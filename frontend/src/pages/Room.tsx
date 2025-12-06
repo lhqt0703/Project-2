@@ -58,6 +58,36 @@ export default function Room() {
     };
   }, [nav]);
 
+  useEffect(() => {
+    interface RoleMismatchData {
+      newPlayers: Player[];
+      missingRoles: number;
+    }
+
+    const handleMismatch = (data: RoleMismatchData) => {
+      const { newPlayers, missingRoles } = data;
+
+      const names = newPlayers.map((p: Player) => p.name).join(", ");
+
+      const ok = window.confirm(
+        `Có người chơi mới (${names}) đã vào phòng sau khi bạn đã xác nhận vai trò.\n` +
+        `Bạn đang thiếu ${missingRoles} vai trò.\n\n` +
+        `Bạn có muốn tự động thêm ${missingRoles} Dân làng không?`
+      );
+
+      if (ok) {
+        socket.emit("addAutoRoles", { roomId: room?.id, count: missingRoles });
+      } else {
+        alert("Hãy quay lại màn hình chọn vai trò để chỉnh sửa lại!");
+      }
+    };
+
+    socket.on("roleMismatch", handleMismatch);
+    return () => {
+      socket.off("roleMismatch", handleMismatch);
+    };
+  }, [room]);
+
   if (!room) return <p>Đang tải phòng...</p>;
 
   return (
@@ -72,6 +102,15 @@ export default function Room() {
           </li>
         ))}
       </ul>
+
+      {socket.id === room.hostId && (
+        <button
+          style={{ marginTop: 20 }}
+          onClick={() => nav(`/roleselect?roomId=${room.id}`)}
+        >
+          Chọn vai trò
+        </button>
+      )}
 
       {socket.id === room.hostId && (
         <button

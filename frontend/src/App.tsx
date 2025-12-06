@@ -3,6 +3,7 @@ import Home from "./pages/Home";
 import Lobby from "./pages/Lobby";
 import Game from "./pages/Game";
 import Room from "./pages/Room";
+import RoleSelect from "./pages/RoleSelect";
 
 function App() {
   return (
@@ -11,6 +12,8 @@ function App() {
       <Route path="/lobby" element={<Lobby />} />
       <Route path="/room" element={<Room />} />
       <Route path="/game" element={<Game />} />
+      <Route path="/roleselect" element={<RoleSelect />} />
+
     </Routes>
   );
 }

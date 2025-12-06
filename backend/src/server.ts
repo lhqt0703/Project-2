@@ -21,6 +21,9 @@ interface Room {
   id: string;
   players: Player[];
   hostId: string; // ai là quản trò
+  roles?: string[]; // danh sách role được chọn cho phòng
+  rolesLocked?: boolean; // đã xác nhận role chưa
+  lockedPlayerIds?: string[]; // danh sách id người chơi lúc xác nhận role
 }
 
 const rooms: Record<string, Room> = {};
@@ -74,6 +77,7 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("roomUpdated", room);
   });
 
+
   socket.on("getRoom", (roomId) => {
     const room = rooms[roomId];
     if (room) {
@@ -82,6 +86,53 @@ io.on("connection", (socket) => {
       socket.emit("errorMessage", "Phòng không tồn tại :(");
     }
   });
+
+  socket.on("rolesSelected", ({ roomId, roles }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    // lưu danh sách role vào phòng
+    room.roles = roles; 
+
+    // 🔒 bộ role đã khóa
+    room.rolesLocked = true;  
+
+    // lưu lại danh sách người chơi lúc khóa
+    room.lockedPlayerIds = room.players.map(p => p.id); 
+
+    io.to(roomId).emit("rolesReady", roles);
+  });
+
+  socket.on("addAutoRoles", ({ roomId, count }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (!room.roles) {
+      room.roles = [];
+    }
+    for (let i = 0; i < count; i++) {
+      room.roles.push("Dân");
+    }
+
+    io.to(roomId).emit("rolesReady", room.roles);
+
+    // Tự động bắt đầu game sau khi thêm role
+    const roles = room.roles;
+    if (!roles || roles.length < room.players.length) {
+      io.to(room.hostId).emit("errorMessage", "Danh sách vai trò không hợp lệ hoặc chưa được chọn.");
+      return;
+    }
+    const shuffled = roles.slice().sort(() => Math.random() - 0.5);
+    room.players.forEach((player, index) => {
+      const role = shuffled[index];
+      io.to(player.id).emit("yourRole", role);
+    });
+    io.to(roomId).emit("gameStarted");
+
+    // Cập nhật lại lockedPlayerIds sau khi đã bổ sung role và bắt đầu game
+    room.lockedPlayerIds = room.players.map(p => p.id);
+  });
+
 
   console.log("Một client đã kết nối:", socket.id);
 
@@ -114,26 +165,45 @@ io.on("connection", (socket) => {
   });
 
   socket.on("startGame", (roomId) => {
-  const room = rooms[roomId];
-  if (!room) return;
+    const room = rooms[roomId];
+    if (!room) return;
 
-  // danh sách role tạm (bạn sẽ mở rộng sau)
-  const roles = ["Sói", "Dân", "Tiên tri", "Bảo vệ"];
+    // Kiểm tra nếu đã lock role và có người mới vào
+    if (room.rolesLocked && room.lockedPlayerIds) {
+      const lockedCount = room.lockedPlayerIds.length;
+      const currentCount = room.players.length;
+      if (currentCount > lockedCount) {
+        const newPlayers = room.players.filter(
+          p => !room.lockedPlayerIds!.includes(p.id)
+        );
+        const missingRoles = currentCount - (room.roles ? room.roles.length : 0);
+        // gửi cảnh báo CHỈ đến host
+        io.to(room.hostId).emit("roleMismatch", {
+          newPlayers,
+          missingRoles,
+        });
+        return; // Không random role, chờ host xử lý
+      }
+    }
 
-  // random role cho mỗi người
-  const playerRoles: Record<string, string> = {};
+    const roles = room.roles;
+    if (!roles || roles.length < room.players.length) {
+      socket.emit("errorMessage", "Danh sách vai trò không hợp lệ hoặc chưa được chọn.");
+      return;
+    }
 
-  room.players.forEach((player) => {
-    const role = roles[Math.floor(Math.random() * roles.length)]!;
-    playerRoles[player.id] = role;
+    // random role cho mỗi người
+    const shuffled = roles.slice().sort(() => Math.random() - 0.5);
 
-    // gửi role bí mật cho từng client
-    io.to(player.id).emit("yourRole", role);
+    room.players.forEach((player, index) => {
+      const role = shuffled[index];
+      // gửi role bí mật cho từng client
+      io.to(player.id).emit("yourRole", role);
+    });
+
+    // thông báo cho cả phòng rằng game đã bắt đầu
+    io.to(roomId).emit("gameStarted");
   });
-
-  // thông báo cho cả phòng rằng game đã bắt đầu
-  io.to(roomId).emit("gameStarted");
-});
 
 
 });

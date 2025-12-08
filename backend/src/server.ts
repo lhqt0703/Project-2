@@ -1,3 +1,4 @@
+
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
@@ -24,6 +25,7 @@ interface Room {
   roles?: string[]; // danh sách role được chọn cho phòng
   rolesLocked?: boolean; // đã xác nhận role chưa
   lockedPlayerIds?: string[]; // danh sách id người chơi lúc xác nhận role
+  phase?: string; // "day" hoặc "night"
 }
 
 const rooms: Record<string, Room> = {};
@@ -127,6 +129,9 @@ io.on("connection", (socket) => {
       const role = shuffled[index];
       io.to(player.id).emit("yourRole", role);
     });
+    // Đánh dấu game đã bắt đầu (mặc định là ban ngày)
+    room.phase = "day";
+
     io.to(roomId).emit("gameStarted");
 
     // Cập nhật lại lockedPlayerIds sau khi đã bổ sung role và bắt đầu game
@@ -146,6 +151,7 @@ io.on("connection", (socket) => {
       // tìm user trong room
       const playerIndex = room.players.findIndex(p => p.id === socket.id);
       if (playerIndex !== -1) {
+        const isHost = room.hostId === socket.id;
         // xoá user khỏi room
         room.players.splice(playerIndex, 1);
 
@@ -155,10 +161,27 @@ io.on("connection", (socket) => {
           activeRooms.delete(roomId);
           console.log(`Phòng ${roomId} đã đóng vì trống.`);
         } else {
-          // nếu còn người → cập nhật room
-          io.to(roomId).emit("roomUpdated", room);
+          // Nếu host rời phòng
+          if (isHost) {
+            // Nếu game chưa bắt đầu (chưa có phase hoặc phase === undefined)
+            if (!room.phase) {
+              // Chuyển quyền host cho người đầu tiên còn lại
+              if (room.players[0]) {
+                room.hostId = room.players[0].id;
+                io.to(roomId).emit("hostChanged", room.hostId);
+                io.to(roomId).emit("roomUpdated", room);
+                console.log(`Chủ phòng rời, chuyển quyền cho ${room.hostId}`);
+              }
+            } else {
+              // Nếu game đã bắt đầu, thông báo cho cả phòng
+              io.to(roomId).emit("hostDisconnected");
+              console.log(`Host rời khi game đang diễn ra ở phòng ${roomId}`);
+            }
+          } else {
+            // nếu còn người → cập nhật room
+            io.to(roomId).emit("roomUpdated", room);
+          }
         }
-
         break;
       }
     }
@@ -186,6 +209,17 @@ io.on("connection", (socket) => {
       }
     }
 
+  socket.on("changePhase", ({ roomId, phase }) => {
+  const room = rooms[roomId];
+  if (!room) return;
+
+  room.phase = phase; // "day" hoặc "night"
+
+  // Gửi phase cho cả phòng
+  io.to(roomId).emit("phaseChanged", phase);
+  });
+
+
     const roles = room.roles;
     if (!roles || roles.length < room.players.length) {
       socket.emit("errorMessage", "Danh sách vai trò không hợp lệ hoặc chưa được chọn.");
@@ -201,10 +235,43 @@ io.on("connection", (socket) => {
       io.to(player.id).emit("yourRole", role);
     });
 
+    // Đánh dấu game đã bắt đầu (mặc định là ban ngày)
+    room.phase = "day";
+
     // thông báo cho cả phòng rằng game đã bắt đầu
     io.to(roomId).emit("gameStarted");
   });
 
+  // Nhường quyền chủ phòng cho người khác
+  socket.on("transferHost", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (socket.id !== room.hostId) return; // chỉ host mới được nhường quyền
+    if (!room.players.find(p => p.id === targetId)) return;
+    room.hostId = targetId;
+    io.to(roomId).emit("hostChanged", room.hostId);
+    io.to(roomId).emit("roomUpdated", room);
+  });
+
+  // Kick người chơi khỏi phòng
+  socket.on("kickPlayer", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (socket.id !== room.hostId) return; // chỉ host mới được kick
+    if (!room.players.find(p => p.id === targetId)) return;
+    // Xoá player khỏi room
+    room.players = room.players.filter(p => p.id !== targetId);
+    // Nếu bị kick là host (trường hợp hiếm), chuyển quyền cho người đầu tiên còn lại
+    if (room.hostId === targetId && room.players.length > 0) {
+      const firstPlayer = room.players[0];
+      if (firstPlayer) {
+        room.hostId = firstPlayer.id;
+        io.to(roomId).emit("hostChanged", room.hostId);
+      }
+    }
+    io.to(roomId).emit("roomUpdated", room);
+    io.to(targetId).emit("kicked"); // thông báo cho người bị kick
+  });
 
 });
 

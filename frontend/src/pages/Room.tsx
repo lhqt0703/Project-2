@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { socket } from "../socket";
+import React from "react";
 
 interface Player {
   id: string;
@@ -15,6 +16,11 @@ interface RoomData {
 
 export default function Room() {
   const [room, setRoom] = useState<RoomData | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    player: Player | null;
+  } | null>(null);
   const location = useLocation();
   const nav = useNavigate();
 
@@ -30,33 +36,55 @@ export default function Room() {
 
   useEffect(() => {
     // Khi server gửi cập nhật phòng
-    socket.on("roomCreated", (data) => setRoom(data));
-    socket.on("roomJoined", (data) => setRoom(data));
-    socket.on("roomUpdated", (data) => setRoom(data));
+    const handleRoom = (data: RoomData) => {
+      setRoom(data);
+      localStorage.setItem("hostId", data.hostId);
+    };
+    socket.on("roomCreated", handleRoom);
+    socket.on("roomJoined", handleRoom);
+    socket.on("roomUpdated", handleRoom);
+
+    // Lắng nghe hostChanged để cập nhật hostId realtime
+    const handleHostChanged = (newHostId: string) => {
+      if (room) {
+        setRoom({ ...room, hostId: newHostId });
+        localStorage.setItem("hostId", newHostId);
+      }
+    };
+    socket.on("hostChanged", handleHostChanged);
 
     return () => {
-      socket.off("roomCreated");
-      socket.off("roomJoined");
-      socket.off("roomUpdated");
+      socket.off("roomCreated", handleRoom);
+      socket.off("roomJoined", handleRoom);
+      socket.off("roomUpdated", handleRoom);
+      socket.off("hostChanged", handleHostChanged);
     };
-  }, []);
+  }, [room]);
 
   useEffect(() => {
-    socket.on("yourRole", (role) => {
-      // lưu role vào state, chuyển sang trang game
+    const handleYourRole = (role: string) => {
+      // lưu role vào state, chuyển sang trang game (kèm roomId)
       localStorage.setItem("role", role); // tạm dùng localStorage
-      nav("/game");
-    });
+      const targetRoomId = room?.id ?? roomId;
+      if (targetRoomId) {
+        nav(`/game?roomId=${targetRoomId}`);
+      } else {
+        nav("/game");
+      }
+    };
 
-    socket.on("gameStarted", () => {
+    const handleGameStarted = () => {
       // nếu cần thì trigger UI chung
-    });
+    };
+
+    socket.on("yourRole", handleYourRole);
+    socket.on("gameStarted", handleGameStarted);
 
     return () => {
-      socket.off("yourRole");
-      socket.off("gameStarted");
+      socket.off("yourRole", handleYourRole);
+      socket.off("gameStarted", handleGameStarted);
     };
-  }, [nav]);
+  }, [nav, room, roomId]);
 
   useEffect(() => {
     interface RoleMismatchData {
@@ -88,20 +116,102 @@ export default function Room() {
     };
   }, [room]);
 
+  useEffect(() => {
+    // Khi host rời khi game đang diễn ra
+    const handleHostDisconnected = () => {
+      alert("Chủ phòng đã rời đi. Bạn có thể chờ chủ phòng quay lại hoặc thoát khỏi phòng.");
+      // Có thể thêm logic cho phép người chơi tự thoát hoặc chờ
+    };
+    socket.on("hostDisconnected", handleHostDisconnected);
+    return () => {
+      socket.off("hostDisconnected", handleHostDisconnected);
+    };
+  }, []);
+
+  // Xử lý click chuột phải vào tên người chơi
+  const handlePlayerRightClick = (e: React.MouseEvent, player: Player) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, player });
+  };
+
+  // Xử lý nhường quyền
+  const handleTransferHost = () => {
+    if (contextMenu?.player && room) {
+      socket.emit("transferHost", { roomId: room.id, targetId: contextMenu.player.id });
+      setContextMenu(null);
+    }
+  };
+
+  // Xử lý kick
+  const handleKick = () => {
+    if (contextMenu?.player && room) {
+      socket.emit("kickPlayer", { roomId: room.id, targetId: contextMenu.player.id });
+      setContextMenu(null);
+    }
+  };
+
+  // Đóng menu khi click ngoài
+  useEffect(() => {
+    const closeMenu = () => setContextMenu(null);
+    if (contextMenu) {
+      window.addEventListener("click", closeMenu);
+      return () => window.removeEventListener("click", closeMenu);
+    }
+  }, [contextMenu]);
+
+  // Lắng nghe bị kick
+  useEffect(() => {
+    const handleKicked = () => {
+      alert("Bạn đã bị chủ phòng kick khỏi phòng!");
+      nav("/");
+    };
+    socket.on("kicked", handleKicked);
+    return () => {
+      socket.off("kicked", handleKicked);
+    };
+  }, [nav]);
+
   if (!room) return <p>Đang tải phòng...</p>;
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ padding: 20, position: "relative" }}>
       <h1>Phòng: {room.id}</h1>
       <h2>Người chơi:</h2>
-
       <ul>
         {room.players.map((p) => (
-          <li key={p.id}>
+          <li
+            key={p.id}
+            onContextMenu={socket.id === room.hostId && p.id !== room.hostId ? (e) => handlePlayerRightClick(e, p) : undefined}
+            style={{ cursor: socket.id === room.hostId && p.id !== room.hostId ? "context-menu" : undefined }}
+          >
             {p.name} {p.id === room.hostId && "(Chủ phòng)"}
           </li>
         ))}
       </ul>
+
+      {/* Menu chuột phải cho host */}
+      {contextMenu && (
+        <div
+          style={{
+            position: "fixed",
+            top: contextMenu.y,
+            left: contextMenu.x,
+            background: "#fff",
+            border: "1px solid #ccc",
+            borderRadius: 6,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+            zIndex: 1000,
+            minWidth: 120,
+          }}
+        >
+          <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleTransferHost}>
+            Nhường quyền chủ phòng
+          </button>
+          <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer", color: "red" }} onClick={handleKick}>
+            Kick khỏi phòng
+          </button>
+        </div>
+      )}
 
       {socket.id === room.hostId && (
         <button

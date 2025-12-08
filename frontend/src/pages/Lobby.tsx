@@ -11,11 +11,9 @@ export default function Lobby() {
     socket.on("roomCreated", (room) => {
       nav(`/room?roomId=${room.id}`);
     });
-
     socket.on("roomJoined", (room) => {
       nav(`/room?roomId=${room.id}`);
     });
-
     return () => {
       socket.off("roomCreated");
       socket.off("roomJoined");
@@ -33,19 +31,15 @@ export default function Lobby() {
   return (
     <div style={{ padding: 20 }}>
       <h1>Phòng Chờ</h1>
-
       <input
         placeholder="Tên của bạn"
         onChange={(e) => setName(e.target.value)}
       />
-
       <button onClick={createRoom}>Tạo Phòng</button>
-
       <input
         placeholder="Mã phòng"
         onChange={(e) => setRoomIdInput(e.target.value)}
       />
-
       <button onClick={joinRoom}>Tham gia phòng</button>
     </div>
   );

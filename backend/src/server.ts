@@ -26,6 +26,8 @@ interface Room {
   rolesLocked?: boolean; // đã xác nhận role chưa
   lockedPlayerIds?: string[]; // danh sách id người chơi lúc xác nhận role
   phase?: string; // "day" hoặc "night"
+  positions?: { playerId: string; x: number; y: number }[];
+  positionEditors?: string[]; // ai được phép sắp xếp
 }
 
 const rooms: Record<string, Room> = {};
@@ -37,13 +39,24 @@ const activeRooms = new Set<string>(); // chứa toàn bộ mã phòng đã tạ
 function generateRoomId(activeRooms: Set<string>)  {
   let id;
   do {
-    id = String(Math.floor(Math.random() * 1000)).padStart(3, "0");
+    id = String(Math.floor(Math.random() * 1000)).padStart(3, "0"); // mã phòng 3 chữ số
   } while (activeRooms.has(id));
 
   activeRooms.add(id);
   return id;
 }
 
+function generateCirclePositions(playerIds: string[]) {
+  const n = playerIds.length;
+  return playerIds.map((id, i) => {
+    const angle = (i / n) * 2 * Math.PI - Math.PI / 2;
+    return {
+      playerId: id,
+      x: 0.5 + 0.35 * Math.cos(angle), // tâm (0.5, 0.5), bán kính 0.35
+      y: 0.5 + 0.35 * Math.sin(angle),
+    };
+  });
+}
 
 // Khi client kết nối
 io.on("connection", (socket) => {
@@ -54,6 +67,8 @@ io.on("connection", (socket) => {
       id: roomId,
       players: [{ id: socket.id, name }],
       hostId: socket.id,
+      positions: generateCirclePositions([socket.id]),   // khởi tạo vị trí
+      positionEditors: [], // ai được phép sắp xếp
     };
 
     socket.join(roomId);
@@ -70,6 +85,19 @@ io.on("connection", (socket) => {
     }
 
     room.players.push({ id: socket.id, name });
+    if (!room.positions || room.positions.length !== room.players.length) {
+      const existing = new Map((room.positions || []).map(p => [p.playerId, p]));
+      const newPos = generateCirclePositions(room.players.map(p => p.id));
+      // giữ vị trí cũ nếu có
+      newPos.forEach(pos => {
+        if (existing.has(pos.playerId)) {
+          const ex = existing.get(pos.playerId)!;
+          pos.x = ex.x;
+          pos.y = ex.y;
+        }
+      });
+      room.positions = newPos;
+    }
     socket.join(roomId);
 
     // 1) gửi riêng cho người vừa join
@@ -84,6 +112,9 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (room) {
       socket.emit("roomUpdated", room);
+      io.to(roomId).emit("positionsUpdated", room.positions);
+      io.to(roomId).emit("positionEditorsUpdated", room.positionEditors || []);
+
     } else {
       socket.emit("errorMessage", "Phòng không tồn tại :(");
     }
@@ -138,6 +169,43 @@ io.on("connection", (socket) => {
     room.lockedPlayerIds = room.players.map(p => p.id);
   });
 
+  socket.on("updatePositions", ({ roomId, positions }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const isHost = socket.id === room.hostId;
+    const isEditor = room.positionEditors?.includes(socket.id);
+
+    if (!isHost && !isEditor) {
+      socket.emit("errorMessage", "Bạn không có quyền chỉnh vị trí.");
+      return;
+    }
+
+    room.positions = positions;
+    io.to(roomId).emit("positionsUpdated", positions);
+  });
+
+  socket.on("grantPositionEdit", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (socket.id !== room.hostId) return;
+
+    room.positionEditors = room.positionEditors || [];
+    if (!room.positionEditors.includes(targetId)) {
+      room.positionEditors.push(targetId);
+    }
+
+    io.to(roomId).emit("positionEditorsUpdated", room.positionEditors);
+  });
+
+  socket.on("revokePositionEdit", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (socket.id !== room.hostId) return;
+
+    room.positionEditors = (room.positionEditors || []).filter(id => id !== targetId);
+    io.to(roomId).emit("positionEditorsUpdated", room.positionEditors);
+  });
 
   console.log("Một client đã kết nối:", socket.id);
 
@@ -154,6 +222,11 @@ io.on("connection", (socket) => {
         const isHost = room.hostId === socket.id;
         // xoá user khỏi room
         room.players.splice(playerIndex, 1);
+        // Xóa cả position luôn
+        room.positions = (room.positions || []).filter(pos => pos.playerId !== socket.id);
+        io.to(roomId).emit("positionsUpdated", room.positions);
+
+
 
         // nếu phòng trống → xoá phòng
         if (room.players.length === 0) {
@@ -209,17 +282,6 @@ io.on("connection", (socket) => {
       }
     }
 
-  socket.on("changePhase", ({ roomId, phase }) => {
-  const room = rooms[roomId];
-  if (!room) return;
-
-  room.phase = phase; // "day" hoặc "night"
-
-  // Gửi phase cho cả phòng
-  io.to(roomId).emit("phaseChanged", phase);
-  });
-
-
     const roles = room.roles;
     if (!roles || roles.length < room.players.length) {
       socket.emit("errorMessage", "Danh sách vai trò không hợp lệ hoặc chưa được chọn.");
@@ -232,6 +294,7 @@ io.on("connection", (socket) => {
     room.players.forEach((player, index) => {
       const role = shuffled[index];
       // gửi role bí mật cho từng client
+      console.log(`[yourRole emit] Gửi role '${role}' cho player ${player.id}`);
       io.to(player.id).emit("yourRole", role);
     });
 
@@ -240,6 +303,17 @@ io.on("connection", (socket) => {
 
     // thông báo cho cả phòng rằng game đã bắt đầu
     io.to(roomId).emit("gameStarted");
+  });
+
+  // changePhase phải ở bên ngoài startGame
+  socket.on("changePhase", ({ roomId, phase }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    room.phase = phase; // "day" hoặc "night"
+    console.log(`[changePhase] Phòng ${roomId} chuyển sang phase '${phase}'`);
+    // Gửi phase cho cả phòng
+    io.to(roomId).emit("phaseChanged", phase);
   });
 
   // Nhường quyền chủ phòng cho người khác

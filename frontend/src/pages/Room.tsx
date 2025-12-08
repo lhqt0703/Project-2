@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { socket } from "../socket";
 import React from "react";
+import PositionEditor from "../components/PositionEditor";
+import { useRoomContext } from "../context/RoomContext";
+
 
 interface Player {
   id: string;
@@ -12,10 +15,12 @@ interface RoomData {
   id: string;
   players: Player[];
   hostId: string;
+  positions?: PlayerPosition[];
+  positionEditors?: string[];
 }
 
 export default function Room() {
-  const [room, setRoom] = useState<RoomData | null>(null);
+  const { room, setRoom, setRole } = useRoomContext();
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -27,6 +32,9 @@ export default function Room() {
   // lấy roomId từ URL (?roomId=xxxxx)
   const query = new URLSearchParams(location.search);
   const roomId = query.get("roomId");
+
+  const [showEditor, setShowEditor] = useState(false);
+  const [positionEditors, setPositionEditors] = useState<string[]>([]);
 
   useEffect(() => {
     if (roomId) {
@@ -44,12 +52,20 @@ export default function Room() {
     socket.on("roomJoined", handleRoom);
     socket.on("roomUpdated", handleRoom);
 
+    socket.on("positionsUpdated", (positions: PlayerPosition[]) => {
+      setRoom(prev => prev ? { ...prev, positions } : prev);
+    });
+
+    socket.on("positionEditorsUpdated", (editors: string[]) => {
+      setPositionEditors(editors ?? []);
+      setRoom(prev => prev ? { ...prev, positionEditors: editors } : prev);
+    });
+
+
     // Lắng nghe hostChanged để cập nhật hostId realtime
     const handleHostChanged = (newHostId: string) => {
-      if (room) {
-        setRoom({ ...room, hostId: newHostId });
-        localStorage.setItem("hostId", newHostId);
-      }
+      setRoom(prev => prev ? { ...prev, hostId: newHostId } : prev);
+      localStorage.setItem("hostId", newHostId);
     };
     socket.on("hostChanged", handleHostChanged);
 
@@ -58,20 +74,22 @@ export default function Room() {
       socket.off("roomJoined", handleRoom);
       socket.off("roomUpdated", handleRoom);
       socket.off("hostChanged", handleHostChanged);
+      socket.off("positionsUpdated"); 
+      socket.off("positionEditorsUpdated"); 
     };
-  }, [room]);
+  }, [room, setRoom]);
 
   useEffect(() => {
     const handleYourRole = (role: string) => {
-      // lưu role vào state, chuyển sang trang game (kèm roomId)
-      localStorage.setItem("role", role); // tạm dùng localStorage
-      const targetRoomId = room?.id ?? roomId;
-      if (targetRoomId) {
-        nav(`/game?roomId=${targetRoomId}`);
-      } else {
-        nav("/game");
-      }
-    };
+      // Chỉ lưu role nếu chưa có hoặc khác role hiện tại
+      setRole(role);
+  const targetRoomId = room?.id ?? roomId;
+  if (targetRoomId) {
+    nav(`/game?roomId=${targetRoomId}`);
+  } else {
+    nav("/game");
+  }
+};
 
     const handleGameStarted = () => {
       // nếu cần thì trigger UI chung
@@ -84,7 +102,7 @@ export default function Room() {
       socket.off("yourRole", handleYourRole);
       socket.off("gameStarted", handleGameStarted);
     };
-  }, [nav, room, roomId]);
+  }, [nav, room, roomId, setRole]);
 
   useEffect(() => {
     interface RoleMismatchData {
@@ -150,6 +168,22 @@ export default function Room() {
     }
   };
 
+  // Xử lý trao quyền sắp xếp vị trí
+  const handleGrantPosition = () => {
+    if (contextMenu?.player && room) {
+      socket.emit("grantPositionEdit", { roomId: room.id, targetId: contextMenu.player.id });
+      setContextMenu(null);
+    }
+  };
+
+  // Xử lý thu lại quyền sắp xếp vị trí
+  const handleRevokePosition = () => {
+    if (contextMenu?.player && room) {
+      socket.emit("revokePositionEdit", { roomId: room.id, targetId: contextMenu.player.id });
+      setContextMenu(null);
+    }
+  };
+
   // Đóng menu khi click ngoài
   useEffect(() => {
     const closeMenu = () => setContextMenu(null);
@@ -173,63 +207,130 @@ export default function Room() {
 
   if (!room) return <p>Đang tải phòng...</p>;
 
+  const amIHost = socket.id === room.hostId;
+  const amIPositionEditor = (room.positionEditors || []).includes(socket.id);
+
   return (
-    <div style={{ padding: 20, position: "relative" }}>
-      <h1>Phòng: {room.id}</h1>
-      <h2>Người chơi:</h2>
-      <ul>
-        {room.players.map((p) => (
-          <li
-            key={p.id}
-            onContextMenu={socket.id === room.hostId && p.id !== room.hostId ? (e) => handlePlayerRightClick(e, p) : undefined}
-            style={{ cursor: socket.id === room.hostId && p.id !== room.hostId ? "context-menu" : undefined }}
-          >
-            {p.name} {p.id === room.hostId && "(Chủ phòng)"}
-          </li>
-        ))}
-      </ul>
+      <div style={{ padding: 20, position: "relative" }}>
+        <h1>Phòng: {room.id}</h1>
+        <div style={{ display: "flex", gap: 20 }}>
+        {/* left: players list */}
+        <div style={{ minWidth: 220 }}>
+          <h3>Người chơi:</h3>
+          <ul>
+            {room.players.map((p) => (
+              <li
+                key={p.id}
+                onContextMenu={amIHost && p.id !== room.hostId ? (e) => handlePlayerRightClick(e, p) : undefined}
+                style={{ cursor: amIHost && p.id !== room.hostId ? "context-menu" : undefined }}
+              >
+                {p.name} {p.id === room.hostId && "(Chủ phòng)"} {room.positionEditors?.includes(p.id) && " • (Quyền sắp xếp)"}
+              </li>
+            ))}
+          </ul>
 
-      {/* Menu chuột phải cho host */}
-      {contextMenu && (
-        <div
-          style={{
-            position: "fixed",
-            top: contextMenu.y,
-            left: contextMenu.x,
-            background: "#fff",
-            border: "1px solid #ccc",
-            borderRadius: 6,
-            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-            zIndex: 1000,
-            minWidth: 120,
-          }}
-        >
-          <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleTransferHost}>
-            Nhường quyền chủ phòng
-          </button>
-          <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer", color: "red" }} onClick={handleKick}>
-            Kick khỏi phòng
-          </button>
+          { (amIHost || amIPositionEditor) && (
+            <div style={{ marginTop: 12 }}>
+              <button onClick={() => setShowEditor(true)}>Sắp xếp vị trí (Drag & Drop)</button>
+            </div>
+          )}
+
+          {amIHost && (
+            <>
+              <div style={{ marginTop: 12 }}>
+                <button onClick={() => nav(`/roleselect?roomId=${room.id}`)}>Chọn vai trò</button>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <button onClick={() => socket.emit("startGame", room.id)}>Bắt đầu trò chơi</button>
+              </div>
+            </>
+          )}
         </div>
-      )}
 
-      {socket.id === room.hostId && (
-        <button
-          style={{ marginTop: 20 }}
-          onClick={() => nav(`/roleselect?roomId=${room.id}`)}
-        >
-          Chọn vai trò
-        </button>
-      )}
+        {/* right: visual layout preview */}
+        <div style={{ flex: 1 }}>
+          <h3>Bố cục (Preview):</h3>
+          <div style={{ width: "100%", maxWidth: 600, height: 400, background: "#f0f0f0", borderRadius: 10, position: "relative" }}>
+            {/* center marker */}
+            <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", pointerEvents: "none" }}>
+              <div style={{ width: 6, height: 6, borderRadius: 3, background: "#666" }} />
+            </div>
 
-      {socket.id === room.hostId && (
-        <button
-          style={{ marginTop: 20 }}
-          onClick={() => socket.emit("startGame", room.id)}
-        >
-          Bắt đầu trò chơi
-        </button>
-      )}
+            {(room.positions || []).map((pos) => {
+              const p = room.players.find(x => x.id === pos.playerId);
+if (!p) return null;
+              const left = `${pos.x * 100}%`;
+              const top = `${pos.y * 100}%`;
+              return (
+                <div
+                  key={pos.playerId}
+                  style={{
+                    position: "absolute",
+                    left,
+                    top,
+                    transform: "translate(-50%,-50%)",
+                    width: 72,
+                    height: 72,
+                    borderRadius: 36,
+                    background: "#fff",
+                    border: "2px solid #333",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 12,
+                  }}
+                >
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontWeight: "bold" }}>{p.name || "?"}</div>
+                    <div style={{ opacity: 0.6, fontSize: 11 }}>{p.id === socket.id ? "(Bạn)" : ""}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+        {/* Menu chuột phải cho host */}
+        {contextMenu && (
+          <div
+            style={{
+              position: "fixed",
+              top: contextMenu.y,
+              left: contextMenu.x,
+              background: "#fff",
+              border: "1px solid #ccc",
+              borderRadius: 6,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+              zIndex: 1000,
+              minWidth: 120,
+            }}
+          >
+            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleTransferHost}>
+              Nhường quyền chủ phòng
+            </button>
+            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer", color: "red" }} onClick={handleKick}>
+              Kick khỏi phòng
+            </button>
+            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleGrantPosition}>
+              Trao quyền sắp xếp vị trí
+            </button>
+            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleRevokePosition}>
+              Thu lại quyền sắp xếp
+            </button>
+
+          </div>
+        )}
+
+        {showEditor && room && (
+          <PositionEditor
+            roomId={room.id}
+            players={room.players}
+            positionsFromServer={room.positions}
+            isEditor={socket.id === room.hostId || positionEditors.includes(socket.id)}
+            onClose={() => setShowEditor(false)}
+          />
+        )}
     </div>
   );
 }

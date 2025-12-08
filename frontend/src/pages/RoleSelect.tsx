@@ -30,10 +30,8 @@ export default function RoleSelect() {
     // Định nghĩa kiểu dữ liệu cho phòng
     interface Room {
       players: { id: string; name: string }[];
-      // Thêm các trường khác nếu cần
     }
 
-    // Lắng nghe cập nhật phòng
     const handleRoom = (room: Room) => {
       setPlayerCount(room.players.length);
     };
@@ -61,21 +59,17 @@ export default function RoleSelect() {
     // Nếu role chọn ít hơn số người → hỏi bổ sung dân làng
     if (selectedRoles.length < playerCount) {
       const missing = playerCount - selectedRoles.length;
-
       const autoFill = window.confirm(
         `Bạn đang thiếu ${missing} vai trò.\nBạn có muốn tự động thêm ${missing} Dân làng không?`
       );
-
       if (autoFill) {
         const finalRoles = [...selectedRoles];
-
         for (let i = 0; i < missing; i++) {
           finalRoles.push("Dân");
         }
 
         // Gửi roles lên server
         socket.emit("rolesSelected", { roomId, roles: finalRoles });
-
         nav(`/room?roomId=${roomId}`);
         return;
       } else {

@@ -1,22 +1,23 @@
+
 import { useEffect, useState } from "react";
 import { socket } from "../socket";
 import { useLocation } from "react-router-dom";
+import { useRoomContext } from "../context/RoomContext";
 
 export default function Game() {
-  const role = localStorage.getItem("role");
+  const { role } = useRoomContext();
   const [phase, setPhase] = useState<"day" | "night">("day");
   const location = useLocation();
   const query = new URLSearchParams(location.search);
   const roomId = query.get("roomId");
+  // hostId vẫn lấy từ localStorage, hoặc có thể chuyển sang context nếu muốn đồng bộ hơn
   const hostId = localStorage.getItem("hostId");
 
   useEffect(() => {
     const handlePhaseChanged = (newPhase: "day" | "night") => {
       setPhase(newPhase);
     };
-
     socket.on("phaseChanged", handlePhaseChanged);
-
     return () => {
       socket.off("phaseChanged", handlePhaseChanged);
     };
@@ -45,7 +46,6 @@ export default function Game() {
       ) : (
         <h1>🌙 Ban đêm – Các vai trò thực hiện hành động</h1>
       )}
-
       {socket.id === hostId && (
         <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
           <button

@@ -28,6 +28,7 @@ interface Room {
   phase?: string; // "day" hoặc "night"
   positions?: { playerId: string; x: number; y: number }[];
   positionEditors?: string[]; // ai được phép sắp xếp
+  playerRoles?: Record<string, string>; // mapping playerId -> role
 }
 
 const rooms: Record<string, Room> = {};
@@ -288,11 +289,12 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // random role cho mỗi người
+    // random role cho mỗi người và lưu mapping
     const shuffled = roles.slice().sort(() => Math.random() - 0.5);
-
+    room.playerRoles = {};
     room.players.forEach((player, index) => {
-      const role = shuffled[index];
+      const role: string = shuffled[index] || "";
+      room.playerRoles![player.id] = role;
       // gửi role bí mật cho từng client
       console.log(`[yourRole emit] Gửi role '${role}' cho player ${player.id}`);
       io.to(player.id).emit("yourRole", role);
@@ -325,6 +327,16 @@ io.on("connection", (socket) => {
     room.hostId = targetId;
     io.to(roomId).emit("hostChanged", room.hostId);
     io.to(roomId).emit("roomUpdated", room);
+  });
+
+
+  // Xử lý chức năng tiên tri soi người
+  socket.on("seerCheck", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room || !room.playerRoles) return;
+    const roleOfTarget = room.playerRoles[targetId];
+    const isWolf = roleOfTarget === "Sói";
+    io.to(socket.id).emit("seerResult", { playerId: targetId, isWolf });
   });
 
   // Kick người chơi khỏi phòng

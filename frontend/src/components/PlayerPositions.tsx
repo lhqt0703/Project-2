@@ -1,10 +1,17 @@
 import { socket } from "../socket";
 import { useRoomContext } from "../context/RoomContext";
+import { useState } from "react";
 
 export default function PlayerPositions({ onPlayerClick }) {
   const { room } = useRoomContext();
 
   if (!room) return null;
+
+  // Lấy thông tin sói còn sống và số lượng sói
+  const wolfVotes = (room as any).wolfVotes as Record<string, string | null> | undefined;
+  const deadPlayers = (room as any).deadPlayers as string[] | undefined;
+  const wolvesAlive = room.players.filter(p => room.playerRoles?.[p.id] === "Sói" && !(deadPlayers || []).includes(p.id)).map(p => p.id);
+  const wolfCount = wolvesAlive.length;
 
   return (
     <div
@@ -44,6 +51,9 @@ export default function PlayerPositions({ onPlayerClick }) {
         const left = `${pos.x * 100}%`;
         const top = `${pos.y * 100}%`;
 
+        const voteCountForThis = wolfVotes ? Object.values(wolfVotes).filter(t => t === pos.playerId).length : 0;
+        const isDead = (deadPlayers || []).includes(pos.playerId);
+
         return (
           <div
             key={pos.playerId}
@@ -62,9 +72,26 @@ export default function PlayerPositions({ onPlayerClick }) {
               justifyContent: "center",
               fontSize: 12,
               cursor: "pointer",
+              opacity: isDead ? 0.4 : 1,
             }}
             onClick={() => onPlayerClick(p.id)}
           >
+             {wolfCount >= 2 && voteCountForThis > 0 && (
+              <div style={{
+                position: "absolute",
+                top: -10,
+                right: -10,
+                background: "#b71c1c",
+                color: "#fff",
+                borderRadius: 10,
+                padding: "2px 6px",
+                fontSize: 11,
+                fontWeight: "bold",
+              }}>
+                {voteCountForThis}/{wolfCount}
+              </div>
+            )}
+
             <div style={{ textAlign: "center" }}>
               <div style={{ fontWeight: "bold" }}>{p.name}</div>
               <div style={{ opacity: 0.6, fontSize: 11 }}>

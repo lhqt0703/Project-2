@@ -100,27 +100,44 @@ export default function RoleSelect() {
         }}
       >
         {ALL_ROLES.map(role => {
-          const isSelected = selectedRoles.includes(role);
+  const count = selectedRoles.filter(r => r === role).length;
 
-          return (
-            <div
-              key={role}
-              onClick={() => toggleRole(role)}
-              style={{
-                padding: "16px 22px",
-                borderRadius: 12,
-                cursor: "pointer",
-                border: isSelected ? "3px solid #ff9800" : "2px solid #444",
-                background: isSelected ? "#ffe9c7" : "#f2f2f2",
-                transition: "0.2s",
-                fontSize: 18,
-                userSelect: "none",
-              }}
-            >
-              {role}
-            </div>
-          );
-        })}
+  return (
+    <div
+      key={role}
+      onClick={() => toggleRole(role)}   // <-- CLICK Ở ĐÂY
+      style={{
+        padding: "16px 22px",
+        borderRadius: 12,
+        cursor: "pointer",
+        border: count > 0 ? "3px solid #ff9800" : "2px solid #444",
+        background: count > 0 ? "#ffe9c7" : "#f2f2f2",
+        transition: "0.2s",
+        fontSize: 18,
+        userSelect: "none",
+      }}
+    >
+      {/* văn bản hiển thị role */}
+      <div>
+        {role} {count > 1 ? `x${count}` : ""}
+      </div>
+
+      {/* nút + Sói không được chặn click vùng ngoài */}
+      {role === "Sói" && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();            // ngăn không cho toggleRole chạy
+            setSelectedRoles(prev => [...prev, "Sói"]);
+          }}
+          style={{ marginLeft: 10 }}
+        >
+          + Sói
+        </button>
+      )}
+    </div>
+  );
+})}
+
       </div>
 
       {/* Nút xác nhận */}

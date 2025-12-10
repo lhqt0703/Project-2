@@ -15,6 +15,63 @@ export default function Game() {
   const query = new URLSearchParams(location.search);
   const roomId = query.get("roomId");
   const hostId = localStorage.getItem("hostId");
+  // --- state cho sói ---
+  const [wolfVotes, setWolfVotes] = useState<Record<string, string | null> | null>(null);
+  const [wolfLocked, setWolfLocked] = useState<Record<string, boolean> | null>(null); // trạng thái lock vote của từng sói
+  const [wolfDeadline, setWolfDeadline] = useState<number | null>(null); 
+  const [localSelectedTarget, setLocalSelectedTarget] = useState<string | null>(null); // khi sói click avatar -> chọn tạm
+  const [killedTonight, setKilledTonight] = useState<string | null>(null); 
+  const [deadPlayers, setDeadPlayers] = useState<string[]>([]); // danh sách người chơi đã bị cắn
+  const [now, setNow] = useState(Date.now()); // để cập nhật thời gian hiện tại
+  const [wolves, setWolves] = useState<string[]>([]);
+
+
+
+
+
+  useEffect(() => {
+  const t = setInterval(() => setNow(Date.now()), 1000);
+  return () => clearInterval(t);
+}, []);
+  
+  useEffect(() => {
+  const handleWolfVotesUpdated = (votes: Record<string, string | null>) => {
+    setWolfVotes(votes);
+  };
+  const handleWolfLockedUpdated = (locked: Record<string, boolean>) => {
+    setWolfLocked(locked);
+  };
+  const handleWolfPhaseStarted = ({ wolves, deadline }: { wolves: string[]; deadline: number }) => {
+    setWolves(wolves);         // LƯU DANH SÁCH SÓI
+    setWolfDeadline(deadline);
+    setWolfVotes(null);
+    setWolfLocked(null);
+    setLocalSelectedTarget(null);
+    setKilledTonight(null);
+  };
+  const handleWolfVoteFinished = ({ target }: { target: string | null }) => {
+    setKilledTonight(target || null);
+    // server sẽ thực tế công bố vào lúc chuyển sang day; nhưng client có thể hiển thị sơ bộ
+  };
+  const handlePlayerKilled = (playerId: string) => {
+    setDeadPlayers(prev => prev.includes(playerId) ? prev : [...prev, playerId]);
+  };
+
+  socket.on("wolfVotesUpdated", handleWolfVotesUpdated);
+  socket.on("wolfLockedUpdated", handleWolfLockedUpdated);
+  socket.on("wolfPhaseStarted", handleWolfPhaseStarted);
+  socket.on("wolfVoteFinished", handleWolfVoteFinished);
+  socket.on("playerKilled", handlePlayerKilled);
+
+  return () => {
+    socket.off("wolfVotesUpdated", handleWolfVotesUpdated);
+    socket.off("wolfLockedUpdated", handleWolfLockedUpdated);
+    socket.off("wolfPhaseStarted", handleWolfPhaseStarted);
+    socket.off("wolfVoteFinished", handleWolfVoteFinished);
+    socket.off("playerKilled", handlePlayerKilled);
+  };
+}, []);
+
 
   useEffect(() => {
     const handlePhaseChanged = (newPhase: "day" | "night") => {
@@ -22,6 +79,8 @@ export default function Game() {
       setSelectedPlayerId(null);
       setShowConfirm(false);
       setSeerResult(null);
+      setWolfVotes(null); // reset cái badge vote của sói
+      setLocalSelectedTarget(null); // reset lựa chọn tạm thời của sói
     };
     socket.on("phaseChanged", handlePhaseChanged);
     return () => {
@@ -56,9 +115,35 @@ export default function Game() {
 
   // Xử lý click vào avatar người chơi
   const handlePlayerClick = (playerId: string) => {
+    // Nếu người chơi đã chết thì không được chọn họ nữa
+    if (deadPlayers.includes(playerId)) return;
+
+    // Nếu là Tiên tri
     if (phase === "night" && role === "Tiên tri" && !seerResult) {
+      if (deadPlayers.includes(socket.id)) return; // tiên tri chết → không soi
+      
       setSelectedPlayerId(playerId);
       setShowConfirm(true);
+      return;
+    }
+
+    // Nếu là Sói
+    if (phase === "night" && role === "Sói") {
+      // nếu bản thân đã bị chết thì không được chọn
+      if (deadPlayers.includes(socket.id)) return;
+      // không cho chọn chính mình
+      if (playerId === socket.id) return;
+      // không cho chọn sói khác
+      if (wolves.includes(playerId)) return;
+      // lock vote rồi thì không được chọn nữa
+      if (wolfLocked?.[socket.id]) return;
+      // hoặc là hết thời gian
+      if (wolfDeadline && Date.now() >= wolfDeadline) return;
+
+
+      // set local selection và gửi lên server để sói khác thấy
+      setLocalSelectedTarget(playerId);
+      socket.emit("wolfChooseTarget", { roomId, targetId: playerId });
     }
   };
 
@@ -95,6 +180,18 @@ export default function Game() {
             if (seerResult && seerResult.playerId === pos.playerId) {
               boxShadow = seerResult.isWolf ? "0 0 0 8px #d00, 0 0 16px 8px #222" : "0 0 0 8px #222, 0 0 16px 8px #d00";
             }
+            // xác định wolves sống hiện tại (từ room.playerRoles)
+            const wolvesAlive = wolves.filter(id => !deadPlayers.includes(id));
+            const wolfCount = wolvesAlive.length;
+
+            // trong map: tính voteCount cho từng avatar
+            const voteCountForThis = wolfVotes ? Object.values(wolfVotes).filter(t => t === pos.playerId).length : 0;
+
+            // isSelectedLocal (nếu bạn là sói và bạn đã chọn mục tiêu này)
+            const isLocalSelected = localSelectedTarget === pos.playerId;
+
+            // opacity nếu đã chết
+            const isDead = deadPlayers.includes(pos.playerId);
             return (
               <div
                 key={pos.playerId}
@@ -112,15 +209,53 @@ export default function Game() {
                   alignItems: "center",
                   justifyContent: "center",
                   fontSize: 12,
-                  cursor: phase === "night" && role === "Tiên tri" && !seerResult ? "pointer" : "default",
+                  cursor: (phase === "night" && (role === "Tiên tri" || role === "Sói") && !seerResult) ? "pointer" : "default",
                   boxShadow,
-                  transition: "box-shadow 0.3s"
+                  transition: "box-shadow 0.3s",
+                  opacity: isDead ? 0.4 : 1,
+                  outline: isLocalSelected ? "3px solid rgba(255,165,0,0.9)" : undefined,
                 }}
                 onClick={() => handlePlayerClick(pos.playerId)}
               >
+                {/* small badge x/y - chỉ hiện khi bạn là sói hoặc mọi người nên thấy? 
+                    Yêu cầu là: những người chơi là sói sẽ thấy đối tượng mà sói khác muốn chọn trong đêm đó.
+                    => badge chỉ hiển thị cho sói. */}
+                {role === "Sói" && wolfCount >= 2 && voteCountForThis > 0 && (
+                  <div style={{
+                    position: "absolute",
+                    top: -10,
+                    right: -10,
+                    background: "#b71c1c",
+                    color: "#fff",
+                    borderRadius: 10,
+                    padding: "2px 6px",
+                    fontSize: 11,
+                    fontWeight: "bold",
+                  }}>
+                    {voteCountForThis}/{wolfCount}
+                  </div>
+                )}
+
                 <div style={{ textAlign: "center" }}>
                   <div style={{ fontWeight: "bold" }}>{p.name || "?"}</div>
                   <div style={{ opacity: 0.6, fontSize: 11 }}>{p.id === socket.id ? "(Bạn)" : ""}</div>
+                  {role === "Sói" && phase === "night" && wolves.includes(p.id) && (
+                  <div style={{
+                    position: "absolute",
+                    top: -10,
+                    left: -10,
+                    background: "#000",
+                    color: "#fff",
+                    padding: "2px 6px",
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: "bold",
+                    opacity: 0.9
+                  }}>
+                    Sói
+                  </div>
+                )}
+
                 </div>
               </div>
             );
@@ -151,25 +286,59 @@ export default function Game() {
           </div>
         </div>
       )}
-      {/* Host controls */}
-      {socket.id === hostId && (
-        <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-          <button
-            onClick={() =>
-              socket.emit("changePhase", { roomId, phase: "night" })
+
+
+    {/* Host controls */}
+    {socket.id === hostId && (
+      <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+        <button
+          onClick={() =>
+            socket.emit("changePhase", { roomId, phase: "night" })
+          }
+        >
+          Bắt đầu đêm
+        </button>
+        <button
+          onClick={() =>
+            socket.emit("changePhase", { roomId, phase: "day" })
+          }
+        >
+          Bắt đầu ngày
+        </button>
+      </div>
+    )}
+
+    {/* Nút CẮN cho sói (ban đêm) */}
+    {role === "Sói" && phase === "night" && !deadPlayers.includes(socket.id) && (
+      <div style={{ marginTop: 12 }}>
+        <div>Chọn người để cắn: <b>{localSelectedTarget ? room.players.find(p => p.id === localSelectedTarget)?.name || "?" : "Chưa chọn"}</b></div>
+        <button
+          onClick={() => {
+            // nếu chưa chọn target thì nhắc
+            if (!localSelectedTarget) {
+              alert("Bạn chưa chọn mục tiêu để cắn.");
+              return;
             }
-          >
-            Bắt đầu đêm
-          </button>
-          <button
-            onClick={() =>
-              socket.emit("changePhase", { roomId, phase: "day" })
+            // mở popup xác nhận (dùng same popup style như tiên tri hoặc riêng)
+            const ok = window.confirm(`Bạn có chắc chắn muốn cắn ${room.players.find(p => p.id === localSelectedTarget)?.name || "đối tượng"}?`);
+            if (ok) {
+              // gửi lock vote (bấm CẮN)
+              socket.emit("wolfLockVote", { roomId });
             }
-          >
-            Bắt đầu ngày
-          </button>
-        </div>
-      )}
+          }}
+          style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer" }}
+        >
+          🐺 CẮN!
+        </button>
+        {/* Hiển thị countdown (nếu có) */}
+        {wolfDeadline && (
+          <div style={{ marginTop: 6 }}>
+            Thời gian còn lại: {Math.max(0, Math.ceil((wolfDeadline - Date.now()) / 1000))}s
+          </div>
+        )}
+      </div>
+    )}
+  
     </div>
   );
 }

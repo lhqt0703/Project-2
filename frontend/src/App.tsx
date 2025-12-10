@@ -4,6 +4,7 @@ import Lobby from "./pages/Lobby";
 import Game from "./pages/Game";
 import Room from "./pages/Room";
 import RoleSelect from "./pages/RoleSelect";
+import DevSpawn from "./pages/dev";
 
 function App() {
   return (
@@ -13,6 +14,8 @@ function App() {
       <Route path="/room" element={<Room />} />
       <Route path="/game" element={<Game />} />
       <Route path="/roleselect" element={<RoleSelect />} />
+      <Route path="/dev-spawn" element={<DevSpawn />} />
+
 
     </Routes>
   );

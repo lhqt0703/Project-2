@@ -10,6 +10,9 @@ interface RoomData {
   id: string;
   players: Player[];
   hostId: string;
+  roles?: string[];
+  rolesLocked?: boolean;
+  lockedPlayerIds?: string[];
   positions?: PlayerPosition[];
   positionEditors?: string[];
 }

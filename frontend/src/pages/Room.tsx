@@ -15,6 +15,9 @@ interface RoomData {
   id: string;
   players: Player[];
   hostId: string;
+  roles?: string[];
+  rolesLocked?: boolean;
+  lockedPlayerIds?: string[];
   positions?: PlayerPosition[];
   positionEditors?: string[];
 }
@@ -122,18 +125,71 @@ export default function Room() {
     const handleMismatch = (data: RoleMismatchData) => {
       const { newPlayers, missingRoles } = data;
 
+      const targetRoomId = room?.id ?? roomId;
+      if (!targetRoomId) return;
+
+      // Server cap: tối đa 10 "Dân" trong toàn bộ danh sách role
+      const MAX_VILLAGERS = 10;
+      const currentRoles = room?.roles ?? [];
+      const currentVillagers = currentRoles.filter(r => r === "Dân").length;
+      const availableVillagers = Math.max(0, MAX_VILLAGERS - currentVillagers);
+      const autoAddCount = Math.min(missingRoles, availableVillagers);
+      const stillMissingAfterAuto = Math.max(0, missingRoles - autoAddCount);
+
+      // Trường hợp server báo thiếu tiếp sau khi đã auto-add một phần (newPlayers có thể là [])
+      if ((newPlayers?.length ?? 0) === 0) {
+        alert(
+          `Danh sách vai trò vẫn đang thiếu ${missingRoles} vai trò so với số người chơi trong phòng.\n` +
+          `Hãy quay lại màn hình chọn vai trò để bổ sung tiếp.`
+        );
+        nav(`/roleselect?roomId=${targetRoomId}`);
+        return;
+      }
+
       const names = newPlayers.map((p: Player) => p.name).join(", ");
 
+      // Không thể auto-add thêm dân nữa
+      if (autoAddCount <= 0) {
+        alert(
+          `Có người chơi mới (${names}) đã vào phòng sau khi bạn đã xác nhận vai trò.\n` +
+          `Bạn đang thiếu ${missingRoles} vai trò.\n` +
+          `Hệ thống không thể tự thêm "Dân" nữa (tối đa ${MAX_VILLAGERS}).\n\n` +
+          `Bạn sẽ được chuyển sang màn hình chọn vai trò để bổ sung tiếp.`
+        );
+        nav(`/roleselect?roomId=${targetRoomId}`);
+        return;
+      }
+
+      // Auto-add được nhưng vẫn còn thiếu sau khi thêm tối đa
+      if (stillMissingAfterAuto > 0) {
+        const ok = window.confirm(
+          `Có người chơi mới (${names}) đã vào phòng sau khi bạn đã xác nhận vai trò.\n` +
+          `Bạn đang thiếu ${missingRoles} vai trò.\n\n` +
+          `Hệ thống có thể tự động thêm ${autoAddCount} vai trò "Dân" (tối đa ${MAX_VILLAGERS}).\n` +
+          `Tuy nhiên sau đó vẫn còn thiếu ${stillMissingAfterAuto} vai trò.\n\n` +
+          `Bạn có muốn tự thêm ${autoAddCount} "Dân" ngay bây giờ không?\n` +
+          `Sau đó bạn sẽ được chuyển sang màn hình chọn vai trò để chọn tiếp.`
+        );
+
+        if (ok) {
+          socket.emit("addAutoRoles", { roomId: targetRoomId, count: autoAddCount });
+          nav(`/roleselect?roomId=${targetRoomId}`);
+        } else {
+          nav(`/roleselect?roomId=${targetRoomId}`);
+        }
+        return;
+      }
+
+      // Auto-add đủ để hết thiếu
       const ok = window.confirm(
         `Có người chơi mới (${names}) đã vào phòng sau khi bạn đã xác nhận vai trò.\n` +
         `Bạn đang thiếu ${missingRoles} vai trò.\n\n` +
-        `Bạn có muốn tự động thêm ${missingRoles} Dân làng không?`
+        `Bạn có muốn tự động thêm ${missingRoles} "Dân" không? (tối đa ${MAX_VILLAGERS})`
       );
-
       if (ok) {
-        socket.emit("addAutoRoles", { roomId: room?.id, count: missingRoles });
+        socket.emit("addAutoRoles", { roomId: targetRoomId, count: missingRoles });
       } else {
-        alert("Hãy quay lại màn hình chọn vai trò để chỉnh sửa lại!");
+        nav(`/roleselect?roomId=${targetRoomId}`);
       }
     };
 

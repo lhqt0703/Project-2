@@ -20,13 +20,13 @@ export default function Game() {
   const [wolfLocked, setWolfLocked] = useState<Record<string, boolean> | null>(null); // trạng thái lock vote của từng sói
   const [wolfDeadline, setWolfDeadline] = useState<number | null>(null); 
   const [localSelectedTarget, setLocalSelectedTarget] = useState<string | null>(null); // khi sói click avatar -> chọn tạm
-  const [killedTonight, setKilledTonight] = useState<string | null>(null); 
+  const [_killedTonight, setKilledTonight] = useState<string | null>(null); // dấu _ để tránh cảnh báo không dùng
   const [deadPlayers, setDeadPlayers] = useState<string[]>([]); // danh sách người chơi đã bị cắn
-  const [now, setNow] = useState(Date.now()); // để cập nhật thời gian hiện tại
+  const [_now, setNow] = useState(Date.now()); // để cập nhật thời gian hiện tại
   const [wolves, setWolves] = useState<string[]>([]);
 
 
-
+  if (!room) return <p>Hình như có gì đó sai sai... Lẽ ra bạn không nên thấy được những dòng này</p>;
 
 
   useEffect(() => {
@@ -120,7 +120,7 @@ export default function Game() {
 
     // Nếu là Tiên tri
     if (phase === "night" && role === "Tiên tri" && !seerResult) {
-      if (deadPlayers.includes(socket.id)) return; // tiên tri chết → không soi
+      if (deadPlayers.includes(socket.id!)) return; // tiên tri chết → không soi
       
       setSelectedPlayerId(playerId);
       setShowConfirm(true);
@@ -130,13 +130,13 @@ export default function Game() {
     // Nếu là Sói
     if (phase === "night" && role === "Sói") {
       // nếu bản thân đã bị chết thì không được chọn
-      if (deadPlayers.includes(socket.id)) return;
+      if (deadPlayers.includes(socket.id!)) return;
       // không cho chọn chính mình
       if (playerId === socket.id) return;
       // không cho chọn sói khác
       if (wolves.includes(playerId)) return;
       // lock vote rồi thì không được chọn nữa
-      if (wolfLocked?.[socket.id]) return;
+      if (wolfLocked?.[socket.id!]) return;
       // hoặc là hết thời gian
       if (wolfDeadline && Date.now() >= wolfDeadline) return;
 
@@ -309,7 +309,7 @@ export default function Game() {
     )}
 
     {/* Nút CẮN cho sói (ban đêm) */}
-    {role === "Sói" && phase === "night" && !deadPlayers.includes(socket.id) && (
+    {role === "Sói" && phase === "night" && !deadPlayers.includes(socket.id!) && (
       <div style={{ marginTop: 12 }}>
         <div>Chọn người để cắn: <b>{localSelectedTarget ? room.players.find(p => p.id === localSelectedTarget)?.name || "?" : "Chưa chọn"}</b></div>
         <button

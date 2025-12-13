@@ -128,10 +128,10 @@ function finishWolfVoting(roomId: string) {
     // Sắp xếp phiếu từ nhiều xuống thấp
     entries.sort((a, b) => b[1] - a[1]);
     // Kiểm tra phiếu
-    if (entries.length > 1 && entries[0][1] === entries[1][1]) {
+    if (entries.length > 1 && entries[0]![1] === entries[1]![1]) { // dùng ! để TS ko nghĩ rằng entries[0] có thể undefined
       room.killedTonight = null; // hòa phiếu → ko chết ai
     } else {
-      room.killedTonight = entries[0][0]; // playerId bị cắn
+      room.killedTonight = entries[0]![0]; // playerId bị cắn
     }
   }
   // thông báo kết quả sơ cho phòng (chưa công bố đến người chơi sáng, chỉ gửi event)
@@ -224,26 +224,63 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
 
-    if (!room.roles) {
-      room.roles = [];
+    room.roles = room.roles || []; 
+
+    const currentVillagers = room.roles.filter(r => r === "Dân").length;
+    const maxVillagers = 10;
+
+    const availableToAdd = maxVillagers - currentVillagers;
+
+    if (availableToAdd <= 0) {
+      // Đã đạt tối đa dân, không thêm nữa
+      const stillMissing = room.players.length - room.roles.length;
+      io.to(room.hostId).emit("roleMismatch", {
+        newPlayers: [],
+        missingRoles: stillMissing
+      });
+      return;
     }
-    for (let i = 0; i < count; i++) {
+
+    const addCount = Math.min(count, availableToAdd);
+
+    for (let i = 0; i < addCount; i++) {
       room.roles.push("Dân");
     }
 
-    io.to(roomId).emit("rolesReady", room.roles);
+    // Sau khi thêm, kiểm tra còn thiếu không
+    const stillMissing = room.players.length - room.roles.length;
 
-    // Tự động bắt đầu game sau khi thêm role
-    const roles = room.roles;
-    if (!roles || roles.length < room.players.length) {
-      io.to(room.hostId).emit("errorMessage", "Danh sách vai trò không hợp lệ hoặc chưa được chọn.");
+    if (stillMissing > 0) {
+      io.to(room.hostId).emit("roleMismatch", {
+        newPlayers: [],
+        missingRoles: stillMissing
+      });
       return;
     }
-    const shuffled = roles.slice().sort(() => Math.random() - 0.5);
+
+    // Đủ role → bắt đầu game luôn
+    const shuffled = room.roles.slice().sort(() => Math.random() - 0.5);
+    room.playerRoles = {};
+
     room.players.forEach((player, index) => {
-      const role = shuffled[index];
+      const role = shuffled[index]!; // dùng dấu chấm than vì chắc chắn số role phải bằng hoặc nhiều hơn số người
+      room.playerRoles![player.id] = role;
       io.to(player.id).emit("yourRole", role);
     });
+
+    // Thiết lập lại danh sách sói để các chức năng sói hoạt động đúng
+    room.wolves = room.players
+      .filter(p => room.playerRoles?.[p.id] === "Sói")
+      .map(p => p.id);
+
+    room.wolves.forEach(wolfId => {
+      const wolfSocket = io.sockets.sockets.get(wolfId);
+      if (wolfSocket) wolfSocket.join(`wolves_${roomId}`);
+    });
+
+    // Khởi tạo mảng người chết (để tránh lỗi undefined)
+    room.deadPlayers = room.deadPlayers || [];
+    
     // Đánh dấu game đã bắt đầu (mặc định là ban ngày)
     room.phase = "day";
 
@@ -356,13 +393,15 @@ io.on("connection", (socket) => {
         const newPlayers = room.players.filter(
           p => !room.lockedPlayerIds!.includes(p.id)
         );
-        const missingRoles = currentCount - (room.roles ? room.roles.length : 0);
+        const missingRoles = Math.max(0, currentCount - (room.roles?.length || 0));
         // gửi cảnh báo CHỈ đến host
-        io.to(room.hostId).emit("roleMismatch", {
-          newPlayers,
-          missingRoles,
-        });
-        return; // Không random role, chờ host xử lý
+        if (missingRoles > 0) {
+          io.to(room.hostId).emit("roleMismatch", {
+            newPlayers,
+            missingRoles
+          });
+          return;
+        }
       }
     }
 

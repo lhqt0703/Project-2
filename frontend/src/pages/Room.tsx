@@ -19,6 +19,13 @@ interface RoomData {
   positionEditors?: string[];
 }
 
+interface PlayerPosition {
+  playerId: string;
+  x: number;
+  y: number;
+}
+
+
 export default function Room() {
   const { room, setRoom, setRole } = useRoomContext();
   const [contextMenu, setContextMenu] = useState<{
@@ -51,6 +58,8 @@ export default function Room() {
     socket.on("roomCreated", handleRoom);
     socket.on("roomJoined", handleRoom);
     socket.on("roomUpdated", handleRoom);
+    socket.on("roomUpdated", (data) => console.log("ROOM UPDATED:", data));
+
 
     socket.on("positionsUpdated", (positions: PlayerPosition[]) => {
       setRoom(prev => prev ? { ...prev, positions } : prev);
@@ -77,7 +86,7 @@ export default function Room() {
       socket.off("positionsUpdated"); 
       socket.off("positionEditorsUpdated"); 
     };
-  }, [room, setRoom]);
+  }, []); // cần là mảng rỗng để tránh gây lãng phí tài nguyên và lỡ sự kiện
 
   useEffect(() => {
     const handleYourRole = (role: string) => {
@@ -208,7 +217,7 @@ export default function Room() {
   if (!room) return <p>Đang tải phòng...</p>;
 
   const amIHost = socket.id === room.hostId;
-  const amIPositionEditor = (room.positionEditors || []).includes(socket.id);
+  const amIPositionEditor = (room.positionEditors || []).includes(socket.id || "");
 
   return (
       <div style={{ padding: 20, position: "relative" }}>
@@ -327,7 +336,7 @@ if (!p) return null;
             roomId={room.id}
             players={room.players}
             positionsFromServer={room.positions}
-            isEditor={socket.id === room.hostId || positionEditors.includes(socket.id)}
+            isEditor={socket.id === room.hostId || positionEditors.includes(socket.id || "")}
             onClose={() => setShowEditor(false)}
           />
         )}

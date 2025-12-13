@@ -32,7 +32,6 @@ export default function PositionEditor({
   // map positions (server) -> local state
   useEffect(() => {
     if (positionsFromServer && positionsFromServer.length === players.length) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPositions(positionsFromServer);
       return;
     }
@@ -48,10 +47,7 @@ export default function PositionEditor({
     setPositions(newPos);
   }, [players, positionsFromServer]);
 
-  // helper: convert 0..1 to px
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const toPx = (val: number, size: number) => Math.round(val * size);
-
+  
   const onPointerDown = (e: React.PointerEvent, playerId: string) => {
     if (!isEditor) return;
     (e.target as Element).setPointerCapture(e.pointerId);

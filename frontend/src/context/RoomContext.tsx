@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState } from "react";
 interface Player {
   id: string;
   name: string;
+  connected?: boolean;
 }
 
 // RoomData như file Room.tsx
@@ -15,6 +16,7 @@ interface RoomData {
   lockedPlayerIds?: string[];
   positions?: PlayerPosition[];
   positionEditors?: string[];
+  playerRoles?: Record<string, string>;
 }
 
 // Khi nào làm file PlayerPosition riêng thì import từ đó

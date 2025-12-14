@@ -1,8 +1,11 @@
 import { socket } from "../socket";
 import { useRoomContext } from "../context/RoomContext";
-import { useState } from "react";
 
-export default function PlayerPositions({ onPlayerClick }) {
+export default function PlayerPositions({
+  onPlayerClick,
+}: {
+  onPlayerClick: (playerId: string) => void;
+}) {
   const { room } = useRoomContext();
 
   if (!room) return null;

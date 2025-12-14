@@ -6,7 +6,7 @@ import { useLocation } from "react-router-dom";
 import { useRoomContext } from "../context/RoomContext";
 
 export default function Game() {
-  const { role, room } = useRoomContext();
+  const { role, room, setRoom } = useRoomContext();
   const [phase, setPhase] = useState<"day" | "night">("day");
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -24,9 +24,32 @@ export default function Game() {
   const [deadPlayers, setDeadPlayers] = useState<string[]>([]); // danh sách người chơi đã bị cắn
   const [_now, setNow] = useState(Date.now()); // để cập nhật thời gian hiện tại
   const [wolves, setWolves] = useState<string[]>([]);
+  const [activeWolves, setActiveWolves] = useState<string[]>([]);
 
 
   if (!room) return <p>Hình như có gì đó sai sai... Lẽ ra bạn không nên thấy được những dòng này</p>;
+
+  // keep room state in sync while in Game (for connected/disconnected badge, positions, etc.)
+  useEffect(() => {
+    if (roomId) {
+      socket.emit("getRoom", roomId);
+    }
+
+    const handleRoomUpdated = (data: any) => {
+      setRoom(data);
+    };
+    const handlePositionsUpdated = (positions: any) => {
+      setRoom((prev) => (prev ? { ...prev, positions } : prev));
+    };
+
+    socket.on("roomUpdated", handleRoomUpdated);
+    socket.on("positionsUpdated", handlePositionsUpdated);
+
+    return () => {
+      socket.off("roomUpdated", handleRoomUpdated);
+      socket.off("positionsUpdated", handlePositionsUpdated);
+    };
+  }, [roomId, setRoom]);
 
 
   useEffect(() => {
@@ -41,8 +64,9 @@ export default function Game() {
   const handleWolfLockedUpdated = (locked: Record<string, boolean>) => {
     setWolfLocked(locked);
   };
-  const handleWolfPhaseStarted = ({ wolves, deadline }: { wolves: string[]; deadline: number }) => {
+  const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline }: { wolves: string[]; activeWolves: string[]; deadline: number }) => {
     setWolves(wolves);         // LƯU DANH SÁCH SÓI
+    setActiveWolves(activeWolves || []);
     setWolfDeadline(deadline);
     setWolfVotes(null);
     setWolfLocked(null);
@@ -81,6 +105,9 @@ export default function Game() {
       setSeerResult(null);
       setWolfVotes(null); // reset cái badge vote của sói
       setLocalSelectedTarget(null); // reset lựa chọn tạm thời của sói
+      if (newPhase === "day") {
+        setActiveWolves([]);
+      }
     };
     socket.on("phaseChanged", handlePhaseChanged);
     return () => {
@@ -181,11 +208,15 @@ export default function Game() {
               boxShadow = seerResult.isWolf ? "0 0 0 8px #d00, 0 0 16px 8px #222" : "0 0 0 8px #222, 0 0 16px 8px #d00";
             }
             // xác định wolves sống hiện tại (từ room.playerRoles)
-            const wolvesAlive = wolves.filter(id => !deadPlayers.includes(id));
-            const wolfCount = wolvesAlive.length;
+            const activeWolvesAlive = (activeWolves.length ? activeWolves : wolves)
+              .filter(id => !deadPlayers.includes(id))
+              .filter(id => room.players.find(pp => pp.id === id)?.connected !== false);
+            const wolfCount = activeWolvesAlive.length;
 
             // trong map: tính voteCount cho từng avatar
-            const voteCountForThis = wolfVotes ? Object.values(wolfVotes).filter(t => t === pos.playerId).length : 0;
+            const voteCountForThis = wolfVotes
+              ? activeWolvesAlive.filter(wid => wolfVotes[wid] === pos.playerId).length
+              : 0;
 
             // isSelectedLocal (nếu bạn là sói và bạn đã chọn mục tiêu này)
             const isLocalSelected = localSelectedTarget === pos.playerId;
@@ -233,6 +264,24 @@ export default function Game() {
                     fontWeight: "bold",
                   }}>
                     {voteCountForThis}/{wolfCount}
+                  </div>
+                )}
+
+                {p.connected === false && (
+                  <div style={{
+                    position: "absolute",
+                    bottom: -10,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    background: "#555",
+                    color: "#fff",
+                    padding: "2px 6px",
+                    borderRadius: 6,
+                    fontSize: 11,
+                    fontWeight: "bold",
+                    opacity: 0.9,
+                  }}>
+                    Mất kết nối
                   </div>
                 )}
 

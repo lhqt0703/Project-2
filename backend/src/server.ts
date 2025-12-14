@@ -16,6 +16,7 @@ const io = new Server(httpServer, {
 interface Player {
   id: string;
   name: string;
+  connected?: boolean; // true = đang online; false = mất kết nối
 }
 
 interface Room {
@@ -42,6 +43,29 @@ interface Room {
 
 const rooms: Record<string, Room> = {};
 const activeRooms = new Set<string>(); // chứa toàn bộ mã phòng đã tạo
+
+function isPlayerConnected(room: Room, playerId: string) {
+  const player = room.players.find(p => p.id === playerId);
+  return player ? player.connected !== false : false;
+}
+
+function getActiveWolves(room: Room) {
+  const allWolves = room.players
+    .filter(p => room.playerRoles?.[p.id] === "Sói")
+    .map(p => p.id);
+  const dead = new Set(room.deadPlayers || []);
+  return allWolves.filter(id => !dead.has(id) && isPlayerConnected(room, id));
+}
+
+function toPublicRoom(room: Room) {
+  // IMPORTANT: tuyệt đối không emit NodeJS.Timeout (wolfTimer) vì nó gây lỗi serialize.
+  // Trả về object thuần JSON.
+  const { wolfTimer: _wolfTimer, ...rest } = room;
+  return {
+    ...rest,
+    players: room.players.map(p => ({ id: p.id, name: p.name, connected: p.connected !== false })),
+  };
+}
 
 
 // Tạo phòng mới
@@ -86,6 +110,7 @@ function startWolfPhase(roomId: string) {
   // broadcast cho cả phòng (client cần biết deadline để đếm ngược)
   io.to(`wolves_${roomId}`).emit("wolfPhaseStarted", {
     wolves: wolves.map(w => w.id),
+    activeWolves: getActiveWolves(room),
     deadline: room.wolfDeadline,
   });
 
@@ -111,10 +136,12 @@ function finishWolfVoting(roomId: string) {
     room.wolfTimer = null;
   }
 
-  const votes = room.wolfVotes!;
+  const votes = room.wolfVotes || {};
+  const activeWolves = getActiveWolves(room);
 
   const counts: Record<string, number> = {};
-  Object.values(votes).forEach(target => {
+  activeWolves.forEach(wolfId => {
+    const target = votes[wolfId];
     if (!target) return;
     counts[target] = (counts[target] || 0) + 1;
   });
@@ -150,7 +177,7 @@ io.on("connection", (socket) => {
 
     rooms[roomId] = {
       id: roomId,
-      players: [{ id: socket.id, name }],
+      players: [{ id: socket.id, name, connected: true }],
       hostId: socket.id,
       positions: generateCirclePositions([socket.id]),   // khởi tạo vị trí
       positionEditors: [], // ai được phép sắp xếp
@@ -159,7 +186,7 @@ io.on("connection", (socket) => {
     socket.join(roomId);
 
     // Gửi lại thông tin phòng cho người tạo
-    socket.emit("roomCreated", rooms[roomId]);
+    socket.emit("roomCreated", toPublicRoom(rooms[roomId]));
   });
 
   socket.on("joinRoom", ({ roomId, name }) => {
@@ -169,7 +196,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    room.players.push({ id: socket.id, name });
+    room.players.push({ id: socket.id, name, connected: true });
     if (!room.positions || room.positions.length !== room.players.length) {
       const existing = new Map((room.positions || []).map(p => [p.playerId, p]));
       const newPos = generateCirclePositions(room.players.map(p => p.id));
@@ -186,16 +213,16 @@ io.on("connection", (socket) => {
     socket.join(roomId);
 
     // 1) gửi riêng cho người vừa join
-    socket.emit("roomJoined", room);
+    socket.emit("roomJoined", toPublicRoom(room));
 
     // 2) gửi cho cả phòng để cập nhật
-    io.to(roomId).emit("roomUpdated", room);
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
   socket.on("getRoom", (roomId) => {
     const room = rooms[roomId];
     if (room) {
-      socket.emit("roomUpdated", room);
+      socket.emit("roomUpdated", toPublicRoom(room));
       io.to(roomId).emit("positionsUpdated", room.positions);
       io.to(roomId).emit("positionEditorsUpdated", room.positionEditors || []);
 
@@ -341,13 +368,43 @@ io.on("connection", (socket) => {
       const playerIndex = room.players.findIndex(p => p.id === socket.id);
       if (playerIndex !== -1) {
         const isHost = room.hostId === socket.id;
-        // xoá user khỏi room
+
+        // Nếu game đã bắt đầu -> không xoá khỏi phòng, chỉ đánh dấu mất kết nối
+        if (room.phase) {
+          room.players[playerIndex] = { ...room.players[playerIndex]!, connected: false };
+
+          // Nếu là sói và đang ở night phase -> bỏ qua hành động của họ
+          if (room.playerRoles?.[socket.id] === "Sói") {
+            if (room.wolfVotes) room.wolfVotes[socket.id] = null;
+            if (room.wolfLocked) room.wolfLocked[socket.id] = false;
+            io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes || {});
+            io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked || {});
+
+            // nếu các sói còn online đã lock hết -> chốt luôn
+            const activeWolves = getActiveWolves(room);
+            const allLocked = activeWolves.length > 0 && activeWolves.every(id => room.wolfLocked?.[id] === true);
+            if (allLocked) {
+              finishWolfVoting(roomId);
+            }
+          }
+
+          // broadcast cho cả phòng để hiện badge mất kết nối
+          io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+
+          // Nếu host mất kết nối khi game đang diễn ra
+          if (isHost) {
+            io.to(roomId).emit("hostDisconnected");
+            console.log(`Host mất kết nối khi game đang diễn ra ở phòng ${roomId}`);
+          }
+
+          break;
+        }
+
+        // Game chưa bắt đầu -> xoá user khỏi room như cũ
         room.players.splice(playerIndex, 1);
         // Xóa cả position luôn
         room.positions = (room.positions || []).filter(pos => pos.playerId !== socket.id);
         io.to(roomId).emit("positionsUpdated", room.positions);
-
-
 
         // nếu phòng trống → xoá phòng
         if (room.players.length === 0) {
@@ -357,23 +414,16 @@ io.on("connection", (socket) => {
         } else {
           // Nếu host rời phòng
           if (isHost) {
-            // Nếu game chưa bắt đầu (chưa có phase hoặc phase === undefined)
-            if (!room.phase) {
-              // Chuyển quyền host cho người đầu tiên còn lại
-              if (room.players[0]) {
-                room.hostId = room.players[0].id;
-                io.to(roomId).emit("hostChanged", room.hostId);
-                io.to(roomId).emit("roomUpdated", room);
-                console.log(`Chủ phòng rời, chuyển quyền cho ${room.hostId}`);
-              }
-            } else {
-              // Nếu game đã bắt đầu, thông báo cho cả phòng
-              io.to(roomId).emit("hostDisconnected");
-              console.log(`Host rời khi game đang diễn ra ở phòng ${roomId}`);
+            // Chuyển quyền host cho người đầu tiên còn lại
+            if (room.players[0]) {
+              room.hostId = room.players[0].id;
+              io.to(roomId).emit("hostChanged", room.hostId);
+              io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+              console.log(`Chủ phòng rời, chuyển quyền cho ${room.hostId}`);
             }
           } else {
             // nếu còn người → cập nhật room
-            io.to(roomId).emit("roomUpdated", room);
+            io.to(roomId).emit("roomUpdated", toPublicRoom(room));
           }
         }
         break;
@@ -489,7 +539,7 @@ io.on("connection", (socket) => {
     if (!room.players.find(p => p.id === targetId)) return;
     room.hostId = targetId;
     io.to(roomId).emit("hostChanged", room.hostId);
-    io.to(roomId).emit("roomUpdated", room);
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
   // Kick người chơi khỏi phòng
@@ -508,7 +558,7 @@ io.on("connection", (socket) => {
         io.to(roomId).emit("hostChanged", room.hostId);
       }
     }
-    io.to(roomId).emit("roomUpdated", room);
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     io.to(targetId).emit("kicked"); // thông báo cho người bị kick
   });
 
@@ -526,6 +576,7 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
     if (room.playerRoles?.[socket.id] !== "Sói") return; // chỉ sói mới được chọn
+    if ((room.deadPlayers || []).includes(socket.id)) return; // sói chết -> bỏ qua
 
     // nếu sói đã cắn thì ko cho thay đổi
     if (room.wolfLocked?.[socket.id]) {
@@ -554,10 +605,8 @@ io.on("connection", (socket) => {
     io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked);
 
     // nếu tất cả sói đã lock → xử lý ngay, không chờ hết 10 giây
-    const aliveWolves = (room.wolves || []).filter(id => !(room.deadPlayers || []).includes(id)); // chỉ tính sói còn sống
-
-  //const allLocked = Object.values(room.wolfLocked!).every(v => v === true);
-    const allLocked = aliveWolves.length > 0 && aliveWolves.every(id => room.wolfLocked?.[id] === true);
+    const activeWolves = getActiveWolves(room);
+    const allLocked = activeWolves.length > 0 && activeWolves.every(id => room.wolfLocked?.[id] === true);
     if (allLocked) {
     if (room.wolfTimer) { // nếu timer còn tồn tại
       clearTimeout(room.wolfTimer);

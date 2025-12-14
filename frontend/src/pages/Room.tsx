@@ -9,6 +9,7 @@ import { useRoomContext } from "../context/RoomContext";
 interface Player {
   id: string;
   name: string;
+  connected?: boolean;
 }
 
 interface RoomData {

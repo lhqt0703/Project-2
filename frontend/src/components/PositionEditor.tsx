@@ -4,6 +4,7 @@ import { socket } from "../socket";
 interface Player {
   id: string;
   name: string;
+  connected?: boolean;
 }
 
 interface PlayerPosition {

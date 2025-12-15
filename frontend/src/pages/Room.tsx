@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { socket } from "../socket";
 import React from "react";
-import PositionEditor from "../components/PositionEditor";
+import PlayerPositions from "../components/PlayerPositions";
 import { useRoomContext } from "../context/RoomContext";
 
 
@@ -44,9 +44,6 @@ export default function Room() {
   const query = new URLSearchParams(location.search);
   const roomId = query.get("roomId");
 
-  const [showEditor, setShowEditor] = useState(false);
-  const [positionEditors, setPositionEditors] = useState<string[]>([]);
-
   useEffect(() => {
     if (roomId) {
       socket.emit("getRoom", roomId);
@@ -70,7 +67,6 @@ export default function Room() {
     });
 
     socket.on("positionEditorsUpdated", (editors: string[]) => {
-      setPositionEditors(editors ?? []);
       setRoom(prev => prev ? { ...prev, positionEditors: editors } : prev);
     });
 
@@ -274,7 +270,6 @@ export default function Room() {
   if (!room) return <p>Đang tải phòng...</p>;
 
   const amIHost = socket.id === room.hostId;
-  const amIPositionEditor = (room.positionEditors || []).includes(socket.id || "");
 
   return (
       <div style={{ padding: 20, position: "relative" }}>
@@ -295,12 +290,6 @@ export default function Room() {
             ))}
           </ul>
 
-          { (amIHost || amIPositionEditor) && (
-            <div style={{ marginTop: 12 }}>
-              <button onClick={() => setShowEditor(true)}>Sắp xếp vị trí (Drag & Drop)</button>
-            </div>
-          )}
-
           {amIHost && (
             <>
               <div style={{ marginTop: 12 }}>
@@ -315,45 +304,12 @@ export default function Room() {
 
         {/* right: visual layout preview */}
         <div style={{ flex: 1 }}>
-          <h3>Bố cục (Preview):</h3>
-          <div style={{ width: "100%", maxWidth: 600, height: 400, background: "#f0f0f0", borderRadius: 10, position: "relative" }}>
-            {/* center marker */}
-            <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", pointerEvents: "none" }}>
-              <div style={{ width: 6, height: 6, borderRadius: 3, background: "#666" }} />
-            </div>
-
-            {(room.positions || []).map((pos) => {
-              const p = room.players.find(x => x.id === pos.playerId);
-if (!p) return null;
-              const left = `${pos.x * 100}%`;
-              const top = `${pos.y * 100}%`;
-              return (
-                <div
-                  key={pos.playerId}
-                  style={{
-                    position: "absolute",
-                    left,
-                    top,
-                    transform: "translate(-50%,-50%)",
-                    width: 72,
-                    height: 72,
-                    borderRadius: 36,
-                    background: "#fff",
-                    border: "2px solid #333",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 12,
-                  }}
-                >
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontWeight: "bold" }}>{p.name || "?"}</div>
-                    <div style={{ opacity: 0.6, fontSize: 11 }}>{p.id === socket.id ? "(Bạn)" : ""}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <h3>Bố cục:</h3>
+          <PlayerPositions onPlayerClick={() => {
+             // Handle click if needed, e.g. show profile or context menu
+             // Currently context menu is handled by onContextMenu on the list, 
+             // but we might want it here too. For now, just log or ignore.
+          }} />
         </div>
       </div>
 
@@ -386,16 +342,6 @@ if (!p) return null;
             </button>
 
           </div>
-        )}
-
-        {showEditor && room && (
-          <PositionEditor
-            roomId={room.id}
-            players={room.players}
-            positionsFromServer={room.positions}
-            isEditor={socket.id === room.hostId || positionEditors.includes(socket.id || "")}
-            onClose={() => setShowEditor(false)}
-          />
         )}
     </div>
   );

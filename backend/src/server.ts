@@ -92,6 +92,269 @@ function generateCirclePositions(playerIds: string[]) {
   });
 }
 
+type PlayerPos = { playerId: string; x: number; y: number };
+
+// Layout assumptions (client canvas is typically ~600x400 in Game view)
+const POSITION_LAYOUT = {
+  widthPx: 600,
+  heightPx: 470,
+  radiusPx: 40,
+  defaultGapPx: 13.3,
+  paddingPx: 6,
+} as const;
+
+const JOIN_LAYOUT = {
+  topHeightPx: 350,
+  gapPx: 20,
+  joinHeightPx: 100,
+  maxPerRow: 7,
+} as const;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function clamp01(v: number) {
+  return Math.max(0, Math.min(1, v));
+}
+
+function clampToBounds(pos: PlayerPos, opts = POSITION_LAYOUT): PlayerPos {
+  const marginX = (opts.radiusPx + opts.paddingPx) / opts.widthPx;
+  const marginY = (opts.radiusPx + opts.paddingPx) / opts.heightPx;
+  return {
+    ...pos,
+    x: Math.max(marginX, Math.min(1 - marginX, clamp01(pos.x))),
+    y: Math.max(marginY, Math.min(1 - marginY, clamp01(pos.y))),
+  };
+}
+
+function distSqPx(a: PlayerPos, b: PlayerPos, opts = POSITION_LAYOUT) {
+  const dx = (a.x - b.x) * opts.widthPx;
+  const dy = (a.y - b.y) * opts.heightPx;
+  return dx * dx + dy * dy;
+}
+
+function isTooClose(a: PlayerPos, b: PlayerPos, minDistPx: number, opts = POSITION_LAYOUT) {
+  return distSqPx(a, b, opts) < minDistPx * minDistPx;
+}
+
+function resolveOverlaps(
+  positions: PlayerPos[],
+  {
+    minDistPx,
+    anchoredIds,
+    anchorStrength,
+    iterations,
+  }: {
+    minDistPx: number;
+    anchoredIds?: Set<string>;
+    anchorStrength?: number; // 0..1; smaller = weaker pull to anchor
+    iterations?: number;
+  },
+  opts = POSITION_LAYOUT
+) {
+  const anchors = new Map<string, { x: number; y: number }>();
+  if (anchoredIds) {
+    positions.forEach(p => {
+      if (anchoredIds.has(p.playerId)) anchors.set(p.playerId, { x: p.x, y: p.y });
+    });
+  }
+
+  const iters = iterations ?? 220;
+  const k = anchorStrength ?? 0.02;
+  const minDistSq = minDistPx * minDistPx;
+
+  for (let iter = 0; iter < iters; iter++) {
+    let moved = 0;
+
+    for (let i = 0; i < positions.length; i++) {
+      const a = positions[i]!;
+      // If this position is anchored, keep it fully fixed to avoid drift.
+      if (anchoredIds?.has(a.playerId)) continue;
+      let pushXpx = 0;
+      let pushYpx = 0;
+
+      for (let j = 0; j < positions.length; j++) {
+        if (i === j) continue;
+        const b = positions[j]!;
+
+        const dxPx = (a.x - b.x) * opts.widthPx;
+        const dyPx = (a.y - b.y) * opts.heightPx;
+        const d2 = dxPx * dxPx + dyPx * dyPx;
+        if (d2 >= minDistSq) continue;
+
+        const d = Math.sqrt(d2) || 0.0001;
+        const overlap = (minDistPx - d) / d;
+        pushXpx += dxPx * overlap;
+        pushYpx += dyPx * overlap;
+      }
+
+      // anchor spring to keep old positions stable
+      const anchor = anchors.get(a.playerId);
+      if (anchor) {
+        pushXpx += (anchor.x - a.x) * opts.widthPx * k;
+        pushYpx += (anchor.y - a.y) * opts.heightPx * k;
+      }
+
+      if (pushXpx === 0 && pushYpx === 0) continue;
+      const step = 0.6;
+      a.x += (pushXpx / opts.widthPx) * 0.06 * step;
+      a.y += (pushYpx / opts.heightPx) * 0.06 * step;
+      const clamped = clampToBounds(a, opts);
+      a.x = clamped.x;
+      a.y = clamped.y;
+      moved++;
+    }
+
+    if (moved === 0) break;
+  }
+
+  return positions;
+}
+
+function tryPlaceNewPoint(existing: PlayerPos[], id: string, minDistPx: number, opts = POSITION_LAYOUT): PlayerPos | null {
+  const marginX = (opts.radiusPx + opts.paddingPx) / opts.widthPx;
+  const marginY = (opts.radiusPx + opts.paddingPx) / opts.heightPx;
+  const joinStartPx = JOIN_LAYOUT.topHeightPx + JOIN_LAYOUT.gapPx;
+  const joinCenterY = (joinStartPx + JOIN_LAYOUT.joinHeightPx / 2) / opts.heightPx;
+  const joinCenterYClamped = clamp(joinCenterY, marginY, 1 - marginY);
+
+  const stepX = (2 * opts.radiusPx + opts.defaultGapPx) / opts.widthPx;
+  const availableX = 1 - 2 * marginX;
+  const maxSlots = Math.max(1, Math.floor(availableX / stepX) + 1);
+  const slots = Math.min(JOIN_LAYOUT.maxPerRow, maxSlots);
+  const startX = clamp(0.5 - (stepX * (slots - 1)) / 2, marginX, 1 - marginX);
+
+  for (let i = 0; i < slots; i++) {
+    const candidate: PlayerPos = {
+      playerId: id,
+      x: clamp(startX + stepX * i, marginX, 1 - marginX),
+      y: joinCenterYClamped,
+    };
+    let ok = true;
+    for (const p of existing) {
+      if (isTooClose(candidate, p, minDistPx, opts)) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return candidate;
+  }
+
+  // 2) Fallback: random anywhere
+  for (let attempt = 0; attempt < 1200; attempt++) {
+    const candidate: PlayerPos = {
+      playerId: id,
+      x: marginX + Math.random() * (1 - 2 * marginX),
+      y: marginY + Math.random() * (1 - 2 * marginY),
+    };
+    let ok = true;
+    for (const p of existing) {
+      if (isTooClose(candidate, p, minDistPx, opts)) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return candidate;
+  }
+  return null;
+}
+
+function ensureNonOverlappingPositions(playerIds: string[], existingPositions?: PlayerPos[], opts = POSITION_LAYOUT): PlayerPos[] {
+  const byId = new Map<string, PlayerPos>();
+  (existingPositions || []).forEach(p => {
+    byId.set(p.playerId, clampToBounds({ ...p }, opts));
+  });
+
+  const anchoredIds = new Set<string>();
+  const result: PlayerPos[] = [];
+
+  // 1) keep existing positions when possible
+  for (const id of playerIds) {
+    const ex = byId.get(id);
+    if (ex) {
+      anchoredIds.add(id);
+      result.push({ ...ex });
+    }
+  }
+
+  // 2) place missing players without overlap (prefer a small default gap)
+  const preferredMinDistPx = 2 * opts.radiusPx + opts.defaultGapPx;
+  const hardMinDistPx = 2 * opts.radiusPx;
+
+  for (const id of playerIds) {
+    if (byId.has(id)) continue;
+    const placed =
+      tryPlaceNewPoint(result, id, preferredMinDistPx, opts) ||
+      tryPlaceNewPoint(result, id, hardMinDistPx, opts);
+
+    if (placed) {
+      result.push(placed);
+      continue;
+    }
+
+    // fallback: start from circle + relax (guarantees best-effort packing)
+    const fallback = generateCirclePositions([id])[0]!;
+    result.push(clampToBounds({ ...fallback, playerId: id }, opts));
+  }
+
+  // 3) resolve overlaps; keep anchors stable unless necessary
+  resolveOverlaps(result, {
+    minDistPx: hardMinDistPx,
+    anchoredIds,
+    anchorStrength: 0.02,
+    iterations: 260,
+  }, opts);
+
+  return result;
+}
+
+function resolveDraggedAgainstFixedOthers(dragged: PlayerPos, fixedOthers: PlayerPos[], opts = POSITION_LAYOUT): PlayerPos {
+  const minDistPx = 2 * opts.radiusPx; // hard minimum
+  const minDistSq = minDistPx * minDistPx;
+
+  let p: PlayerPos = clampToBounds({ ...dragged }, opts);
+
+  // Push only the dragged point away from fixed others.
+  for (let iter = 0; iter < 24; iter++) {
+    let moved = false;
+
+    for (const o of fixedOthers) {
+      const dxPx = (p.x - o.x) * opts.widthPx;
+      const dyPx = (p.y - o.y) * opts.heightPx;
+      const d2 = dxPx * dxPx + dyPx * dyPx;
+      if (d2 >= minDistSq) continue;
+
+      const d = Math.sqrt(d2) || 0.0001;
+      const overlap = minDistPx - d;
+      const nx = dxPx / d;
+      const ny = dyPx / d;
+
+      p.x += (nx * overlap) / opts.widthPx;
+      p.y += (ny * overlap) / opts.heightPx;
+      p = clampToBounds(p, opts);
+      moved = true;
+    }
+
+    if (!moved) break;
+  }
+
+  // If still overlapping (too crowded), fall back to best-effort relax using existing layout.
+  for (const o of fixedOthers) {
+    if (isTooClose(p, o, minDistPx, opts)) {
+      const fallback = ensureNonOverlappingPositions(
+        [p.playerId, ...fixedOthers.map(x => x.playerId)],
+        [p, ...fixedOthers],
+        opts
+      );
+      const fixed = fallback.find(x => x.playerId === p.playerId);
+      return fixed ? fixed : p;
+    }
+  }
+
+  return p;
+}
+
 
 function startWolfPhase(roomId: string) {
   const room = rooms[roomId];
@@ -179,7 +442,7 @@ io.on("connection", (socket) => {
       id: roomId,
       players: [{ id: socket.id, name, connected: true }],
       hostId: socket.id,
-      positions: generateCirclePositions([socket.id]),   // khởi tạo vị trí
+      positions: ensureNonOverlappingPositions([socket.id]),   // khởi tạo vị trí
       positionEditors: [], // ai được phép sắp xếp
     };
 
@@ -197,19 +460,7 @@ io.on("connection", (socket) => {
     }
 
     room.players.push({ id: socket.id, name, connected: true });
-    if (!room.positions || room.positions.length !== room.players.length) {
-      const existing = new Map((room.positions || []).map(p => [p.playerId, p]));
-      const newPos = generateCirclePositions(room.players.map(p => p.id));
-      // giữ vị trí cũ nếu có
-      newPos.forEach(pos => {
-        if (existing.has(pos.playerId)) {
-          const ex = existing.get(pos.playerId)!;
-          pos.x = ex.x;
-          pos.y = ex.y;
-        }
-      });
-      room.positions = newPos;
-    }
+    room.positions = ensureNonOverlappingPositions(room.players.map(p => p.id), room.positions);
     socket.join(roomId);
 
     // 1) gửi riêng cho người vừa join
@@ -329,8 +580,47 @@ io.on("connection", (socket) => {
       return;
     }
 
-    room.positions = positions;
-    io.to(roomId).emit("positionsUpdated", positions);
+    const playerIds = room.players.map(p => p.id);
+    const hasAllPlayers = (room.positions || []).length === playerIds.length;
+    const current = room.positions && hasAllPlayers
+      ? room.positions.map(p => clampToBounds({ ...p }))
+      : ensureNonOverlappingPositions(playerIds, room.positions);
+
+    // Detect "single-drag" updates: only one player changed compared to current.
+    const incomingById = new Map<string, PlayerPos>();
+    (positions || []).forEach((p: PlayerPos) => incomingById.set(p.playerId, p));
+    const currentById = new Map<string, PlayerPos>();
+    current.forEach(p => currentById.set(p.playerId, p));
+
+    const EPS = 0.0005;
+    const changedIds: string[] = [];
+    for (const id of playerIds) {
+      const inc = incomingById.get(id);
+      const cur = currentById.get(id);
+      if (!inc || !cur) continue;
+      if (Math.abs(inc.x - cur.x) > EPS || Math.abs(inc.y - cur.y) > EPS) changedIds.push(id);
+    }
+
+    if (changedIds.length === 1) {
+      const draggedId = changedIds[0]!;
+      const draggedIncoming = incomingById.get(draggedId);
+      const draggedCurrent = currentById.get(draggedId);
+
+      if (draggedIncoming && draggedCurrent) {
+        const fixedOthers = current.filter(p => p.playerId !== draggedId);
+        const resolvedDragged = resolveDraggedAgainstFixedOthers(
+          { ...draggedCurrent, x: draggedIncoming.x, y: draggedIncoming.y },
+          fixedOthers
+        );
+        room.positions = [...fixedOthers, resolvedDragged];
+        io.to(roomId).emit("positionsUpdated", room.positions);
+        return;
+      }
+    }
+
+    // Multi-change updates (swap/auto-arrange) or ambiguous updates: sanitize globally.
+    room.positions = ensureNonOverlappingPositions(playerIds, positions);
+    io.to(roomId).emit("positionsUpdated", room.positions);
   });
 
   socket.on("grantPositionEdit", ({ roomId, targetId }) => {

@@ -20,9 +20,9 @@ export default function Game() {
   const [wolfLocked, setWolfLocked] = useState<Record<string, boolean> | null>(null); // trạng thái lock vote của từng sói
   const [wolfDeadline, setWolfDeadline] = useState<number | null>(null); 
   const [localSelectedTarget, setLocalSelectedTarget] = useState<string | null>(null); // khi sói click avatar -> chọn tạm
-  const [_killedTonight, setKilledTonight] = useState<string | null>(null); // dấu _ để tránh cảnh báo không dùng
+  const [, setKilledTonight] = useState<string | null>(null);
   const [deadPlayers, setDeadPlayers] = useState<string[]>([]); // danh sách người chơi đã bị cắn
-  const [_now, setNow] = useState(Date.now()); // để cập nhật thời gian hiện tại
+  const [, setNow] = useState(Date.now()); // để cập nhật thời gian hiện tại
   const [wolves, setWolves] = useState<string[]>([]);
   const [activeWolves, setActiveWolves] = useState<string[]>([]);
 

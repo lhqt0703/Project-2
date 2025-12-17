@@ -17,6 +17,8 @@ interface RoomData {
   positions?: PlayerPosition[];
   positionEditors?: string[];
   playerRoles?: Record<string, string>;
+  autoArrangeUsed?: boolean;
+  compactCircles?: boolean;
 }
 
 // Khi nào làm file PlayerPosition riêng thì import từ đó

@@ -39,6 +39,16 @@ interface Room {
   wolfDeadline?: number | null;  // thời gian chờ sói kết thúc cắn
   killedTonight?: string | null; // playerId người bị cắn đêm nay (hiện null nếu ko ai)
   deadPlayers?: string[]; // danh sách playerId đã chết
+
+  // UI flag: after the first auto-arrange, subsequent uses should confirm
+  autoArrangeUsed?: boolean;
+
+  // UI flag: whether circles are shown in compact mode (synced to all clients).
+  compactCircles?: boolean;
+
+  // Layout height mode: positions are normalized against this pixel height.
+  // 470px for 1..18 players, 570px when 19+ (adds a bottom extra row).
+  layoutHeightPx?: number;
 }
 
 const rooms: Record<string, Room> = {};
@@ -103,6 +113,13 @@ const POSITION_LAYOUT = {
   paddingPx: 6,
 } as const;
 
+const BASE_FRAME_HEIGHT_PX = POSITION_LAYOUT.heightPx;
+const EXTRA_FRAME_HEIGHT_PX = 100;
+const EXPANDED_FRAME_HEIGHT_PX = BASE_FRAME_HEIGHT_PX + EXTRA_FRAME_HEIGHT_PX;
+const AUTO_TOP_LIMIT = 18;
+
+const COMPACT_RADIUS_PX = 23; // matches 46px circles on client
+
 const JOIN_LAYOUT = {
   topHeightPx: 350,
   gapPx: 20,
@@ -126,6 +143,31 @@ function clampToBounds(pos: PlayerPos, opts = POSITION_LAYOUT): PlayerPos {
     x: Math.max(marginX, Math.min(1 - marginX, clamp01(pos.x))),
     y: Math.max(marginY, Math.min(1 - marginY, clamp01(pos.y))),
   };
+}
+
+function layoutOptsForRoom(room: Room) {
+  const heightPx = room.layoutHeightPx ?? BASE_FRAME_HEIGHT_PX;
+  const radiusPx = room.compactCircles ? COMPACT_RADIUS_PX : POSITION_LAYOUT.radiusPx;
+  return { ...POSITION_LAYOUT, heightPx, radiusPx };
+}
+
+function desiredLayoutHeightPx(playerCount: number) {
+  return playerCount > AUTO_TOP_LIMIT ? EXPANDED_FRAME_HEIGHT_PX : BASE_FRAME_HEIGHT_PX;
+}
+
+function rescaleRoomPositionsForHeight(room: Room, nextHeightPx: number) {
+  const prevHeightPx = room.layoutHeightPx ?? BASE_FRAME_HEIGHT_PX;
+  if (prevHeightPx === nextHeightPx) return false;
+
+  const factor = prevHeightPx / nextHeightPx; // preserve pixel y: yNorm' = yNorm * (prev/next)
+  const nextOpts = { ...POSITION_LAYOUT, heightPx: nextHeightPx };
+
+  room.positions = (room.positions || []).map(p => {
+    const scaled: PlayerPos = { ...p, y: p.y * factor };
+    return clampToBounds(scaled, nextOpts);
+  });
+  room.layoutHeightPx = nextHeightPx;
+  return true;
 }
 
 function distSqPx(a: PlayerPos, b: PlayerPos, opts = POSITION_LAYOUT) {
@@ -215,6 +257,70 @@ function resolveOverlaps(
 function tryPlaceNewPoint(existing: PlayerPos[], id: string, minDistPx: number, opts = POSITION_LAYOUT): PlayerPos | null {
   const marginX = (opts.radiusPx + opts.paddingPx) / opts.widthPx;
   const marginY = (opts.radiusPx + opts.paddingPx) / opts.heightPx;
+
+  const isExpanded = opts.heightPx > BASE_FRAME_HEIGHT_PX + 0.01;
+
+  // For high player counts (notably 17/18 layouts), don't reserve the bottom join row.
+  // Place new players somewhere inside the frame instead.
+  const preferJoinRow = !isExpanded && existing.length < 17;
+
+  // For 19+ players (expanded frame), place new players into the extra bottom row first.
+  if (isExpanded && existing.length >= AUTO_TOP_LIMIT) {
+    const extraCenterY = (BASE_FRAME_HEIGHT_PX + EXTRA_FRAME_HEIGHT_PX / 2) / opts.heightPx;
+    const y = clamp(extraCenterY, marginY, 1 - marginY);
+
+    const stepX = (2 * opts.radiusPx + opts.defaultGapPx) / opts.widthPx;
+    const availableX = 1 - 2 * marginX;
+    const maxSlots = Math.max(1, Math.floor(availableX / stepX) + 1);
+    const slots = Math.min(JOIN_LAYOUT.maxPerRow, maxSlots);
+    const startX = clamp(0.5 - (stepX * (slots - 1)) / 2, marginX, 1 - marginX);
+
+    for (let i = 0; i < slots; i++) {
+      const candidate: PlayerPos = {
+        playerId: id,
+        x: clamp(startX + stepX * i, marginX, 1 - marginX),
+        y,
+      };
+      let ok = true;
+      for (const p of existing) {
+        if (isTooClose(candidate, p, minDistPx, opts)) {
+          ok = false;
+          break;
+        }
+      }
+      if (ok) return candidate;
+    }
+  }
+
+  if (!preferJoinRow) {
+    const centerX = 0.5;
+    const centerY = 0.5;
+    const step = (2 * opts.radiusPx + opts.defaultGapPx) / Math.min(opts.widthPx, opts.heightPx);
+    const rings = 6;
+    const pointsPerRing = 10;
+
+    for (let r = 0; r <= rings; r++) {
+      const radius = r * step;
+      const points = r === 0 ? 1 : pointsPerRing;
+      for (let i = 0; i < points; i++) {
+        const a = (i / points) * 2 * Math.PI;
+        const candidate: PlayerPos = {
+          playerId: id,
+          x: clamp(centerX + Math.cos(a) * radius, marginX, 1 - marginX),
+          y: clamp(centerY + Math.sin(a) * radius, marginY, 1 - marginY),
+        };
+        let ok = true;
+        for (const p of existing) {
+          if (isTooClose(candidate, p, minDistPx, opts)) {
+            ok = false;
+            break;
+          }
+        }
+        if (ok) return candidate;
+      }
+    }
+  }
+
   const joinStartPx = JOIN_LAYOUT.topHeightPx + JOIN_LAYOUT.gapPx;
   const joinCenterY = (joinStartPx + JOIN_LAYOUT.joinHeightPx / 2) / opts.heightPx;
   const joinCenterYClamped = clamp(joinCenterY, marginY, 1 - marginY);
@@ -225,7 +331,7 @@ function tryPlaceNewPoint(existing: PlayerPos[], id: string, minDistPx: number, 
   const slots = Math.min(JOIN_LAYOUT.maxPerRow, maxSlots);
   const startX = clamp(0.5 - (stepX * (slots - 1)) / 2, marginX, 1 - marginX);
 
-  for (let i = 0; i < slots; i++) {
+  if (preferJoinRow) for (let i = 0; i < slots; i++) {
     const candidate: PlayerPos = {
       playerId: id,
       x: clamp(startX + stepX * i, marginX, 1 - marginX),
@@ -442,8 +548,11 @@ io.on("connection", (socket) => {
       id: roomId,
       players: [{ id: socket.id, name, connected: true }],
       hostId: socket.id,
-      positions: ensureNonOverlappingPositions([socket.id]),   // khởi tạo vị trí
+      layoutHeightPx: BASE_FRAME_HEIGHT_PX,
+      positions: ensureNonOverlappingPositions([socket.id], undefined, { ...POSITION_LAYOUT, heightPx: BASE_FRAME_HEIGHT_PX }),   // khởi tạo vị trí
       positionEditors: [], // ai được phép sắp xếp
+      autoArrangeUsed: false,
+      compactCircles: false,
     };
 
     socket.join(roomId);
@@ -460,7 +569,13 @@ io.on("connection", (socket) => {
     }
 
     room.players.push({ id: socket.id, name, connected: true });
-    room.positions = ensureNonOverlappingPositions(room.players.map(p => p.id), room.positions);
+
+    // Expand/shrink layout height as needed, without visually moving existing players.
+    const nextHeightPx = desiredLayoutHeightPx(room.players.length);
+    rescaleRoomPositionsForHeight(room, nextHeightPx);
+
+    const opts = layoutOptsForRoom(room);
+    room.positions = ensureNonOverlappingPositions(room.players.map(p => p.id), room.positions, opts);
     socket.join(roomId);
 
     // 1) gửi riêng cho người vừa join
@@ -568,7 +683,7 @@ io.on("connection", (socket) => {
     room.lockedPlayerIds = room.players.map(p => p.id);
   });
 
-  socket.on("updatePositions", ({ roomId, positions }) => {
+  socket.on("updatePositions", ({ roomId, positions, markAutoArrangeUsed }) => {
     const room = rooms[roomId];
     if (!room) return;
 
@@ -581,10 +696,17 @@ io.on("connection", (socket) => {
     }
 
     const playerIds = room.players.map(p => p.id);
+
+    // Ensure height mode stays consistent even if clients race updates around join/leave.
+    const desiredHeightPx = desiredLayoutHeightPx(playerIds.length);
+    rescaleRoomPositionsForHeight(room, desiredHeightPx);
+
+    // Ensure server sanitizes against the current layout height and circle size.
+    const opts = layoutOptsForRoom(room);
     const hasAllPlayers = (room.positions || []).length === playerIds.length;
     const current = room.positions && hasAllPlayers
-      ? room.positions.map(p => clampToBounds({ ...p }))
-      : ensureNonOverlappingPositions(playerIds, room.positions);
+      ? room.positions.map(p => clampToBounds({ ...p }, opts))
+      : ensureNonOverlappingPositions(playerIds, room.positions, opts);
 
     // Detect "single-drag" updates: only one player changed compared to current.
     const incomingById = new Map<string, PlayerPos>();
@@ -610,7 +732,8 @@ io.on("connection", (socket) => {
         const fixedOthers = current.filter(p => p.playerId !== draggedId);
         const resolvedDragged = resolveDraggedAgainstFixedOthers(
           { ...draggedCurrent, x: draggedIncoming.x, y: draggedIncoming.y },
-          fixedOthers
+          fixedOthers,
+          opts
         );
         room.positions = [...fixedOthers, resolvedDragged];
         io.to(roomId).emit("positionsUpdated", room.positions);
@@ -619,8 +742,28 @@ io.on("connection", (socket) => {
     }
 
     // Multi-change updates (swap/auto-arrange) or ambiguous updates: sanitize globally.
-    room.positions = ensureNonOverlappingPositions(playerIds, positions);
+    room.positions = ensureNonOverlappingPositions(playerIds, positions, opts);
     io.to(roomId).emit("positionsUpdated", room.positions);
+
+    if (markAutoArrangeUsed && !room.autoArrangeUsed) {
+      room.autoArrangeUsed = true;
+      io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    }
+  });
+
+  socket.on("setCompactCircles", ({ roomId, compact }: { roomId: string; compact: boolean }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const isHost = socket.id === room.hostId;
+    const isEditor = room.positionEditors?.includes(socket.id);
+    if (!isHost && !isEditor) {
+      socket.emit("errorMessage", "Bạn không có quyền chỉnh vị trí.");
+      return;
+    }
+
+    room.compactCircles = !!compact;
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
   socket.on("grantPositionEdit", ({ roomId, targetId }) => {
@@ -694,6 +837,15 @@ io.on("connection", (socket) => {
         room.players.splice(playerIndex, 1);
         // Xóa cả position luôn
         room.positions = (room.positions || []).filter(pos => pos.playerId !== socket.id);
+
+        // If we crossed the 18↔19 boundary, rescale remaining positions back.
+        const nextHeightPx = desiredLayoutHeightPx(room.players.length);
+        const changed = rescaleRoomPositionsForHeight(room, nextHeightPx);
+        if (changed) {
+          const opts = layoutOptsForRoom(room);
+          room.positions = (room.positions || []).map(p => clampToBounds({ ...p }, opts));
+        }
+
         io.to(roomId).emit("positionsUpdated", room.positions);
 
         // nếu phòng trống → xoá phòng

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { socket } from "../socket";
-import React from "react";
 import PlayerPositions from "../components/PlayerPositions";
 import { useRoomContext } from "../context/RoomContext";
 
@@ -21,6 +20,8 @@ interface RoomData {
   lockedPlayerIds?: string[];
   positions?: PlayerPosition[];
   positionEditors?: string[];
+  autoArrangeUsed?: boolean;
+  compactCircles?: boolean;
 }
 
 interface PlayerPosition {

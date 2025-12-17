@@ -19,6 +19,10 @@ interface RoomData {
   playerRoles?: Record<string, string>;
   autoArrangeUsed?: boolean;
   compactCircles?: boolean;
+
+  // Game-only ephemeral state that may be synced via sockets.
+  wolfVotes?: Record<string, string | null>;
+  deadPlayers?: string[];
 }
 
 // Khi nào làm file PlayerPosition riêng thì import từ đó

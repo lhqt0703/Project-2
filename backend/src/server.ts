@@ -40,6 +40,11 @@ interface Room {
   killedTonight?: string | null; // playerId người bị cắn đêm nay (hiện null nếu ko ai)
   deadPlayers?: string[]; // danh sách playerId đã chết
 
+  // --- Phần cho bảo vệ ---
+  protectedTonight?: string | null; // playerId được bảo vệ trong đêm hiện tại
+  lastProtected?: string | null; // playerId đã bảo vệ đêm trước (chống bảo vệ 2 đêm liên tiếp)
+  seerUsedTonight?: Record<string, boolean>; // playerId (tiên tri) đã dùng chức năng trong đêm này
+
   // UI flag: after the first auto-arrange, subsequent uses should confirm
   autoArrangeUsed?: boolean;
 
@@ -70,7 +75,7 @@ function getActiveWolves(room: Room) {
 function toPublicRoom(room: Room) {
   // IMPORTANT: tuyệt đối không emit NodeJS.Timeout (wolfTimer) vì nó gây lỗi serialize.
   // Trả về object thuần JSON.
-  const { wolfTimer: _wolfTimer, ...rest } = room;
+  const { wolfTimer: _wolfTimer, seerUsedTonight: _seerUsedTonight, ...rest } = room;
   return {
     ...rest,
     players: room.players.map(p => ({ id: p.id, name: p.name, connected: p.connected !== false })),
@@ -105,13 +110,21 @@ function generateCirclePositions(playerIds: string[]) {
 type PlayerPos = { playerId: string; x: number; y: number };
 
 // Layout assumptions (client canvas is typically ~600x400 in Game view)
-const POSITION_LAYOUT = {
+type PositionLayout = {
+  widthPx: number;
+  heightPx: number;
+  radiusPx: number;
+  defaultGapPx: number;
+  paddingPx: number;
+};
+
+const POSITION_LAYOUT: PositionLayout = {
   widthPx: 600,
   heightPx: 470,
   radiusPx: 40,
   defaultGapPx: 13.3,
   paddingPx: 6,
-} as const;
+};
 
 const BASE_FRAME_HEIGHT_PX = POSITION_LAYOUT.heightPx;
 const EXTRA_FRAME_HEIGHT_PX = 100;
@@ -474,8 +487,8 @@ function startWolfPhase(roomId: string) {
     room.wolfVotes![w.id] = null;
     room.wolfLocked![w.id] = false;
   });
-
-  room.wolfDeadline = Date.now() + 10_000; // 10 giây
+  // Time chờ cho sói cắn
+  room.wolfDeadline = Date.now() + 20_000; // 20 giây
   // broadcast cho cả phòng (client cần biết deadline để đếm ngược)
   io.to(`wolves_${roomId}`).emit("wolfPhaseStarted", {
     wolves: wolves.map(w => w.id),
@@ -492,7 +505,7 @@ function startWolfPhase(roomId: string) {
   // khi hết thời gian → xử lý vote
   room.wolfTimer = setTimeout(() => {
     finishWolfVoting(roomId);
-  }, 10_000);
+  }, 20_000);
 }
 
 function finishWolfVoting(roomId: string) {
@@ -948,20 +961,37 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("phaseChanged", phase);
 
     if (phase === "night") {
+      // reset lựa chọn của bảo vệ cho đêm mới
+      room.protectedTonight = null;
+
+      room.seerUsedTonight = {};
+
       startWolfPhase(roomId);
     } 
     else if (phase === "day") {
       // khi chuyển sang sáng -> nếu có người bị cắn thì công bố và đánh dấu dead
-      if (room.killedTonight) {
+      const killedCandidate = room.killedTonight;
+      const guardianTarget = room.protectedTonight;
+      const finalKilled = killedCandidate && killedCandidate !== guardianTarget ? killedCandidate : null;
+
+      if (finalKilled) {
         room.deadPlayers = room.deadPlayers || [];
-        if (!room.deadPlayers.includes(room.killedTonight)) {
-          room.deadPlayers.push(room.killedTonight);
+        if (!room.deadPlayers.includes(finalKilled)) {
+          room.deadPlayers.push(finalKilled);
         }
         // gửi thông báo người bị chết cho cả phòng
-        io.to(roomId).emit("playerKilled", room.killedTonight);
+        io.to(roomId).emit("playerKilled", finalKilled);
         // xóa killedTonight sau khi công bố
-        room.killedTonight = null;
       }
+
+      // cập nhật lastProtected sau khi kết thúc đêm
+      if (guardianTarget) {
+        room.lastProtected = guardianTarget;
+      }
+      room.protectedTonight = null;
+      room.killedTonight = null;
+
+      room.seerUsedTonight = {};
           // cleanup any wolf phase leftover
         if (room.wolfTimer) {
           clearTimeout(room.wolfTimer);
@@ -1008,9 +1038,65 @@ io.on("connection", (socket) => {
   socket.on("seerCheck", ({ roomId, targetId }) => {
     const room = rooms[roomId];
     if (!room || !room.playerRoles) return;
+
+    // chỉ được dùng vào ban đêm
+    if (room.phase !== "night") return;
+
+    // chỉ tiên tri mới được dùng
+    if (room.playerRoles?.[socket.id] !== "Tiên tri") return;
+
+    // tiên tri chết thì không được chọn
+    if ((room.deadPlayers || []).includes(socket.id)) return;
+
+    // target phải tồn tại trong phòng và còn sống
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    // mỗi đêm chỉ dùng 1 lần
+    room.seerUsedTonight = room.seerUsedTonight || {};
+    if (room.seerUsedTonight[socket.id]) {
+      socket.emit("errorMessage", "Bạn đã dùng chức năng tiên tri trong đêm này rồi!");
+      return;
+    }
+    room.seerUsedTonight[socket.id] = true;
+
     const roleOfTarget = room.playerRoles[targetId];
     const isWolf = roleOfTarget === "Sói";
     io.to(socket.id).emit("seerResult", { playerId: targetId, isWolf });
+  });
+
+  // Xử lý chức năng bảo vệ bảo vệ người
+  socket.on("guardianProtect", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    // chỉ được dùng vào ban đêm
+    if (room.phase !== "night") return;
+
+    // chỉ bảo vệ mới được chọn
+    if (room.playerRoles?.[socket.id] !== "Bảo vệ") return;
+
+    // bảo vệ chết thì không được chọn
+    if ((room.deadPlayers || []).includes(socket.id)) return;
+
+    // đã xác nhận bảo vệ đêm nay thì không được đổi nữa
+    if (room.protectedTonight) {
+      socket.emit("errorMessage", "Bạn đã xác nhận bảo vệ đêm nay rồi, không thể thay đổi lựa chọn.");
+      return;
+    }
+
+    // target phải tồn tại trong phòng và còn sống
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    // Không bảo vệ cùng người 2 đêm liên tiếp
+    if (room.lastProtected && room.lastProtected === targetId) {
+      socket.emit("errorMessage", "Không thể bảo vệ cùng người hai đêm liên tiếp!");
+      return;
+    }
+
+    room.protectedTonight = targetId;
+    io.to(socket.id).emit("guardianProtected", targetId);
   });
 
   // Xử lý chức năng sói chọn cắn ai

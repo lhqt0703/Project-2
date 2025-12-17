@@ -238,8 +238,22 @@ function applyMagnetSnap(
 
 export default function PlayerPositions({
   onPlayerClick,
+  mode = "edit",
+  seerResult,
+  selectedOutlinePlayerId,
+  showWolfVoteBadges,
+  wolfVoteVoterIds,
+  showWolfBadges,
+  wolfBadgePlayerIds,
 }: {
   onPlayerClick: (playerId: string) => void;
+  mode?: "edit" | "view";
+  seerResult?: { playerId: string; isWolf: boolean } | null;
+  selectedOutlinePlayerId?: string | null;
+  showWolfVoteBadges?: boolean;
+  wolfVoteVoterIds?: string[];
+  showWolfBadges?: boolean;
+  wolfBadgePlayerIds?: string[];
 }) {
   const { room } = useRoomContext();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -256,7 +270,7 @@ export default function PlayerPositions({
   }, [room.compactCircles]);
 
   const isHost = room.hostId === socket.id;
-  const isEditor = room.positionEditors?.includes(socket.id!) || isHost;
+  const isEditor = mode === "edit" && (room.positionEditors?.includes(socket.id!) || isHost);
 
   const isExpandedFrame = room.players.length > AUTO_TOP_LIMIT;
   const frameHeightPx = isExpandedFrame ? EXPANDED_FRAME_HEIGHT_PX : FRAME_HEIGHT_PX;
@@ -264,8 +278,8 @@ export default function PlayerPositions({
   const circleSizePx = compactCircles ? SMALL_CIRCLE_SIZE_PX : DEFAULT_CIRCLE_SIZE_PX;
   const circleRadiusPx = circleSizePx / 2;
 
-  const wolfVotes = (room as any).wolfVotes as Record<string, string | null> | undefined;
-  const deadPlayers = (room as any).deadPlayers as string[] | undefined;
+  const wolfVotes = room.wolfVotes as Record<string, string | null> | undefined;
+  const deadPlayers = room.deadPlayers as string[] | undefined;
   const wolvesAlive = room.players.filter(p => room.playerRoles?.[p.id] === "Sói" && !(deadPlayers || []).includes(p.id)).map(p => p.id);
   const wolfCount = wolvesAlive.length;
 
@@ -640,14 +654,31 @@ export default function PlayerPositions({
           const left = `${pos.x * 100}%`;
           const top = `${pos.y * 100}%`;
 
-          const voteCountForThis = wolfVotes ? Object.values(wolfVotes).filter(t => t === pos.playerId).length : 0;
+          const effectiveVoterIds = wolfVoteVoterIds && wolfVoteVoterIds.length ? wolfVoteVoterIds : undefined;
+          const effectiveWolfCount = effectiveVoterIds ? effectiveVoterIds.length : wolfCount;
+          const voteCountForThis = wolfVotes
+            ? (effectiveVoterIds
+                ? effectiveVoterIds.filter(wid => wolfVotes[wid] === pos.playerId).length
+                : Object.values(wolfVotes).filter(t => t === pos.playerId).length)
+            : 0;
           const isDead = (deadPlayers || []).includes(pos.playerId);
           const isSwapSelected = swapSource === pos.playerId;
+
+          let boxShadow = "";
+          if (seerResult && seerResult.playerId === pos.playerId) {
+            boxShadow = seerResult.isWolf
+              ? "0 0 0 8px #d00, 0 0 16px 8px #222"
+              : "0 0 0 8px #222, 0 0 16px 8px #d00";
+          }
+
+          const showSelectedOutline = !!selectedOutlinePlayerId && selectedOutlinePlayerId === pos.playerId;
+          const showWolfBadge = !!showWolfBadges && (wolfBadgePlayerIds || []).includes(p.id);
 
           return (
             <div
               key={pos.playerId}
               onPointerDown={(e) => {
+                if (!isEditor) return;
                 if (swapSource === "SELECTING") {
                   setSwapSource(pos.playerId);
                 } else if (swapSource) {
@@ -657,8 +688,7 @@ export default function PlayerPositions({
                 }
               }}
               onClick={() => {
-                if (!isEditor && !dragging) onPlayerClick(p.id);
-                // If editor, click is handled by pointer events mostly, but we might want to allow click if not dragged
+                if (!dragging) onPlayerClick(p.id);
               }}
               style={{
                 position: "absolute",
@@ -677,12 +707,14 @@ export default function PlayerPositions({
                 cursor: isEditor ? (swapSource ? "crosshair" : "grab") : "pointer",
                 opacity: isDead ? 0.4 : 1,
                 zIndex: dragging === pos.playerId ? 10 : 1,
+                boxShadow,
+                outline: showSelectedOutline ? "3px solid rgba(255,165,0,0.9)" : undefined,
                 transition: dragging === pos.playerId
                   ? "none"
                   : "left 0.2s, top 0.2s, width 220ms ease, height 220ms ease, border-radius 220ms ease", // Smooth move + resize
               }}
             >
-              {wolfCount >= 2 && voteCountForThis > 0 && (
+              {showWolfVoteBadges && effectiveWolfCount >= 2 && voteCountForThis > 0 && (
                 <div style={{
                   position: "absolute",
                   top: -10,
@@ -694,7 +726,24 @@ export default function PlayerPositions({
                   fontSize: 11,
                   fontWeight: "bold",
                 }}>
-                  {voteCountForThis}/{wolfCount}
+                  {voteCountForThis}/{effectiveWolfCount}
+                </div>
+              )}
+
+              {showWolfBadge && (
+                <div style={{
+                  position: "absolute",
+                  top: -10,
+                  left: -10,
+                  background: "#000",
+                  color: "#fff",
+                  padding: "2px 6px",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: "bold",
+                  opacity: 0.9,
+                }}>
+                  Sói
                 </div>
               )}
 

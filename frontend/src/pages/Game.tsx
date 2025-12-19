@@ -10,6 +10,7 @@ import { useSeerRole } from "./gameRoles/useSeerRole";
 import { useWolfRole } from "./gameRoles/useWolfRole";
 import { useGuardianRole } from "./gameRoles/useGuardianRole";
 import { useGameSocketSync } from "./gameRoles/useGameSocketSync";
+import { useWitchRole } from "./gameRoles/useWitchRole";
 
 export default function Game() {
   const { role, room, setRoom } = useRoomContext();
@@ -51,6 +52,16 @@ export default function Game() {
     guardianProtectedTargetId: sync.guardianProtectedTargetId,
   });
 
+  const witch = useWitchRole({
+    roomId,
+    phase,
+    role,
+    room,
+    deadPlayers,
+    witchPendingDeathTargetId: sync.witchPendingDeathTargetId,
+    witchPotions: sync.witchPotions,
+  });
+
   // Note: all socket subscriptions are centralized in useGameSocketSync.
 
   useEffect(() => {
@@ -85,6 +96,7 @@ export default function Game() {
     if (seer.onPlayerClick(playerId)) return;
     if (wolf.onPlayerClick(playerId)) return;
     if (guardian.onPlayerClick(playerId)) return;
+    if (witch.onPlayerClick(playerId)) return;
   };
 
   return (
@@ -103,7 +115,12 @@ export default function Game() {
             mode="view"
             onPlayerClick={handlePlayerClick}
             seerResult={seer.seerResult}
-            selectedOutlinePlayerId={wolf.playerPositionsProps.selectedOutlinePlayerId || guardian.playerPositionsProps.selectedOutlinePlayerId}
+            selectedOutlinePlayerId={
+              wolf.playerPositionsProps.selectedOutlinePlayerId ||
+              guardian.playerPositionsProps.selectedOutlinePlayerId ||
+              witch.playerPositionsProps.selectedOutlinePlayerId
+            }
+            dangerPlayerId={witch.playerPositionsProps.dangerPlayerId}
             showWolfVoteBadges={wolf.playerPositionsProps.showWolfVoteBadges}
             wolfVoteVoterIds={wolf.playerPositionsProps.wolfVoteVoterIds}
             showWolfBadges={wolf.playerPositionsProps.showWolfBadges}
@@ -113,6 +130,8 @@ export default function Game() {
       )}
       {seer.modal}
       {guardian.modal}
+
+      {witch.panel}
 
 
     {/* Host controls */}

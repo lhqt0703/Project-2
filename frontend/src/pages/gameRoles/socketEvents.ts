@@ -12,3 +12,6 @@ export type WolfPhaseStartedPayload = {
 
 export type SeerResultPayload = { playerId: string; isWolf: boolean };
 export type GuardianProtectedPayload = string; // targetId
+
+export type WitchPendingDeathPayload = { targetId: string | null };
+export type WitchPotionsPayload = { healUsed: boolean; poisonUsed: boolean };

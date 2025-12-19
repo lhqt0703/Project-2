@@ -241,6 +241,7 @@ export default function PlayerPositions({
   mode = "edit",
   seerResult,
   selectedOutlinePlayerId,
+  dangerPlayerId,
   showWolfVoteBadges,
   wolfVoteVoterIds,
   showWolfBadges,
@@ -250,6 +251,7 @@ export default function PlayerPositions({
   mode?: "edit" | "view";
   seerResult?: { playerId: string; isWolf: boolean } | null;
   selectedOutlinePlayerId?: string | null;
+  dangerPlayerId?: string | null;
   showWolfVoteBadges?: boolean;
   wolfVoteVoterIds?: string[];
   showWolfBadges?: boolean;
@@ -619,6 +621,19 @@ export default function PlayerPositions({
 
   return (
     <div style={{ position: "relative", width: "100%", maxWidth: 600, margin: "0 auto" }}>
+      <style>{`
+        @keyframes witchDangerShake {
+          0% { transform: translate(-50%,-50%) translateX(0); }
+          20% { transform: translate(-50%,-50%) translateX(-2px); }
+          40% { transform: translate(-50%,-50%) translateX(2px); }
+          60% { transform: translate(-50%,-50%) translateX(-2px); }
+          80% { transform: translate(-50%,-50%) translateX(2px); }
+          100% { transform: translate(-50%,-50%) translateX(0); }
+        }
+        .witch-danger {
+          animation: witchDangerShake 500ms infinite;
+        }
+      `}</style>
       {isEditor && (
         <div style={{ marginBottom: 8, display: "flex", gap: 8, justifyContent: "center" }}>
           <button onClick={() => setSwapSource(prev => prev ? null : "SELECTING")}>
@@ -671,6 +686,10 @@ export default function PlayerPositions({
               : "0 0 0 8px #222, 0 0 16px 8px #d00";
           }
 
+          const isWitchDanger = !!dangerPlayerId && dangerPlayerId === pos.playerId;
+          const dangerShadow = isWitchDanger ? "0 0 0 6px rgba(220,0,0,0.95), 0 0 14px rgba(220,0,0,0.55)" : "";
+          const mergedBoxShadow = [boxShadow, dangerShadow].filter(Boolean).join(", ");
+
           const showSelectedOutline = !!selectedOutlinePlayerId && selectedOutlinePlayerId === pos.playerId;
           const showWolfBadge = !!showWolfBadges && (wolfBadgePlayerIds || []).includes(p.id);
 
@@ -690,6 +709,7 @@ export default function PlayerPositions({
               onClick={() => {
                 if (!dragging) onPlayerClick(p.id);
               }}
+              className={isWitchDanger ? "witch-danger" : undefined}
               style={{
                 position: "absolute",
                 left,
@@ -707,7 +727,7 @@ export default function PlayerPositions({
                 cursor: isEditor ? (swapSource ? "crosshair" : "grab") : "pointer",
                 opacity: isDead ? 0.4 : 1,
                 zIndex: dragging === pos.playerId ? 10 : 1,
-                boxShadow,
+                boxShadow: mergedBoxShadow || undefined,
                 outline: showSelectedOutline ? "3px solid rgba(255,165,0,0.9)" : undefined,
                 transition: dragging === pos.playerId
                   ? "none"

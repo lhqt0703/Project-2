@@ -4,6 +4,8 @@ import type {
   GamePhase,
   GuardianProtectedPayload,
   SeerResultPayload,
+  WitchPendingDeathPayload,
+  WitchPotionsPayload,
   WolfLockedUpdatedPayload,
   WolfPhaseStartedPayload,
   WolfVotesUpdatedPayload,
@@ -19,6 +21,9 @@ export function useGameSocketSync({
   const [phase, setPhase] = useState<GamePhase>("day");
   const [deadPlayers, setDeadPlayers] = useState<string[]>([]);
   const [seerResult, setSeerResult] = useState<SeerResultPayload | null>(null);
+
+  const [witchPendingDeathTargetId, setWitchPendingDeathTargetId] = useState<string | null>(null);
+  const [witchPotions, setWitchPotions] = useState<WitchPotionsPayload | null>(null);
 
   const [guardianProtectedSeq, setGuardianProtectedSeq] = useState(0);
   const [guardianProtectedTargetId, setGuardianProtectedTargetId] = useState<string | null>(null);
@@ -50,6 +55,9 @@ export function useGameSocketSync({
     const handlePhaseChanged = (newPhase: GamePhase) => {
       setPhase(newPhase);
       setSeerResult(null);
+      if (newPhase === "day") {
+        setWitchPendingDeathTargetId(null);
+      }
       setRoom((prev: any) => (prev ? { ...prev, wolfVotes: undefined } : prev));
 
       // reset wolf ui state as phase rotates
@@ -96,6 +104,14 @@ export function useGameSocketSync({
       setGuardianProtectedSeq(s => s + 1);
     };
 
+    const handleWitchPendingDeath = (payload: WitchPendingDeathPayload) => {
+      setWitchPendingDeathTargetId(payload?.targetId ?? null);
+    };
+
+    const handleWitchPotionsUpdated = (payload: WitchPotionsPayload) => {
+      setWitchPotions(payload);
+    };
+
     socket.on("roomUpdated", handleRoomUpdated);
     socket.on("positionsUpdated", handlePositionsUpdated);
     socket.on("phaseChanged", handlePhaseChanged);
@@ -107,6 +123,9 @@ export function useGameSocketSync({
 
     socket.on("seerResult", handleSeerResult);
     socket.on("guardianProtected", handleGuardianProtected);
+
+    socket.on("witchPendingDeath", handleWitchPendingDeath);
+    socket.on("witchPotionsUpdated", handleWitchPotionsUpdated);
 
     return () => {
       socket.off("roomUpdated", handleRoomUpdated);
@@ -120,6 +139,9 @@ export function useGameSocketSync({
 
       socket.off("seerResult", handleSeerResult);
       socket.off("guardianProtected", handleGuardianProtected);
+
+      socket.off("witchPendingDeath", handleWitchPendingDeath);
+      socket.off("witchPotionsUpdated", handleWitchPotionsUpdated);
     };
   }, [roomId, setRoom]);
 
@@ -128,6 +150,8 @@ export function useGameSocketSync({
       phase,
       deadPlayers,
       seerResult,
+      witchPendingDeathTargetId,
+      witchPotions,
       guardianProtectedSeq,
       guardianProtectedTargetId,
       wolfLocked,
@@ -139,6 +163,8 @@ export function useGameSocketSync({
       phase,
       deadPlayers,
       seerResult,
+      witchPendingDeathTargetId,
+      witchPotions,
       guardianProtectedSeq,
       guardianProtectedTargetId,
       wolfLocked,

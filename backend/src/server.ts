@@ -45,6 +45,11 @@ interface Room {
   lastProtected?: string | null; // playerId đã bảo vệ đêm trước (chống bảo vệ 2 đêm liên tiếp)
   seerUsedTonight?: Record<string, boolean>; // playerId (tiên tri) đã dùng chức năng trong đêm này
 
+  // --- Phần cho phù thủy ---
+  witchPotions?: Record<string, { healUsed: boolean; poisonUsed: boolean }>; // theo witchId
+  witchHealTargetTonight?: Record<string, string | null>; // theo witchId (thường = wolf pending)
+  witchPoisonTargetTonight?: Record<string, string | null>; // theo witchId
+
   // UI flag: after the first auto-arrange, subsequent uses should confirm
   autoArrangeUsed?: boolean;
 
@@ -72,10 +77,61 @@ function getActiveWolves(room: Room) {
   return allWolves.filter(id => !dead.has(id) && isPlayerConnected(room, id));
 }
 
+function getWitches(room: Room) {
+  return room.players
+    .filter(p => room.playerRoles?.[p.id] === "Phù thủy")
+    .map(p => p.id);
+}
+
+function getWitchPendingDeath(room: Room): string | null {
+  const killedCandidate = room.killedTonight;
+  const guardianTarget = room.protectedTonight;
+  const pending = killedCandidate && killedCandidate !== guardianTarget ? killedCandidate : null;
+  return pending;
+}
+
+function emitWitchPendingDeath(roomId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+
+  const targetId = getWitchPendingDeath(room);
+  io.to(`witches_${roomId}`).emit("witchPendingDeath", { targetId });
+}
+
+function ensureWitchState(room: Room, witchId: string) {
+  room.witchPotions = room.witchPotions || {};
+  room.witchHealTargetTonight = room.witchHealTargetTonight || {};
+  room.witchPoisonTargetTonight = room.witchPoisonTargetTonight || {};
+
+  if (!room.witchPotions[witchId]) {
+    room.witchPotions[witchId] = { healUsed: false, poisonUsed: false };
+  }
+  if (typeof room.witchHealTargetTonight[witchId] === "undefined") {
+    room.witchHealTargetTonight[witchId] = null;
+  }
+  if (typeof room.witchPoisonTargetTonight[witchId] === "undefined") {
+    room.witchPoisonTargetTonight[witchId] = null;
+  }
+}
+
+function emitWitchPotions(roomId: string, witchId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  ensureWitchState(room, witchId);
+  io.to(witchId).emit("witchPotionsUpdated", room.witchPotions![witchId]);
+}
+
 function toPublicRoom(room: Room) {
   // IMPORTANT: tuyệt đối không emit NodeJS.Timeout (wolfTimer) vì nó gây lỗi serialize.
   // Trả về object thuần JSON.
-  const { wolfTimer: _wolfTimer, seerUsedTonight: _seerUsedTonight, ...rest } = room;
+  const {
+    wolfTimer: _wolfTimer,
+    seerUsedTonight: _seerUsedTonight,
+    witchPotions: _witchPotions,
+    witchHealTargetTonight: _witchHealTargetTonight,
+    witchPoisonTargetTonight: _witchPoisonTargetTonight,
+    ...rest
+  } = room;
   return {
     ...rest,
     players: room.players.map(p => ({ id: p.id, name: p.name, connected: p.connected !== false })),
@@ -547,6 +603,9 @@ function finishWolfVoting(roomId: string) {
   io.to(roomId).emit("wolfVoteFinished", {
     target: room.killedTonight
   });
+
+  // Phù thủy chỉ thấy "người sắp chết" nếu không bị bảo vệ cứu.
+  emitWitchPendingDeath(roomId);
   // Lưu trạng thái: thực tế xử lý "chết" sẽ diễn ra khi host chuyển sang buổi sáng
 }
 
@@ -604,6 +663,13 @@ io.on("connection", (socket) => {
       socket.emit("roomUpdated", toPublicRoom(room));
       io.to(roomId).emit("positionsUpdated", room.positions);
       io.to(roomId).emit("positionEditorsUpdated", room.positionEditors || []);
+
+      // Re-send private witch potion state on refresh/reconnect.
+      if (room.playerRoles?.[socket.id] === "Phù thủy") {
+        ensureWitchState(room, socket.id);
+        emitWitchPotions(roomId, socket.id);
+        emitWitchPendingDeath(roomId);
+      }
 
     } else {
       socket.emit("errorMessage", "Phòng không tồn tại :(");
@@ -938,6 +1004,15 @@ io.on("connection", (socket) => {
       if (wolfSocket) wolfSocket.join(`wolves_${roomId}`);
     });
 
+    // Thiết lập danh sách phù thủy
+    const witches = getWitches(room);
+    witches.forEach(witchId => {
+      const witchSocket = io.sockets.sockets.get(witchId);
+      if (witchSocket) witchSocket.join(`witches_${roomId}`);
+      ensureWitchState(room, witchId);
+      emitWitchPotions(roomId, witchId);
+    });
+
     // đảm bảo danh sách deadPlayers tồn tại
     room.deadPlayers = room.deadPlayers || [];
 
@@ -964,6 +1039,19 @@ io.on("connection", (socket) => {
       // reset lựa chọn của bảo vệ cho đêm mới
       room.protectedTonight = null;
 
+      // reset chọn bình trong đêm (không reset potion đã dùng)
+      room.witchHealTargetTonight = room.witchHealTargetTonight || {};
+      room.witchPoisonTargetTonight = room.witchPoisonTargetTonight || {};
+      for (const wid of getWitches(room)) {
+        ensureWitchState(room, wid);
+        room.witchHealTargetTonight[wid] = null;
+        room.witchPoisonTargetTonight[wid] = null;
+        emitWitchPotions(roomId, wid);
+      }
+
+      // ban đầu đêm chưa có người sắp chết
+      emitWitchPendingDeath(roomId);
+
       room.seerUsedTonight = {};
 
       startWolfPhase(roomId);
@@ -972,16 +1060,39 @@ io.on("connection", (socket) => {
       // khi chuyển sang sáng -> nếu có người bị cắn thì công bố và đánh dấu dead
       const killedCandidate = room.killedTonight;
       const guardianTarget = room.protectedTonight;
-      const finalKilled = killedCandidate && killedCandidate !== guardianTarget ? killedCandidate : null;
 
-      if (finalKilled) {
+      const pendingWolfDeath = killedCandidate && killedCandidate !== guardianTarget ? killedCandidate : null;
+      const healedTargets = new Set<string>();
+      const poisonTargets = new Set<string>();
+
+      // apply witch actions
+      for (const wid of getWitches(room)) {
+        ensureWitchState(room, wid);
+        const healTarget = room.witchHealTargetTonight?.[wid] || null;
+        if (healTarget) healedTargets.add(healTarget);
+
+        const poisonTarget = room.witchPoisonTargetTonight?.[wid] || null;
+        if (poisonTarget) poisonTargets.add(poisonTarget);
+      }
+
+      const finalDeaths: string[] = [];
+      if (pendingWolfDeath && !healedTargets.has(pendingWolfDeath)) {
+        finalDeaths.push(pendingWolfDeath);
+      }
+      for (const t of poisonTargets) {
+        finalDeaths.push(t);
+      }
+
+      if (finalDeaths.length) {
         room.deadPlayers = room.deadPlayers || [];
-        if (!room.deadPlayers.includes(finalKilled)) {
-          room.deadPlayers.push(finalKilled);
+        for (const pid of Array.from(new Set(finalDeaths))) {
+          if (!pid) continue;
+          if (room.deadPlayers.includes(pid)) continue;
+          // chỉ giết người còn trong phòng
+          if (!room.players.find(p => p.id === pid)) continue;
+          room.deadPlayers.push(pid);
+          io.to(roomId).emit("playerKilled", pid);
         }
-        // gửi thông báo người bị chết cho cả phòng
-        io.to(roomId).emit("playerKilled", finalKilled);
-        // xóa killedTonight sau khi công bố
       }
 
       // cập nhật lastProtected sau khi kết thúc đêm
@@ -990,6 +1101,14 @@ io.on("connection", (socket) => {
       }
       room.protectedTonight = null;
       room.killedTonight = null;
+
+      // reset per-night witch choices after resolving
+      room.witchHealTargetTonight = room.witchHealTargetTonight || {};
+      room.witchPoisonTargetTonight = room.witchPoisonTargetTonight || {};
+      for (const wid of getWitches(room)) {
+        room.witchHealTargetTonight[wid] = null;
+        room.witchPoisonTargetTonight[wid] = null;
+      }
 
       room.seerUsedTonight = {};
           // cleanup any wolf phase leftover
@@ -1097,6 +1216,69 @@ io.on("connection", (socket) => {
 
     room.protectedTonight = targetId;
     io.to(socket.id).emit("guardianProtected", targetId);
+
+    // Nếu bảo vệ trúng người sói cắn, phù thủy sẽ không còn thấy ai sắp chết.
+    emitWitchPendingDeath(roomId);
+  });
+
+  // Xử lý chức năng phù thủy dùng bình cứu
+  socket.on("witchHeal", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (room.phase !== "night") return;
+    if (room.playerRoles?.[socket.id] !== "Phù thủy") return;
+    if ((room.deadPlayers || []).includes(socket.id)) return;
+
+    ensureWitchState(room, socket.id);
+
+    const potions = room.witchPotions![socket.id]!;
+    if (potions.healUsed) {
+      socket.emit("errorMessage", "Bạn đã dùng bình cứu rồi!");
+      return;
+    }
+
+    const pending = getWitchPendingDeath(room);
+    if (!pending) {
+      socket.emit("errorMessage", "Không có ai sắp chết để dùng bình cứu.");
+      return;
+    }
+
+    potions.healUsed = true;
+    room.witchHealTargetTonight![socket.id] = pending;
+    emitWitchPotions(roomId, socket.id);
+  });
+
+  // Xử lý chức năng phù thủy dùng bình giết
+  socket.on("witchPoison", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (room.phase !== "night") return;
+    if (room.playerRoles?.[socket.id] !== "Phù thủy") return;
+    if ((room.deadPlayers || []).includes(socket.id)) return;
+
+    ensureWitchState(room, socket.id);
+
+    const potions = room.witchPotions![socket.id]!;
+    if (potions.poisonUsed) {
+      socket.emit("errorMessage", "Bạn đã dùng bình giết rồi!");
+      return;
+    }
+
+    // không giết bản thân
+    if (targetId === socket.id) {
+      socket.emit("errorMessage", "Bạn không thể dùng bình giết lên chính mình.");
+      return;
+    }
+
+    // target phải tồn tại và còn sống
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    potions.poisonUsed = true;
+    room.witchPoisonTargetTonight![socket.id] = targetId;
+    emitWitchPotions(roomId, socket.id);
   });
 
   // Xử lý chức năng sói chọn cắn ai

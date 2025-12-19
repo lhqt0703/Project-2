@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { socket } from "../socket";
 
 const MAX_VILLAGERS = 10;
-const NON_VILLAGER_ROLES = ["Sói", "Tiên tri", "Bảo vệ", "Phù thủy"] as const;
+const NON_VILLAGER_ROLES = ["Sói", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn"] as const;
 type NonVillagerRole = (typeof NON_VILLAGER_ROLES)[number];
 
 export default function RoleSelect() {
@@ -234,7 +234,7 @@ export default function RoleSelect() {
         })}
 
         {/* Các role còn lại */}
-        {(["Tiên tri", "Bảo vệ", "Phù thủy"] as const).map((role) => {
+        {(["Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn"] as const).map((role) => {
           const selected = selectedRoles.includes(role);
           return (
             <div

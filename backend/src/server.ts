@@ -50,6 +50,10 @@ interface Room {
   witchHealTargetTonight?: Record<string, string | null>; // theo witchId (thường = wolf pending)
   witchPoisonTargetTonight?: Record<string, string | null>; // theo witchId
 
+  // --- Phần cho thợ săn ---
+  // hunterId -> targetId (mỗi đêm có thể chọn 1 người; nếu hunter chết trong đêm thì target cũng chết)
+  hunterTargetTonight?: Record<string, string | null>;
+
   // UI flag: after the first auto-arrange, subsequent uses should confirm
   autoArrangeUsed?: boolean;
 
@@ -81,6 +85,19 @@ function getWitches(room: Room) {
   return room.players
     .filter(p => room.playerRoles?.[p.id] === "Phù thủy")
     .map(p => p.id);
+}
+
+function getHunters(room: Room) {
+  return room.players
+    .filter(p => room.playerRoles?.[p.id] === "Thợ săn")
+    .map(p => p.id);
+}
+
+function emitHunterTarget(roomId: string, hunterId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  const targetId = room.hunterTargetTonight?.[hunterId] ?? null;
+  io.to(hunterId).emit("hunterTargetUpdated", { targetId });
 }
 
 function getWitchPendingDeath(room: Room): string | null {
@@ -130,6 +147,7 @@ function toPublicRoom(room: Room) {
     witchPotions: _witchPotions,
     witchHealTargetTonight: _witchHealTargetTonight,
     witchPoisonTargetTonight: _witchPoisonTargetTonight,
+    hunterTargetTonight: _hunterTargetTonight,
     ...rest
   } = room;
   return {
@@ -671,6 +689,11 @@ io.on("connection", (socket) => {
         emitWitchPendingDeath(roomId);
       }
 
+      // Re-send private hunter target state on refresh/reconnect.
+      if (room.playerRoles?.[socket.id] === "Thợ săn") {
+        emitHunterTarget(roomId, socket.id);
+      }
+
     } else {
       socket.emit("errorMessage", "Phòng không tồn tại :(");
     }
@@ -1054,6 +1077,13 @@ io.on("connection", (socket) => {
 
       room.seerUsedTonight = {};
 
+      // reset lựa chọn thợ săn cho đêm mới
+      room.hunterTargetTonight = room.hunterTargetTonight || {};
+      for (const hid of getHunters(room)) {
+        room.hunterTargetTonight[hid] = null;
+        emitHunterTarget(roomId, hid);
+      }
+
       startWolfPhase(roomId);
     } 
     else if (phase === "day") {
@@ -1075,17 +1105,29 @@ io.on("connection", (socket) => {
         if (poisonTarget) poisonTargets.add(poisonTarget);
       }
 
-      const finalDeaths: string[] = [];
+      const finalDeathSet = new Set<string>();
       if (pendingWolfDeath && !healedTargets.has(pendingWolfDeath)) {
-        finalDeaths.push(pendingWolfDeath);
+        finalDeathSet.add(pendingWolfDeath);
       }
       for (const t of poisonTargets) {
-        finalDeaths.push(t);
+        finalDeathSet.add(t);
       }
 
+      // Nếu thợ săn chết trong đêm, người thợ săn đã chọn cũng chết theo.
+      for (const hid of getHunters(room)) {
+        if (!finalDeathSet.has(hid)) continue;
+        const targetId = room.hunterTargetTonight?.[hid] || null;
+        if (!targetId) continue;
+        if (targetId === hid) continue;
+        if ((room.deadPlayers || []).includes(targetId)) continue;
+        if (!room.players.find(p => p.id === targetId)) continue;
+        finalDeathSet.add(targetId);
+      }
+
+      const finalDeaths = Array.from(finalDeathSet);
       if (finalDeaths.length) {
         room.deadPlayers = room.deadPlayers || [];
-        for (const pid of Array.from(new Set(finalDeaths))) {
+        for (const pid of finalDeaths) {
           if (!pid) continue;
           if (room.deadPlayers.includes(pid)) continue;
           // chỉ giết người còn trong phòng
@@ -1101,6 +1143,13 @@ io.on("connection", (socket) => {
       }
       room.protectedTonight = null;
       room.killedTonight = null;
+
+      // reset lựa chọn thợ săn sau khi kết thúc đêm
+      room.hunterTargetTonight = room.hunterTargetTonight || {};
+      for (const hid of getHunters(room)) {
+        room.hunterTargetTonight[hid] = null;
+        emitHunterTarget(roomId, hid);
+      }
 
       // reset per-night witch choices after resolving
       room.witchHealTargetTonight = room.witchHealTargetTonight || {};
@@ -1120,6 +1169,32 @@ io.on("connection", (socket) => {
         room.wolfLocked = {};
         room.wolfDeadline = null;
     }
+  });
+
+  // Xử lý chức năng thợ săn chọn mục tiêu trong đêm
+  socket.on("hunterChooseTarget", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (room.phase !== "night") return;
+    if (room.playerRoles?.[socket.id] !== "Thợ săn") return;
+    if ((room.deadPlayers || []).includes(socket.id)) return;
+
+    room.hunterTargetTonight = room.hunterTargetTonight || {};
+
+    // Cho phép clear bằng null/undefined
+    if (!targetId) {
+      room.hunterTargetTonight[socket.id] = null;
+      emitHunterTarget(roomId, socket.id);
+      return;
+    }
+
+    // target phải tồn tại trong phòng và còn sống
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    room.hunterTargetTonight[socket.id] = targetId;
+    emitHunterTarget(roomId, socket.id);
   });
 
   // Nhường quyền chủ phòng cho người khác

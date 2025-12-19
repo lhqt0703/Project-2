@@ -11,6 +11,7 @@ import { useWolfRole } from "./gameRoles/useWolfRole";
 import { useGuardianRole } from "./gameRoles/useGuardianRole";
 import { useGameSocketSync } from "./gameRoles/useGameSocketSync";
 import { useWitchRole } from "./gameRoles/useWitchRole";
+import { useHunterRole } from "./gameRoles/useHunterRole";
 
 export default function Game() {
   const { role, room, setRoom } = useRoomContext();
@@ -62,6 +63,15 @@ export default function Game() {
     witchPotions: sync.witchPotions,
   });
 
+  const hunter = useHunterRole({
+    roomId,
+    phase,
+    role,
+    deadPlayers,
+    hunterTargetSeq: sync.hunterTargetSeq,
+    hunterTargetId: sync.hunterTargetId,
+  });
+
   // Note: all socket subscriptions are centralized in useGameSocketSync.
 
   useEffect(() => {
@@ -97,6 +107,7 @@ export default function Game() {
     if (wolf.onPlayerClick(playerId)) return;
     if (guardian.onPlayerClick(playerId)) return;
     if (witch.onPlayerClick(playerId)) return;
+    if (hunter.onPlayerClick(playerId)) return;
   };
 
   return (
@@ -118,7 +129,8 @@ export default function Game() {
             selectedOutlinePlayerId={
               wolf.playerPositionsProps.selectedOutlinePlayerId ||
               guardian.playerPositionsProps.selectedOutlinePlayerId ||
-              witch.playerPositionsProps.selectedOutlinePlayerId
+              witch.playerPositionsProps.selectedOutlinePlayerId ||
+              hunter.playerPositionsProps.selectedOutlinePlayerId
             }
             dangerPlayerId={witch.playerPositionsProps.dangerPlayerId}
             showWolfVoteBadges={wolf.playerPositionsProps.showWolfVoteBadges}
@@ -130,6 +142,8 @@ export default function Game() {
       )}
       {seer.modal}
       {guardian.modal}
+
+      {hunter.modal}
 
       {witch.panel}
 

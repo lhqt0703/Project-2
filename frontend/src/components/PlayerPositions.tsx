@@ -241,7 +241,9 @@ export default function PlayerPositions({
   mode = "edit",
   seerResult,
   selectedOutlinePlayerId,
+  selectedOutlinePlayerIds,
   dangerPlayerId,
+  dangerPlayerIds,
   showWolfVoteBadges,
   wolfVoteVoterIds,
   showWolfBadges,
@@ -251,7 +253,9 @@ export default function PlayerPositions({
   mode?: "edit" | "view";
   seerResult?: { playerId: string; isWolf: boolean } | null;
   selectedOutlinePlayerId?: string | null;
+  selectedOutlinePlayerIds?: string[];
   dangerPlayerId?: string | null;
+  dangerPlayerIds?: string[];
   showWolfVoteBadges?: boolean;
   wolfVoteVoterIds?: string[];
   showWolfBadges?: boolean;
@@ -281,8 +285,14 @@ export default function PlayerPositions({
   const circleRadiusPx = circleSizePx / 2;
 
   const wolfVotes = room.wolfVotes as Record<string, string | null> | undefined;
+  const wolfVotes2 = room.wolfVotes2 as Record<string, string | null> | undefined;
   const deadPlayers = room.deadPlayers as string[] | undefined;
-  const wolvesAlive = room.players.filter(p => room.playerRoles?.[p.id] === "Sói" && !(deadPlayers || []).includes(p.id)).map(p => p.id);
+  const wolvesAlive = room.players
+    .filter(p => {
+      const r = room.playerRoles?.[p.id];
+      return (r === "Sói" || r === "Sói con") && !(deadPlayers || []).includes(p.id);
+    })
+    .map(p => p.id);
   const wolfCount = wolvesAlive.length;
 
   const onPointerDown = (e: React.PointerEvent, playerId: string) => {
@@ -671,10 +681,13 @@ export default function PlayerPositions({
 
           const effectiveVoterIds = wolfVoteVoterIds && wolfVoteVoterIds.length ? wolfVoteVoterIds : undefined;
           const effectiveWolfCount = effectiveVoterIds ? effectiveVoterIds.length : wolfCount;
-          const voteCountForThis = wolfVotes
+          const voteCountForThis = (wolfVotes || wolfVotes2)
             ? (effectiveVoterIds
-                ? effectiveVoterIds.filter(wid => wolfVotes[wid] === pos.playerId).length
-                : Object.values(wolfVotes).filter(t => t === pos.playerId).length)
+                ? effectiveVoterIds.filter(wid => (wolfVotes?.[wid] === pos.playerId) || (wolfVotes2?.[wid] === pos.playerId)).length
+                : (() => {
+                    const ids = Object.keys({ ...(wolfVotes || {}), ...(wolfVotes2 || {}) });
+                    return ids.filter(wid => (wolfVotes?.[wid] === pos.playerId) || (wolfVotes2?.[wid] === pos.playerId)).length;
+                  })())
             : 0;
           const isDead = (deadPlayers || []).includes(pos.playerId);
           const isSwapSelected = swapSource === pos.playerId;
@@ -686,11 +699,15 @@ export default function PlayerPositions({
               : "0 0 0 8px #222, 0 0 16px 8px #d00";
           }
 
-          const isWitchDanger = !!dangerPlayerId && dangerPlayerId === pos.playerId;
+          const isWitchDanger =
+            (!!dangerPlayerId && dangerPlayerId === pos.playerId) ||
+            (!!dangerPlayerIds && dangerPlayerIds.includes(pos.playerId));
           const dangerShadow = isWitchDanger ? "0 0 0 6px rgba(220,0,0,0.95), 0 0 14px rgba(220,0,0,0.55)" : "";
           const mergedBoxShadow = [boxShadow, dangerShadow].filter(Boolean).join(", ");
 
-          const showSelectedOutline = !!selectedOutlinePlayerId && selectedOutlinePlayerId === pos.playerId;
+          const showSelectedOutline =
+            (!!selectedOutlinePlayerId && selectedOutlinePlayerId === pos.playerId) ||
+            (!!selectedOutlinePlayerIds && selectedOutlinePlayerIds.includes(pos.playerId));
           const showWolfBadge = !!showWolfBadges && (wolfBadgePlayerIds || []).includes(p.id);
 
           return (
@@ -763,7 +780,7 @@ export default function PlayerPositions({
                   fontWeight: "bold",
                   opacity: 0.9,
                 }}>
-                  Sói
+                  {room.playerRoles?.[p.id] === "Sói con" ? "Sói con" : "Sói"}
                 </div>
               )}
 

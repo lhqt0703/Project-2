@@ -43,6 +43,7 @@ export default function Game() {
     wolfDeadline: sync.wolfDeadline,
     wolves: sync.wolves,
     activeWolves: sync.activeWolves,
+    wolfMaxTargets: sync.wolfMaxTargets,
   });
   const guardian = useGuardianRole({
     roomId,
@@ -59,7 +60,7 @@ export default function Game() {
     role,
     room,
     deadPlayers,
-    witchPendingDeathTargetId: sync.witchPendingDeathTargetId,
+    witchPendingDeathTargetIds: sync.witchPendingDeathTargetIds,
     witchPotions: sync.witchPotions,
   });
 
@@ -127,12 +128,13 @@ export default function Game() {
             onPlayerClick={handlePlayerClick}
             seerResult={seer.seerResult}
             selectedOutlinePlayerId={
-              wolf.playerPositionsProps.selectedOutlinePlayerId ||
               guardian.playerPositionsProps.selectedOutlinePlayerId ||
               witch.playerPositionsProps.selectedOutlinePlayerId ||
-              hunter.playerPositionsProps.selectedOutlinePlayerId
+              hunter.playerPositionsProps.selectedOutlinePlayerId ||
+              null
             }
-            dangerPlayerId={witch.playerPositionsProps.dangerPlayerId}
+            selectedOutlinePlayerIds={wolf.playerPositionsProps.selectedOutlinePlayerIds}
+            dangerPlayerIds={witch.playerPositionsProps.dangerPlayerIds}
             showWolfVoteBadges={wolf.playerPositionsProps.showWolfVoteBadges}
             wolfVoteVoterIds={wolf.playerPositionsProps.wolfVoteVoterIds}
             showWolfBadges={wolf.playerPositionsProps.showWolfBadges}

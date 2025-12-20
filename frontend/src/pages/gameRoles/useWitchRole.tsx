@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { socket } from "../../socket";
 import type { GamePhase, WitchPotionsPayload } from "./socketEvents";
+import ConfirmModal from "../../components/ConfirmModal";
 
 type Player = { id: string; name: string; connected?: boolean };
 
@@ -14,7 +15,7 @@ export function useWitchRole({
   role,
   room,
   deadPlayers,
-  witchPendingDeathTargetId,
+  witchPendingDeathTargetIds,
   witchPotions,
 }: {
   roomId: string | null;
@@ -22,16 +23,26 @@ export function useWitchRole({
   role: string | null;
   room: RoomLike;
   deadPlayers: string[];
-  witchPendingDeathTargetId: string | null;
+  witchPendingDeathTargetIds: string[];
   witchPotions: WitchPotionsPayload | null;
 }) {
   const [poisonMode, setPoisonMode] = useState(false);
   const [poisonSelectedTargetId, setPoisonSelectedTargetId] = useState<string | null>(null);
+  const [showPoisonConfirm, setShowPoisonConfirm] = useState(false);
+
+  const [healMode, setHealMode] = useState(false);
+  const [healSelectedTargetId, setHealSelectedTargetId] = useState<string | null>(null);
+  const [showHealConfirm, setShowHealConfirm] = useState(false);
 
   useEffect(() => {
     if (phase === "day") {
       setPoisonMode(false);
       setPoisonSelectedTargetId(null);
+      setShowPoisonConfirm(false);
+
+      setHealMode(false);
+      setHealSelectedTargetId(null);
+      setShowHealConfirm(false);
     }
   }, [phase]);
 
@@ -44,10 +55,10 @@ export function useWitchRole({
 
   const healDisabled = useMemo(() => {
     if (!canAct) return true;
-    if (!witchPendingDeathTargetId) return true;
+    if (!witchPendingDeathTargetIds.length) return true;
     if (witchPotions?.healUsed) return true;
     return false;
-  }, [canAct, witchPendingDeathTargetId, witchPotions?.healUsed]);
+  }, [canAct, witchPendingDeathTargetIds.length, witchPotions?.healUsed]);
 
   const poisonDisabled = useMemo(() => {
     if (!canAct) return true;
@@ -58,6 +69,15 @@ export function useWitchRole({
   const onPlayerClick = useCallback(
     (playerId: string) => {
       if (!canAct) return false;
+
+      // Heal selection: only allow selecting from pending targets.
+      if (healMode && !healDisabled) {
+        if (!witchPendingDeathTargetIds.includes(playerId)) return true;
+        setHealSelectedTargetId(playerId);
+        setShowHealConfirm(true);
+        return true;
+      }
+
       if (!poisonMode) return false;
       if (poisonDisabled) return true;
 
@@ -70,11 +90,24 @@ export function useWitchRole({
 
       setPoisonSelectedTargetId(playerId);
       setPoisonMode(false);
-      socket.emit("witchPoison", { roomId, targetId: playerId });
+      setShowPoisonConfirm(true);
       return true;
     },
-    [canAct, deadPlayers, poisonDisabled, poisonMode, room.players, roomId]
+    [canAct, deadPlayers, healDisabled, healMode, poisonDisabled, poisonMode, room.players, roomId, witchPendingDeathTargetIds]
   );
+
+  const confirmHeal = useCallback(() => {
+    if (!roomId || !healSelectedTargetId) return;
+    socket.emit("witchHeal", { roomId, targetId: healSelectedTargetId });
+    setShowHealConfirm(false);
+    setHealMode(false);
+  }, [healSelectedTargetId, roomId]);
+
+  const confirmPoison = useCallback(() => {
+    if (!roomId || !poisonSelectedTargetId) return;
+    socket.emit("witchPoison", { roomId, targetId: poisonSelectedTargetId });
+    setShowPoisonConfirm(false);
+  }, [poisonSelectedTargetId, roomId]);
 
   const panel =
     role === "Phù thủy" && phase === "night" && socket.id && !deadPlayers.includes(socket.id) ? (
@@ -83,11 +116,13 @@ export function useWitchRole({
           disabled={healDisabled}
           onClick={() => {
             if (healDisabled) return;
-            socket.emit("witchHeal", { roomId });
+            setPoisonMode(false);
+            setPoisonSelectedTargetId(null);
+            setHealMode(m => !m);
           }}
           style={{ padding: "8px 12px", cursor: healDisabled ? "not-allowed" : "pointer" }}
         >
-          🧪 Bình cứu
+          🧪 {healMode ? "Chọn người để cứu" : "Bình cứu"}
         </button>
 
         <button
@@ -104,11 +139,50 @@ export function useWitchRole({
       </div>
     ) : null;
 
+  const healConfirmModal = (
+    <ConfirmModal
+      open={showHealConfirm && !!healSelectedTargetId}
+      title="Xác nhận dùng bình cứu"
+      message="Bạn có chắc muốn cứu người này không?"
+      onConfirm={confirmHeal}
+      onCancel={() => {
+        setShowHealConfirm(false);
+        setHealSelectedTargetId(null);
+        // Keep heal mode on so user can pick another pending target.
+        setHealMode(true);
+      }}
+    />
+  );
+
+  const poisonConfirmModal = (
+    <ConfirmModal
+      open={showPoisonConfirm && !!poisonSelectedTargetId}
+      title="Xác nhận dùng bình giết"
+      message="Bạn có chắc muốn dùng bình giết lên người này không?"
+      onConfirm={confirmPoison}
+      onCancel={() => {
+        setShowPoisonConfirm(false);
+        setPoisonSelectedTargetId(null);
+        // Keep poison mode on so user can pick another target.
+        setPoisonMode(true);
+      }}
+    />
+  );
+
   return {
     onPlayerClick,
-    panel,
+    panel: (
+      <>
+        {panel}
+        {healConfirmModal}
+        {poisonConfirmModal}
+      </>
+    ),
     playerPositionsProps: {
-      dangerPlayerId: role === "Phù thủy" && phase === "night" ? witchPendingDeathTargetId : null,
+      dangerPlayerIds:
+        role === "Phù thủy" && phase === "night" && !witchPotions?.healUsed
+          ? witchPendingDeathTargetIds
+          : [],
       selectedOutlinePlayerId: role === "Phù thủy" && phase === "night" ? poisonSelectedTargetId : null,
     },
   };

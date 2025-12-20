@@ -10,6 +10,7 @@ import type {
   WolfLockedUpdatedPayload,
   WolfPhaseStartedPayload,
   WolfVotesUpdatedPayload,
+  WolfVotes2UpdatedPayload,
 } from "./socketEvents";
 
 export function useGameSocketSync({
@@ -23,7 +24,7 @@ export function useGameSocketSync({
   const [deadPlayers, setDeadPlayers] = useState<string[]>([]);
   const [seerResult, setSeerResult] = useState<SeerResultPayload | null>(null);
 
-  const [witchPendingDeathTargetId, setWitchPendingDeathTargetId] = useState<string | null>(null);
+  const [witchPendingDeathTargetIds, setWitchPendingDeathTargetIds] = useState<string[]>([]);
   const [witchPotions, setWitchPotions] = useState<WitchPotionsPayload | null>(null);
 
   const [guardianProtectedSeq, setGuardianProtectedSeq] = useState(0);
@@ -36,6 +37,8 @@ export function useGameSocketSync({
   const [wolfDeadline, setWolfDeadline] = useState<number | null>(null);
   const [wolves, setWolves] = useState<string[]>([]);
   const [activeWolves, setActiveWolves] = useState<string[]>([]);
+  const [wolfVotes2, setWolfVotes2] = useState<WolfVotes2UpdatedPayload | null>(null);
+  const [wolfMaxTargets, setWolfMaxTargets] = useState<number>(1);
 
   useEffect(() => {
     if (roomId) {
@@ -60,7 +63,7 @@ export function useGameSocketSync({
       setPhase(newPhase);
       setSeerResult(null);
       if (newPhase === "day") {
-        setWitchPendingDeathTargetId(null);
+        setWitchPendingDeathTargetIds([]);
       }
       // hunter selection is per-night; server will also emit reset, but clear locally on phase rotate
       if (newPhase === "day") {
@@ -75,6 +78,8 @@ export function useGameSocketSync({
       setWolfLocked(null);
       setWolfDeadline(null);
       setWolves([]);
+      setWolfVotes2(null);
+      setWolfMaxTargets(1);
     };
 
     const handlePlayerKilled = (playerId: string) => {
@@ -91,16 +96,24 @@ export function useGameSocketSync({
       setRoom((prev: any) => (prev ? { ...prev, wolfVotes: votes } : prev));
     };
 
+    const handleWolfVotes2Updated = (votes2: WolfVotes2UpdatedPayload) => {
+      setWolfVotes2(votes2);
+      setRoom((prev: any) => (prev ? { ...prev, wolfVotes2: votes2 } : prev));
+    };
+
     const handleWolfLockedUpdated = (locked: WolfLockedUpdatedPayload) => {
       setWolfLocked(locked);
     };
 
-    const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline }: WolfPhaseStartedPayload) => {
+    const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline, maxTargets }: WolfPhaseStartedPayload) => {
       setWolves(wolves);
       setActiveWolves(activeWolves || []);
       setWolfDeadline(deadline);
+      setWolfMaxTargets(typeof maxTargets === "number" ? maxTargets : 1);
       setRoom((prev: any) => (prev ? { ...prev, wolfVotes: undefined } : prev));
       setWolfLocked(null);
+      setWolfVotes2(null);
+      setRoom((prev: any) => (prev ? { ...prev, wolfVotes2: undefined } : prev));
     };
 
     const handleSeerResult = (payload: SeerResultPayload) => {
@@ -113,7 +126,10 @@ export function useGameSocketSync({
     };
 
     const handleWitchPendingDeath = (payload: WitchPendingDeathPayload) => {
-      setWitchPendingDeathTargetId(payload?.targetId ?? null);
+      const ids = Array.isArray(payload?.targetIds)
+        ? payload!.targetIds!.filter(Boolean)
+        : (payload?.targetId ? [payload.targetId] : []);
+      setWitchPendingDeathTargetIds(ids);
     };
 
     const handleWitchPotionsUpdated = (payload: WitchPotionsPayload) => {
@@ -131,6 +147,7 @@ export function useGameSocketSync({
     socket.on("playerKilled", handlePlayerKilled);
 
     socket.on("wolfVotesUpdated", handleWolfVotesUpdated);
+    socket.on("wolfVotes2Updated", handleWolfVotes2Updated);
     socket.on("wolfLockedUpdated", handleWolfLockedUpdated);
     socket.on("wolfPhaseStarted", handleWolfPhaseStarted);
 
@@ -149,6 +166,7 @@ export function useGameSocketSync({
       socket.off("playerKilled", handlePlayerKilled);
 
       socket.off("wolfVotesUpdated", handleWolfVotesUpdated);
+      socket.off("wolfVotes2Updated", handleWolfVotes2Updated);
       socket.off("wolfLockedUpdated", handleWolfLockedUpdated);
       socket.off("wolfPhaseStarted", handleWolfPhaseStarted);
 
@@ -167,7 +185,7 @@ export function useGameSocketSync({
       phase,
       deadPlayers,
       seerResult,
-      witchPendingDeathTargetId,
+      witchPendingDeathTargetIds,
       witchPotions,
       guardianProtectedSeq,
       guardianProtectedTargetId,
@@ -177,12 +195,14 @@ export function useGameSocketSync({
       wolfDeadline,
       wolves,
       activeWolves,
+      wolfVotes2,
+      wolfMaxTargets,
     }),
     [
       phase,
       deadPlayers,
       seerResult,
-      witchPendingDeathTargetId,
+      witchPendingDeathTargetIds,
       witchPotions,
       guardianProtectedSeq,
       guardianProtectedTargetId,
@@ -192,6 +212,8 @@ export function useGameSocketSync({
       wolfDeadline,
       wolves,
       activeWolves,
+      wolfVotes2,
+      wolfMaxTargets,
     ]
   );
 }

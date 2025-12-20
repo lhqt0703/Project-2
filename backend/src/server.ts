@@ -34,10 +34,14 @@ interface Room {
    // --- Phần cho sói ---
   wolves?: string[]; // danh sách id của sói (còn sống) trong phòng
   wolfVotes?: Record<string, string | null>; // mapping: wolfId -> targetId hoặc null
+  wolfVotes2?: Record<string, string | null>; // mapping: wolfId -> 2nd targetId (bonus bite night)
   wolfLocked?: Record<string, boolean>;// wolfId nào đã nhấn nút "cắn" → true
   wolfTimer?: NodeJS.Timeout | null; // thời gian server tự động kết thúc
   wolfDeadline?: number | null;  // thời gian chờ sói kết thúc cắn
   killedTonight?: string | null; // playerId người bị cắn đêm nay (hiện null nếu ko ai)
+  killedTonightExtra?: string | null; // bonus victim (wolf cub died -> next night)
+  wolfExtraBiteNextNight?: boolean; // if true, wolves can kill 2 targets next night (one-time)
+  wolfBonusBiteThisNight?: boolean; // internal: whether current night has a bonus bite
   deadPlayers?: string[]; // danh sách playerId đã chết
 
   // --- Phần cho bảo vệ ---
@@ -68,6 +72,11 @@ interface Room {
 const rooms: Record<string, Room> = {};
 const activeRooms = new Set<string>(); // chứa toàn bộ mã phòng đã tạo
 
+const WOLF_ROLES = new Set(["Sói", "Sói con"]);
+function isWolfRole(role: string | undefined) {
+  return !!role && WOLF_ROLES.has(role);
+}
+
 function isPlayerConnected(room: Room, playerId: string) {
   const player = room.players.find(p => p.id === playerId);
   return player ? player.connected !== false : false;
@@ -75,7 +84,7 @@ function isPlayerConnected(room: Room, playerId: string) {
 
 function getActiveWolves(room: Room) {
   const allWolves = room.players
-    .filter(p => room.playerRoles?.[p.id] === "Sói")
+    .filter(p => isWolfRole(room.playerRoles?.[p.id]))
     .map(p => p.id);
   const dead = new Set(room.deadPlayers || []);
   return allWolves.filter(id => !dead.has(id) && isPlayerConnected(room, id));
@@ -100,19 +109,35 @@ function emitHunterTarget(roomId: string, hunterId: string) {
   io.to(hunterId).emit("hunterTargetUpdated", { targetId });
 }
 
-function getWitchPendingDeath(room: Room): string | null {
-  const killedCandidate = room.killedTonight;
+function getWitchPendingDeaths(room: Room): string[] {
   const guardianTarget = room.protectedTonight;
-  const pending = killedCandidate && killedCandidate !== guardianTarget ? killedCandidate : null;
-  return pending;
+  const dead = new Set(room.deadPlayers || []);
+
+  const candidates = [room.killedTonight, room.killedTonightExtra]
+    .filter(Boolean)
+    .filter(pid => pid !== guardianTarget) as string[];
+
+  const unique: string[] = [];
+  for (const pid of candidates) {
+    if (!pid) continue;
+    if (dead.has(pid)) continue;
+    if (!room.players.find(p => p.id === pid)) continue;
+    if (!unique.includes(pid)) unique.push(pid);
+  }
+  return unique;
 }
 
 function emitWitchPendingDeath(roomId: string) {
   const room = rooms[roomId];
   if (!room) return;
 
-  const targetId = getWitchPendingDeath(room);
-  io.to(`witches_${roomId}`).emit("witchPendingDeath", { targetId });
+  const pendingTargets = getWitchPendingDeaths(room);
+  for (const wid of getWitches(room)) {
+    ensureWitchState(room, wid);
+    const healUsed = room.witchPotions?.[wid]?.healUsed === true;
+    const targetIds = healUsed ? [] : pendingTargets;
+    io.to(wid).emit("witchPendingDeath", { targetId: targetIds[0] ?? null, targetIds });
+  }
 }
 
 function ensureWitchState(room: Room, witchId: string) {
@@ -553,12 +578,14 @@ function startWolfPhase(roomId: string) {
   const room = rooms[roomId];
   if (!room) return;
 
-  const wolves = room.players.filter(p => room.playerRoles?.[p.id] === "Sói");
+  const wolves = room.players.filter(p => isWolfRole(room.playerRoles?.[p.id]));
 
   room.wolfVotes = {};
+  room.wolfVotes2 = {};
   room.wolfLocked = {};
   wolves.forEach(w => {
     room.wolfVotes![w.id] = null;
+    room.wolfVotes2![w.id] = null;
     room.wolfLocked![w.id] = false;
   });
   // Time chờ cho sói cắn
@@ -568,7 +595,11 @@ function startWolfPhase(roomId: string) {
     wolves: wolves.map(w => w.id),
     activeWolves: getActiveWolves(room),
     deadline: room.wolfDeadline,
+    maxTargets: room.wolfBonusBiteThisNight ? 2 : 1,
   });
+
+  // Ensure clients have a defined state for bonus target voting.
+  io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
 
   // huỷ timer cũ nếu có
   if (room.wolfTimer) {
@@ -593,6 +624,7 @@ function finishWolfVoting(roomId: string) {
   }
 
   const votes = room.wolfVotes || {};
+  const votes2 = room.wolfVotes2 || {};
   const activeWolves = getActiveWolves(room);
 
   const counts: Record<string, number> = {};
@@ -617,9 +649,79 @@ function finishWolfVoting(roomId: string) {
       room.killedTonight = entries[0]![0]; // playerId bị cắn
     }
   }
+
+  // Bonus bite: use combined selections (target #1 and #2) but ONLY shared votes count.
+  // Rule (per user spec): if only one target has shared votes, only that one dies;
+  // any remaining targets that tie (or don't reach 2 votes) are discarded.
+  room.killedTonightExtra = null;
+  if (room.wolfBonusBiteThisNight) {
+    const votingWolves = activeWolves.filter(wid => !!votes[wid] || !!votes2[wid]);
+
+    // If only one wolf actually voted this night, do NOT treat equal counts as a tie.
+    // Just accept that wolf's selections (up to 2 unique targets).
+    if (votingWolves.length <= 1) {
+      const wid = votingWolves[0];
+      const t1 = wid ? votes[wid] : null;
+      const t2 = wid ? votes2[wid] : null;
+      if (t1 && t2 && t1 !== t2) {
+        room.killedTonight = t1;
+        room.killedTonightExtra = t2;
+      } else {
+        room.killedTonight = t1 || t2 || null;
+        room.killedTonightExtra = null;
+      }
+    } else {
+      const combinedCounts: Record<string, number> = {};
+      for (const wid of votingWolves) {
+        const t1 = votes[wid];
+        const t2 = votes2[wid];
+        const uniq = new Set<string>();
+        if (t1) uniq.add(t1);
+        if (t2) uniq.add(t2);
+        for (const t of uniq) {
+          combinedCounts[t] = (combinedCounts[t] || 0) + 1;
+        }
+      }
+
+      // Consider only targets with at least 2 votes (shared across wolves).
+      const eligible = Object.entries(combinedCounts).filter(([, c]) => c >= 2);
+      if (eligible.length === 0) {
+        room.killedTonight = null;
+        room.killedTonightExtra = null;
+      } else {
+        eligible.sort((a, b) => b[1] - a[1]);
+        const topCount = eligible[0]![1];
+        const topTied = eligible.filter(([, c]) => c === topCount);
+        if (topTied.length >= 3) {
+          // too many tied for first => nobody dies
+          room.killedTonight = null;
+          room.killedTonightExtra = null;
+        } else if (topTied.length === 2) {
+          // exactly two targets tied for first: both die
+          room.killedTonight = topTied[0]![0];
+          room.killedTonightExtra = topTied[1]![0];
+        } else {
+          room.killedTonight = eligible[0]![0];
+
+          // second victim: next unique count >=2, and must not tie.
+          const remaining = eligible.filter(([pid]) => pid !== room.killedTonight);
+          if (remaining.length) {
+            const secondCount = remaining[0]![1];
+            const secondTied = remaining.filter(([, c]) => c === secondCount);
+            if (secondTied.length === 1) {
+              room.killedTonightExtra = remaining[0]![0];
+            } else {
+              room.killedTonightExtra = null;
+            }
+          }
+        }
+      }
+    }
+  }
   // thông báo kết quả sơ cho phòng (chưa công bố đến người chơi sáng, chỉ gửi event)
   io.to(roomId).emit("wolfVoteFinished", {
-    target: room.killedTonight
+    target: room.killedTonight,
+    extraTarget: room.killedTonightExtra,
   });
 
   // Phù thủy chỉ thấy "người sắp chết" nếu không bị bảo vệ cứu.
@@ -765,7 +867,7 @@ io.on("connection", (socket) => {
 
     // Thiết lập lại danh sách sói để các chức năng sói hoạt động đúng
     room.wolves = room.players
-      .filter(p => room.playerRoles?.[p.id] === "Sói")
+      .filter(p => isWolfRole(room.playerRoles?.[p.id]))
       .map(p => p.id);
 
     room.wolves.forEach(wolfId => {
@@ -775,6 +877,9 @@ io.on("connection", (socket) => {
 
     // Khởi tạo mảng người chết (để tránh lỗi undefined)
     room.deadPlayers = room.deadPlayers || [];
+    room.wolfExtraBiteNextNight = room.wolfExtraBiteNextNight || false;
+    room.wolfBonusBiteThisNight = false;
+    room.killedTonightExtra = null;
     
     // Đánh dấu game đã bắt đầu (mặc định là ban ngày)
     room.phase = "day";
@@ -909,10 +1014,12 @@ io.on("connection", (socket) => {
           room.players[playerIndex] = { ...room.players[playerIndex]!, connected: false };
 
           // Nếu là sói và đang ở night phase -> bỏ qua hành động của họ
-          if (room.playerRoles?.[socket.id] === "Sói") {
+          if (isWolfRole(room.playerRoles?.[socket.id])) {
             if (room.wolfVotes) room.wolfVotes[socket.id] = null;
+            if (room.wolfVotes2) room.wolfVotes2[socket.id] = null;
             if (room.wolfLocked) room.wolfLocked[socket.id] = false;
             io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes || {});
+            io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2 || {});
             io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked || {});
 
             // nếu các sói còn online đã lock hết -> chốt luôn
@@ -1019,7 +1126,7 @@ io.on("connection", (socket) => {
 
     // Thiết lập danh sách sói
     room.wolves = room.players
-      .filter(p => room.playerRoles?.[p.id] === "Sói")
+      .filter(p => isWolfRole(room.playerRoles?.[p.id]))
       .map(p => p.id);
 
     room.wolves.forEach(wolfId => {
@@ -1038,6 +1145,10 @@ io.on("connection", (socket) => {
 
     // đảm bảo danh sách deadPlayers tồn tại
     room.deadPlayers = room.deadPlayers || [];
+
+    room.wolfExtraBiteNextNight = room.wolfExtraBiteNextNight || false;
+    room.wolfBonusBiteThisNight = false;
+    room.killedTonightExtra = null;
 
 
     // Đánh dấu game đã bắt đầu (mặc định là ban ngày)
@@ -1059,6 +1170,11 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("phaseChanged", phase);
 
     if (phase === "night") {
+      // Determine whether wolves have a one-time bonus bite this night.
+      room.wolfBonusBiteThisNight = !!room.wolfExtraBiteNextNight;
+      room.wolfExtraBiteNextNight = false;
+      room.killedTonightExtra = null;
+
       // reset lựa chọn của bảo vệ cho đêm mới
       room.protectedTonight = null;
 
@@ -1089,9 +1205,12 @@ io.on("connection", (socket) => {
     else if (phase === "day") {
       // khi chuyển sang sáng -> nếu có người bị cắn thì công bố và đánh dấu dead
       const killedCandidate = room.killedTonight;
+      const killedCandidateExtra = room.killedTonightExtra;
       const guardianTarget = room.protectedTonight;
 
-      const pendingWolfDeath = killedCandidate && killedCandidate !== guardianTarget ? killedCandidate : null;
+      const pendingWolfDeaths = [killedCandidate, killedCandidateExtra]
+        .filter(Boolean)
+        .filter(pid => pid !== guardianTarget) as string[];
       const healedTargets = new Set<string>();
       const poisonTargets = new Set<string>();
 
@@ -1106,8 +1225,8 @@ io.on("connection", (socket) => {
       }
 
       const finalDeathSet = new Set<string>();
-      if (pendingWolfDeath && !healedTargets.has(pendingWolfDeath)) {
-        finalDeathSet.add(pendingWolfDeath);
+      for (const pid of pendingWolfDeaths) {
+        if (pid && !healedTargets.has(pid)) finalDeathSet.add(pid);
       }
       for (const t of poisonTargets) {
         finalDeathSet.add(t);
@@ -1135,6 +1254,12 @@ io.on("connection", (socket) => {
           room.deadPlayers.push(pid);
           io.to(roomId).emit("playerKilled", pid);
         }
+
+        // If the Wolf Cub died tonight, enable a one-time bonus bite next night.
+        if (!room.wolfExtraBiteNextNight) {
+          const cubDied = finalDeaths.some(pid => room.playerRoles?.[pid] === "Sói con");
+          if (cubDied) room.wolfExtraBiteNextNight = true;
+        }
       }
 
       // cập nhật lastProtected sau khi kết thúc đêm
@@ -1143,6 +1268,7 @@ io.on("connection", (socket) => {
       }
       room.protectedTonight = null;
       room.killedTonight = null;
+      room.killedTonightExtra = null;
 
       // reset lựa chọn thợ săn sau khi kết thúc đêm
       room.hunterTargetTonight = room.hunterTargetTonight || {};
@@ -1166,8 +1292,10 @@ io.on("connection", (socket) => {
           room.wolfTimer = null;
         }
         room.wolfVotes = {};
+        room.wolfVotes2 = {};
         room.wolfLocked = {};
         room.wolfDeadline = null;
+        room.wolfBonusBiteThisNight = false;
     }
   });
 
@@ -1255,7 +1383,7 @@ io.on("connection", (socket) => {
     room.seerUsedTonight[socket.id] = true;
 
     const roleOfTarget = room.playerRoles[targetId];
-    const isWolf = roleOfTarget === "Sói";
+    const isWolf = isWolfRole(roleOfTarget);
     io.to(socket.id).emit("seerResult", { playerId: targetId, isWolf });
   });
 
@@ -1297,7 +1425,7 @@ io.on("connection", (socket) => {
   });
 
   // Xử lý chức năng phù thủy dùng bình cứu
-  socket.on("witchHeal", ({ roomId }) => {
+  socket.on("witchHeal", ({ roomId, targetId }) => {
     const room = rooms[roomId];
     if (!room) return;
 
@@ -1313,15 +1441,23 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const pending = getWitchPendingDeath(room);
-    if (!pending) {
+    const pendingTargets = getWitchPendingDeaths(room);
+    if (!pendingTargets.length) {
       socket.emit("errorMessage", "Không có ai sắp chết để dùng bình cứu.");
       return;
     }
 
+    if (!targetId || !pendingTargets.includes(targetId)) {
+      socket.emit("errorMessage", "Mục tiêu bình cứu không hợp lệ.");
+      return;
+    }
+
     potions.healUsed = true;
-    room.witchHealTargetTonight![socket.id] = pending;
+    room.witchHealTargetTonight![socket.id] = targetId;
     emitWitchPotions(roomId, socket.id);
+
+    // After using heal, this witch should no longer see pending deaths.
+    emitWitchPendingDeath(roomId);
   });
 
   // Xử lý chức năng phù thủy dùng bình giết
@@ -1360,8 +1496,9 @@ io.on("connection", (socket) => {
   socket.on("wolfChooseTarget", ({ roomId, targetId }) => {
     const room = rooms[roomId];
     if (!room) return;
-    if (room.playerRoles?.[socket.id] !== "Sói") return; // chỉ sói mới được chọn
+    if (!isWolfRole(room.playerRoles?.[socket.id])) return; // chỉ phe sói mới được chọn
     if ((room.deadPlayers || []).includes(socket.id)) return; // sói chết -> bỏ qua
+    if (room.phase !== "night") return;
 
     // nếu sói đã cắn thì ko cho thay đổi
     if (room.wolfLocked?.[socket.id]) {
@@ -1370,10 +1507,67 @@ io.on("connection", (socket) => {
     }
 
     room.wolfVotes = room.wolfVotes || {}; // khởi tạo nếu chưa có
-    room.wolfVotes[socket.id] = targetId || null; // cho phép null để hủy chọn
+
+    // Allow clear by null/undefined
+    if (!targetId) {
+      room.wolfVotes[socket.id] = null;
+      io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes);
+      return;
+    }
+
+    // Validate target exists and alive
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    // Prevent voting for yourself or wolf-team
+    if (targetId === socket.id) return;
+    if (isWolfRole(room.playerRoles?.[targetId])) return;
+
+    room.wolfVotes[socket.id] = targetId;
 
     // Gửi cập nhật vote cho tất cả sói để họ nhìn thấy
     io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes); 
+  });
+
+  // Xử lý mục tiêu cắn thứ 2 (chỉ khi có bonus bite)
+  socket.on("wolfChooseTarget2", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (!isWolfRole(room.playerRoles?.[socket.id])) return;
+    if (room.phase !== "night") return;
+    if ((room.deadPlayers || []).includes(socket.id)) return;
+
+    // Chỉ cho chọn mục tiêu #2 khi đêm này có bonus
+    if (!room.wolfBonusBiteThisNight) return;
+
+    // nếu sói đã lock thì ko cho thay đổi
+    if (room.wolfLocked?.[socket.id]) {
+      socket.emit("errorMessage", "Bạn đã bấm CẮN, không thể thay đổi lựa chọn.");
+      return;
+    }
+
+    room.wolfVotes2 = room.wolfVotes2 || {};
+
+    // Allow clear by null/undefined
+    if (!targetId) {
+      room.wolfVotes2[socket.id] = null;
+      io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
+      return;
+    }
+
+    // Validate target exists and alive
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    // Prevent voting for yourself or wolf-team
+    if (targetId === socket.id) return;
+    if (isWolfRole(room.playerRoles?.[targetId])) return;
+
+    // Prevent selecting the same as primary
+    if (room.wolfVotes?.[socket.id] && room.wolfVotes[socket.id] === targetId) return;
+
+    room.wolfVotes2[socket.id] = targetId;
+    io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
   });
 
   // Xử lý khi sói nhấn nút "Cắn" (lock vote)
@@ -1381,7 +1575,8 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
 
-    if (room.playerRoles?.[socket.id] !== "Sói") return;
+    if (!isWolfRole(room.playerRoles?.[socket.id])) return;
+    if (room.phase !== "night") return;
 
     room.wolfLocked = room.wolfLocked || {}; // khởi tạo nếu chưa có
     room.wolfLocked![socket.id] = true;

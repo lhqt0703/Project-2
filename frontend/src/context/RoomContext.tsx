@@ -22,6 +22,7 @@ interface RoomData {
 
   // Game-only ephemeral state that may be synced via sockets.
   wolfVotes?: Record<string, string | null>;
+  wolfVotes2?: Record<string, string | null>;
   deadPlayers?: string[];
 }
 

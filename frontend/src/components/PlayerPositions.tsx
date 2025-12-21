@@ -9,6 +9,13 @@ interface PlayerPosition {
   y: number;
 }
 
+type BulletAnimation = {
+  fromPlayerId: string;
+  toPlayerId: string;
+  startedAt: number;
+  durationMs: number;
+};
+
 const DEFAULT_CIRCLE_SIZE_PX = 72; // Match Game.tsx size
 const SMALL_CIRCLE_SIZE_PX = 46;
 const CIRCLE_BORDER_PX = 2;
@@ -240,6 +247,8 @@ export default function PlayerPositions({
   onPlayerClick,
   mode = "edit",
   seerResult,
+  deadPlayersOverride,
+  bulletAnimation,
   selectedOutlinePlayerId,
   selectedOutlinePlayerIds,
   dangerPlayerId,
@@ -252,6 +261,8 @@ export default function PlayerPositions({
   onPlayerClick: (playerId: string) => void;
   mode?: "edit" | "view";
   seerResult?: { playerId: string; isWolf: boolean } | null;
+  deadPlayersOverride?: string[];
+  bulletAnimation?: BulletAnimation | null;
   selectedOutlinePlayerId?: string | null;
   selectedOutlinePlayerIds?: string[];
   dangerPlayerId?: string | null;
@@ -286,7 +297,7 @@ export default function PlayerPositions({
 
   const wolfVotes = room.wolfVotes as Record<string, string | null> | undefined;
   const wolfVotes2 = room.wolfVotes2 as Record<string, string | null> | undefined;
-  const deadPlayers = room.deadPlayers as string[] | undefined;
+  const deadPlayers = deadPlayersOverride ?? (room.deadPlayers as string[] | undefined);
   const wolvesAlive = room.players
     .filter(p => {
       const r = room.playerRoles?.[p.id];
@@ -336,6 +347,120 @@ export default function PlayerPositions({
   useEffect(() => {
     if (room.positions) setLocalPositions(room.positions);
   }, [room.positions]);
+
+  const animPositionsRef = useRef<PlayerPosition[]>([]);
+  useEffect(() => {
+    animPositionsRef.current = (localPositions && localPositions.length ? localPositions : (room.positions || [])) as PlayerPosition[];
+  }, [localPositions, room.positions]);
+
+  const [bulletFrame, setBulletFrame] = useState<{ x: number; y: number; elapsedMs: number; totalMs: number } | null>(null);
+  const bulletRafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (bulletRafRef.current != null) {
+      cancelAnimationFrame(bulletRafRef.current);
+      bulletRafRef.current = null;
+    }
+
+    if (!bulletAnimation) {
+      setBulletFrame(null);
+      return;
+    }
+
+    const easeInCubic = (t: number) => t * t * t;
+    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+    const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+    // Cinematic timing: quick burst -> slow-mo (~1s) -> quick finish.
+    // These are time-based (ms), so the feel doesn't depend on distance.
+    const burst1Ms = 800;
+    const slowMoMs = 100;
+    const burst2Ms = 100;
+    const totalMs = burst1Ms + slowMoMs + burst2Ms;
+
+    const tick = () => {
+      const now = performance.now();
+      const elapsedMs = now - bulletAnimation.startedAt;
+      const localElapsed = clamp(elapsedMs, 0, totalMs);
+      const t = clamp(localElapsed / totalMs, 0, 1);
+
+      const positions = animPositionsRef.current;
+      const from = positions.find(p => p.playerId === bulletAnimation.fromPlayerId);
+      const to = positions.find(p => p.playerId === bulletAnimation.toPlayerId);
+
+      if (!from || !to) {
+        setBulletFrame(null);
+        return;
+      }
+
+      // Map elapsed time -> travel fraction (0..1) with the cinematic beat.
+      // Distance splits are chosen to keep the bullet visible during slow-mo.
+      const d1 = 0.35;
+      const d2 = 0.70;
+
+      let s = 0;
+      if (localElapsed <= burst1Ms) {
+        const u = clamp(localElapsed / burst1Ms, 0, 1);
+        s = d1 * easeOutCubic(u);
+      } else if (localElapsed <= burst1Ms + slowMoMs) {
+        const u = clamp((localElapsed - burst1Ms) / slowMoMs, 0, 1);
+        s = d1 + (d2 - d1) * easeInOutCubic(u);
+      } else {
+        const u = clamp((localElapsed - burst1Ms - slowMoMs) / burst2Ms, 0, 1);
+        s = d2 + (1 - d2) * easeInCubic(u);
+      }
+
+      setBulletFrame({
+        x: from.x + (to.x - from.x) * s,
+        y: from.y + (to.y - from.y) * s,
+        elapsedMs: localElapsed,
+        totalMs,
+      });
+
+      if (t < 1) {
+        bulletRafRef.current = requestAnimationFrame(tick);
+      } else {
+        // Keep the last frame briefly; Game will clear bulletAnimation state.
+        bulletRafRef.current = null;
+      }
+    };
+
+    bulletRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (bulletRafRef.current != null) {
+        cancelAnimationFrame(bulletRafRef.current);
+        bulletRafRef.current = null;
+      }
+    };
+  }, [
+    bulletAnimation?.fromPlayerId,
+    bulletAnimation?.toPlayerId,
+    bulletAnimation?.startedAt,
+    bulletAnimation?.durationMs,
+  ]);
+
+  const bulletRecoil = (() => {
+    if (!bulletAnimation || !bulletFrame) return null;
+    const positions = localPositions && localPositions.length ? localPositions : (room.positions || []);
+    const from = positions.find(p => p.playerId === bulletAnimation.fromPlayerId);
+    const to = positions.find(p => p.playerId === bulletAnimation.toPlayerId);
+    if (!from || !to) return null;
+    const rect = containerRef.current?.getBoundingClientRect();
+    const w = rect?.width ?? 1;
+    const h = rect?.height ?? 1;
+    const dxPx = (to.x - from.x) * w;
+    const dyPx = (to.y - from.y) * h;
+    const len = Math.sqrt(dxPx * dxPx + dyPx * dyPx) || 1;
+    return {
+      fromId: bulletAnimation.fromPlayerId,
+      toId: bulletAnimation.toPlayerId,
+      ux: dxPx / len,
+      uy: dyPx / len,
+      angleDeg: (Math.atan2(dyPx, dxPx) * 180) / Math.PI,
+      elapsedMs: bulletFrame.elapsedMs,
+      totalMs: bulletFrame.totalMs,
+    };
+  })();
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!dragging || !isEditor) return;
@@ -672,6 +797,31 @@ export default function PlayerPositions({
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
       >
+        {bulletAnimation && bulletFrame && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              zIndex: 9,
+            }}
+          >
+            <img
+              src={encodeURI("/Đạn.svg")}
+              alt="Đạn"
+              style={{
+                position: "absolute",
+                left: `${bulletFrame.x * 100}%`,
+                top: `${bulletFrame.y * 100}%`,
+                // The SVG's default facing is up-right; +45deg makes it face right.
+                transform: `translate(-50%, -50%) rotate(${(bulletRecoil?.angleDeg ?? 0) + 45}deg)`,
+                transformOrigin: "center",
+                width: 22,
+                height: 22,
+              }}
+            />
+          </div>
+        )}
         {localPositions.map((pos) => {
           const p = room.players.find((x) => x.id === pos.playerId);
           if (!p) return null;
@@ -710,6 +860,81 @@ export default function PlayerPositions({
             (!!selectedOutlinePlayerIds && selectedOutlinePlayerIds.includes(pos.playerId));
           const showWolfBadge = !!showWolfBadges && (wolfBadgePlayerIds || []).includes(p.id);
 
+          const isBulletView = mode === "view" && !!bulletRecoil;
+
+          // Recoil on hunter (kick back) and knockback on target near impact.
+          let extraDx = 0;
+          let extraDy = 0;
+          if (isBulletView && bulletRecoil) {
+            const { fromId, toId, ux, uy, elapsedMs, totalMs } = bulletRecoil;
+
+            const pulse = (u: number) => {
+              const t = clamp(u, 0, 1);
+              return Math.sin(Math.PI * t);
+            };
+
+            // Hunter recoil: kick back quickly as bullet fires, then return slowly during slow-mo,
+            // then finish returning quickly as bullet speeds up.
+            const HUNTER_RECOIL_PX = 38;
+
+            const burst1Ms = 800;
+            const slowMoMs = 100;
+            const burst2Ms = Math.max(1, totalMs - burst1Ms - slowMoMs);
+
+            // Recoil timing: kick back VERY fast (pre slow-mo), hold, then return in slow-mo,
+            // then snap back fast in the final burst.
+            const hunterKickMs = 55;
+
+            const recoilMag = (() => {
+              if (elapsedMs <= 0) return 0;
+
+              // 1) Fast kickback (no slow-mo yet)
+              if (elapsedMs <= hunterKickMs) {
+                const u = clamp(elapsedMs / hunterKickMs, 0, 1);
+                const easeOut = 1 - Math.pow(1 - u, 3);
+                return HUNTER_RECOIL_PX * easeOut;
+              }
+
+              // 2) Hold the recoil position until slow-mo starts
+              if (elapsedMs <= burst1Ms) {
+                return HUNTER_RECOIL_PX;
+              }
+
+              // 3) Slow return during slow-mo (only part-way)
+              const residualFrac = 1.35; // how much recoil remains after slow-mo
+              if (elapsedMs <= burst1Ms + slowMoMs) {
+                const u = clamp((elapsedMs - burst1Ms) / slowMoMs, 0, 1);
+                const eased = 1 - Math.pow(1 - u, 3);
+                return HUNTER_RECOIL_PX * (1 - (1 - residualFrac) * eased);
+              }
+
+              // 4) Snap back fast in the final burst with a tiny overshoot
+              const u = clamp((elapsedMs - burst1Ms - slowMoMs) / burst2Ms, 0, 1);
+              const s = 1.15;
+              const x = u - 1;
+              const easeOutBack = 1 + (s + 1) * x * x * x + s * x * x;
+              return HUNTER_RECOIL_PX * residualFrac * (1 - easeOutBack);
+            })();
+
+            if (pos.playerId === fromId) {
+              extraDx += -ux * recoilMag;
+              extraDy += -uy * recoilMag;
+            }
+
+            // Target knockback: delay until the *final* burst so it doesn't flinch early.
+            const TARGET_KNOCK_PX = 14;
+            const targetKickWindowMs = Math.min(90, Math.max(40, burst2Ms));
+            const impactStart = Math.max(0, totalMs - targetKickWindowMs);
+            const knockPulse = pulse((elapsedMs - impactStart) / targetKickWindowMs);
+
+            if (pos.playerId === toId) {
+              extraDx += ux * TARGET_KNOCK_PX * knockPulse;
+              extraDy += uy * TARGET_KNOCK_PX * knockPulse;
+            }
+          }
+
+          const circleTransform = `translate(-50%,-50%)${extraDx || extraDy ? ` translate(${extraDx}px, ${extraDy}px)` : ""}`;
+
           return (
             <div
               key={pos.playerId}
@@ -731,7 +956,7 @@ export default function PlayerPositions({
                 position: "absolute",
                 left,
                 top,
-                transform: "translate(-50%,-50%)",
+                transform: circleTransform,
                 width: circleSizePx,
                 height: circleSizePx,
                 borderRadius: circleRadiusPx,

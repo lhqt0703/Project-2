@@ -19,3 +19,5 @@ export type WitchPendingDeathPayload = { targetId: string | null; targetIds?: st
 export type WitchPotionsPayload = { healUsed: boolean; poisonUsed: boolean };
 
 export type HunterTargetUpdatedPayload = { targetId: string | null };
+
+export type HunterShotPayload = { hunterId: string; targetId: string };

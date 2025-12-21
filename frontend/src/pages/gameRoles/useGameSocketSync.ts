@@ -3,6 +3,7 @@ import { socket } from "../../socket";
 import type {
   GamePhase,
   GuardianProtectedPayload,
+  HunterShotPayload,
   HunterTargetUpdatedPayload,
   SeerResultPayload,
   WitchPendingDeathPayload,
@@ -32,6 +33,9 @@ export function useGameSocketSync({
 
   const [hunterTargetSeq, setHunterTargetSeq] = useState(0);
   const [hunterTargetId, setHunterTargetId] = useState<string | null>(null);
+
+  const [hunterShotSeq, setHunterShotSeq] = useState(0);
+  const [hunterShot, setHunterShot] = useState<HunterShotPayload | null>(null);
 
   const [wolfLocked, setWolfLocked] = useState<WolfLockedUpdatedPayload | null>(null);
   const [wolfDeadline, setWolfDeadline] = useState<number | null>(null);
@@ -141,6 +145,12 @@ export function useGameSocketSync({
       setHunterTargetSeq(s => s + 1);
     };
 
+    const handleHunterShot = (payload: HunterShotPayload) => {
+      if (!payload?.hunterId || !payload?.targetId) return;
+      setHunterShot(payload);
+      setHunterShotSeq(s => s + 1);
+    };
+
     socket.on("roomUpdated", handleRoomUpdated);
     socket.on("positionsUpdated", handlePositionsUpdated);
     socket.on("phaseChanged", handlePhaseChanged);
@@ -158,6 +168,7 @@ export function useGameSocketSync({
     socket.on("witchPotionsUpdated", handleWitchPotionsUpdated);
 
     socket.on("hunterTargetUpdated", handleHunterTargetUpdated);
+    socket.on("hunterShot", handleHunterShot);
 
     return () => {
       socket.off("roomUpdated", handleRoomUpdated);
@@ -177,6 +188,7 @@ export function useGameSocketSync({
       socket.off("witchPotionsUpdated", handleWitchPotionsUpdated);
 
       socket.off("hunterTargetUpdated", handleHunterTargetUpdated);
+      socket.off("hunterShot", handleHunterShot);
     };
   }, [roomId, setRoom]);
 
@@ -191,6 +203,8 @@ export function useGameSocketSync({
       guardianProtectedTargetId,
       hunterTargetSeq,
       hunterTargetId,
+      hunterShotSeq,
+      hunterShot,
       wolfLocked,
       wolfDeadline,
       wolves,
@@ -208,6 +222,8 @@ export function useGameSocketSync({
       guardianProtectedTargetId,
       hunterTargetSeq,
       hunterTargetId,
+      hunterShotSeq,
+      hunterShot,
       wolfLocked,
       wolfDeadline,
       wolves,

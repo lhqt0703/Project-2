@@ -1232,6 +1232,8 @@ io.on("connection", (socket) => {
         finalDeathSet.add(t);
       }
 
+      const hunterShots: Array<{ hunterId: string; targetId: string }> = [];
+
       // Nếu thợ săn chết trong đêm, người thợ săn đã chọn cũng chết theo.
       for (const hid of getHunters(room)) {
         if (!finalDeathSet.has(hid)) continue;
@@ -1241,6 +1243,13 @@ io.on("connection", (socket) => {
         if ((room.deadPlayers || []).includes(targetId)) continue;
         if (!room.players.find(p => p.id === targetId)) continue;
         finalDeathSet.add(targetId);
+
+        // Dedicated event so clients can animate the shot before deaths are rendered.
+        hunterShots.push({ hunterId: hid, targetId });
+      }
+
+      for (const shot of hunterShots) {
+        io.to(roomId).emit("hunterShot", shot);
       }
 
       const finalDeaths = Array.from(finalDeathSet);

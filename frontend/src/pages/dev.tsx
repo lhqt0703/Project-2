@@ -4,12 +4,22 @@ export default function DevSpawn() {
   const [roomId, setRoomId] = useState("");
   const [count, setCount] = useState(5);
   const [prefix, setPrefix] = useState("P");
+  const [debugAnim, setDebugAnim] = useState(true);
 
   const spawn = () => {
     for (let i = 1; i <= count; i++) {
       window.open(`/?roomId=${roomId}&name=${prefix}${i}`, "_blank");
 
     }
+  };
+
+  const openGame = (opts?: { debugAnim?: boolean }) => {
+    const rid = (roomId || "").trim();
+    if (!rid) return;
+    const params = new URLSearchParams();
+    params.set("roomId", rid);
+    if (opts?.debugAnim) params.set("debugAnim", "1");
+    window.open(`/game?${params.toString()}`, "_blank");
   };
 
   return (
@@ -22,6 +32,15 @@ export default function DevSpawn() {
         onChange={(e) => setRoomId(e.target.value)}
         style={{ display: "block", marginBottom: 10 }}
       />
+
+      <label style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+        <input
+          type="checkbox"
+          checked={debugAnim}
+          onChange={(e) => setDebugAnim(e.target.checked)}
+        />
+        Debug hunter animation (Game)
+      </label>
 
       <label>Số player muốn mở:</label>
       <input
@@ -41,6 +60,15 @@ export default function DevSpawn() {
       <button onClick={spawn} style={{ marginTop: 20 }}>
         Spawn Players 🚀
       </button>
+
+      <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button onClick={() => openGame({ debugAnim })}>
+          Open Game {debugAnim ? "(debug)" : ""}
+        </button>
+        <button onClick={() => openGame({ debugAnim: true })}>
+          Open Game (debug)
+        </button>
+      </div>
     </div>
   );
 }

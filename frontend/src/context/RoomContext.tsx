@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { socket } from "../socket";
 
 interface Player {
   id: string;
@@ -46,6 +47,18 @@ const RoomContext = createContext<RoomContextType | undefined>(undefined);
 export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [role, setRole] = useState<string | null>(null);
   const [room, setRoom] = useState<RoomData | null>(null);
+
+  useEffect(() => {
+    const handleYourRole = (nextRole: string) => {
+      if (!nextRole) return;
+      setRole(nextRole);
+    };
+
+    socket.on("yourRole", handleYourRole);
+    return () => {
+      socket.off("yourRole", handleYourRole);
+    };
+  }, []);
 
   return (
     <RoomContext.Provider value={{ role, setRole, room, setRoom }}>

@@ -21,3 +21,8 @@ export type WitchPotionsPayload = { healUsed: boolean; poisonUsed: boolean };
 export type HunterTargetUpdatedPayload = { targetId: string | null };
 
 export type HunterShotPayload = { hunterId: string; targetId: string };
+
+export type GameEndedPayload = { winner: "wolves" | "villagers"; reason?: string };
+
+export type SpiritWolfDecisionNeededPayload = { targetId: string };
+export type SpiritWolfDecisionRecordedPayload = { saved: boolean };

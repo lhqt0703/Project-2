@@ -38,11 +38,13 @@ export function useWolfRole({
   const [localSelectedTarget2, setLocalSelectedTarget2] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
-  const isWolfTeam = useMemo(() => role === "Sói" || role === "Sói con", [role]);
+  const isWolfTeam = useMemo(() => role === "Sói" || role === "Sói con" || role === "Bán sói", [role]);
 
   useEffect(() => {
     // Chỉ tick khi cần hiển thị countdown cho sói
     if (!isWolfTeam || phase !== "night" || !wolfDeadline) return;
+    // Refresh immediately to avoid showing stale remaining seconds when phase switches quickly.
+    setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [isWolfTeam, phase, wolfDeadline]);

@@ -301,7 +301,7 @@ export default function PlayerPositions({
   const wolvesAlive = room.players
     .filter(p => {
       const r = room.playerRoles?.[p.id];
-      return (r === "Sói" || r === "Sói con") && !(deadPlayers || []).includes(p.id);
+      return (r === "Sói" || r === "Sói con" || r === "Bán sói") && !(deadPlayers || []).includes(p.id);
     })
     .map(p => p.id);
   const wolfCount = wolvesAlive.length;
@@ -786,7 +786,7 @@ export default function PlayerPositions({
         style={{
           width: "100%",
           height: frameHeightPx,
-          background: "#f0f0f0",
+          background: "var(--surface-muted)",
           borderRadius: 10,
           position: "relative",
           touchAction: "none",
@@ -960,7 +960,7 @@ export default function PlayerPositions({
                 width: circleSizePx,
                 height: circleSizePx,
                 borderRadius: circleRadiusPx,
-                background: "#fff",
+                background: "var(--surface)",
                 border: isSwapSelected ? "3px solid #2196F3" : "2px solid #333",
                 display: "flex",
                 alignItems: "center",
@@ -1005,7 +1005,11 @@ export default function PlayerPositions({
                   fontWeight: "bold",
                   opacity: 0.9,
                 }}>
-                  {room.playerRoles?.[p.id] === "Sói con" ? "Sói con" : "Sói"}
+                  {room.playerRoles?.[p.id] === "Sói con"
+                    ? "Sói con"
+                    : room.playerRoles?.[p.id] === "Bán sói"
+                      ? "Bán sói"
+                      : "Sói"}
                 </div>
               )}
 

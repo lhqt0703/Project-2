@@ -12,6 +12,7 @@ import { useGuardianRole } from "./gameRoles/useGuardianRole";
 import { useGameSocketSync } from "./gameRoles/useGameSocketSync";
 import { useWitchRole } from "./gameRoles/useWitchRole";
 import { useHunterRole } from "./gameRoles/useHunterRole";
+import { useSpiritWolfRole } from "./gameRoles/useSpiritWolfRole";
 
 export default function Game() {
   const { role, room, setRoom } = useRoomContext();
@@ -159,6 +160,15 @@ export default function Game() {
     hunterTargetId: sync.hunterTargetId,
   });
 
+  const spiritWolf = useSpiritWolfRole({
+    roomId,
+    phase,
+    role,
+    room: roomForRoles,
+    deadPlayers,
+    decisionTargetId: sync.spiritWolfDecisionTargetId,
+  });
+
   // Note: all socket subscriptions are centralized in useGameSocketSync.
 
   useEffect(() => {
@@ -185,8 +195,15 @@ export default function Game() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!sync.gameEnded) return;
+    const winnerText = sync.gameEnded.winner === "wolves" ? "Phe Sói" : "Phe Dân";
+    alert(`Trò chơi kết thúc! ${winnerText} chiến thắng.`);
+  }, [sync.gameEnded]);
+
   // Xử lý click vào avatar người chơi
   const handlePlayerClick = (playerId: string) => {
+    if (sync.gameEnded) return;
     // Nếu người chơi đã chết thì không được chọn họ nữa
     if (deadPlayers.includes(playerId)) return;
 
@@ -206,6 +223,11 @@ export default function Game() {
       )}
       <h1>Trò chơi bắt đầu!</h1>
       <h2>Vai trò của bạn là: {role}</h2>
+      {sync.gameEnded && (
+        <h2>
+          Kết thúc: {sync.gameEnded.winner === "wolves" ? "Phe Sói" : "Phe Dân"} chiến thắng
+        </h2>
+      )}
       {phase === "day" ? (
         <h1>🌞 Ban ngày – Thảo luận</h1>
       ) : (
@@ -276,6 +298,8 @@ export default function Game() {
 
       {hunter.modal}
 
+      {spiritWolf.modal}
+
       {witch.panel}
 
 
@@ -295,6 +319,9 @@ export default function Game() {
           }
         >
           Bắt đầu ngày
+        </button>
+        <button onClick={() => socket.emit("restartGame", { roomId })}>
+          Bắt đầu lại
         </button>
       </div>
     )}

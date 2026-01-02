@@ -321,8 +321,8 @@ export default function Room() {
               position: "fixed",
               top: contextMenu.y,
               left: contextMenu.x,
-              background: "#fff",
-              border: "1px solid #ccc",
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
               borderRadius: 6,
               boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
               zIndex: 1000,
@@ -332,7 +332,7 @@ export default function Room() {
             <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleTransferHost}>
               Nhường quyền chủ phòng
             </button>
-            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer", color: "red" }} onClick={handleKick}>
+            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer", color: "var(--danger)" }} onClick={handleKick}>
               Kick khỏi phòng
             </button>
             <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleGrantPosition}>

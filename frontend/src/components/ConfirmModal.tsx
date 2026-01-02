@@ -34,7 +34,7 @@ export default function ConfirmModal({
     >
       <div
         style={{
-          background: "#fff",
+          background: "var(--surface)",
           padding: 32,
           borderRadius: 12,
           minWidth: 320,

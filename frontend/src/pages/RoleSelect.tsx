@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { socket } from "../socket";
 
 const MAX_VILLAGERS = 10;
-const NON_VILLAGER_ROLES = ["Sói", "Sói con", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn"] as const;
+const NON_VILLAGER_ROLES = ["Sói", "Bán sói", "Sói con", "Linh sói", "Kẻ bị nguyền", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn"] as const;
 type NonVillagerRole = (typeof NON_VILLAGER_ROLES)[number];
 
 export default function RoleSelect() {
@@ -187,8 +187,8 @@ export default function RoleSelect() {
                 padding: "16px 22px",
                 borderRadius: 12,
                 cursor: "pointer",
-                border: count > 0 ? "3px solid #ff9800" : "2px solid #444",
-                background: count > 0 ? "#ffe9c7" : "#f2f2f2",
+                border: count > 0 ? "3px solid var(--accent)" : "2px solid var(--border-strong)",
+                background: count > 0 ? "var(--accent-surface)" : "var(--surface-muted)",
                 transition: "0.2s",
                 fontSize: 18,
                 userSelect: "none",
@@ -221,8 +221,8 @@ export default function RoleSelect() {
                 padding: "16px 22px",
                 borderRadius: 12,
                 cursor: "pointer",
-                border: selected ? "3px solid #ff9800" : "2px solid #444",
-                background: selected ? "#ffe9c7" : "#f2f2f2",
+                border: selected ? "3px solid var(--accent)" : "2px solid var(--border-strong)",
+                background: selected ? "var(--accent-surface)" : "var(--surface-muted)",
                 transition: "0.2s",
                 fontSize: 18,
                 userSelect: "none",
@@ -234,7 +234,7 @@ export default function RoleSelect() {
         })}
 
         {/* Các role còn lại */}
-        {(["Sói con", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn"] as const).map((role) => {
+        {(["Bán sói", "Sói con", "Linh sói", "Kẻ bị nguyền", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn"] as const).map((role) => {
           const selected = selectedRoles.includes(role);
           return (
             <div
@@ -244,8 +244,8 @@ export default function RoleSelect() {
                 padding: "16px 22px",
                 borderRadius: 12,
                 cursor: "pointer",
-                border: selected ? "3px solid #ff9800" : "2px solid #444",
-                background: selected ? "#ffe9c7" : "#f2f2f2",
+                border: selected ? "3px solid var(--accent)" : "2px solid var(--border-strong)",
+                background: selected ? "var(--accent-surface)" : "var(--surface-muted)",
                 transition: "0.2s",
                 fontSize: 18,
                 userSelect: "none",

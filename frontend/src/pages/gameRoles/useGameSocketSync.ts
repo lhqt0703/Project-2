@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "../../socket";
 import type {
   GamePhase,
+  GameEndedPayload,
   GuardianProtectedPayload,
   HunterShotPayload,
   HunterTargetUpdatedPayload,
   SeerResultPayload,
+  SpiritWolfDecisionNeededPayload,
+  SpiritWolfDecisionRecordedPayload,
   WitchPendingDeathPayload,
   WitchPotionsPayload,
   WolfLockedUpdatedPayload,
@@ -22,6 +25,11 @@ export function useGameSocketSync({
   setRoom: React.Dispatch<React.SetStateAction<any>>;
 }) {
   const [phase, setPhase] = useState<GamePhase>("day");
+  const phaseRef = useRef<GamePhase>("day");
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
   const [deadPlayers, setDeadPlayers] = useState<string[]>([]);
   const [seerResult, setSeerResult] = useState<SeerResultPayload | null>(null);
 
@@ -44,30 +52,20 @@ export function useGameSocketSync({
   const [wolfVotes2, setWolfVotes2] = useState<WolfVotes2UpdatedPayload | null>(null);
   const [wolfMaxTargets, setWolfMaxTargets] = useState<number>(1);
 
+  const [gameEnded, setGameEnded] = useState<GameEndedPayload | null>(null);
+  const [spiritWolfDecisionTargetId, setSpiritWolfDecisionTargetId] = useState<string | null>(null);
+
   useEffect(() => {
     if (roomId) {
       socket.emit("getRoom", roomId);
     }
 
-    const handleRoomUpdated = (data: any) => {
-      setRoom(data);
-      if (data?.phase === "day" || data?.phase === "night") {
-        setPhase(data.phase);
-      }
-      if (Array.isArray(data?.deadPlayers)) {
-        setDeadPlayers(data.deadPlayers);
-      }
-    };
-
-    const handlePositionsUpdated = (positions: any) => {
-      setRoom((prev: any) => (prev ? { ...prev, positions } : prev));
-    };
-
-    const handlePhaseChanged = (newPhase: GamePhase) => {
+    const applyPhaseTransition = (newPhase: GamePhase) => {
       setPhase(newPhase);
       setSeerResult(null);
       if (newPhase === "day") {
         setWitchPendingDeathTargetIds([]);
+        setSpiritWolfDecisionTargetId(null);
       }
       // hunter selection is per-night; server will also emit reset, but clear locally on phase rotate
       if (newPhase === "day") {
@@ -84,6 +82,54 @@ export function useGameSocketSync({
       setWolves([]);
       setWolfVotes2(null);
       setWolfMaxTargets(1);
+    };
+
+    const handleRoomUpdated = (data: any) => {
+      setRoom(data);
+      if (data?.phase === "day" || data?.phase === "night") {
+        const nextPhase = data.phase as GamePhase;
+        if (phaseRef.current !== nextPhase) {
+          phaseRef.current = nextPhase;
+          applyPhaseTransition(nextPhase);
+        } else {
+          setPhase(nextPhase);
+        }
+      }
+      if (Array.isArray(data?.deadPlayers)) {
+        setDeadPlayers(data.deadPlayers);
+      }
+    };
+
+    const handlePositionsUpdated = (positions: any) => {
+      setRoom((prev: any) => (prev ? { ...prev, positions } : prev));
+    };
+
+    const handlePhaseChanged = (newPhase: GamePhase) => {
+      phaseRef.current = newPhase;
+      applyPhaseTransition(newPhase);
+    };
+
+    const handleGameStarted = () => {
+      setGameEnded(null);
+      setSpiritWolfDecisionTargetId(null);
+      setSeerResult(null);
+      setWitchPendingDeathTargetIds([]);
+      setDeadPlayers([]);
+    };
+
+    const handleGameEnded = (payload: GameEndedPayload) => {
+      if (!payload?.winner) return;
+      setGameEnded(payload);
+      // Clear any pending per-role prompts.
+      setSpiritWolfDecisionTargetId(null);
+    };
+
+    const handleSpiritWolfDecisionNeeded = (payload: SpiritWolfDecisionNeededPayload) => {
+      setSpiritWolfDecisionTargetId(payload?.targetId ?? null);
+    };
+
+    const handleSpiritWolfDecisionRecorded = (_payload: SpiritWolfDecisionRecordedPayload) => {
+      setSpiritWolfDecisionTargetId(null);
     };
 
     const handlePlayerKilled = (playerId: string) => {
@@ -170,6 +216,12 @@ export function useGameSocketSync({
     socket.on("hunterTargetUpdated", handleHunterTargetUpdated);
     socket.on("hunterShot", handleHunterShot);
 
+    socket.on("gameStarted", handleGameStarted);
+
+    socket.on("gameEnded", handleGameEnded);
+    socket.on("spiritWolfDecisionNeeded", handleSpiritWolfDecisionNeeded);
+    socket.on("spiritWolfDecisionRecorded", handleSpiritWolfDecisionRecorded);
+
     return () => {
       socket.off("roomUpdated", handleRoomUpdated);
       socket.off("positionsUpdated", handlePositionsUpdated);
@@ -189,6 +241,12 @@ export function useGameSocketSync({
 
       socket.off("hunterTargetUpdated", handleHunterTargetUpdated);
       socket.off("hunterShot", handleHunterShot);
+
+      socket.off("gameStarted", handleGameStarted);
+
+      socket.off("gameEnded", handleGameEnded);
+      socket.off("spiritWolfDecisionNeeded", handleSpiritWolfDecisionNeeded);
+      socket.off("spiritWolfDecisionRecorded", handleSpiritWolfDecisionRecorded);
     };
   }, [roomId, setRoom]);
 
@@ -211,6 +269,8 @@ export function useGameSocketSync({
       activeWolves,
       wolfVotes2,
       wolfMaxTargets,
+      gameEnded,
+      spiritWolfDecisionTargetId,
     }),
     [
       phase,
@@ -230,6 +290,8 @@ export function useGameSocketSync({
       activeWolves,
       wolfVotes2,
       wolfMaxTargets,
+      gameEnded,
+      spiritWolfDecisionTargetId,
     ]
   );
 }

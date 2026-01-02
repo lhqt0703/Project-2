@@ -67,14 +67,96 @@ interface Room {
   // Layout height mode: positions are normalized against this pixel height.
   // 470px for 1..18 players, 570px when 19+ (adds a bottom extra row).
   layoutHeightPx?: number;
+
+  // --- Game end state ---
+  gameOver?: boolean;
+  winner?: "wolves" | "villagers";
+
+  // --- Linh sói (Spirit Wolf) ---
+  spiritWolfId?: string | null;
+  spiritWolfDecisionMade?: boolean;
+  spiritWolfChoseSave?: boolean;
+  // When true, Linh sói is considered wolf-aligned for seer + win condition,
+  // but does NOT join wolves chat/biting group.
+  spiritWolfWolfAligned?: boolean;
+  // If true, Linh sói will become wolf-aligned starting next night.
+  spiritWolfWolfAlignedPending?: boolean;
+  spiritWolfPendingPoisonedWolfId?: string | null;
 }
 
 const rooms: Record<string, Room> = {};
 const activeRooms = new Set<string>(); // chứa toàn bộ mã phòng đã tạo
 
-const WOLF_ROLES = new Set(["Sói", "Sói con"]);
+const WOLF_ROLES = new Set(["Sói", "Sói con", "Bán sói"]);
+const SPIRIT_WOLF_ROLE = "Linh sói";
 function isWolfRole(role: string | undefined) {
   return !!role && WOLF_ROLES.has(role);
+}
+
+function getAlivePlayerIds(room: Room) {
+  const dead = new Set(room.deadPlayers || []);
+  return room.players.map(p => p.id).filter(id => !dead.has(id));
+}
+
+function getSpiritWolfId(room: Room): string | null {
+  // prefer cached id if still valid
+  const cached = room.spiritWolfId;
+  if (cached && room.players.find(p => p.id === cached) && room.playerRoles?.[cached] === SPIRIT_WOLF_ROLE) {
+    return cached;
+  }
+  const found = room.players.find(p => room.playerRoles?.[p.id] === SPIRIT_WOLF_ROLE)?.id || null;
+  room.spiritWolfId = found;
+  return found;
+}
+
+function isSpiritWolfAlive(room: Room) {
+  const id = getSpiritWolfId(room);
+  if (!id) return false;
+  return !(room.deadPlayers || []).includes(id);
+}
+
+function isWolfAlignedPlayer(room: Room, playerId: string) {
+  const role = room.playerRoles?.[playerId];
+  if (isWolfRole(role)) return true;
+  // Linh sói only counts as wolf-aligned after the SAVE takes effect (next night).
+  return room.spiritWolfWolfAligned === true && getSpiritWolfId(room) === playerId;
+}
+
+function checkAndEndGame(roomId: string, reason?: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  if (room.gameOver) return;
+  if (!room.playerRoles) return;
+
+  const aliveIds = getAlivePlayerIds(room);
+
+  // Villagers win if ALL wolves that can bite are dead.
+  // (Per spec: Linh sói after saving has no bite, so does not prevent villagers from winning here.)
+  const bitingWolvesAlive = aliveIds.filter(id => isWolfRole(room.playerRoles?.[id])).length;
+  if (bitingWolvesAlive <= 0) {
+    room.gameOver = true;
+    room.winner = "villagers";
+    io.to(roomId).emit("gameEnded", { winner: room.winner, reason: reason || "no_biting_wolves" });
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    return;
+  }
+
+  // Wolves win if (biting wolves) >= (villager team).
+  // Linh sói (after choosing save) is wolf-aligned but does NOT count toward the "wolves" number.
+  const spiritWolfId = getSpiritWolfId(room);
+  const villagersAlive = aliveIds.filter(id => {
+    const role = room.playerRoles?.[id];
+    if (isWolfRole(role)) return false;
+    if (role === SPIRIT_WOLF_ROLE && room.spiritWolfChoseSave === true && spiritWolfId === id) return false;
+    return true;
+  }).length;
+
+  if (bitingWolvesAlive >= villagersAlive) {
+    room.gameOver = true;
+    room.winner = "wolves";
+    io.to(roomId).emit("gameEnded", { winner: room.winner, reason: reason || "wolves_ge_villagers" });
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  }
 }
 
 function isPlayerConnected(room: Room, playerId: string) {
@@ -154,6 +236,20 @@ function ensureWitchState(room: Room, witchId: string) {
   if (typeof room.witchPoisonTargetTonight[witchId] === "undefined") {
     room.witchPoisonTargetTonight[witchId] = null;
   }
+}
+
+function emitSpiritWolfDecisionNeeded(roomId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  if (room.gameOver) return;
+  const swid = getSpiritWolfId(room);
+  if (!swid) return;
+  if ((room.deadPlayers || []).includes(swid)) return;
+  if (room.spiritWolfDecisionMade) return;
+  const targetId = room.spiritWolfPendingPoisonedWolfId;
+  if (!targetId) return;
+  if ((room.deadPlayers || []).includes(targetId)) return;
+  io.to(swid).emit("spiritWolfDecisionNeeded", { targetId });
 }
 
 function emitWitchPotions(roomId: string, witchId: string) {
@@ -796,6 +892,13 @@ io.on("connection", (socket) => {
         emitHunterTarget(roomId, socket.id);
       }
 
+      // Re-send Spirit Wolf pending decision on refresh/reconnect.
+      if (room.playerRoles?.[socket.id] === SPIRIT_WOLF_ROLE) {
+        if (!room.spiritWolfDecisionMade && room.spiritWolfPendingPoisonedWolfId) {
+          emitSpiritWolfDecisionNeeded(roomId);
+        }
+      }
+
     } else {
       socket.emit("errorMessage", "Phòng không tồn tại :(");
     }
@@ -880,11 +983,34 @@ io.on("connection", (socket) => {
     room.wolfExtraBiteNextNight = room.wolfExtraBiteNextNight || false;
     room.wolfBonusBiteThisNight = false;
     room.killedTonightExtra = null;
+
+    // Reset end-game + Linh sói state
+    room.gameOver = false;
+    room.winner = undefined;
+    room.spiritWolfId = getSpiritWolfId(room);
+    room.spiritWolfDecisionMade = false;
+    room.spiritWolfChoseSave = false;
+    room.spiritWolfWolfAligned = false;
+    room.spiritWolfWolfAlignedPending = false;
+    room.spiritWolfPendingPoisonedWolfId = null;
+
+    // Reset end-game + Linh sói state
+    room.gameOver = false;
+    room.winner = undefined;
+    room.spiritWolfId = getSpiritWolfId(room);
+    room.spiritWolfDecisionMade = false;
+    room.spiritWolfChoseSave = false;
+    room.spiritWolfWolfAligned = false;
+    room.spiritWolfWolfAlignedPending = false;
+    room.spiritWolfPendingPoisonedWolfId = null;
     
     // Đánh dấu game đã bắt đầu (mặc định là ban ngày)
     room.phase = "day";
 
     io.to(roomId).emit("gameStarted");
+
+    // In case the role set is degenerate (e.g. no biting wolves), resolve immediately.
+    checkAndEndGame(roomId, "after_game_start");
 
     // Cập nhật lại lockedPlayerIds sau khi đã bổ sung role và bắt đầu game
     room.lockedPlayerIds = room.players.map(p => p.id);
@@ -1157,6 +1283,96 @@ io.on("connection", (socket) => {
     // thông báo cho cả phòng rằng game đã bắt đầu
     io.to(roomId).emit("gameStarted");
 
+    // In case the role set is degenerate (e.g. no biting wolves), resolve immediately.
+    checkAndEndGame(roomId, "after_game_start");
+
+  });
+
+  // Host can restart the game: reshuffle roles and reset per-game state.
+  socket.on("restartGame", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (socket.id !== room.hostId) return;
+
+    const roles = room.roles;
+    if (!roles || roles.length < room.players.length) {
+      socket.emit("errorMessage", "Danh sách vai trò không hợp lệ hoặc chưa được chọn.");
+      return;
+    }
+
+    // Clear any running timers.
+    if (room.wolfTimer) {
+      clearTimeout(room.wolfTimer);
+      room.wolfTimer = null;
+    }
+
+    // Remove everyone from private role rooms to prevent information leakage.
+    for (const p of room.players) {
+      const s = io.sockets.sockets.get(p.id);
+      if (!s) continue;
+      s.leave(`wolves_${roomId}`);
+      s.leave(`witches_${roomId}`);
+    }
+
+    // Re-shuffle and assign roles.
+    const shuffled = roles.slice().sort(() => Math.random() - 0.5);
+    room.playerRoles = {};
+    room.players.forEach((player, index) => {
+      const role: string = shuffled[index] || "";
+      room.playerRoles![player.id] = role;
+      io.to(player.id).emit("yourRole", role);
+    });
+
+    // Rebuild wolves room membership.
+    room.wolves = room.players.filter(p => isWolfRole(room.playerRoles?.[p.id])).map(p => p.id);
+    room.wolves.forEach(wolfId => {
+      const wolfSocket = io.sockets.sockets.get(wolfId);
+      if (wolfSocket) wolfSocket.join(`wolves_${roomId}`);
+    });
+
+    // Rebuild witches room membership and reset potion state.
+    room.witchPotions = {};
+    room.witchHealTargetTonight = {};
+    room.witchPoisonTargetTonight = {};
+    for (const wid of getWitches(room)) {
+      const witchSocket = io.sockets.sockets.get(wid);
+      if (witchSocket) witchSocket.join(`witches_${roomId}`);
+      ensureWitchState(room, wid);
+      emitWitchPotions(roomId, wid);
+    }
+
+    // Reset per-game/per-night state.
+    room.gameOver = false;
+    room.winner = undefined;
+    room.phase = "day";
+    room.deadPlayers = [];
+    room.protectedTonight = null;
+    room.lastProtected = null;
+    room.seerUsedTonight = {};
+    room.hunterTargetTonight = {};
+    room.killedTonight = null;
+    room.killedTonightExtra = null;
+    room.wolfVotes = {};
+    room.wolfVotes2 = {};
+    room.wolfLocked = {};
+    room.wolfDeadline = null;
+    room.wolfExtraBiteNextNight = false;
+    room.wolfBonusBiteThisNight = false;
+
+    // Reset Linh sói state.
+    room.spiritWolfId = getSpiritWolfId(room);
+    room.spiritWolfDecisionMade = false;
+    room.spiritWolfChoseSave = false;
+    room.spiritWolfWolfAligned = false;
+    room.spiritWolfWolfAlignedPending = false;
+    room.spiritWolfPendingPoisonedWolfId = null;
+
+    io.to(roomId).emit("phaseChanged", "day");
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    io.to(roomId).emit("gameStarted");
+
+    // In case roles yield an immediate end state.
+    checkAndEndGame(roomId, "after_restart_game");
   });
 
   // changePhase phải ở bên ngoài startGame
@@ -1164,12 +1380,22 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
 
+    if (room.gameOver) return;
+
     room.phase = phase; // "day" hoặc "night"
     console.log(`[changePhase] Phòng ${roomId} chuyển sang phase '${phase}'`);
     // Gửi phase cho cả phòng
     io.to(roomId).emit("phaseChanged", phase);
 
     if (phase === "night") {
+      // Apply Linh sói alignment starting from the night AFTER choosing save.
+      if (room.spiritWolfWolfAlignedPending && !room.spiritWolfWolfAligned) {
+        room.spiritWolfWolfAligned = true;
+        room.spiritWolfWolfAlignedPending = false;
+        checkAndEndGame(roomId, "spirit_wolf_aligned_next_night");
+        if (room.gameOver) return;
+      }
+
       // Determine whether wolves have a one-time bonus bite this night.
       room.wolfBonusBiteThisNight = !!room.wolfExtraBiteNextNight;
       room.wolfExtraBiteNextNight = false;
@@ -1305,6 +1531,17 @@ io.on("connection", (socket) => {
         room.wolfLocked = {};
         room.wolfDeadline = null;
         room.wolfBonusBiteThisNight = false;
+
+      // If Linh sói never responded in time, treat as NOT SAVE.
+      if (room.spiritWolfPendingPoisonedWolfId && !room.spiritWolfDecisionMade) {
+        room.spiritWolfDecisionMade = true;
+        room.spiritWolfChoseSave = false;
+        room.spiritWolfPendingPoisonedWolfId = null;
+      } else {
+        room.spiritWolfPendingPoisonedWolfId = null;
+      }
+
+      checkAndEndGame(roomId, "after_night_resolution");
     }
   });
 
@@ -1370,6 +1607,8 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room || !room.playerRoles) return;
 
+    if (room.gameOver) return;
+
     // chỉ được dùng vào ban đêm
     if (room.phase !== "night") return;
 
@@ -1392,7 +1631,22 @@ io.on("connection", (socket) => {
     room.seerUsedTonight[socket.id] = true;
 
     const roleOfTarget = room.playerRoles[targetId];
-    const isWolf = isWolfRole(roleOfTarget);
+    // Seer detection rules:
+    // - "Bán sói" thuộc phe Sói nhưng không bị Tiên tri phát hiện là Sói
+    // - "Kẻ bị nguyền" thuộc phe Dân nhưng bị Tiên tri soi ra thành Sói
+    const isSpiritWolfMarkedWolf =
+      roleOfTarget === SPIRIT_WOLF_ROLE &&
+      room.spiritWolfChoseSave === true &&
+      getSpiritWolfId(room) === targetId;
+
+    const isWolf =
+      roleOfTarget === "Kẻ bị nguyền"
+        ? true
+        : roleOfTarget === "Bán sói"
+          ? false
+          : isSpiritWolfMarkedWolf
+            ? true
+            : isWolfRole(roleOfTarget);
     io.to(socket.id).emit("seerResult", { playerId: targetId, isWolf });
   });
 
@@ -1400,6 +1654,8 @@ io.on("connection", (socket) => {
   socket.on("guardianProtect", ({ roomId, targetId }) => {
     const room = rooms[roomId];
     if (!room) return;
+
+    if (room.gameOver) return;
 
     // chỉ được dùng vào ban đêm
     if (room.phase !== "night") return;
@@ -1438,6 +1694,8 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
 
+    if (room.gameOver) return;
+
     if (room.phase !== "night") return;
     if (room.playerRoles?.[socket.id] !== "Phù thủy") return;
     if ((room.deadPlayers || []).includes(socket.id)) return;
@@ -1474,6 +1732,8 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
 
+    if (room.gameOver) return;
+
     if (room.phase !== "night") return;
     if (room.playerRoles?.[socket.id] !== "Phù thủy") return;
     if ((room.deadPlayers || []).includes(socket.id)) return;
@@ -1499,12 +1759,59 @@ io.on("connection", (socket) => {
     potions.poisonUsed = true;
     room.witchPoisonTargetTonight![socket.id] = targetId;
     emitWitchPotions(roomId, socket.id);
+
+    // If witch poisons a wolf, Linh sói may choose to save.
+    const targetRole = room.playerRoles?.[targetId];
+    if (
+      isWolfRole(targetRole) &&
+      isSpiritWolfAlive(room) &&
+      !room.spiritWolfDecisionMade &&
+      !room.spiritWolfPendingPoisonedWolfId
+    ) {
+      room.spiritWolfPendingPoisonedWolfId = targetId;
+      emitSpiritWolfDecisionNeeded(roomId);
+    }
+  });
+
+  // Linh sói decides whether to save the poisoned wolf.
+  socket.on("spiritWolfDecide", ({ roomId, save }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+    if (room.playerRoles?.[socket.id] !== SPIRIT_WOLF_ROLE) return;
+    if ((room.deadPlayers || []).includes(socket.id)) return;
+
+    const pendingTargetId = room.spiritWolfPendingPoisonedWolfId;
+    if (!pendingTargetId) return;
+    if (room.spiritWolfDecisionMade) return;
+
+    room.spiritWolfDecisionMade = true;
+    room.spiritWolfChoseSave = !!save;
+    if (save) {
+      room.spiritWolfWolfAlignedPending = true;
+      // Cancel the poison kill on that wolf target (potion remains used).
+      room.witchPoisonTargetTonight = room.witchPoisonTargetTonight || {};
+      for (const wid of getWitches(room)) {
+        if (room.witchPoisonTargetTonight[wid] === pendingTargetId) {
+          room.witchPoisonTargetTonight[wid] = null;
+        }
+      }
+    }
+
+    room.spiritWolfPendingPoisonedWolfId = null;
+    io.to(socket.id).emit("spiritWolfDecisionRecorded", { saved: !!save });
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+
+    // Spirit Wolf becomes wolf-aligned next night; still re-check in case there are no biting wolves.
+    checkAndEndGame(roomId, "after_spirit_wolf_decision");
   });
 
   // Xử lý chức năng sói chọn cắn ai
   socket.on("wolfChooseTarget", ({ roomId, targetId }) => {
     const room = rooms[roomId];
     if (!room) return;
+    if (room.gameOver) return;
     if (!isWolfRole(room.playerRoles?.[socket.id])) return; // chỉ phe sói mới được chọn
     if ((room.deadPlayers || []).includes(socket.id)) return; // sói chết -> bỏ qua
     if (room.phase !== "night") return;
@@ -1542,6 +1849,7 @@ io.on("connection", (socket) => {
   socket.on("wolfChooseTarget2", ({ roomId, targetId }) => {
     const room = rooms[roomId];
     if (!room) return;
+    if (room.gameOver) return;
     if (!isWolfRole(room.playerRoles?.[socket.id])) return;
     if (room.phase !== "night") return;
     if ((room.deadPlayers || []).includes(socket.id)) return;

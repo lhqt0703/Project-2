@@ -17,7 +17,6 @@ interface RoomData {
   lockedPlayerIds?: string[];
   positions?: PlayerPosition[];
   positionEditors?: string[];
-  playerRoles?: Record<string, string>;
   autoArrangeUsed?: boolean;
   compactCircles?: boolean;
 

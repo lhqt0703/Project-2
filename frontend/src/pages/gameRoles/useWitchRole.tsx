@@ -46,6 +46,16 @@ export function useWitchRole({
     }
   }, [phase]);
 
+  useEffect(() => {
+    // If pending-death targets change (e.g. guardian protected), close invalid heal confirm.
+    if (!showHealConfirm) return;
+    if (!healSelectedTargetId) return;
+    if (!witchPendingDeathTargetIds.includes(healSelectedTargetId)) {
+      setShowHealConfirm(false);
+      setHealSelectedTargetId(null);
+    }
+  }, [healSelectedTargetId, showHealConfirm, witchPendingDeathTargetIds]);
+
   const canAct = useMemo(() => {
     if (phase !== "night") return false;
     if (role !== "Phù thủy") return false;
@@ -118,6 +128,18 @@ export function useWitchRole({
             if (healDisabled) return;
             setPoisonMode(false);
             setPoisonSelectedTargetId(null);
+
+            // UX: nếu chỉ có 1 người sắp chết thì chỉ cần confirm cứu,
+            // không cần click chọn mục tiêu.
+            if (witchPendingDeathTargetIds.length === 1) {
+              setHealMode(false);
+              setHealSelectedTargetId(witchPendingDeathTargetIds[0]!);
+              setShowHealConfirm(true);
+              return;
+            }
+
+            // Nếu có nhiều hơn 1 người sắp chết thì bật chế độ chọn mục tiêu.
+            setHealSelectedTargetId(null);
             setHealMode(m => !m);
           }}
           style={{ padding: "8px 12px", cursor: healDisabled ? "not-allowed" : "pointer" }}
@@ -140,10 +162,19 @@ export function useWitchRole({
     ) : null;
 
   const healConfirmModal = (
+    (() => {
+      const targetName = healSelectedTargetId
+        ? room.players.find(p => p.id === healSelectedTargetId)?.name
+        : undefined;
+      const msg = targetName
+        ? `Bạn có chắc muốn cứu ${targetName} không?`
+        : "Bạn có chắc muốn cứu người này không?";
+
+      return (
     <ConfirmModal
       open={showHealConfirm && !!healSelectedTargetId}
       title="Xác nhận dùng bình cứu"
-      message="Bạn có chắc muốn cứu người này không?"
+      message={msg}
       onConfirm={confirmHeal}
       onCancel={() => {
         setShowHealConfirm(false);
@@ -152,6 +183,8 @@ export function useWitchRole({
         setHealMode(true);
       }}
     />
+      );
+    })()
   );
 
   const poisonConfirmModal = (

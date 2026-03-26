@@ -66,6 +66,7 @@ export function useHunterRole({
   const onPlayerClick = useCallback(
     (playerId: string) => {
       if (!canAct) return false;
+      if (playerId === socket.id) return true; // Không cho chọn chính mình
 
       // đã xác nhận rồi thì không được đổi
       if (lockedTargetId) {

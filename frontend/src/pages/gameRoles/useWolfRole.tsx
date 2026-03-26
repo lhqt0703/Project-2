@@ -8,7 +8,6 @@ type RoomLike = {
   players: Player[];
   wolfVotes?: Record<string, string | null>;
   deadPlayers?: string[];
-  playerRoles?: Record<string, string>;
 };
 
 export function useWolfRole({

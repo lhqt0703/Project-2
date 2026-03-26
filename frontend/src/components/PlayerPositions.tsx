@@ -251,12 +251,16 @@ export default function PlayerPositions({
   bulletAnimation,
   selectedOutlinePlayerId,
   selectedOutlinePlayerIds,
+  highlightPlayerId,
+  secondaryHighlightPlayerIds,
   dangerPlayerId,
   dangerPlayerIds,
   showWolfVoteBadges,
   wolfVoteVoterIds,
   showWolfBadges,
   wolfBadgePlayerIds,
+  showRoleBadges,
+  roleBadges,
 }: {
   onPlayerClick: (playerId: string) => void;
   mode?: "edit" | "view";
@@ -265,12 +269,16 @@ export default function PlayerPositions({
   bulletAnimation?: BulletAnimation | null;
   selectedOutlinePlayerId?: string | null;
   selectedOutlinePlayerIds?: string[];
+  highlightPlayerId?: string | null;
+  secondaryHighlightPlayerIds?: string[];
   dangerPlayerId?: string | null;
   dangerPlayerIds?: string[];
   showWolfVoteBadges?: boolean;
   wolfVoteVoterIds?: string[];
   showWolfBadges?: boolean;
   wolfBadgePlayerIds?: string[];
+  showRoleBadges?: boolean;
+  roleBadges?: Record<string, string>;
 }) {
   const { room } = useRoomContext();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -298,13 +306,12 @@ export default function PlayerPositions({
   const wolfVotes = room.wolfVotes as Record<string, string | null> | undefined;
   const wolfVotes2 = room.wolfVotes2 as Record<string, string | null> | undefined;
   const deadPlayers = deadPlayersOverride ?? (room.deadPlayers as string[] | undefined);
-  const wolvesAlive = room.players
-    .filter(p => {
-      const r = room.playerRoles?.[p.id];
-      return (r === "Sói" || r === "Sói con" || r === "Bán sói") && !(deadPlayers || []).includes(p.id);
-    })
-    .map(p => p.id);
-  const wolfCount = wolvesAlive.length;
+  const wolfCount = wolfVoteVoterIds && wolfVoteVoterIds.length
+    ? wolfVoteVoterIds.length
+    : (() => {
+        const ids = Object.keys({ ...(wolfVotes || {}), ...(wolfVotes2 || {}) });
+        return ids.length;
+      })();
 
   const onPointerDown = (e: React.PointerEvent, playerId: string) => {
     if (!isEditor) return;
@@ -853,12 +860,20 @@ export default function PlayerPositions({
             (!!dangerPlayerId && dangerPlayerId === pos.playerId) ||
             (!!dangerPlayerIds && dangerPlayerIds.includes(pos.playerId));
           const dangerShadow = isWitchDanger ? "0 0 0 6px rgba(220,0,0,0.95), 0 0 14px rgba(220,0,0,0.55)" : "";
-          const mergedBoxShadow = [boxShadow, dangerShadow].filter(Boolean).join(", ");
+          const isHighlighted = !!highlightPlayerId && highlightPlayerId === pos.playerId;
+          const isSecondaryHighlighted = !!secondaryHighlightPlayerIds && secondaryHighlightPlayerIds.includes(pos.playerId);
+          const highlightShadow = isHighlighted
+            ? "0 0 0 6px rgba(108,92,231,0.55), 0 0 16px 6px rgba(108,92,231,0.45)"
+            : isSecondaryHighlighted
+              ? "0 0 0 5px rgba(46,204,113,0.35), 0 0 12px 4px rgba(46,204,113,0.22)"
+              : "";
+          const mergedBoxShadow = [boxShadow, dangerShadow, highlightShadow].filter(Boolean).join(", ");
 
           const showSelectedOutline =
             (!!selectedOutlinePlayerId && selectedOutlinePlayerId === pos.playerId) ||
             (!!selectedOutlinePlayerIds && selectedOutlinePlayerIds.includes(pos.playerId));
           const showWolfBadge = !!showWolfBadges && (wolfBadgePlayerIds || []).includes(p.id);
+          const roleBadgeText = (showRoleBadges && roleBadges) ? roleBadges[p.id] : undefined;
 
           const isBulletView = mode === "view" && !!bulletRecoil;
 
@@ -973,7 +988,7 @@ export default function PlayerPositions({
                 outline: showSelectedOutline ? "3px solid rgba(255,165,0,0.9)" : undefined,
                 transition: dragging === pos.playerId
                   ? "none"
-                  : "left 0.2s, top 0.2s, width 220ms ease, height 220ms ease, border-radius 220ms ease", // Smooth move + resize
+                  : "left 0.2s, top 0.2s, width 220ms ease, height 220ms ease, border-radius 220ms ease, box-shadow 300ms ease", // Smooth move + resize + glow
               }}
             >
               {showWolfVoteBadges && effectiveWolfCount >= 2 && voteCountForThis > 0 && (
@@ -1005,11 +1020,26 @@ export default function PlayerPositions({
                   fontWeight: "bold",
                   opacity: 0.9,
                 }}>
-                  {room.playerRoles?.[p.id] === "Sói con"
-                    ? "Sói con"
-                    : room.playerRoles?.[p.id] === "Bán sói"
-                      ? "Bán sói"
-                      : "Sói"}
+                  Sói
+                </div>
+              )}
+
+              {roleBadgeText && (
+                <div style={{
+                  position: "absolute",
+                  bottom: -10,
+                  right: -10,
+                  background: "var(--accent-surface)",
+                  color: "var(--text)",
+                  border: "1px solid var(--border)",
+                  padding: "2px 6px",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: "bold",
+                  opacity: 0.95,
+                  width: "max-content",
+                }}>
+                  {roleBadgeText}
                 </div>
               )}
 

@@ -1,10 +1,11 @@
 
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "../socket";
 import { useLocation } from "react-router-dom";
 import { useRoomContext } from "../context/RoomContext";
 import PlayerPositions from "../components/PlayerPositions";
+import GameLogPanel from "../components/GameLogPanel";
 import type { GamePhase } from "./gameRoles/socketEvents";
 import { useSeerRole } from "./gameRoles/useSeerRole";
 import { useWolfRole } from "./gameRoles/useWolfRole";
@@ -24,6 +25,65 @@ export default function Game() {
   const sync = useGameSocketSync({ roomId, setRoom });
   const phase: GamePhase = sync.phase;
   const deadPlayers = sync.deadPlayers;
+  const isHost = socket.id === hostId;
+
+  // State for highlighting player from log click
+  const [highlightPlayerId, setHighlightPlayerId] = useState<string | null>(null);
+  const [secondaryHighlightPlayerIds, setSecondaryHighlightPlayerIds] = useState<string[]>([]);
+  const handleLogHighlightPlayer = useCallback((payload: { primaryId: string | null; secondaryIds?: string[] }) => {
+    setHighlightPlayerId(payload.primaryId);
+    setSecondaryHighlightPlayerIds(payload.secondaryIds || []);
+  }, []);
+
+  // Host can view the log anytime; others only after game ends.
+  const canViewLog = isHost || !!sync.gameEnded;
+  const canViewRoles = isHost || !!sync.gameEnded;
+
+  useEffect(() => {
+    if (!roomId) return;
+    if (!isHost) return;
+    socket.emit("requestGameLog", { roomId });
+  }, [roomId, isHost]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    if (!sync.gameEnded) return;
+    // Fallback request (server also broadcasts on gameEnded).
+    socket.emit("requestGameLog", { roomId });
+  }, [roomId, sync.gameEnded]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    if (!isHost) return;
+    socket.emit("requestRolesReveal", { roomId });
+  }, [roomId, isHost]);
+
+  useEffect(() => {
+    if (!roomId) return;
+    if (!sync.gameEnded) return;
+    socket.emit("requestRolesReveal", { roomId });
+  }, [roomId, sync.gameEnded]);
+
+  const playerNamesById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const p of room?.players || []) {
+      map[p.id] = p.name;
+    }
+    return map;
+  }, [room?.players]);
+
+  const logPanel = canViewLog ? (
+    <GameLogPanel
+      nights={sync.gameLogNights || []}
+      rolesByPlayerId={sync.revealedRolesByPlayerId || {}}
+      playerNamesById={playerNamesById}
+      onHighlightPlayer={handleLogHighlightPlayer}
+      onRequestRefresh={() => {
+        if (!roomId) return;
+        socket.emit("requestGameLog", { roomId });
+      }}
+    />
+  ) : null;
 
   const roomForRoles = useMemo(
     () =>
@@ -234,6 +294,7 @@ export default function Game() {
         <h1>🌙 Ban đêm – Các vai trò thực hiện hành động</h1>
       )}
 
+
       {debugAnim && (
         <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
           <button
@@ -276,6 +337,10 @@ export default function Game() {
             seerResult={seer.seerResult}
             deadPlayersOverride={deadPlayersOverrideForRender}
             bulletAnimation={hunterBulletAnim}
+            highlightPlayerId={highlightPlayerId}
+            secondaryHighlightPlayerIds={secondaryHighlightPlayerIds}
+            showRoleBadges={canViewRoles}
+            roleBadges={canViewRoles ? sync.revealedRolesByPlayerId : undefined}
             selectedOutlinePlayerId={
               guardian.playerPositionsProps.selectedOutlinePlayerId ||
               witch.playerPositionsProps.selectedOutlinePlayerId ||
@@ -293,6 +358,8 @@ export default function Game() {
           />
         </div>
       )}
+
+      {!isHost && logPanel}
       {seer.modal}
       {guardian.modal}
 
@@ -304,7 +371,7 @@ export default function Game() {
 
 
     {/* Host controls */}
-    {socket.id === hostId && (
+    {isHost && (
       <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
         <button
           onClick={() =>
@@ -325,6 +392,8 @@ export default function Game() {
         </button>
       </div>
     )}
+
+    {isHost && logPanel}
 
     {wolf.panel}
   

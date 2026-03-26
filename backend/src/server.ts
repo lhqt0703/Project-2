@@ -31,6 +31,11 @@ interface Room {
   positionEditors?: string[]; // ai được phép sắp xếp
   playerRoles?: Record<string, string>; // mapping playerId -> role
 
+  // --- Game log ---
+  // Nhật ký theo từng đêm. Host có thể xem mọi lúc; mọi người xem khi game kết thúc.
+  nightCount?: number; // số đêm đã bắt đầu (tăng khi chuyển sang night)
+  gameLog?: GameLogNight[];
+
    // --- Phần cho sói ---
   wolves?: string[]; // danh sách id của sói (còn sống) trong phòng
   wolfVotes?: Record<string, string | null>; // mapping: wolfId -> targetId hoặc null
@@ -83,6 +88,45 @@ interface Room {
   spiritWolfWolfAlignedPending?: boolean;
   spiritWolfPendingPoisonedWolfId?: string | null;
 }
+
+type GameLogEntryPhase = "night" | "day";
+
+type WolfVoteBreakdown = {
+  targetId: string;
+  voterIds: string[];
+};
+
+type EliminationCause =
+  | { type: "wolf"; attackerIds: string[] }
+  | { type: "witch_poison" }
+  | { type: "hunter_shot" };
+
+type GameLogEntry =
+  | { type: "wolf_vote"; phase: GameLogEntryPhase; voteBreakdown: WolfVoteBreakdown[] }
+  | { type: "wolf_result"; phase: GameLogEntryPhase; targetIds: string[]; selectedByByTarget?: Record<string, string[]> }
+  | { type: "bonus_bite"; phase: GameLogEntryPhase }
+  | { type: "guardian_protect"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "witch_heal"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "witch_poison"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "seer_check"; phase: GameLogEntryPhase; actorId: string; targetId: string; isWolf: boolean }
+  | { type: "hunter_mark"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "hunter_shot"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "spirit_wolf_decision"; phase: GameLogEntryPhase; saved: boolean }
+  | { type: "saved_by_guardian"; phase: GameLogEntryPhase; targetIds: string[] }
+  | { type: "saved_by_witch"; phase: GameLogEntryPhase; targetIds: string[] }
+  | { type: "eliminated"; phase: GameLogEntryPhase; targetIds: string[]; causesByTarget?: Record<string, EliminationCause[]> }
+  | { type: "no_death"; phase: GameLogEntryPhase };
+
+type GameLogNight = {
+  night: number;
+  at: number;
+  entries: GameLogEntry[];
+};
+
+type RolesRevealPayload = {
+  roomId: string;
+  rolesByPlayerId: Record<string, string>;
+};
 
 const rooms: Record<string, Room> = {};
 const activeRooms = new Set<string>(); // chứa toàn bộ mã phòng đã tạo
@@ -137,6 +181,8 @@ function checkAndEndGame(roomId: string, reason?: string) {
     room.gameOver = true;
     room.winner = "villagers";
     io.to(roomId).emit("gameEnded", { winner: room.winner, reason: reason || "no_biting_wolves" });
+    io.to(roomId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
+    io.to(roomId).emit("rolesRevealUpdated", { roomId, rolesByPlayerId: room.playerRoles || {} } satisfies RolesRevealPayload);
     io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     return;
   }
@@ -155,6 +201,8 @@ function checkAndEndGame(roomId: string, reason?: string) {
     room.gameOver = true;
     room.winner = "wolves";
     io.to(roomId).emit("gameEnded", { winner: room.winner, reason: reason || "wolves_ge_villagers" });
+    io.to(roomId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
+    io.to(roomId).emit("rolesRevealUpdated", { roomId, rolesByPlayerId: room.playerRoles || {} } satisfies RolesRevealPayload);
     io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   }
 }
@@ -269,11 +317,89 @@ function toPublicRoom(room: Room) {
     witchHealTargetTonight: _witchHealTargetTonight,
     witchPoisonTargetTonight: _witchPoisonTargetTonight,
     hunterTargetTonight: _hunterTargetTonight,
+    gameLog: _gameLog,
+    nightCount: _nightCount,
+    // Never leak roles / private night state to non-host clients.
+    playerRoles: _playerRoles,
+    wolves: _wolves,
+    wolfVotes: _wolfVotes,
+    wolfVotes2: _wolfVotes2,
+    wolfLocked: _wolfLocked,
+    wolfTimer: __wolfTimer,
+    wolfDeadline: _wolfDeadline,
+    killedTonight: _killedTonight,
+    killedTonightExtra: _killedTonightExtra,
+    protectedTonight: _protectedTonight,
+    lastProtected: _lastProtected,
+    spiritWolfPendingPoisonedWolfId: _spiritWolfPendingPoisonedWolfId,
     ...rest
   } = room;
   return {
     ...rest,
     players: room.players.map(p => ({ id: p.id, name: p.name, connected: p.connected !== false })),
+  };
+}
+
+function getPlayerName(room: Room, playerId: string | null | undefined) {
+  if (!playerId) return "(không rõ)";
+  return room.players.find(p => p.id === playerId)?.name || playerId;
+}
+
+function ensureNightLog(room: Room) {
+  room.gameLog = room.gameLog || [];
+  const night = room.nightCount || 0;
+  if (night <= 0) return null;
+
+  let entry = room.gameLog.find(n => n.night === night);
+  if (!entry) {
+    entry = { night, at: Date.now(), entries: [] };
+    room.gameLog.push(entry);
+  }
+  return entry;
+}
+
+function appendLogEntry(room: Room, entry: GameLogEntry) {
+  const nightLog = ensureNightLog(room);
+  if (!nightLog) return;
+  nightLog.entries.push(entry);
+}
+
+function emitGameLogToSocket(roomId: string, socketId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  io.to(socketId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
+}
+
+function emitRolesRevealToSocket(roomId: string, socketId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  io.to(socketId).emit("rolesRevealUpdated", {
+    roomId,
+    rolesByPlayerId: room.playerRoles || {},
+  } satisfies RolesRevealPayload);
+}
+
+function buildWolfVoteBreakdown(room: Room, votes: Record<string, string | null>): GameLogEntry {
+  const activeWolves = getActiveWolves(room);
+  const map: Record<string, string[]> = {};
+  for (const wid of activeWolves) {
+    const t = votes[wid];
+    if (!t) continue;
+    map[t] = map[t] || [];
+    map[t].push(wid);
+  }
+  const targets = Object.keys(map);
+  // Keep stable ordering by player name for readability.
+  targets.sort((a, b) => getPlayerName(room, a).localeCompare(getPlayerName(room, b)));
+  const voteBreakdown = targets.map(targetId => ({
+    targetId,
+    voterIds: map[targetId] || [],
+  }));
+
+  return {
+    type: "wolf_vote",
+    phase: "night",
+    voteBreakdown,
   };
 }
 
@@ -723,6 +849,12 @@ function finishWolfVoting(roomId: string) {
   const votes2 = room.wolfVotes2 || {};
   const activeWolves = getActiveWolves(room);
 
+  // Log detailed wolf voting breakdown.
+  appendLogEntry(room, buildWolfVoteBreakdown(room, votes));
+  if (room.wolfBonusBiteThisNight) {
+    appendLogEntry(room, buildWolfVoteBreakdown(room, votes2));
+  }
+
   const counts: Record<string, number> = {};
   activeWolves.forEach(wolfId => {
     const target = votes[wolfId];
@@ -819,6 +951,15 @@ function finishWolfVoting(roomId: string) {
     target: room.killedTonight,
     extraTarget: room.killedTonightExtra,
   });
+
+  // Log resolved wolf victims for this night.
+  const wolfTargets = [room.killedTonight, room.killedTonightExtra].filter(Boolean) as string[];
+  const selectedByByTarget: Record<string, string[]> = {};
+  for (const targetId of wolfTargets) {
+    const selectedBy = activeWolves.filter((wid) => votes[wid] === targetId || votes2[wid] === targetId);
+    selectedByByTarget[targetId] = selectedBy;
+  }
+  appendLogEntry(room, { type: "wolf_result", phase: "night", targetIds: wolfTargets, selectedByByTarget });
 
   // Phù thủy chỉ thấy "người sắp chết" nếu không bị bảo vệ cứu.
   emitWitchPendingDeath(roomId);
@@ -1282,6 +1423,8 @@ io.on("connection", (socket) => {
 
     // thông báo cho cả phòng rằng game đã bắt đầu
     io.to(roomId).emit("gameStarted");
+    // Host can always see roles; refresh reveal mapping after (re)deal.
+    emitRolesRevealToSocket(roomId, room.hostId);
 
     // In case the role set is degenerate (e.g. no biting wolves), resolve immediately.
     checkAndEndGame(roomId, "after_game_start");
@@ -1345,6 +1488,8 @@ io.on("connection", (socket) => {
     room.gameOver = false;
     room.winner = undefined;
     room.phase = "day";
+    room.nightCount = 0;
+    room.gameLog = [];
     room.deadPlayers = [];
     room.protectedTonight = null;
     room.lastProtected = null;
@@ -1370,6 +1515,8 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("phaseChanged", "day");
     io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     io.to(roomId).emit("gameStarted");
+    // Host can always see roles; refresh reveal mapping after (re)deal.
+    emitRolesRevealToSocket(roomId, room.hostId);
 
     // In case roles yield an immediate end state.
     checkAndEndGame(roomId, "after_restart_game");
@@ -1388,6 +1535,10 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("phaseChanged", phase);
 
     if (phase === "night") {
+      // Increment night counter and start a new log bucket.
+      room.nightCount = (room.nightCount || 0) + 1;
+      ensureNightLog(room);
+
       // Apply Linh sói alignment starting from the night AFTER choosing save.
       if (room.spiritWolfWolfAlignedPending && !room.spiritWolfWolfAligned) {
         room.spiritWolfWolfAligned = true;
@@ -1400,6 +1551,10 @@ io.on("connection", (socket) => {
       room.wolfBonusBiteThisNight = !!room.wolfExtraBiteNextNight;
       room.wolfExtraBiteNextNight = false;
       room.killedTonightExtra = null;
+
+      if (room.wolfBonusBiteThisNight) {
+        appendLogEntry(room, { type: "bonus_bite", phase: "night" });
+      }
 
       // reset lựa chọn của bảo vệ cho đêm mới
       room.protectedTonight = null;
@@ -1458,6 +1613,16 @@ io.on("connection", (socket) => {
         finalDeathSet.add(t);
       }
 
+      const wolfAttackersByTarget: Record<string, string[]> = {};
+      const wolfVotesNow = room.wolfVotes || {};
+      const wolfVotes2Now = room.wolfVotes2 || {};
+      const wolvesWhoVoted = Object.keys({ ...wolfVotesNow, ...wolfVotes2Now });
+      for (const targetId of pendingWolfDeaths) {
+        if (!targetId || healedTargets.has(targetId)) continue;
+        const attackers = wolvesWhoVoted.filter((wid) => wolfVotesNow[wid] === targetId || wolfVotes2Now[wid] === targetId);
+        wolfAttackersByTarget[targetId] = attackers;
+      }
+
       const hunterShots: Array<{ hunterId: string; targetId: string }> = [];
 
       // Nếu thợ săn chết trong đêm, người thợ săn đã chọn cũng chết theo.
@@ -1474,11 +1639,59 @@ io.on("connection", (socket) => {
         hunterShots.push({ hunterId: hid, targetId });
       }
 
+      for (const s of hunterShots) {
+        appendLogEntry(room, { type: "hunter_shot", phase: "day", actorId: s.hunterId, targetId: s.targetId });
+      }
+
       for (const shot of hunterShots) {
         io.to(roomId).emit("hunterShot", shot);
       }
 
       const finalDeaths = Array.from(finalDeathSet);
+
+      // --- Game log: end-of-night resolution summary ---
+      const wolfTargets = [killedCandidate, killedCandidateExtra].filter(Boolean) as string[];
+      const savedByGuardian = guardianTarget && wolfTargets.includes(guardianTarget)
+        ? [guardianTarget]
+        : [];
+      const savedByHeal = pendingWolfDeaths.filter(pid => healedTargets.has(pid));
+
+      if (savedByGuardian.length) {
+        appendLogEntry(room, { type: "saved_by_guardian", phase: "day", targetIds: savedByGuardian });
+      }
+      if (savedByHeal.length) {
+        appendLogEntry(room, { type: "saved_by_witch", phase: "day", targetIds: savedByHeal });
+      }
+      if (finalDeaths.length) {
+        const causesByTarget: Record<string, EliminationCause[]> = {};
+        const addCause = (pid: string, cause: EliminationCause) => {
+          causesByTarget[pid] = causesByTarget[pid] || [];
+          const exists = causesByTarget[pid]!.some((c) => {
+            if (c.type !== cause.type) return false;
+            if (c.type !== "wolf" || cause.type !== "wolf") return true;
+            const a = [...c.attackerIds].sort().join("|");
+            const b = [...cause.attackerIds].sort().join("|");
+            return a === b;
+          });
+          if (!exists) causesByTarget[pid]!.push(cause);
+        };
+
+        for (const pid of finalDeaths) {
+          if (wolfAttackersByTarget[pid]?.length) {
+            addCause(pid, { type: "wolf", attackerIds: wolfAttackersByTarget[pid]! });
+          }
+          if (poisonTargets.has(pid)) {
+            addCause(pid, { type: "witch_poison" });
+          }
+          if (hunterShots.some((s) => s.targetId === pid)) {
+            addCause(pid, { type: "hunter_shot" });
+          }
+        }
+
+        appendLogEntry(room, { type: "eliminated", phase: "day", targetIds: finalDeaths, causesByTarget });
+      } else {
+        appendLogEntry(room, { type: "no_death", phase: "day" });
+      }
       if (finalDeaths.length) {
         room.deadPlayers = room.deadPlayers || [];
         for (const pid of finalDeaths) {
@@ -1542,7 +1755,28 @@ io.on("connection", (socket) => {
       }
 
       checkAndEndGame(roomId, "after_night_resolution");
+
+      // Push log updates to host immediately (host can view anytime).
+      if (room.hostId) {
+        emitGameLogToSocket(roomId, room.hostId);
+      }
     }
+  });
+
+  socket.on("requestGameLog", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    const isHost = socket.id === room.hostId;
+    if (!isHost && !room.gameOver) return;
+    emitGameLogToSocket(roomId, socket.id);
+  });
+
+  socket.on("requestRolesReveal", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    const isHost = socket.id === room.hostId;
+    if (!isHost && !room.gameOver) return;
+    emitRolesRevealToSocket(roomId, socket.id);
   });
 
   // Xử lý chức năng thợ săn chọn mục tiêu trong đêm
@@ -1555,6 +1789,8 @@ io.on("connection", (socket) => {
     if ((room.deadPlayers || []).includes(socket.id)) return;
 
     room.hunterTargetTonight = room.hunterTargetTonight || {};
+
+    const prev = room.hunterTargetTonight[socket.id] ?? null;
 
     // Cho phép clear bằng null/undefined
     if (!targetId) {
@@ -1569,6 +1805,10 @@ io.on("connection", (socket) => {
 
     room.hunterTargetTonight[socket.id] = targetId;
     emitHunterTarget(roomId, socket.id);
+
+    if (prev !== targetId) {
+      appendLogEntry(room, { type: "hunter_mark", phase: "night", actorId: socket.id, targetId });
+    }
   });
 
   // Nhường quyền chủ phòng cho người khác
@@ -1648,6 +1888,9 @@ io.on("connection", (socket) => {
             ? true
             : isWolfRole(roleOfTarget);
     io.to(socket.id).emit("seerResult", { playerId: targetId, isWolf });
+
+              // Log seer action (revealed after game; host can view anytime).
+              appendLogEntry(room, { type: "seer_check", phase: "night", actorId: socket.id, targetId, isWolf });
   });
 
   // Xử lý chức năng bảo vệ bảo vệ người
@@ -1684,6 +1927,8 @@ io.on("connection", (socket) => {
 
     room.protectedTonight = targetId;
     io.to(socket.id).emit("guardianProtected", targetId);
+
+    appendLogEntry(room, { type: "guardian_protect", phase: "night", actorId: socket.id, targetId });
 
     // Nếu bảo vệ trúng người sói cắn, phù thủy sẽ không còn thấy ai sắp chết.
     emitWitchPendingDeath(roomId);
@@ -1723,6 +1968,8 @@ io.on("connection", (socket) => {
     room.witchHealTargetTonight![socket.id] = targetId;
     emitWitchPotions(roomId, socket.id);
 
+    appendLogEntry(room, { type: "witch_heal", phase: "night", actorId: socket.id, targetId });
+
     // After using heal, this witch should no longer see pending deaths.
     emitWitchPendingDeath(roomId);
   });
@@ -1759,6 +2006,8 @@ io.on("connection", (socket) => {
     potions.poisonUsed = true;
     room.witchPoisonTargetTonight![socket.id] = targetId;
     emitWitchPotions(roomId, socket.id);
+
+    appendLogEntry(room, { type: "witch_poison", phase: "night", actorId: socket.id, targetId });
 
     // If witch poisons a wolf, Linh sói may choose to save.
     const targetRole = room.playerRoles?.[targetId];
@@ -1802,6 +2051,8 @@ io.on("connection", (socket) => {
     room.spiritWolfPendingPoisonedWolfId = null;
     io.to(socket.id).emit("spiritWolfDecisionRecorded", { saved: !!save });
     io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+
+    appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", saved: !!save });
 
     // Spirit Wolf becomes wolf-aligned next night; still re-check in case there are no biting wolves.
     checkAndEndGame(roomId, "after_spirit_wolf_decision");

@@ -3,10 +3,13 @@ import { socket } from "../../socket";
 import type {
   GamePhase,
   GameEndedPayload,
+  GameLogUpdatedPayload,
+  GameLogNight,
   GuardianProtectedPayload,
   HunterShotPayload,
   HunterTargetUpdatedPayload,
   SeerResultPayload,
+  RolesRevealUpdatedPayload,
   SpiritWolfDecisionNeededPayload,
   SpiritWolfDecisionRecordedPayload,
   WitchPendingDeathPayload,
@@ -54,6 +57,9 @@ export function useGameSocketSync({
 
   const [gameEnded, setGameEnded] = useState<GameEndedPayload | null>(null);
   const [spiritWolfDecisionTargetId, setSpiritWolfDecisionTargetId] = useState<string | null>(null);
+
+  const [gameLogNights, setGameLogNights] = useState<GameLogNight[]>([]);
+  const [revealedRolesByPlayerId, setRevealedRolesByPlayerId] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (roomId) {
@@ -115,6 +121,8 @@ export function useGameSocketSync({
       setSeerResult(null);
       setWitchPendingDeathTargetIds([]);
       setDeadPlayers([]);
+      setGameLogNights([]);
+      setRevealedRolesByPlayerId({});
     };
 
     const handleGameEnded = (payload: GameEndedPayload) => {
@@ -122,6 +130,20 @@ export function useGameSocketSync({
       setGameEnded(payload);
       // Clear any pending per-role prompts.
       setSpiritWolfDecisionTargetId(null);
+    };
+
+    const handleGameLogUpdated = (payload: GameLogUpdatedPayload) => {
+      if (!payload?.roomId) return;
+      if (roomId && payload.roomId !== roomId) return;
+      if (!Array.isArray(payload.nights)) return;
+      const sorted = [...payload.nights].sort((a, b) => (a.night || 0) - (b.night || 0));
+      setGameLogNights(sorted);
+    };
+
+    const handleRolesRevealUpdated = (payload: RolesRevealUpdatedPayload) => {
+      if (!payload?.roomId) return;
+      if (roomId && payload.roomId !== roomId) return;
+      setRevealedRolesByPlayerId(payload.rolesByPlayerId || {});
     };
 
     const handleSpiritWolfDecisionNeeded = (payload: SpiritWolfDecisionNeededPayload) => {
@@ -219,6 +241,8 @@ export function useGameSocketSync({
     socket.on("gameStarted", handleGameStarted);
 
     socket.on("gameEnded", handleGameEnded);
+    socket.on("gameLogUpdated", handleGameLogUpdated);
+    socket.on("rolesRevealUpdated", handleRolesRevealUpdated);
     socket.on("spiritWolfDecisionNeeded", handleSpiritWolfDecisionNeeded);
     socket.on("spiritWolfDecisionRecorded", handleSpiritWolfDecisionRecorded);
 
@@ -245,6 +269,8 @@ export function useGameSocketSync({
       socket.off("gameStarted", handleGameStarted);
 
       socket.off("gameEnded", handleGameEnded);
+      socket.off("gameLogUpdated", handleGameLogUpdated);
+      socket.off("rolesRevealUpdated", handleRolesRevealUpdated);
       socket.off("spiritWolfDecisionNeeded", handleSpiritWolfDecisionNeeded);
       socket.off("spiritWolfDecisionRecorded", handleSpiritWolfDecisionRecorded);
     };
@@ -271,6 +297,8 @@ export function useGameSocketSync({
       wolfMaxTargets,
       gameEnded,
       spiritWolfDecisionTargetId,
+      gameLogNights,
+      revealedRolesByPlayerId,
     }),
     [
       phase,
@@ -292,6 +320,8 @@ export function useGameSocketSync({
       wolfMaxTargets,
       gameEnded,
       spiritWolfDecisionTargetId,
+      gameLogNights,
+      revealedRolesByPlayerId,
     ]
   );
 }

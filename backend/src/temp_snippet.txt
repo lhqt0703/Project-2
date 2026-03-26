@@ -1,0 +1,28 @@
+﻿  } satisfies RolesRevealPayload);
+}
+
+function formatWolfVoteBreakdown(room: Room, votes: Record<string, string | null>, label: string) {
+  const activeWolves = getActiveWolves(room);
+  const map: Record<string, string[]> = {};
+  for (const wid of activeWolves) {
+    const t = votes[wid];
+    if (!t) continue;
+    map[t] = map[t] || [];
+    map[t].push(getPlayerName(room, wid));
+  }
+  const targets = Object.keys(map);
+  if (!targets.length) return `${label}: (khÃ´ng ai chá»n)`;
+  // Keep stable ordering by player name for readability.
+  targets.sort((a, b) => getPlayerName(room, a).localeCompare(getPlayerName(room, b)));
+  const parts = targets.map(tid => `${getPlayerName(room, tid)}  ${map[tid]!.join(", ")}`);
+  return `${label}: ${parts.join("; ")}`;
+}
+
+
+// Táº¡o phÃ²ng má»›i
+
+function generateRoomId(activeRooms: Set<string>)  {
+  let id;
+  do {
+    id = String(Math.floor(Math.random() * 1000)).padStart(3, "0"); // mÃ£ phÃ²ng 3 chá»¯ sá»‘
+  } while (activeRooms.has(id));

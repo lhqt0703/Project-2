@@ -261,6 +261,9 @@ export default function PlayerPositions({
   wolfBadgePlayerIds,
   showRoleBadges,
   roleBadges,
+  trialOrangePlayerId,
+  trialWhitePlayerIds,
+  trialGreenPlayerId,
 }: {
   onPlayerClick: (playerId: string) => void;
   mode?: "edit" | "view";
@@ -279,6 +282,9 @@ export default function PlayerPositions({
   wolfBadgePlayerIds?: string[];
   showRoleBadges?: boolean;
   roleBadges?: Record<string, string>;
+  trialOrangePlayerId?: string | null;
+  trialWhitePlayerIds?: string[];
+  trialGreenPlayerId?: string | null;
 }) {
   const { room } = useRoomContext();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -865,9 +871,18 @@ export default function PlayerPositions({
           const highlightShadow = isHighlighted
             ? "0 0 0 6px rgba(108,92,231,0.55), 0 0 16px 6px rgba(108,92,231,0.45)"
             : isSecondaryHighlighted
-              ? "0 0 0 5px rgba(46,204,113,0.35), 0 0 12px 4px rgba(46,204,113,0.22)"
+              ? "0 0 0 5px rgba(46,204,113,0.38), 0 0 12px 4px rgba(46,204,113,0.24)"
               : "";
-          const mergedBoxShadow = [boxShadow, dangerShadow, highlightShadow].filter(Boolean).join(", ");
+          const trialOrangeShadow = trialOrangePlayerId === pos.playerId
+            ? "0 0 0 7px rgba(255,165,0,0.9), 0 0 16px 6px rgba(255,165,0,0.55)"
+            : "";
+          const trialWhiteShadow = (trialWhitePlayerIds || []).includes(pos.playerId)
+            ? "0 0 0 6px rgba(255,255,255,0.95), 0 0 14px 5px rgba(255,255,255,0.35)"
+            : "";
+          const trialGreenShadow = trialGreenPlayerId === pos.playerId
+            ? "0 0 0 7px rgba(46,204,113,0.95), 0 0 16px 6px rgba(46,204,113,0.45)"
+            : "";
+          const mergedBoxShadow = [boxShadow, dangerShadow, highlightShadow, trialOrangeShadow, trialWhiteShadow, trialGreenShadow].filter(Boolean).join(", ");
 
           const showSelectedOutline =
             (!!selectedOutlinePlayerId && selectedOutlinePlayerId === pos.playerId) ||
@@ -1028,7 +1043,8 @@ export default function PlayerPositions({
                 <div style={{
                   position: "absolute",
                   bottom: -10,
-                  right: -10,
+                  left: "50%",
+                  transform: "translateX(-50%)",
                   background: "var(--accent-surface)",
                   color: "var(--text)",
                   border: "1px solid var(--border)",

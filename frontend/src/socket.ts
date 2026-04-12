@@ -1,3 +1,7 @@
 import { io } from "socket.io-client";
-export const socket = io("http://localhost:3001");
-// Kết nối tới backend tại địa chỉ localhost:3001
+
+const backendUrl =
+  import.meta.env.VITE_BACKEND_URL ??
+  `${window.location.protocol}//${window.location.hostname}:3001`;
+
+export const socket = io(backendUrl);

@@ -36,6 +36,7 @@ export function useSeerRole({
 
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;
+    if (playerId === socket.id) return true; // Không cho chọn chính mình
 
     setSelectedPlayerId(playerId);
     setShowConfirm(true);

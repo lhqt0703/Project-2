@@ -163,10 +163,13 @@ export function useWitchRole({
 
   const healConfirmModal = (
     (() => {
+      const isSelfHeal = !!healSelectedTargetId && healSelectedTargetId === socket.id;
       const targetName = healSelectedTargetId
         ? room.players.find(p => p.id === healSelectedTargetId)?.name
         : undefined;
-      const msg = targetName
+      const msg = isSelfHeal
+        ? "Bạn có chắc muốn cứu bản thân không?"
+        : targetName
         ? `Bạn có chắc muốn cứu ${targetName} không?`
         : "Bạn có chắc muốn cứu người này không?";
 

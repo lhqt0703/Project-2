@@ -14,6 +14,7 @@ import { useGameSocketSync } from "./gameRoles/useGameSocketSync";
 import { useWitchRole } from "./gameRoles/useWitchRole";
 import { useHunterRole } from "./gameRoles/useHunterRole";
 import { useSpiritWolfRole } from "./gameRoles/useSpiritWolfRole";
+import { useDayVoteRole } from "./gameRoles/useDayVoteRole";
 
 export default function Game() {
   const { role, room, setRoom } = useRoomContext();
@@ -21,22 +22,29 @@ export default function Game() {
   const query = new URLSearchParams(location.search);
   const roomId = query.get("roomId");
   const debugAnim = query.get("debugAnim") === "1";
-  const hostId = localStorage.getItem("hostId");
   const sync = useGameSocketSync({ roomId, setRoom });
   const phase: GamePhase = sync.phase;
+  const isDusk = phase === "dusk";
+  const isDayDiscussion =
+    phase === "day" &&
+    !sync.dayDeadline &&
+    sync.trialStage === "none" &&
+    !sync.gameEnded;
   const deadPlayers = sync.deadPlayers;
-  const isHost = socket.id === hostId;
+  const isHost = !!room?.hostId && socket.id === room.hostId;
 
   // State for highlighting player from log click
   const [highlightPlayerId, setHighlightPlayerId] = useState<string | null>(null);
   const [secondaryHighlightPlayerIds, setSecondaryHighlightPlayerIds] = useState<string[]>([]);
-  const handleLogHighlightPlayer = useCallback((payload: { primaryId: string | null; secondaryIds?: string[] }) => {
+  const [dangerHighlightPlayerIds, setDangerHighlightPlayerIds] = useState<string[]>([]);
+  const handleLogHighlightPlayer = useCallback((payload: { primaryId: string | null; secondaryIds?: string[]; dangerIds?: string[] }) => {
     setHighlightPlayerId(payload.primaryId);
     setSecondaryHighlightPlayerIds(payload.secondaryIds || []);
+    setDangerHighlightPlayerIds(payload.dangerIds || []);
   }, []);
 
-  // Host can view the log anytime; others only after game ends.
-  const canViewLog = isHost || !!sync.gameEnded;
+  // During dusk, log stays hidden to everyone.
+  const canViewLog = !isDusk && (isHost || !!sync.gameEnded);
   const canViewRoles = isHost || !!sync.gameEnded;
 
   useEffect(() => {
@@ -229,6 +237,28 @@ export default function Game() {
     decisionTargetId: sync.spiritWolfDecisionTargetId,
   });
 
+  const dayVote = useDayVoteRole({
+    roomId,
+    phase,
+    room: roomForRoles,
+    deadPlayers,
+    dayVotes: sync.dayVotes,
+    dayLocked: sync.dayLocked,
+    dayDiscussionDeadline: sync.dayDiscussionDeadline,
+    dayDeadline: sync.dayDeadline,
+    dayVoters: sync.dayVoters,
+    trialTargetId: sync.trialTargetId,
+    trialStage: sync.trialStage,
+    trialDefenseDeadline: sync.trialDefenseDeadline,
+    trialVerdictDeadline: sync.trialVerdictDeadline,
+    trialInteractionCut: sync.trialInteractionCut,
+    trialInteractionActiveIds: sync.trialInteractionActiveIds,
+    trialSelectedInteractorId: sync.trialSelectedInteractorId,
+    trialSelectedInteractorIds: sync.trialSelectedInteractorIds,
+    trialInteractionSelectionLimit: sync.trialInteractionSelectionLimit,
+    trialVotes: sync.trialVotes,
+  });
+
   // Note: all socket subscriptions are centralized in useGameSocketSync.
 
   useEffect(() => {
@@ -258,14 +288,40 @@ export default function Game() {
   useEffect(() => {
     if (!sync.gameEnded) return;
     const winnerText = sync.gameEnded.winner === "wolves" ? "Phe Sói" : "Phe Dân";
-    alert(`Trò chơi kết thúc! ${winnerText} chiến thắng.`);
+    alert(`Trò chơi kết thúc! ${winnerText} chiến thắng`);
   }, [sync.gameEnded]);
+
+  useEffect(() => {
+    if (!sync.dayVoteFinished) return;
+    if (sync.dayVoteFinished.targetId) {
+      const targetName = room?.players.find((p) => p.id === sync.dayVoteFinished?.targetId)?.name || "một người chơi";
+      if (sync.dayVoteFinished.startedTrial) {
+        alert(`Kết quả biểu quyết: ${targetName} bị đưa lên thanh minh`);
+      } else {
+        alert(`Kết quả biểu quyết: ${targetName} bị loại`);
+      }
+      return;
+    }
+    alert("Kết quả biểu quyết: không ai bị loại");
+  }, [sync.dayVoteFinishedSeq]);
+
+  useEffect(() => {
+    if (!sync.trialVerdictFinished) return;
+    const targetName = room?.players.find((p) => p.id === sync.trialVerdictFinished?.targetId)?.name || "người bị biểu quyết";
+    if (sync.trialVerdictFinished.executed) {
+      alert(`Kết quả sống/chết: ${targetName} bị xử tử.`);
+      return;
+    }
+    alert(`Kết quả sống/chết: ${targetName} được tha (sống).`);
+  }, [sync.trialVerdictFinishedSeq]);
 
   // Xử lý click vào avatar người chơi
   const handlePlayerClick = (playerId: string) => {
     if (sync.gameEnded) return;
     // Nếu người chơi đã chết thì không được chọn họ nữa
     if (deadPlayers.includes(playerId)) return;
+
+    if (dayVote.onPlayerClick(playerId)) return;
 
     if (seer.onPlayerClick(playerId)) return;
     if (wolf.onPlayerClick(playerId)) return;
@@ -288,7 +344,9 @@ export default function Game() {
           Kết thúc: {sync.gameEnded.winner === "wolves" ? "Phe Sói" : "Phe Dân"} chiến thắng
         </h2>
       )}
-      {phase === "day" ? (
+      {phase === "dusk" ? (
+        <h1>🌥️ Hoàng hôn</h1>
+      ) : phase === "day" ? (
         <h1>🌞 Ban ngày – Thảo luận</h1>
       ) : (
         <h1>🌙 Ban đêm – Các vai trò thực hiện hành động</h1>
@@ -342,6 +400,7 @@ export default function Game() {
             showRoleBadges={canViewRoles}
             roleBadges={canViewRoles ? sync.revealedRolesByPlayerId : undefined}
             selectedOutlinePlayerId={
+              dayVote.playerPositionsProps.selectedOutlinePlayerId ||
               guardian.playerPositionsProps.selectedOutlinePlayerId ||
               witch.playerPositionsProps.selectedOutlinePlayerId ||
               hunter.playerPositionsProps.selectedOutlinePlayerId ||
@@ -350,11 +409,18 @@ export default function Game() {
             selectedOutlinePlayerIds={(wolf.playerPositionsProps.selectedOutlinePlayerIds || []).filter(
               (id): id is string => !!id
             )}
-            dangerPlayerIds={witch.playerPositionsProps.dangerPlayerIds}
-            showWolfVoteBadges={wolf.playerPositionsProps.showWolfVoteBadges}
-            wolfVoteVoterIds={wolf.playerPositionsProps.wolfVoteVoterIds}
+            dangerPlayerIds={Array.from(new Set([...(witch.playerPositionsProps.dangerPlayerIds || []), ...dangerHighlightPlayerIds]))}
+            showWolfVoteBadges={dayVote.playerPositionsProps.showWolfVoteBadges || wolf.playerPositionsProps.showWolfVoteBadges}
+            wolfVoteVoterIds={
+              dayVote.playerPositionsProps.showWolfVoteBadges
+                ? dayVote.playerPositionsProps.wolfVoteVoterIds
+                : wolf.playerPositionsProps.wolfVoteVoterIds
+            }
             showWolfBadges={wolf.playerPositionsProps.showWolfBadges}
             wolfBadgePlayerIds={wolf.playerPositionsProps.wolfBadgePlayerIds}
+            trialOrangePlayerId={dayVote.playerPositionsProps.trialOrangePlayerId}
+            trialWhitePlayerIds={dayVote.playerPositionsProps.trialWhitePlayerIds}
+            trialGreenPlayerId={dayVote.playerPositionsProps.trialGreenPlayerId}
           />
         </div>
       )}
@@ -380,22 +446,44 @@ export default function Game() {
         >
           Bắt đầu đêm
         </button>
-        <button
-          onClick={() =>
-            socket.emit("changePhase", { roomId, phase: "day" })
-          }
-        >
-          Bắt đầu ngày
-        </button>
         <button onClick={() => socket.emit("restartGame", { roomId })}>
           Bắt đầu lại
         </button>
+        {phase === "night" && !sync.gameEnded && (
+          <button
+            onClick={() =>
+              socket.emit("changePhase", { roomId, phase: "day" })
+            }
+          >
+            Bắt đầu ngày
+          </button>
+        )}
+        {phase === "day" && !sync.gameEnded && (
+          <button
+            onClick={() => socket.emit("hostStartDayVoting", { roomId })}
+            disabled={!isDayDiscussion}
+            style={{ opacity: isDayDiscussion ? 1 : 0.6 }}
+          >
+            Bắt đầu biểu quyết
+          </button>
+        )}
+        {phase === "day" && !sync.gameEnded && (sync.dayDeadline || sync.trialStage !== "none") && (
+          <button onClick={() => socket.emit("hostForceFinishDayVote", { roomId })}>
+            Chốt vote ngay
+          </button>
+        )}
+        {phase === "day" && !sync.gameEnded && sync.trialStage === "defense" && (
+          <button onClick={() => socket.emit("trialAddInteractionTurn", { roomId })}>
+            Bổ sung lượt tương tác
+          </button>
+        )}
       </div>
     )}
 
     {isHost && logPanel}
 
     {wolf.panel}
+    {dayVote.panel}
   
     </div>
   );

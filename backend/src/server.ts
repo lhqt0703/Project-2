@@ -49,6 +49,30 @@ interface Room {
   wolfBonusBiteThisNight?: boolean; // internal: whether current night has a bonus bite
   deadPlayers?: string[]; // danh sách playerId đã chết
 
+  // --- Phần vote ban ngày ---
+  dayVoters?: string[]; // danh sách người chơi còn sống khi bắt đầu phiên vote ngày
+  dayVotes?: Record<string, string | null>; // mapping: voterId -> targetId hoặc null
+  dayLocked?: Record<string, boolean>; // voterId đã xác nhận khóa phiếu
+  dayDiscussionTimer?: NodeJS.Timeout | null; // timer chờ kết thúc thảo luận để mở biểu quyết
+  dayDiscussionDeadline?: number | null; // mốc thời gian kết thúc thảo luận ban ngày
+  dayTimer?: NodeJS.Timeout | null; // timer tự động chốt vote ngày
+  dayDeadline?: number | null; // mốc thời gian chốt vote ngày
+
+  // --- Phiên thanh minh + biểu quyết sống/chết ---
+  trialTargetId?: string | null; // người bị đưa lên thanh minh
+  trialStage?: "none" | "defense" | "verdict";
+  trialDefenseDeadline?: number | null;
+  trialVerdictDeadline?: number | null;
+  trialDefenseTimer?: NodeJS.Timeout | null;
+  trialVerdictTimer?: NodeJS.Timeout | null;
+  trialInteractionCut?: boolean;
+  trialInteractionActiveIds?: string[]; // người đã bấm "Tương tác" (vòng trắng)
+  trialSelectedInteractorId?: string | null; // người được chọn bởi bị cáo (vòng xanh)
+  trialSelectedInteractorIds?: string[]; // người đã từng được bị cáo chọn tương tác
+  trialInteractionSelectionLimit?: number; // số lượt bị cáo được chọn tương tác
+  trialInteractionQueuedIds?: string[]; // hàng chờ những người muốn tương tác (để khôi phục khi được thêm lượt)
+  trialVotes?: Record<string, "live" | "die" | null>; // voter -> sống/chết
+
   // --- Phần cho bảo vệ ---
   protectedTonight?: string | null; // playerId được bảo vệ trong đêm hiện tại
   lastProtected?: string | null; // playerId đã bảo vệ đêm trước (chống bảo vệ 2 đêm liên tiếp)
@@ -75,7 +99,7 @@ interface Room {
 
   // --- Game end state ---
   gameOver?: boolean;
-  winner?: "wolves" | "villagers";
+  winner?: "wolves" | "villagers" | undefined;
 
   // --- Linh sói (Spirit Wolf) ---
   spiritWolfId?: string | null;
@@ -99,11 +123,17 @@ type WolfVoteBreakdown = {
 type EliminationCause =
   | { type: "wolf"; attackerIds: string[] }
   | { type: "witch_poison" }
-  | { type: "hunter_shot" };
+  | { type: "hunter_shot" }
+  | { type: "day_vote"; voterIds: string[] }
+  | { type: "trial_verdict"; voterIds: string[] };
 
 type GameLogEntry =
   | { type: "wolf_vote"; phase: GameLogEntryPhase; voteBreakdown: WolfVoteBreakdown[] }
+  | { type: "day_vote"; phase: GameLogEntryPhase; voteBreakdown: WolfVoteBreakdown[] }
   | { type: "wolf_result"; phase: GameLogEntryPhase; targetIds: string[]; selectedByByTarget?: Record<string, string[]> }
+  | { type: "day_result"; phase: GameLogEntryPhase; targetId: string | null; tie?: boolean }
+  | { type: "trial_started"; phase: GameLogEntryPhase; targetId: string }
+  | { type: "trial_verdict"; phase: GameLogEntryPhase; targetId: string; liveVotes: number; dieVotes: number; liveVoterIds?: string[]; dieVoterIds?: string[]; executed: boolean }
   | { type: "bonus_bite"; phase: GameLogEntryPhase }
   | { type: "guardian_protect"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "witch_heal"; phase: GameLogEntryPhase; actorId: string; targetId: string }
@@ -326,6 +356,10 @@ function toPublicRoom(room: Room) {
     wolfVotes2: _wolfVotes2,
     wolfLocked: _wolfLocked,
     wolfTimer: __wolfTimer,
+    dayDiscussionTimer: _dayDiscussionTimer,
+    dayTimer: _dayTimer,
+    trialDefenseTimer: _trialDefenseTimer,
+    trialVerdictTimer: _trialVerdictTimer,
     wolfDeadline: _wolfDeadline,
     killedTonight: _killedTonight,
     killedTonightExtra: _killedTonightExtra,
@@ -401,6 +435,384 @@ function buildWolfVoteBreakdown(room: Room, votes: Record<string, string | null>
     phase: "night",
     voteBreakdown,
   };
+}
+
+function getActiveDayVoters(room: Room) {
+  const dead = new Set(room.deadPlayers || []);
+  const base = (room.dayVoters && room.dayVoters.length)
+    ? room.dayVoters
+    : room.players.map(p => p.id).filter(id => !dead.has(id));
+
+  return base
+    .filter(id => !dead.has(id))
+    .filter(id => isPlayerConnected(room, id))
+    .filter(id => !!room.players.find(p => p.id === id));
+}
+
+function getTrialVoters(room: Room) {
+  const targetId = room.trialTargetId;
+  return getActiveDayVoters(room).filter((id) => id !== targetId);
+}
+
+function clearTrialState(room: Room) {
+  if (room.trialDefenseTimer) {
+    clearTimeout(room.trialDefenseTimer);
+    room.trialDefenseTimer = null;
+  }
+  if (room.trialVerdictTimer) {
+    clearTimeout(room.trialVerdictTimer);
+    room.trialVerdictTimer = null;
+  }
+
+  room.trialTargetId = null;
+  room.trialStage = "none";
+  room.trialDefenseDeadline = null;
+  room.trialVerdictDeadline = null;
+  room.trialInteractionCut = false;
+  room.trialInteractionActiveIds = [];
+  room.trialSelectedInteractorId = null;
+  room.trialSelectedInteractorIds = [];
+  room.trialInteractionSelectionLimit = 0;
+  room.trialInteractionQueuedIds = [];
+  room.trialVotes = {};
+}
+
+function buildTrialInteractionUpdatedPayload(room: Room) {
+  const selectedIds = room.trialSelectedInteractorIds || [];
+  const selectionLimit = Math.max(0, room.trialInteractionSelectionLimit || 0);
+  return {
+    activeIds: room.trialInteractionActiveIds || [],
+    selectedId: room.trialSelectedInteractorId || null,
+    selectedIds,
+    selectionLimit,
+    selectionCount: selectedIds.length,
+    interactionCut: room.trialInteractionCut === true,
+  };
+}
+
+function buildDayVoteBreakdown(room: Room, votes: Record<string, string | null>): GameLogEntry {
+  const activeVoters = getActiveDayVoters(room);
+  const map: Record<string, string[]> = {};
+  for (const voterId of activeVoters) {
+    const t = votes[voterId];
+    if (!t) continue;
+    map[t] = map[t] || [];
+    map[t].push(voterId);
+  }
+  const targets = Object.keys(map);
+  targets.sort((a, b) => getPlayerName(room, a).localeCompare(getPlayerName(room, b)));
+  const voteBreakdown = targets.map(targetId => ({
+    targetId,
+    voterIds: map[targetId] || [],
+  }));
+
+  return {
+    type: "day_vote",
+    phase: "day",
+    voteBreakdown,
+  };
+}
+
+function startTrialVerdictVoting(roomId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  if (room.gameOver) return;
+  if (room.phase !== "day") return;
+  if (!room.trialTargetId) return;
+
+  if (room.trialDefenseTimer) {
+    clearTimeout(room.trialDefenseTimer);
+    room.trialDefenseTimer = null;
+  }
+  if (room.trialVerdictTimer) {
+    clearTimeout(room.trialVerdictTimer);
+    room.trialVerdictTimer = null;
+  }
+
+  room.trialStage = "verdict";
+  room.trialInteractionCut = true;
+  room.trialInteractionActiveIds = [];
+  room.trialSelectedInteractorId = null;
+  room.trialSelectedInteractorIds = [];
+  room.trialInteractionQueuedIds = [];
+  room.trialDefenseDeadline = null;
+  room.trialVerdictDeadline = Date.now() + 20_000;
+
+  const voters = getTrialVoters(room);
+  room.trialVotes = room.trialVotes || {};
+  voters.forEach((vid) => {
+    if (typeof room.trialVotes?.[vid] === "undefined") {
+      room.trialVotes![vid] = null;
+    }
+  });
+
+  io.to(roomId).emit("trialVerdictStarted", {
+    targetId: room.trialTargetId,
+    voters,
+    deadline: room.trialVerdictDeadline,
+  });
+  io.to(roomId).emit("trialVotesUpdated", room.trialVotes);
+  io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+
+  room.trialVerdictTimer = setTimeout(() => {
+    finishTrialVerdict(roomId);
+  }, 20_000);
+}
+
+function finishTrialVerdict(roomId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  if (room.gameOver) return;
+  if (room.phase !== "day") return;
+
+  const targetId = room.trialTargetId;
+  if (!targetId) return;
+
+  if (room.trialVerdictTimer) {
+    clearTimeout(room.trialVerdictTimer);
+    room.trialVerdictTimer = null;
+  }
+  if (room.trialDefenseTimer) {
+    clearTimeout(room.trialDefenseTimer);
+    room.trialDefenseTimer = null;
+  }
+
+  const voters = getTrialVoters(room);
+  const votes = room.trialVotes || {};
+
+  let liveVotes = 0;
+  let dieVotes = 0;
+  const liveVoterIds: string[] = [];
+  const dieVoterIds: string[] = [];
+  for (const vid of voters) {
+    const v = votes[vid];
+    if (v === "live") {
+      liveVotes += 1;
+      liveVoterIds.push(vid);
+    } else if (v === "die") {
+      dieVotes += 1;
+      dieVoterIds.push(vid);
+    }
+  }
+
+  const executed = dieVotes > liveVotes;
+
+  appendLogEntry(room, {
+    type: "trial_verdict",
+    phase: "day",
+    targetId,
+    liveVotes,
+    dieVotes,
+    liveVoterIds,
+    dieVoterIds,
+    executed,
+  });
+
+  if (executed && !((room.deadPlayers || []).includes(targetId))) {
+    room.deadPlayers = room.deadPlayers || [];
+    room.deadPlayers.push(targetId);
+    io.to(roomId).emit("playerKilled", targetId);
+
+    appendLogEntry(room, {
+      type: "eliminated",
+      phase: "day",
+      targetIds: [targetId],
+      causesByTarget: {
+        [targetId]: [{ type: "trial_verdict", voterIds: dieVoterIds }],
+      },
+    });
+  }
+
+  io.to(roomId).emit("trialVerdictFinished", {
+    targetId,
+    executed,
+    liveVotes,
+    dieVotes,
+  });
+
+  clearTrialState(room);
+  io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+
+  checkAndEndGame(roomId, "after_trial_verdict");
+
+  if (room.hostId) {
+    emitGameLogToSocket(roomId, room.hostId);
+  }
+}
+
+function startTrialDefense(roomId: string, targetId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  if (room.gameOver) return;
+  if (room.phase !== "day") return;
+
+  clearTrialState(room);
+
+  room.trialTargetId = targetId;
+  room.trialStage = "defense";
+  room.trialDefenseDeadline = Date.now() + 120_000;
+  room.trialInteractionCut = false;
+  room.trialInteractionActiveIds = [];
+  room.trialSelectedInteractorId = null;
+  room.trialSelectedInteractorIds = [];
+  room.trialInteractionSelectionLimit = 2;
+  room.trialInteractionQueuedIds = [];
+  room.trialVotes = {};
+
+  appendLogEntry(room, { type: "trial_started", phase: "day", targetId });
+
+  io.to(roomId).emit("trialPhaseStarted", {
+    targetId,
+    stage: "defense",
+    defenseDeadline: room.trialDefenseDeadline,
+  });
+  io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
+  io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+
+  room.trialDefenseTimer = setTimeout(() => {
+    startTrialVerdictVoting(roomId);
+  }, 120_000);
+}
+
+function startDayVoting(roomId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  if (room.gameOver) return;
+
+  if (room.dayDiscussionTimer) {
+    clearTimeout(room.dayDiscussionTimer);
+    room.dayDiscussionTimer = null;
+  }
+  room.dayDiscussionDeadline = null;
+  io.to(roomId).emit("dayDiscussionStarted", { deadline: null });
+
+  if (room.dayTimer) {
+    clearTimeout(room.dayTimer);
+    room.dayTimer = null;
+  }
+
+  clearTrialState(room);
+
+  const voters = getAlivePlayerIds(room);
+  room.dayVoters = voters;
+  room.dayVotes = {};
+  room.dayLocked = {};
+  voters.forEach((id) => {
+    room.dayVotes![id] = null;
+    room.dayLocked![id] = false;
+  });
+
+  room.dayDeadline = Date.now() + 45_000; // 45 giây biểu quyết ban ngày
+
+  io.to(roomId).emit("dayPhaseStarted", {
+    voters: getActiveDayVoters(room),
+    deadline: room.dayDeadline,
+  });
+  io.to(roomId).emit("dayVotesUpdated", room.dayVotes);
+  io.to(roomId).emit("dayLockedUpdated", room.dayLocked);
+  io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+
+  room.dayTimer = setTimeout(() => {
+    finishDayVoting(roomId);
+  }, 45_000);
+}
+
+function startDayDiscussion(roomId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  if (room.phase !== "day") return;
+  if (room.gameOver) return;
+
+  if (room.dayTimer) {
+    clearTimeout(room.dayTimer);
+    room.dayTimer = null;
+  }
+  if (room.dayDiscussionTimer) {
+    clearTimeout(room.dayDiscussionTimer);
+    room.dayDiscussionTimer = null;
+  }
+
+  clearTrialState(room);
+
+  room.dayVoters = [];
+  room.dayVotes = {};
+  room.dayLocked = {};
+  room.dayDeadline = null;
+  room.dayDiscussionDeadline = Date.now() + 240_000; // 4 phút thảo luận
+
+  io.to(roomId).emit("dayDiscussionStarted", {
+    deadline: room.dayDiscussionDeadline,
+  });
+  io.to(roomId).emit("dayVotesUpdated", room.dayVotes);
+  io.to(roomId).emit("dayLockedUpdated", room.dayLocked);
+  io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+
+  room.dayDiscussionTimer = setTimeout(() => {
+    startDayVoting(roomId);
+  }, 240_000);
+}
+
+function finishDayVoting(roomId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  if (room.phase !== "day") return;
+  if (room.gameOver) return;
+  if (room.trialStage && room.trialStage !== "none") return;
+  if (!room.dayDeadline) return;
+
+  if (room.dayTimer) {
+    clearTimeout(room.dayTimer);
+    room.dayTimer = null;
+  }
+
+  const votes = room.dayVotes || {};
+  const activeVoters = getActiveDayVoters(room);
+
+  appendLogEntry(room, buildDayVoteBreakdown(room, votes));
+
+  const counts: Record<string, number> = {};
+  for (const voterId of activeVoters) {
+    const target = votes[voterId];
+    if (!target) continue;
+    counts[target] = (counts[target] || 0) + 1;
+  }
+
+  const entries = Object.entries(counts);
+  let executedId: string | null = null;
+  let tie = false;
+  if (entries.length > 0) {
+    entries.sort((a, b) => b[1] - a[1]);
+    if (entries.length > 1 && entries[0]![1] === entries[1]![1]) {
+      tie = true;
+    } else {
+      executedId = entries[0]![0];
+    }
+  }
+
+  appendLogEntry(room, { type: "day_result", phase: "day", targetId: executedId, tie });
+
+  for (const voterId of activeVoters) {
+    room.dayLocked = room.dayLocked || {};
+    room.dayLocked[voterId] = true;
+  }
+  room.dayDiscussionDeadline = null;
+  room.dayDeadline = null;
+
+  io.to(roomId).emit("dayVotesUpdated", room.dayVotes || {});
+  io.to(roomId).emit("dayLockedUpdated", room.dayLocked || {});
+  io.to(roomId).emit("dayVoteFinished", { targetId: executedId, tie, startedTrial: !!executedId });
+  io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+
+  if (executedId) {
+    startTrialDefense(roomId, executedId);
+  } else {
+    checkAndEndGame(roomId, "after_day_vote_no_nominee");
+  }
+
+  // Push log updates to host immediately (host can view anytime).
+  if (room.hostId) {
+    emitGameLogToSocket(roomId, room.hostId);
+  }
 }
 
 
@@ -835,6 +1247,32 @@ function startWolfPhase(roomId: string) {
   }, 20_000);
 }
 
+function getWolfRoleCount(roles: string[] | undefined) {
+  return (roles || []).filter(role => isWolfRole(role)).length;
+}
+
+function getMaxAllowedWolfCount(playerCount: number) {
+  return Math.floor((playerCount - 1) / 2);
+}
+
+function rebalanceWolfRoles(room: Room, maxWolfCount: number) {
+  const roles = room.roles || [];
+  let wolfCount = 0;
+
+  room.roles = roles.map(role => {
+    if (!isWolfRole(role)) {
+      return role;
+    }
+
+    wolfCount += 1;
+    if (wolfCount > maxWolfCount) {
+      return "Dân";
+    }
+
+    return role;
+  });
+}
+
 function finishWolfVoting(roomId: string) {
   const room = rooms[roomId];
   if (!room) return;
@@ -1021,6 +1459,41 @@ io.on("connection", (socket) => {
       io.to(roomId).emit("positionsUpdated", room.positions);
       io.to(roomId).emit("positionEditorsUpdated", room.positionEditors || []);
 
+      if (room.phase === "day" && room.dayDeadline) {
+        io.to(socket.id).emit("dayPhaseStarted", {
+          voters: getActiveDayVoters(room),
+          deadline: room.dayDeadline,
+        });
+        io.to(socket.id).emit("dayVotesUpdated", room.dayVotes || {});
+        io.to(socket.id).emit("dayLockedUpdated", room.dayLocked || {});
+      }
+
+      if (room.phase === "day" && !room.dayDeadline && room.dayDiscussionDeadline) {
+        io.to(socket.id).emit("dayDiscussionStarted", {
+          deadline: room.dayDiscussionDeadline,
+        });
+      }
+
+      if (room.phase === "day" && room.trialTargetId && room.trialStage === "defense") {
+        io.to(socket.id).emit("trialPhaseStarted", {
+          targetId: room.trialTargetId,
+          stage: "defense",
+          defenseDeadline: room.trialDefenseDeadline || null,
+        });
+        io.to(socket.id).emit("trialInteractionUpdated", {
+          ...buildTrialInteractionUpdatedPayload(room),
+        });
+      }
+
+      if (room.phase === "day" && room.trialTargetId && room.trialStage === "verdict") {
+        io.to(socket.id).emit("trialVerdictStarted", {
+          targetId: room.trialTargetId,
+          voters: getTrialVoters(room),
+          deadline: room.trialVerdictDeadline || null,
+        });
+        io.to(socket.id).emit("trialVotesUpdated", room.trialVotes || {});
+      }
+
       // Re-send private witch potion state on refresh/reconnect.
       if (room.playerRoles?.[socket.id] === "Phù thủy") {
         ensureWitchState(room, socket.id);
@@ -1124,6 +1597,20 @@ io.on("connection", (socket) => {
     room.wolfExtraBiteNextNight = room.wolfExtraBiteNextNight || false;
     room.wolfBonusBiteThisNight = false;
     room.killedTonightExtra = null;
+    room.dayVoters = [];
+    room.dayVotes = {};
+    room.dayLocked = {};
+    room.dayDiscussionDeadline = null;
+    room.dayDeadline = null;
+    if (room.dayDiscussionTimer) {
+      clearTimeout(room.dayDiscussionTimer);
+      room.dayDiscussionTimer = null;
+    }
+    if (room.dayTimer) {
+      clearTimeout(room.dayTimer);
+      room.dayTimer = null;
+    }
+    clearTrialState(room);
 
     // Reset end-game + Linh sói state
     room.gameOver = false;
@@ -1145,10 +1632,12 @@ io.on("connection", (socket) => {
     room.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
     
-    // Đánh dấu game đã bắt đầu (mặc định là ban ngày)
-    room.phase = "day";
+    // Đánh dấu game đã bắt đầu ở trạng thái chờ mở màn.
+    room.phase = "dusk";
 
     io.to(roomId).emit("gameStarted");
+    io.to(roomId).emit("phaseChanged", "dusk");
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
 
     // In case the role set is degenerate (e.g. no biting wolves), resolve immediately.
     checkAndEndGame(roomId, "after_game_start");
@@ -1297,6 +1786,73 @@ io.on("connection", (socket) => {
             }
           }
 
+          // Nếu đang ở ban ngày, người mất kết nối sẽ bị loại khỏi danh sách biểu quyết hiệu lực.
+          if (room.phase === "day") {
+            if (room.dayVotes) room.dayVotes[socket.id] = null;
+            if (room.dayLocked) room.dayLocked[socket.id] = false;
+
+            io.to(roomId).emit("dayVotesUpdated", room.dayVotes || {});
+            io.to(roomId).emit("dayLockedUpdated", room.dayLocked || {});
+            if (room.dayDeadline) {
+              io.to(roomId).emit("dayPhaseStarted", {
+                voters: getActiveDayVoters(room),
+                deadline: room.dayDeadline,
+              });
+            } else {
+              io.to(roomId).emit("dayDiscussionStarted", {
+                deadline: room.dayDiscussionDeadline || null,
+              });
+            }
+
+            const activeDayVoters = getActiveDayVoters(room);
+            const allDayLocked =
+              activeDayVoters.length > 0 &&
+              activeDayVoters.every((id) => room.dayLocked?.[id] === true);
+            if (allDayLocked && (!room.trialStage || room.trialStage === "none")) {
+              finishDayVoting(roomId);
+            }
+
+            // Trial updates on disconnect.
+            if (room.trialStage === "defense") {
+              const activeSet = new Set(room.trialInteractionActiveIds || []);
+              if (activeSet.has(socket.id)) {
+                activeSet.delete(socket.id);
+                room.trialInteractionActiveIds = Array.from(activeSet);
+              }
+              const queuedSet = new Set(room.trialInteractionQueuedIds || []);
+              if (queuedSet.has(socket.id)) {
+                queuedSet.delete(socket.id);
+                room.trialInteractionQueuedIds = Array.from(queuedSet);
+              }
+              if (room.trialSelectedInteractorId === socket.id) {
+                room.trialSelectedInteractorId = null;
+              }
+
+              if (room.trialTargetId === socket.id) {
+                // Nếu bị cáo mất kết nối, chuyển luôn sang biểu quyết sống/chết.
+                startTrialVerdictVoting(roomId);
+              } else {
+                io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
+              }
+            }
+
+            if (room.trialStage === "verdict") {
+              if (room.trialVotes) room.trialVotes[socket.id] = null;
+              io.to(roomId).emit("trialVotesUpdated", room.trialVotes || {});
+
+              const activeTrialVoters = getTrialVoters(room);
+              const allVoted =
+                activeTrialVoters.length > 0 &&
+                activeTrialVoters.every((id) => {
+                  const v = room.trialVotes?.[id];
+                  return v === "live" || v === "die";
+                });
+              if (allVoted) {
+                finishTrialVerdict(roomId);
+              }
+            }
+          }
+
           // broadcast cho cả phòng để hiện badge mất kết nối
           io.to(roomId).emit("roomUpdated", toPublicRoom(room));
 
@@ -1349,7 +1905,12 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("startGame", (roomId) => {
+  socket.on("startGame", (payload) => {
+    const roomId = typeof payload === "string" ? payload : payload?.roomId;
+    const forceAdjustWolfCount = typeof payload === "object" && payload !== null ? !!payload.forceAdjustWolfCount : false;
+
+    if (!roomId) return;
+
     const room = rooms[roomId];
     if (!room) return;
 
@@ -1379,8 +1940,26 @@ io.on("connection", (socket) => {
       return;
     }
 
+    const wolfCount = getWolfRoleCount(roles);
+    const maxAllowedWolfCount = getMaxAllowedWolfCount(room.players.length);
+
+    if (wolfCount > maxAllowedWolfCount) {
+      if (!forceAdjustWolfCount) {
+        io.to(room.hostId).emit("wolfRoleMismatch", {
+          currentWolfCount: wolfCount,
+          maxAllowedWolfCount,
+          playerCount: room.players.length,
+        });
+        return;
+      }
+
+      rebalanceWolfRoles(room, maxAllowedWolfCount);
+      io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    }
+
     // random role cho mỗi người và lưu mapping
-    const shuffled = roles.slice().sort(() => Math.random() - 0.5);
+    const rolesToUse = room.roles || roles;
+    const shuffled = rolesToUse.slice().sort(() => Math.random() - 0.5);
     room.playerRoles = {};
     room.players.forEach((player, index) => {
       const role: string = shuffled[index] || "";
@@ -1416,13 +1995,30 @@ io.on("connection", (socket) => {
     room.wolfExtraBiteNextNight = room.wolfExtraBiteNextNight || false;
     room.wolfBonusBiteThisNight = false;
     room.killedTonightExtra = null;
+    room.dayVoters = [];
+    room.dayVotes = {};
+    room.dayLocked = {};
+    room.dayDiscussionDeadline = null;
+    room.dayDeadline = null;
+    if (room.dayDiscussionTimer) {
+      clearTimeout(room.dayDiscussionTimer);
+      room.dayDiscussionTimer = null;
+    }
+    if (room.dayTimer) {
+      clearTimeout(room.dayTimer);
+      room.dayTimer = null;
+    }
+    clearTrialState(room);
 
 
-    // Đánh dấu game đã bắt đầu (mặc định là ban ngày)
-    room.phase = "day";
+    // Đánh dấu game đã bắt đầu ở trạng thái chờ mở màn.
+    room.phase = "dusk";
 
     // thông báo cho cả phòng rằng game đã bắt đầu
     io.to(roomId).emit("gameStarted");
+    io.to(roomId).emit("phaseChanged", "dusk");
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+
     // Host can always see roles; refresh reveal mapping after (re)deal.
     emitRolesRevealToSocket(roomId, room.hostId);
 
@@ -1447,6 +2043,14 @@ io.on("connection", (socket) => {
     if (room.wolfTimer) {
       clearTimeout(room.wolfTimer);
       room.wolfTimer = null;
+    }
+    if (room.dayTimer) {
+      clearTimeout(room.dayTimer);
+      room.dayTimer = null;
+    }
+    if (room.dayDiscussionTimer) {
+      clearTimeout(room.dayDiscussionTimer);
+      room.dayDiscussionTimer = null;
     }
 
     // Remove everyone from private role rooms to prevent information leakage.
@@ -1487,7 +2091,7 @@ io.on("connection", (socket) => {
     // Reset per-game/per-night state.
     room.gameOver = false;
     room.winner = undefined;
-    room.phase = "day";
+    room.phase = "dusk";
     room.nightCount = 0;
     room.gameLog = [];
     room.deadPlayers = [];
@@ -1503,6 +2107,12 @@ io.on("connection", (socket) => {
     room.wolfDeadline = null;
     room.wolfExtraBiteNextNight = false;
     room.wolfBonusBiteThisNight = false;
+    room.dayVoters = [];
+    room.dayVotes = {};
+    room.dayLocked = {};
+    room.dayDiscussionDeadline = null;
+    room.dayDeadline = null;
+    clearTrialState(room);
 
     // Reset Linh sói state.
     room.spiritWolfId = getSpiritWolfId(room);
@@ -1512,7 +2122,7 @@ io.on("connection", (socket) => {
     room.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
 
-    io.to(roomId).emit("phaseChanged", "day");
+    io.to(roomId).emit("phaseChanged", "dusk");
     io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     io.to(roomId).emit("gameStarted");
     // Host can always see roles; refresh reveal mapping after (re)deal.
@@ -1535,6 +2145,22 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("phaseChanged", phase);
 
     if (phase === "night") {
+      if (room.dayTimer) {
+        clearTimeout(room.dayTimer);
+        room.dayTimer = null;
+      }
+      if (room.dayDiscussionTimer) {
+        clearTimeout(room.dayDiscussionTimer);
+        room.dayDiscussionTimer = null;
+      }
+      room.dayVoters = [];
+      room.dayVotes = {};
+      room.dayLocked = {};
+      room.dayDiscussionDeadline = null;
+      room.dayDeadline = null;
+      io.to(roomId).emit("dayDiscussionStarted", { deadline: null });
+      clearTrialState(room);
+
       // Increment night counter and start a new log bucket.
       room.nightCount = (room.nightCount || 0) + 1;
       ensureNightLog(room);
@@ -1755,6 +2381,9 @@ io.on("connection", (socket) => {
       }
 
       checkAndEndGame(roomId, "after_night_resolution");
+      if (!room.gameOver) {
+        startDayDiscussion(roomId);
+      }
 
       // Push log updates to host immediately (host can view anytime).
       if (room.hostId) {
@@ -1777,6 +2406,245 @@ io.on("connection", (socket) => {
     const isHost = socket.id === room.hostId;
     if (!isHost && !room.gameOver) return;
     emitRolesRevealToSocket(roomId, socket.id);
+  });
+
+  // Xử lý vote ban ngày: chọn người để biểu quyết treo
+  socket.on("dayChooseTarget", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.trialStage && room.trialStage !== "none") return;
+    if (!room.dayDeadline) return;
+    if ((room.deadPlayers || []).includes(socket.id)) return;
+
+    const activeVoters = getActiveDayVoters(room);
+    if (!activeVoters.includes(socket.id)) return;
+
+    if (room.dayLocked?.[socket.id]) {
+      socket.emit("errorMessage", "Bạn đã khóa phiếu biểu quyết, không thể thay đổi.");
+      return;
+    }
+
+    if (room.dayDeadline && Date.now() >= room.dayDeadline) return;
+
+    room.dayVotes = room.dayVotes || {};
+
+    // Cho phép bỏ chọn
+    if (!targetId) {
+      room.dayVotes[socket.id] = null;
+      io.to(roomId).emit("dayVotesUpdated", room.dayVotes);
+      return;
+    }
+
+    // target phải tồn tại và còn sống
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    // không cho tự vote bản thân
+    if (targetId === socket.id) return;
+
+    room.dayVotes[socket.id] = targetId;
+    io.to(roomId).emit("dayVotesUpdated", room.dayVotes);
+  });
+
+  // Xử lý khóa phiếu vote ban ngày
+  socket.on("dayLockVote", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.trialStage && room.trialStage !== "none") return;
+    if (!room.dayDeadline) return;
+    if ((room.deadPlayers || []).includes(socket.id)) return;
+
+    const activeVoters = getActiveDayVoters(room);
+    if (!activeVoters.includes(socket.id)) return;
+
+    room.dayLocked = room.dayLocked || {};
+    room.dayLocked[socket.id] = true;
+    io.to(roomId).emit("dayLockedUpdated", room.dayLocked);
+
+    const allLocked =
+      activeVoters.length > 0 &&
+      activeVoters.every((id) => room.dayLocked?.[id] === true);
+    if (allLocked) {
+      finishDayVoting(roomId);
+    }
+  });
+
+  socket.on("hostStartDayVoting", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (socket.id !== room.hostId) return;
+    if (room.trialStage && room.trialStage !== "none") return;
+    if (room.dayDeadline) return;
+
+    startDayVoting(roomId);
+  });
+
+  // Host có thể chốt ngay giai đoạn vote/nghe thanh minh để không cần chờ hết giờ.
+  socket.on("hostForceFinishDayVote", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (socket.id !== room.hostId) return;
+
+    if (room.trialStage === "verdict") {
+      finishTrialVerdict(roomId);
+      return;
+    }
+    if (room.trialStage === "defense") {
+      startTrialVerdictVoting(roomId);
+      return;
+    }
+    if (!room.dayDeadline) return;
+    finishDayVoting(roomId);
+  });
+
+  // Người chơi (trừ bị cáo) bấm nút "Tương tác" trong lúc bị cáo thanh minh.
+  socket.on("trialToggleInteraction", ({ roomId, active }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.trialStage !== "defense") return;
+    if (!room.trialTargetId) return;
+    if ((room.deadPlayers || []).includes(socket.id)) return;
+    if (socket.id === room.trialTargetId) return;
+    if (room.trialInteractionCut) return;
+    if ((room.trialSelectedInteractorIds || []).includes(socket.id)) return;
+
+    const activeSet = new Set(room.trialInteractionActiveIds || []);
+    const queuedSet = new Set(room.trialInteractionQueuedIds || []);
+    if (active) activeSet.add(socket.id);
+    else activeSet.delete(socket.id);
+    if (active) queuedSet.add(socket.id);
+    else queuedSet.delete(socket.id);
+
+    room.trialInteractionActiveIds = Array.from(activeSet);
+    room.trialInteractionQueuedIds = Array.from(queuedSet);
+    if (!active && room.trialSelectedInteractorId === socket.id) {
+      room.trialSelectedInteractorId = null;
+    }
+
+    io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  // Bị cáo chọn một người đã bấm "Tương tác" (vòng xanh).
+  socket.on("trialSelectInteractor", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.trialStage !== "defense") return;
+    if (!room.trialTargetId) return;
+    if (socket.id !== room.trialTargetId) return;
+
+    const active = new Set(room.trialInteractionActiveIds || []);
+    if (!active.has(targetId)) return;
+
+    const selectedIds = room.trialSelectedInteractorIds || [];
+    if (selectedIds.includes(targetId)) return;
+
+    selectedIds.push(targetId);
+    room.trialSelectedInteractorIds = selectedIds;
+
+    active.delete(targetId);
+    room.trialInteractionActiveIds = Array.from(active);
+
+    const queued = new Set(room.trialInteractionQueuedIds || []);
+    queued.delete(targetId);
+    room.trialInteractionQueuedIds = Array.from(queued);
+
+    room.trialSelectedInteractorId = targetId;
+
+    const selectionLimit = Math.max(0, room.trialInteractionSelectionLimit || 0);
+    if (selectionLimit > 0 && selectedIds.length >= selectionLimit) {
+      room.trialInteractionCut = true;
+      room.trialInteractionActiveIds = [];
+    }
+
+    io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("trialAddInteractionTurn", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.trialStage !== "defense") return;
+    if (!room.trialTargetId) return;
+    if (socket.id !== room.hostId) return;
+
+    const nextLimit = Math.max(0, room.trialInteractionSelectionLimit || 0) + 1;
+    room.trialInteractionSelectionLimit = nextLimit;
+
+    const selectedSet = new Set(room.trialSelectedInteractorIds || []);
+    if (room.trialInteractionCut && (room.trialSelectedInteractorIds || []).length < nextLimit) {
+      room.trialInteractionCut = false;
+
+      const deadSet = new Set(room.deadPlayers || []);
+      const queued = room.trialInteractionQueuedIds || [];
+      room.trialInteractionActiveIds = queued.filter((id) => {
+        if (!id) return false;
+        if (id === room.trialTargetId) return false;
+        if (selectedSet.has(id)) return false;
+        if (deadSet.has(id)) return false;
+        if (!isPlayerConnected(room, id)) return false;
+        return !!room.players.find((p) => p.id === id);
+      });
+    }
+
+    io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  // Bị cáo cắt tương tác => bắt đầu biểu quyết sống/chết ngay.
+  socket.on("trialCutInteraction", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.trialStage !== "defense") return;
+    if (!room.trialTargetId) return;
+    if (socket.id !== room.trialTargetId) return;
+
+    room.trialInteractionCut = true;
+    io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
+
+    startTrialVerdictVoting(roomId);
+  });
+
+  // Mọi người (trừ bị cáo) vote sống/chết trong 20 giây.
+  socket.on("trialVoteLifeDeath", ({ roomId, vote }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.trialStage !== "verdict") return;
+    if (!room.trialTargetId) return;
+    if (socket.id === room.trialTargetId) return;
+    if ((room.deadPlayers || []).includes(socket.id)) return;
+
+    const voters = getTrialVoters(room);
+    if (!voters.includes(socket.id)) return;
+
+    if (room.trialVerdictDeadline && Date.now() >= room.trialVerdictDeadline) return;
+
+    room.trialVotes = room.trialVotes || {};
+    if (vote !== "live" && vote !== "die") {
+      room.trialVotes[socket.id] = null;
+    } else {
+      room.trialVotes[socket.id] = vote;
+    }
+
+    io.to(roomId).emit("trialVotesUpdated", room.trialVotes);
   });
 
   // Xử lý chức năng thợ săn chọn mục tiêu trong đêm

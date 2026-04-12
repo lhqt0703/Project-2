@@ -9,20 +9,24 @@ type EliminationFocus = {
   causes: EliminationCause[];
 };
 
+type HighlightPayload = {
+  primaryId: string | null;
+  secondaryIds?: string[];
+  dangerIds?: string[];
+};
+
 interface GameLogPanelProps {
   nights: GameLogNight[];
   rolesByPlayerId: RolesByPlayerId;
   playerNamesById: PlayerNamesById;
-  onHighlightPlayer: (payload: { primaryId: string | null; secondaryIds?: string[] }) => void;
+  onHighlightPlayer: (payload: HighlightPayload) => void;
   onRequestRefresh?: () => void;
 }
 
-// Helper: get role display name for a playerId
 function getRoleName(playerId: string, rolesByPlayerId: RolesByPlayerId): string {
   return rolesByPlayerId[playerId] || "???";
 }
 
-// Helper: get player name for a playerId
 function getPlayerName(playerId: string, playerNamesById: PlayerNamesById): string {
   return playerNamesById[playerId] || playerId.slice(0, 8) + "...";
 }
@@ -30,13 +34,6 @@ function getPlayerName(playerId: string, playerNamesById: PlayerNamesById): stri
 function getRolesText(playerIds: string[] | undefined, rolesByPlayerId: RolesByPlayerId): string {
   if (!playerIds || playerIds.length === 0) return "(không rõ)";
   return playerIds.map((id) => getRoleName(id, rolesByPlayerId)).join(", ");
-}
-
-function findFirstPlayerIdByRole(rolesByPlayerId: RolesByPlayerId, roleName: string): string | null {
-  for (const [playerId, role] of Object.entries(rolesByPlayerId)) {
-    if (role === roleName) return playerId;
-  }
-  return null;
 }
 
 function getEliminationCauseText(causes: EliminationCause[] | undefined, rolesByPlayerId: RolesByPlayerId): string {
@@ -47,18 +44,26 @@ function getEliminationCauseText(causes: EliminationCause[] | undefined, rolesBy
       return `Bị ${attackersText} cắn`;
     }
     if (cause.type === "witch_poison") return "Phù thủy quăng bình giết";
+    if (cause.type === "day_vote") {
+      const votersText = getRolesText(cause.voterIds, rolesByPlayerId);
+      return `Bị biểu quyết bởi: ${votersText}`;
+    }
+    if (cause.type === "trial_verdict") {
+      const votersText = getRolesText(cause.voterIds, rolesByPlayerId);
+      return `Bị biểu quyết sống/chết bởi: ${votersText}`;
+    }
     return "Thợ săn đã bắn trúng";
   });
-  return parts.join(" và ");
+  return parts.join(" va ");
 }
 
-// Clickable role span component
 function RoleSpan({
   playerId,
   rolesByPlayerId,
   playerNamesById,
   tooltipDetail,
   secondaryHighlightIds,
+  dangerHighlightIds,
   eliminationFocus,
   dimmed,
   onEliminationFocusChange,
@@ -69,10 +74,11 @@ function RoleSpan({
   playerNamesById: PlayerNamesById;
   tooltipDetail?: string;
   secondaryHighlightIds?: string[];
+  dangerHighlightIds?: string[];
   eliminationFocus?: EliminationFocus;
   dimmed?: boolean;
   onEliminationFocusChange?: (focus: EliminationFocus | null) => void;
-  onHighlightPlayer: (payload: { primaryId: string | null; secondaryIds?: string[] }) => void;
+  onHighlightPlayer: (payload: HighlightPayload) => void;
 }) {
   const [showPopup, setShowPopup] = useState(false);
   const spanRef = useRef<HTMLSpanElement>(null);
@@ -84,11 +90,10 @@ function RoleSpan({
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     setShowPopup(true);
-    onHighlightPlayer({ primaryId: playerId, secondaryIds: secondaryHighlightIds || [] });
+    onHighlightPlayer({ primaryId: playerId, secondaryIds: secondaryHighlightIds || [], dangerIds: dangerHighlightIds || [] });
     onEliminationFocusChange?.(eliminationFocus || null);
-  }, [playerId, secondaryHighlightIds, eliminationFocus, onHighlightPlayer, onEliminationFocusChange]);
+  }, [playerId, secondaryHighlightIds, dangerHighlightIds, eliminationFocus, onHighlightPlayer, onEliminationFocusChange]);
 
-  // Close on click outside
   useEffect(() => {
     if (!showPopup) return;
     const handleClickOutside = (e: MouseEvent) => {
@@ -97,7 +102,7 @@ function RoleSpan({
         spanRef.current && !spanRef.current.contains(e.target as Node)
       ) {
         setShowPopup(false);
-        onHighlightPlayer({ primaryId: null, secondaryIds: [] });
+        onHighlightPlayer({ primaryId: null, secondaryIds: [], dangerIds: [] });
         onEliminationFocusChange?.(null);
       }
     };
@@ -148,7 +153,6 @@ function RoleSpan({
   );
 }
 
-// Multiple roles span (e.g., list of eliminated players)
 function RolesListSpan({
   playerIds,
   rolesByPlayerId,
@@ -168,7 +172,7 @@ function RolesListSpan({
   getEliminationFocus?: (playerId: string) => EliminationFocus | undefined;
   getItemDimmed?: (playerId: string) => boolean;
   onEliminationFocusChange?: (focus: EliminationFocus | null) => void;
-  onHighlightPlayer: (payload: { primaryId: string | null; secondaryIds?: string[] }) => void;
+  onHighlightPlayer: (payload: HighlightPayload) => void;
 }) {
   return (
     <>
@@ -192,10 +196,10 @@ function RolesListSpan({
   );
 }
 
-// Render a single log entry
 function LogEntryLine({
   night,
   entry,
+  dayVotersByTarget,
   rolesByPlayerId,
   playerNamesById,
   eliminationFocus,
@@ -204,24 +208,26 @@ function LogEntryLine({
 }: {
   night: number;
   entry: GameLogEntry;
+  dayVotersByTarget: Record<string, string[]>;
   rolesByPlayerId: RolesByPlayerId;
   playerNamesById: PlayerNamesById;
   eliminationFocus: EliminationFocus | null;
   onEliminationFocusChange: (focus: EliminationFocus | null) => void;
-  onHighlightPlayer: (payload: { primaryId: string | null; secondaryIds?: string[] }) => void;
+  onHighlightPlayer: (payload: HighlightPayload) => void;
 }) {
   const isCauseLineForFocus = (f: EliminationFocus) => {
     const causeTypes = new Set((f.causes || []).map((c) => c.type));
     if (entry.type === "eliminated" && (entry.targetIds || []).includes(f.targetId)) return true;
     if (causeTypes.has("wolf") && entry.type === "wolf_result" && (entry.targetIds || []).includes(f.targetId)) return true;
+    if ((causeTypes.has("day_vote") || causeTypes.has("trial_verdict")) && entry.type === "day_result" && entry.targetId === f.targetId) return true;
+    if (causeTypes.has("day_vote") && entry.type === "day_vote" && (entry.voteBreakdown || []).some((v) => v.targetId === f.targetId)) return true;
+    if (causeTypes.has("trial_verdict") && entry.type === "trial_verdict" && entry.targetId === f.targetId) return true;
     if (causeTypes.has("witch_poison") && entry.type === "witch_poison" && entry.targetId === f.targetId) return true;
     if (causeTypes.has("hunter_shot") && entry.type === "hunter_shot" && entry.targetId === f.targetId) return true;
     return false;
   };
 
-  const dimmed = !!eliminationFocus && (
-    eliminationFocus.night !== night || !isCauseLineForFocus(eliminationFocus)
-  );
+  const dimmed = !!eliminationFocus && (eliminationFocus.night !== night || !isCauseLineForFocus(eliminationFocus));
   const lineStyle: React.CSSProperties = {
     opacity: dimmed ? 0.28 : 1,
     transition: "opacity 180ms ease",
@@ -230,34 +236,61 @@ function LogEntryLine({
   switch (entry.type) {
     case "wolf_vote":
       if (!entry.voteBreakdown || entry.voteBreakdown.length === 0) {
-        return <li style={lineStyle}>Sói chọn cắn: (không ai chọn)</li>;
+        return <li style={lineStyle}>Phe sói nhắm đến: (không ai cả)</li>;
       }
       return (
         <li style={lineStyle}>
-          Sói chọn cắn:{" "}
+          Phe sói nhắm đến:{" "}
           {entry.voteBreakdown.map((v, idx) => {
             const selectedByText = `Bị chọn bởi: ${getRolesText(v.voterIds, rolesByPlayerId)}`;
             return (
-            <span key={v.targetId}>
-              <RoleSpan
-                playerId={v.targetId}
-                rolesByPlayerId={rolesByPlayerId}
-                playerNamesById={playerNamesById}
-                tooltipDetail={selectedByText}
-                secondaryHighlightIds={v.voterIds}
-                onEliminationFocusChange={onEliminationFocusChange}
-                onHighlightPlayer={onHighlightPlayer}
-              />
-              {idx < entry.voteBreakdown.length - 1 && ", "}
-            </span>
-          );
+              <span key={v.targetId}>
+                <RoleSpan
+                  playerId={v.targetId}
+                  rolesByPlayerId={rolesByPlayerId}
+                  playerNamesById={playerNamesById}
+                  tooltipDetail={selectedByText}
+                  secondaryHighlightIds={v.voterIds}
+                  onEliminationFocusChange={onEliminationFocusChange}
+                  onHighlightPlayer={onHighlightPlayer}
+                />
+                {idx < entry.voteBreakdown.length - 1 && ", "}
+              </span>
+            );
+          })}
+        </li>
+      );
+
+    case "day_vote":
+      if (!entry.voteBreakdown || entry.voteBreakdown.length === 0) {
+        return <li style={lineStyle}>Biểu quyết ngày: không ai vote</li>;
+      }
+      return (
+        <li style={lineStyle}>
+          Biểu quyết ngày:{" "}
+          {entry.voteBreakdown.map((v, idx) => {
+            const selectedByText = `Bị vote bởi: ${getRolesText(v.voterIds, rolesByPlayerId)}`;
+            return (
+              <span key={v.targetId}>
+                <RoleSpan
+                  playerId={v.targetId}
+                  rolesByPlayerId={rolesByPlayerId}
+                  playerNamesById={playerNamesById}
+                  tooltipDetail={selectedByText}
+                  secondaryHighlightIds={v.voterIds}
+                  onEliminationFocusChange={onEliminationFocusChange}
+                  onHighlightPlayer={onHighlightPlayer}
+                />
+                {idx < entry.voteBreakdown.length - 1 && ", "}
+              </span>
+            );
           })}
         </li>
       );
 
     case "wolf_result":
       if (!entry.targetIds || entry.targetIds.length === 0) {
-        return <li style={lineStyle}>Sói cắn: (không ai)</li>;
+        return <li style={lineStyle}>Phe sói không thống nhất được lựa chọn cắn ai</li>;
       }
       return (
         <li style={lineStyle}>
@@ -278,21 +311,126 @@ function LogEntryLine({
         </li>
       );
 
+    case "day_result":
+      if (!entry.targetId) {
+        return <li style={lineStyle}>Kết quả biểu quyết: hòa phiếu / không ai bị loại</li>;
+      }
+      {
+        const voterIds = dayVotersByTarget[entry.targetId] || [];
+        const tooltipDetail = voterIds.length ? `Bị vote bởi: ${getRolesText(voterIds, rolesByPlayerId)}` : undefined;
+        return (
+          <li style={lineStyle}>
+            Kết quả biểu quyết:{" "}
+            <RoleSpan
+              playerId={entry.targetId}
+              rolesByPlayerId={rolesByPlayerId}
+              playerNamesById={playerNamesById}
+              tooltipDetail={tooltipDetail}
+              secondaryHighlightIds={voterIds}
+              onEliminationFocusChange={onEliminationFocusChange}
+              onHighlightPlayer={onHighlightPlayer}
+            />
+            {" "}bị lên giàn
+          </li>
+        );
+      }
+
+    case "trial_started":
+      return null;
+
+    case "trial_verdict": {
+      const liveVoterIds = entry.liveVoterIds || [];
+      const dieVoterIds = entry.dieVoterIds || [];
+      const actionStyle: React.CSSProperties = {
+        cursor: "pointer",
+      };
+
+      const onOpenAllHighlights = () => {
+        onHighlightPlayer({
+          primaryId: entry.targetId,
+          secondaryIds: liveVoterIds,
+          dangerIds: dieVoterIds,
+        });
+      };
+
+      const onOpenLiveHighlights = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onHighlightPlayer({ primaryId: null, secondaryIds: liveVoterIds, dangerIds: [] });
+      };
+
+      const onOpenDieHighlights = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onHighlightPlayer({ primaryId: null, secondaryIds: [], dangerIds: dieVoterIds });
+      };
+
+      return (
+        <li style={lineStyle}>
+          <span onClick={onOpenAllHighlights} style={actionStyle}>
+            Kết quả sống/chết cho
+          </span>{" "}
+          {entry.targetId && (
+            <RoleSpan
+              playerId={entry.targetId}
+              rolesByPlayerId={rolesByPlayerId}
+              playerNamesById={playerNamesById}
+              secondaryHighlightIds={liveVoterIds}
+              dangerHighlightIds={dieVoterIds}
+              onEliminationFocusChange={onEliminationFocusChange}
+              onHighlightPlayer={onHighlightPlayer}
+            />
+          )}:
+          {" "}
+          <span onClick={onOpenAllHighlights} style={actionStyle}>
+            <span style={{ color: entry.executed ? "#e74c3c" : "#27ae60" }}>
+              {entry.executed ? "CHẾT" : "SỐNG"}
+            </span>{" "}
+            (
+          </span>
+          <span onClick={onOpenLiveHighlights} style={{ ...actionStyle }}>
+            Sống {entry.liveVotes}
+          </span>
+          <span onClick={onOpenAllHighlights} style={actionStyle}>
+            {" "}-{" "}
+          </span>
+          <span onClick={onOpenDieHighlights} style={{ ...actionStyle }}>
+            Chết {entry.dieVotes}
+          </span>
+          <span onClick={onOpenAllHighlights} style={actionStyle}>
+            )
+          </span>
+        </li>
+      );
+    }
+
     case "bonus_bite":
       return <li style={{ ...lineStyle, fontStyle: "italic", opacity: dimmed ? 0.28 : 0.85 }}>⚠️ Đêm nay Sói được cắn 2 người (do Sói con đã chết)</li>;
 
     case "guardian_protect":
+      if (entry.actorId && entry.targetId && entry.actorId === entry.targetId) {
+        return (
+          <li style={lineStyle}>
+            {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Bảo vệ"} đã bảo vệ bản thân
+          </li>
+        );
+      }
       return (
         <li style={lineStyle}>
-          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Bảo vệ"} bảo vệ:{" "}
+          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Bảo vệ"} đã bảo vệ:{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
         </li>
       );
 
     case "witch_heal":
+      if (entry.actorId && entry.targetId && entry.actorId === entry.targetId) {
+        return (
+          <li style={lineStyle}>
+            {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Phù thủy"} dùng bình cứu lên bản thân
+          </li>
+        );
+      }
       return (
         <li style={lineStyle}>
-          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Phù thủy"} dùng bình cứu:{" "}
+          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Phù thủy"} dùng bình cứu cho:{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
         </li>
       );
@@ -310,7 +448,7 @@ function LogEntryLine({
         <li style={lineStyle}>
           {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Tiên tri"} soi:{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
-          {" → "}
+          {" -> "}
           <span style={{ fontWeight: 600, color: entry.isWolf ? "#e74c3c" : "#27ae60" }}>
             {entry.isWolf ? "Sói" : "Dân"}
           </span>
@@ -339,50 +477,6 @@ function LogEntryLine({
           Linh sói quyết định: <span style={{ fontWeight: 600 }}>{entry.saved ? "CỨU" : "KHÔNG CỨU"}</span>
         </li>
       );
-
-    case "saved_by_guardian":
-      {
-      const guardianId = findFirstPlayerIdByRole(rolesByPlayerId, "Bảo vệ");
-      return (
-        <li style={lineStyle}>
-          {guardianId ? (
-            <RoleSpan
-              playerId={guardianId}
-              rolesByPlayerId={rolesByPlayerId}
-              playerNamesById={playerNamesById}
-              onEliminationFocusChange={onEliminationFocusChange}
-              onHighlightPlayer={onHighlightPlayer}
-            />
-          ) : (
-            "Bảo vệ"
-          )}{" "}
-          cứu khỏi vết cắn cho:{" "}
-          {entry.targetIds && <RolesListSpan playerIds={entry.targetIds} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
-        </li>
-      );
-      }
-
-    case "saved_by_witch":
-      {
-      const witchId = findFirstPlayerIdByRole(rolesByPlayerId, "Phù thủy");
-      return (
-        <li style={lineStyle}>
-          {witchId ? (
-            <RoleSpan
-              playerId={witchId}
-              rolesByPlayerId={rolesByPlayerId}
-              playerNamesById={playerNamesById}
-              onEliminationFocusChange={onEliminationFocusChange}
-              onHighlightPlayer={onHighlightPlayer}
-            />
-          ) : (
-            "Phù thủy"
-          )}{" "}
-          dùng bình cứu cho:{" "}
-          {entry.targetIds && <RolesListSpan playerIds={entry.targetIds} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
-        </li>
-      );
-      }
 
     case "eliminated":
       return (
@@ -418,7 +512,7 @@ function LogEntryLine({
       );
 
     case "no_death":
-      return <li style={{ ...lineStyle, opacity: dimmed ? 0.28 : 0.75 }}>Không ai bị loại.</li>;
+      return <li style={{ ...lineStyle, opacity: dimmed ? 0.28 : 0.75 }}>Đêm qua không ai bị loại</li>;
 
     default:
       return <li style={lineStyle}>(log không rõ)</li>;
@@ -432,9 +526,6 @@ export default function GameLogPanel({
   onHighlightPlayer,
   onRequestRefresh,
 }: GameLogPanelProps) {
-  // Group entries by night + day
-  // Night entries: phase !== "day"
-  // Day entries: phase === "day" (shown after night)
   const [eliminationFocus, setEliminationFocus] = useState<EliminationFocus | null>(null);
 
   return (
@@ -446,19 +537,21 @@ export default function GameLogPanel({
         )}
       </div>
 
-      {(!nights || nights.length === 0) && (
-        <p style={{ marginTop: 8, opacity: 0.8 }}>Chưa có log (thường sẽ bắt đầu ghi từ đêm 1).</p>
-      )}
-
       {(nights || []).map((n) => {
-        const nightEntries = (n.entries || []).filter(e => e.phase !== "day");
+        const nightEntries = (n.entries || []).filter((e) => e.phase !== "day");
         const displayNightEntries = nightEntries.filter((e) => !(e.type === "wolf_vote" && (e.voteBreakdown?.length || 0) <= 1));
-        const dayEntries = (n.entries || []).filter(e => e.phase === "day");
+        const dayEntries = (n.entries || []).filter(
+          (e) => e.phase === "day" && e.type !== "saved_by_guardian" && e.type !== "saved_by_witch" && e.type !== "trial_started"
+        );
+        const dayVoteEntry = dayEntries.find((e) => e.type === "day_vote");
+        const dayVotersByTarget: Record<string, string[]> =
+          dayVoteEntry && dayVoteEntry.type === "day_vote"
+            ? Object.fromEntries((dayVoteEntry.voteBreakdown || []).map((v) => [v.targetId, v.voterIds || []]))
+            : {};
         const dimBucket = !!eliminationFocus && eliminationFocus.night !== n.night;
 
         return (
           <div key={n.night} style={{ marginTop: 14 }}>
-            {/* Night section */}
             <div style={{ fontWeight: 600, fontSize: 15, opacity: dimBucket ? 0.3 : 1, transition: "opacity 180ms ease" }}>🌙 Đêm {n.night}</div>
             {displayNightEntries.length === 0 ? (
               <div style={{ opacity: dimBucket ? 0.3 : 0.75, marginLeft: 18, transition: "opacity 180ms ease" }}>Không có sự kiện.</div>
@@ -469,6 +562,7 @@ export default function GameLogPanel({
                     key={idx}
                     night={n.night}
                     entry={entry}
+                    dayVotersByTarget={dayVotersByTarget}
                     rolesByPlayerId={rolesByPlayerId}
                     playerNamesById={playerNamesById}
                     eliminationFocus={eliminationFocus}
@@ -479,7 +573,6 @@ export default function GameLogPanel({
               </ul>
             )}
 
-            {/* Day section (if any day events) */}
             {dayEntries.length > 0 && (
               <>
                 <div style={{ fontWeight: 600, fontSize: 15, marginTop: 10, opacity: dimBucket ? 0.3 : 1, transition: "opacity 180ms ease" }}>🌞 Ngày {n.night + 1}</div>
@@ -489,6 +582,7 @@ export default function GameLogPanel({
                       key={`day-${idx}`}
                       night={n.night}
                       entry={entry}
+                      dayVotersByTarget={dayVotersByTarget}
                       rolesByPlayerId={rolesByPlayerId}
                       playerNamesById={playerNamesById}
                       eliminationFocus={eliminationFocus}

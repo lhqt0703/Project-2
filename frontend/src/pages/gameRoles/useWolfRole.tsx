@@ -35,6 +35,7 @@ export function useWolfRole({
 }) {
   const [localSelectedTarget, setLocalSelectedTarget] = useState<string | null>(null);
   const [localSelectedTarget2, setLocalSelectedTarget2] = useState<string | null>(null);
+  const [hasSubmittedLock, setHasSubmittedLock] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   const isWolfTeam = useMemo(() => role === "Sói" || role === "Sói con" || role === "Bán sói", [role]);
@@ -60,8 +61,14 @@ export function useWolfRole({
     if (isWolfTeam && phase === "night") {
       setLocalSelectedTarget(null);
       setLocalSelectedTarget2(null);
+      setHasSubmittedLock(false);
     }
   }, [isWolfTeam, phase, wolfDeadline]);
+
+  const isLocked = useMemo(() => {
+    if (socket.id && wolfLocked?.[socket.id]) return true;
+    return hasSubmittedLock;
+  }, [hasSubmittedLock, wolfLocked]);
 
   const canAct = useMemo(() => {
     if (phase !== "night") return false;
@@ -78,7 +85,7 @@ export function useWolfRole({
     // không cho chọn sói khác
     if (wolves.includes(playerId)) return true;
     // lock vote rồi thì không được chọn nữa
-    if (socket.id && wolfLocked?.[socket.id]) return true;
+    if (isLocked) return true;
     // hoặc là hết thời gian
     if (wolfDeadline && Date.now() >= wolfDeadline) return true;
 
@@ -124,7 +131,7 @@ export function useWolfRole({
     setLocalSelectedTarget(playerId);
     socket.emit("wolfChooseTarget", { roomId, targetId: playerId });
     return true;
-  }, [canAct, localSelectedTarget, localSelectedTarget2, roomId, wolfDeadline, wolfLocked, wolfMaxTargets, wolves]);
+  }, [canAct, isLocked, localSelectedTarget, localSelectedTarget2, roomId, wolfDeadline, wolfMaxTargets, wolves]);
 
   const resetOnPhaseChange = useCallback((_nextPhase: GamePhase) => {
     setLocalSelectedTarget(null);
@@ -141,7 +148,10 @@ export function useWolfRole({
           </div>
         )}
         <button
+          disabled={isLocked || !canAct || !!(wolfDeadline && now >= wolfDeadline)}
           onClick={() => {
+            if (isLocked) return;
+            if (wolfDeadline && Date.now() >= wolfDeadline) return;
             if (!localSelectedTarget) {
               alert("Bạn chưa chọn mục tiêu để cắn.");
               return;
@@ -160,10 +170,16 @@ export function useWolfRole({
                 : `Bạn có chắc chắn muốn cắn ${name1}?`
             );
             if (ok) {
+              setHasSubmittedLock(true);
               socket.emit("wolfLockVote", { roomId });
             }
           }}
-          style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer" }}
+          style={{
+            marginTop: 8,
+            padding: "8px 12px",
+            cursor: isLocked || !canAct || !!(wolfDeadline && now >= wolfDeadline) ? "not-allowed" : "pointer",
+            opacity: isLocked || !canAct || !!(wolfDeadline && now >= wolfDeadline) ? 0.7 : 1,
+          }}
         >
           🐺 CẮN!
         </button>

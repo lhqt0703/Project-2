@@ -54,8 +54,8 @@ export default function Room() {
   useEffect(() => {
     // Khi server gửi cập nhật phòng
     const handleRoom = (data: RoomData) => {
+      if (roomId && data?.id !== roomId) return;
       setRoom(data);
-      localStorage.setItem("hostId", data.hostId);
     };
     socket.on("roomCreated", handleRoom);
     socket.on("roomJoined", handleRoom);
@@ -75,7 +75,6 @@ export default function Room() {
     // Lắng nghe hostChanged để cập nhật hostId realtime
     const handleHostChanged = (newHostId: string) => {
       setRoom(prev => prev ? { ...prev, hostId: newHostId } : prev);
-      localStorage.setItem("hostId", newHostId);
     };
     socket.on("hostChanged", handleHostChanged);
 
@@ -87,7 +86,7 @@ export default function Room() {
       socket.off("positionsUpdated"); 
       socket.off("positionEditorsUpdated"); 
     };
-  }, []); // cần là mảng rỗng để tránh gây lãng phí tài nguyên và lỡ sự kiện
+  }, [roomId, setRoom]); // giữ listener ổn định và lọc đúng room theo URL
 
   useEffect(() => {
     const handleYourRole = (role: string) => {
@@ -196,6 +195,37 @@ export default function Room() {
       socket.off("roleMismatch", handleMismatch);
     };
   }, [room]);
+
+  useEffect(() => {
+    interface WolfRoleMismatchData {
+      currentWolfCount: number;
+      maxAllowedWolfCount: number;
+      playerCount: number;
+    }
+
+    const handleWolfMismatch = (data: WolfRoleMismatchData) => {
+      const targetRoomId = room?.id ?? roomId;
+      if (!targetRoomId) return;
+
+      const ok = window.confirm(
+        `Danh sách vai trò hiện tại có ${data.currentWolfCount} sói, vượt quá mức tối đa ${data.maxAllowedWolfCount} cho phòng ${data.playerCount} người.\n\n` +
+        `Hệ thống sẽ tự giảm bớt số lượng sói để tránh phe sói thắng ngay khi bắt đầu.\n` +
+        `Nhấn OK để hệ thống tự điều chỉnh và bắt đầu trò chơi.\n` +
+        `Nhấn Hủy để quay lại màn hình chọn vai trò.`
+      );
+
+      if (ok) {
+        socket.emit("startGame", { roomId: targetRoomId, forceAdjustWolfCount: true });
+      } else {
+        nav(`/roleselect?roomId=${targetRoomId}`);
+      }
+    };
+
+    socket.on("wolfRoleMismatch", handleWolfMismatch);
+    return () => {
+      socket.off("wolfRoleMismatch", handleWolfMismatch);
+    };
+  }, [nav, room, roomId]);
 
   useEffect(() => {
     // Khi host rời khi game đang diễn ra

@@ -1,1 +1,1 @@
-export type GamePhase = "day" | "night";
+export type GamePhase = "dusk" | "day" | "night";

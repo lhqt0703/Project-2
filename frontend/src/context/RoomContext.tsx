@@ -1,17 +1,42 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { socket } from "../socket";
 
-interface Player {
+export interface Player {
   id: string;
   name: string;
   connected?: boolean;
+  inGame?: boolean;
 }
 
-// RoomData như file Room.tsx
-interface RoomData {
+export type NightActionRole = "Sói" | "Bảo vệ" | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri";
+
+export interface RoomGameRules {
+  allNightActionsSimultaneous: boolean;
+  witchSeeBiteOnlyIfHasHealPotion: boolean;
+  witchHideProtectedBiteInSimultaneous: boolean;
+  witchHideProtectedBiteWhenSequential: boolean;
+  trialInteractionSelectionLimit: number;
+  nonWolfNightActionDurationSec: number;
+  nightActionOrder: NightActionRole[];
+}
+
+export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
+  allNightActionsSimultaneous: false,
+  witchSeeBiteOnlyIfHasHealPotion: true,
+  witchHideProtectedBiteInSimultaneous: false,
+  witchHideProtectedBiteWhenSequential: true,
+  trialInteractionSelectionLimit: 2,
+  nonWolfNightActionDurationSec: 10,
+  nightActionOrder: ["Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
+};
+
+export interface RoomData {
   id: string;
   players: Player[];
   hostId: string;
+  hidePlayerRoleText?: boolean;
+  phase?: string;
+  gameOver?: boolean;
   roles?: string[];
   rolesLocked?: boolean;
   lockedPlayerIds?: string[];
@@ -19,11 +44,17 @@ interface RoomData {
   positionEditors?: string[];
   autoArrangeUsed?: boolean;
   compactCircles?: boolean;
+  gameRules?: RoomGameRules;
 
   // Game-only ephemeral state that may be synced via sockets.
   wolfVotes?: Record<string, string | null>;
   wolfVotes2?: Record<string, string | null>;
   deadPlayers?: string[];
+  nightTurnIndex?: number;
+  nightTurnRole?: NightActionRole | null;
+  nightTurnDeadline?: number | null;
+  nightTurnPaused?: boolean;
+  nightTurnRemainingMs?: number | null;
 }
 
 // Khi nào làm file PlayerPosition riêng thì import từ đó

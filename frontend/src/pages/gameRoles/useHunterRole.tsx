@@ -10,6 +10,9 @@ export function useHunterRole({
   deadPlayers,
   hunterTargetSeq,
   hunterTargetId,
+  allNightActionsSimultaneous,
+  currentNightTurnRole,
+  nightTurnPaused: _nightTurnPaused,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -17,6 +20,9 @@ export function useHunterRole({
   deadPlayers: string[];
   hunterTargetSeq: number;
   hunterTargetId: string | null;
+  allNightActionsSimultaneous: boolean;
+  currentNightTurnRole: string | null;
+  nightTurnPaused: boolean;
 }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -29,8 +35,8 @@ export function useHunterRole({
 
     if (phase === "night") {
       setSelectedPlayerId(null);
-      setShowConfirm(false);
       setLockedTargetId(null);
+      setShowConfirm(false);
     } else {
       setSelectedPlayerId(null);
       setShowConfirm(false);
@@ -60,8 +66,17 @@ export function useHunterRole({
     if (phase !== "night") return false;
     if (role !== "Thợ săn") return false;
     if (socket.id && deadPlayers.includes(socket.id)) return false;
+    if (!allNightActionsSimultaneous) {
+      if (currentNightTurnRole !== "Thợ săn") return false;
+    }
     return true;
-  }, [deadPlayers, phase, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, phase, role]);
+
+  const isHunterTurnActive = useMemo(() => {
+    if (phase !== "night") return false;
+    if (allNightActionsSimultaneous) return true;
+    return currentNightTurnRole === "Thợ săn";
+  }, [allNightActionsSimultaneous, currentNightTurnRole, phase]);
 
   const onPlayerClick = useCallback(
     (playerId: string) => {
@@ -115,7 +130,7 @@ export function useHunterRole({
     modal,
     playerPositionsProps: {
       selectedOutlinePlayerId:
-        role === "Thợ săn" && phase === "night" ? (lockedTargetId || selectedPlayerId) : null,
+        role === "Thợ săn" && isHunterTurnActive ? (lockedTargetId || selectedPlayerId) : null,
     },
   };
 }

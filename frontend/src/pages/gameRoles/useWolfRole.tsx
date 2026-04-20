@@ -21,6 +21,9 @@ export function useWolfRole({
   wolves,
   activeWolves,
   wolfMaxTargets,
+  allNightActionsSimultaneous,
+  currentNightTurnRole,
+  nightTurnPaused,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -32,6 +35,9 @@ export function useWolfRole({
   wolves: string[];
   activeWolves: string[];
   wolfMaxTargets: number;
+  allNightActionsSimultaneous: boolean;
+  currentNightTurnRole: string | null;
+  nightTurnPaused: boolean;
 }) {
   const [localSelectedTarget, setLocalSelectedTarget] = useState<string | null>(null);
   const [localSelectedTarget2, setLocalSelectedTarget2] = useState<string | null>(null);
@@ -42,12 +48,12 @@ export function useWolfRole({
 
   useEffect(() => {
     // Chỉ tick khi cần hiển thị countdown cho sói
-    if (!isWolfTeam || phase !== "night" || !wolfDeadline) return;
+    if (!isWolfTeam || phase !== "night" || !wolfDeadline || nightTurnPaused) return;
     // Refresh immediately to avoid showing stale remaining seconds when phase switches quickly.
     setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [isWolfTeam, phase, wolfDeadline]);
+  }, [isWolfTeam, nightTurnPaused, phase, wolfDeadline]);
 
   const activeWolvesAlive = useMemo(() => {
     const effective = (activeWolves.length ? activeWolves : wolves)
@@ -56,14 +62,20 @@ export function useWolfRole({
     return effective;
   }, [activeWolves, deadPlayers, room.players, wolves]);
 
+  const isWolfTurnActive = useMemo(() => {
+    if (phase !== "night") return false;
+    if (allNightActionsSimultaneous) return true;
+    return currentNightTurnRole === "Sói";
+  }, [allNightActionsSimultaneous, currentNightTurnRole, phase]);
+
   useEffect(() => {
-    // Reset local selection when wolf phase starts (deadline changes)
-    if (isWolfTeam && phase === "night") {
+    // Reset local selection only when wolf turn actually starts, not when deadline is adjusted on pause/resume.
+    if (isWolfTeam && isWolfTurnActive) {
       setLocalSelectedTarget(null);
       setLocalSelectedTarget2(null);
       setHasSubmittedLock(false);
     }
-  }, [isWolfTeam, phase, wolfDeadline]);
+  }, [isWolfTeam, isWolfTurnActive]);
 
   const isLocked = useMemo(() => {
     if (socket.id && wolfLocked?.[socket.id]) return true;
@@ -74,8 +86,13 @@ export function useWolfRole({
     if (phase !== "night") return false;
     if (!isWolfTeam) return false;
     if (socket.id && deadPlayers.includes(socket.id)) return false;
+    if (!allNightActionsSimultaneous) {
+      if (currentNightTurnRole !== "Sói") return false;
+    }
     return true;
-  }, [deadPlayers, isWolfTeam, phase]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, isWolfTeam, phase]);
+
+  const deadlineReached = !!(wolfDeadline && Date.now() >= wolfDeadline && !nightTurnPaused);
 
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;
@@ -87,7 +104,7 @@ export function useWolfRole({
     // lock vote rồi thì không được chọn nữa
     if (isLocked) return true;
     // hoặc là hết thời gian
-    if (wolfDeadline && Date.now() >= wolfDeadline) return true;
+    if (deadlineReached) return true;
 
     const isWolfTeamTarget = wolves.includes(playerId);
 
@@ -131,7 +148,7 @@ export function useWolfRole({
     setLocalSelectedTarget(playerId);
     socket.emit("wolfChooseTarget", { roomId, targetId: playerId });
     return true;
-  }, [canAct, isLocked, localSelectedTarget, localSelectedTarget2, roomId, wolfDeadline, wolfMaxTargets, wolves]);
+  }, [canAct, deadlineReached, isLocked, localSelectedTarget, localSelectedTarget2, roomId, wolfMaxTargets, wolves]);
 
   const resetOnPhaseChange = useCallback((_nextPhase: GamePhase) => {
     setLocalSelectedTarget(null);
@@ -140,7 +157,7 @@ export function useWolfRole({
   }, []);
 
   const panel =
-    isWolfTeam && phase === "night" && socket.id && !deadPlayers.includes(socket.id) ? (
+    isWolfTeam && isWolfTurnActive && socket.id && !deadPlayers.includes(socket.id) ? (
       <div style={{ marginTop: 12 }}>
         {wolfMaxTargets >= 2 && (
           <div style={{ marginBottom: 8 }}>
@@ -148,10 +165,10 @@ export function useWolfRole({
           </div>
         )}
         <button
-          disabled={isLocked || !canAct || !!(wolfDeadline && now >= wolfDeadline)}
+          disabled={isLocked || !canAct || deadlineReached}
           onClick={() => {
             if (isLocked) return;
-            if (wolfDeadline && Date.now() >= wolfDeadline) return;
+            if (deadlineReached) return;
             if (!localSelectedTarget) {
               alert("Bạn chưa chọn mục tiêu để cắn.");
               return;
@@ -177,15 +194,15 @@ export function useWolfRole({
           style={{
             marginTop: 8,
             padding: "8px 12px",
-            cursor: isLocked || !canAct || !!(wolfDeadline && now >= wolfDeadline) ? "not-allowed" : "pointer",
-            opacity: isLocked || !canAct || !!(wolfDeadline && now >= wolfDeadline) ? 0.7 : 1,
+            cursor: isLocked || !canAct || deadlineReached ? "not-allowed" : "pointer",
+            opacity: isLocked || !canAct || deadlineReached ? 0.7 : 1,
           }}
         >
           🐺 CẮN!
         </button>
         {wolfDeadline && (
           <div style={{ marginTop: 6 }}>
-            Thời gian còn lại: {Math.max(0, Math.ceil((wolfDeadline - now) / 1000))}s
+            Thời gian còn lại: {Math.max(0, Math.ceil((wolfDeadline - now) / 1000))}s {nightTurnPaused ? "(đang tạm ngưng)" : ""}
           </div>
         )}
       </div>
@@ -197,12 +214,12 @@ export function useWolfRole({
     resetOnPhaseChange,
     playerPositionsProps: {
       selectedOutlinePlayerIds:
-        isWolfTeam && phase === "night"
+        isWolfTeam && isWolfTurnActive
           ? [localSelectedTarget, localSelectedTarget2].filter(Boolean)
           : [],
-      showWolfVoteBadges: isWolfTeam && phase === "night",
+      showWolfVoteBadges: isWolfTeam && isWolfTurnActive,
       wolfVoteVoterIds: activeWolvesAlive,
-      showWolfBadges: isWolfTeam && phase === "night",
+      showWolfBadges: isWolfTeam && isWolfTurnActive,
       wolfBadgePlayerIds: wolves,
     },
   };

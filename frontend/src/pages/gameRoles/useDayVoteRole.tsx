@@ -143,7 +143,7 @@ export function useDayVoteRole({
       <div style={{ marginTop: 12 }}>
         {trialStage === "none" && (
           <>
-            {!dayDeadline && (
+            {!dayDeadline && !!dayDiscussionDeadline && (
               <div style={{ marginTop: 6, opacity: 0.9 }}>
                 Đang thảo luận, chưa đến giai đoạn biểu quyết.
               </div>
@@ -211,7 +211,6 @@ export function useDayVoteRole({
               <button
                 onClick={() => socket.emit("trialCutInteraction", { roomId })}
                 style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer" }}
-                disabled={trialInteractionCut}
               >
                 ✂️ Cắt tương tác
               </button>
@@ -248,7 +247,10 @@ export function useDayVoteRole({
     onPlayerClick,
     panel,
     playerPositionsProps: {
-      selectedOutlinePlayerId: phase === "day" ? localSelectedTarget : null,
+      selectedOutlinePlayerId:
+        phase === "day" && trialStage === "none" && !!dayDeadline
+          ? localSelectedTarget
+          : null,
       showWolfVoteBadges: phase === "day" && !!dayDeadline,
       wolfVoteVoterIds: phase === "day" && !!dayDeadline ? dayVoters : [],
       trialOrangePlayerId: trialTargetId,

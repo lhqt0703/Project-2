@@ -8,8 +8,11 @@ export function useGuardianRole({
   phase,
   role,
   deadPlayers,
-  guardianProtectedSeq,
+  guardianProtectedSeq: _guardianProtectedSeq,
   guardianProtectedTargetId,
+  allNightActionsSimultaneous,
+  currentNightTurnRole,
+  nightTurnPaused: _nightTurnPaused,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -17,6 +20,9 @@ export function useGuardianRole({
   deadPlayers: string[];
   guardianProtectedSeq: number;
   guardianProtectedTargetId: string | null;
+  allNightActionsSimultaneous: boolean;
+  currentNightTurnRole: string | null;
+  nightTurnPaused: boolean;
 }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -58,8 +64,17 @@ export function useGuardianRole({
     if (phase !== "night") return false;
     if (role !== "Bảo vệ") return false;
     if (socket.id && deadPlayers.includes(socket.id)) return false;
+    if (!allNightActionsSimultaneous) {
+      if (currentNightTurnRole !== "Bảo vệ") return false;
+    }
     return true;
-  }, [deadPlayers, phase, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, phase, role]);
+
+  const isGuardianTurnActive = useMemo(() => {
+    if (phase !== "night") return false;
+    if (allNightActionsSimultaneous) return true;
+    return currentNightTurnRole === "Bảo vệ";
+  }, [allNightActionsSimultaneous, currentNightTurnRole, phase]);
 
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;
@@ -112,7 +127,7 @@ export function useGuardianRole({
     resetOnPhaseChange,
     playerPositionsProps: {
       selectedOutlinePlayerId:
-        role === "Bảo vệ" && phase === "night" ? (lockedTargetId || selectedPlayerId) : null,
+        role === "Bảo vệ" && isGuardianTurnActive ? (lockedTargetId || selectedPlayerId) : null,
     },
   };
 }

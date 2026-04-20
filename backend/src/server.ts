@@ -17,12 +17,26 @@ interface Player {
   id: string;
   name: string;
   connected?: boolean; // true = đang online; false = mất kết nối
+  inGame?: boolean; // true = đang ở màn Game; false = đang ở Room/Lobby
 }
+
+interface RoomGameRules {
+  allNightActionsSimultaneous: boolean;
+  witchSeeBiteOnlyIfHasHealPotion: boolean;
+  witchHideProtectedBiteInSimultaneous: boolean;
+  witchHideProtectedBiteWhenSequential: boolean;
+  trialInteractionSelectionLimit: number;
+  nonWolfNightActionDurationSec: number;
+  nightActionOrder: NightActionRole[];
+}
+
+type NightActionRole = "Sói" | "Bảo vệ" | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri";
 
 interface Room {
   id: string;
   players: Player[];
   hostId: string; // ai là quản trò
+  hidePlayerRoleText?: boolean; // host toggle: ẩn dòng role ở phía người chơi
   roles?: string[]; // danh sách role được chọn cho phòng
   rolesLocked?: boolean; // đã xác nhận role chưa
   lockedPlayerIds?: string[]; // danh sách id người chơi lúc xác nhận role
@@ -87,6 +101,15 @@ interface Room {
   // hunterId -> targetId (mỗi đêm có thể chọn 1 người; nếu hunter chết trong đêm thì target cũng chết)
   hunterTargetTonight?: Record<string, string | null>;
 
+  // --- Lượt đêm tuần tự (khi allNightActionsSimultaneous = false) ---
+  nightTurnIndex?: number;
+  nightTurnRole?: NightActionRole | null;
+  nightTurnDeadline?: number | null;
+  nightTurnPaused?: boolean;
+  nightTurnRemainingMs?: number | null;
+  nightTurnTimer?: NodeJS.Timeout | null;
+  nightTurnOrderSnapshot?: NightActionRole[];
+
   // UI flag: after the first auto-arrange, subsequent uses should confirm
   autoArrangeUsed?: boolean;
 
@@ -101,6 +124,8 @@ interface Room {
   gameOver?: boolean;
   winner?: "wolves" | "villagers" | undefined;
 
+  gameRules?: RoomGameRules;
+
   // --- Linh sói (Spirit Wolf) ---
   spiritWolfId?: string | null;
   spiritWolfDecisionMade?: boolean;
@@ -111,6 +136,65 @@ interface Room {
   // If true, Linh sói will become wolf-aligned starting next night.
   spiritWolfWolfAlignedPending?: boolean;
   spiritWolfPendingPoisonedWolfId?: string | null;
+}
+
+const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
+  allNightActionsSimultaneous: false,
+  witchSeeBiteOnlyIfHasHealPotion: true,
+  witchHideProtectedBiteInSimultaneous: false,
+  witchHideProtectedBiteWhenSequential: true,
+  trialInteractionSelectionLimit: 2,
+  nonWolfNightActionDurationSec: 10,
+  nightActionOrder: ["Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
+};
+
+const WOLF_TURN_DURATION_MS = 20_000;
+
+const NIGHT_ACTION_ROLE_SET = new Set<NightActionRole>(DEFAULT_ROOM_GAME_RULES.nightActionOrder);
+
+function normalizeNightActionOrder(input: unknown): NightActionRole[] {
+  const raw = Array.isArray(input) ? input : [];
+  const unique: NightActionRole[] = [];
+  for (const role of raw) {
+    if (typeof role !== "string") continue;
+    if (!NIGHT_ACTION_ROLE_SET.has(role as NightActionRole)) continue;
+    if (unique.includes(role as NightActionRole)) continue;
+    unique.push(role as NightActionRole);
+  }
+
+  for (const role of DEFAULT_ROOM_GAME_RULES.nightActionOrder) {
+    if (!unique.includes(role)) unique.push(role);
+  }
+  return unique;
+}
+
+function clampTrialInteractionSelectionLimit(value: unknown) {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_ROOM_GAME_RULES.trialInteractionSelectionLimit;
+  return Math.max(0, Math.min(10, Math.floor(n)));
+}
+
+function clampNonWolfNightActionDurationSec(value: unknown) {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_ROOM_GAME_RULES.nonWolfNightActionDurationSec;
+  return Math.max(10, Math.min(30, Math.floor(n)));
+}
+
+function buildRoomGameRules(input?: Partial<RoomGameRules> | null): RoomGameRules {
+  const merged: RoomGameRules = {
+    ...DEFAULT_ROOM_GAME_RULES,
+    ...(input || {}),
+    trialInteractionSelectionLimit: clampTrialInteractionSelectionLimit(input?.trialInteractionSelectionLimit),
+    nonWolfNightActionDurationSec: clampNonWolfNightActionDurationSec(input?.nonWolfNightActionDurationSec),
+    nightActionOrder: normalizeNightActionOrder(input?.nightActionOrder),
+  };
+
+  return merged;
+}
+
+function ensureRoomGameRules(room: Room): RoomGameRules {
+  room.gameRules = buildRoomGameRules(room.gameRules);
+  return room.gameRules;
 }
 
 type GameLogEntryPhase = "night" | "day";
@@ -141,7 +225,7 @@ type GameLogEntry =
   | { type: "seer_check"; phase: GameLogEntryPhase; actorId: string; targetId: string; isWolf: boolean }
   | { type: "hunter_mark"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "hunter_shot"; phase: GameLogEntryPhase; actorId: string; targetId: string }
-  | { type: "spirit_wolf_decision"; phase: GameLogEntryPhase; saved: boolean }
+  | { type: "spirit_wolf_decision"; phase: GameLogEntryPhase; saved: boolean; timedOut?: boolean }
   | { type: "saved_by_guardian"; phase: GameLogEntryPhase; targetIds: string[] }
   | { type: "saved_by_witch"; phase: GameLogEntryPhase; targetIds: string[] }
   | { type: "eliminated"; phase: GameLogEntryPhase; targetIds: string[]; causesByTarget?: Record<string, EliminationCause[]> }
@@ -270,12 +354,18 @@ function emitHunterTarget(roomId: string, hunterId: string) {
 }
 
 function getWitchPendingDeaths(room: Room): string[] {
+  const rules = ensureRoomGameRules(room);
   const guardianTarget = room.protectedTonight;
   const dead = new Set(room.deadPlayers || []);
 
+  const hideProtectedBite =
+    rules.allNightActionsSimultaneous
+      ? rules.witchHideProtectedBiteInSimultaneous
+      : rules.witchHideProtectedBiteWhenSequential;
+
   const candidates = [room.killedTonight, room.killedTonightExtra]
     .filter(Boolean)
-    .filter(pid => pid !== guardianTarget) as string[];
+    .filter(pid => (hideProtectedBite ? pid !== guardianTarget : true)) as string[];
 
   const unique: string[] = [];
   for (const pid of candidates) {
@@ -291,11 +381,13 @@ function emitWitchPendingDeath(roomId: string) {
   const room = rooms[roomId];
   if (!room) return;
 
+  const rules = ensureRoomGameRules(room);
   const pendingTargets = getWitchPendingDeaths(room);
   for (const wid of getWitches(room)) {
     ensureWitchState(room, wid);
     const healUsed = room.witchPotions?.[wid]?.healUsed === true;
-    const targetIds = healUsed ? [] : pendingTargets;
+    const canSeePending = !rules.witchSeeBiteOnlyIfHasHealPotion || !healUsed;
+    const targetIds = canSeePending ? pendingTargets : [];
     io.to(wid).emit("witchPendingDeath", { targetId: targetIds[0] ?? null, targetIds });
   }
 }
@@ -338,6 +430,7 @@ function emitWitchPotions(roomId: string, witchId: string) {
 }
 
 function toPublicRoom(room: Room) {
+  ensureRoomGameRules(room);
   // IMPORTANT: tuyệt đối không emit NodeJS.Timeout (wolfTimer) vì nó gây lỗi serialize.
   // Trả về object thuần JSON.
   const {
@@ -360,6 +453,7 @@ function toPublicRoom(room: Room) {
     dayTimer: _dayTimer,
     trialDefenseTimer: _trialDefenseTimer,
     trialVerdictTimer: _trialVerdictTimer,
+    nightTurnTimer: _nightTurnTimer,
     wolfDeadline: _wolfDeadline,
     killedTonight: _killedTonight,
     killedTonightExtra: _killedTonightExtra,
@@ -370,7 +464,12 @@ function toPublicRoom(room: Room) {
   } = room;
   return {
     ...rest,
-    players: room.players.map(p => ({ id: p.id, name: p.name, connected: p.connected !== false })),
+    players: room.players.map(p => ({
+      id: p.id,
+      name: p.name,
+      connected: p.connected !== false,
+      inGame: p.inGame === true,
+    })),
   };
 }
 
@@ -475,6 +574,179 @@ function clearTrialState(room: Room) {
   room.trialInteractionSelectionLimit = 0;
   room.trialInteractionQueuedIds = [];
   room.trialVotes = {};
+}
+
+function clearNightTurnTimer(room: Room) {
+  if (room.nightTurnTimer) {
+    clearTimeout(room.nightTurnTimer);
+    room.nightTurnTimer = null;
+  }
+}
+
+function resetNightTurnState(room: Room) {
+  clearNightTurnTimer(room);
+  room.nightTurnIndex = -1;
+  room.nightTurnRole = null;
+  room.nightTurnDeadline = null;
+  room.nightTurnPaused = false;
+  room.nightTurnRemainingMs = null;
+  delete room.nightTurnOrderSnapshot;
+}
+
+function canPerformNightRoleAction(room: Room, playerId: string, expectedRole: NightActionRole) {
+  if (room.phase !== "night") return false;
+  if ((room.deadPlayers || []).includes(playerId)) return false;
+
+  const rules = ensureRoomGameRules(room);
+  if (rules.allNightActionsSimultaneous) return true;
+  return room.nightTurnRole === expectedRole;
+}
+
+function getSelectedNightActionRoles(room: Room): NightActionRole[] {
+  const sourceRoles = room.playerRoles
+    ? Object.values(room.playerRoles)
+    : room.roles || [];
+
+  const hasWolfRole = sourceRoles.some((role) => isWolfRole(role));
+  const selected = new Set<NightActionRole>();
+
+  if (hasWolfRole) selected.add("Sói");
+  for (const role of ["Bảo vệ", "Phù thủy", "Thợ săn", "Tiên tri"] as NightActionRole[]) {
+    if (sourceRoles.includes(role)) selected.add(role);
+  }
+
+  return Array.from(selected);
+}
+
+function shouldIncludeSpiritWolfTurn(room: Room) {
+  if (room.spiritWolfDecisionMade) return false;
+  if (!room.spiritWolfPendingPoisonedWolfId) return false;
+  if (!isSpiritWolfAlive(room)) return false;
+  if ((room.deadPlayers || []).includes(room.spiritWolfPendingPoisonedWolfId)) return false;
+  return true;
+}
+
+function getBaseNightActionOrder(room: Room) {
+  const rules = ensureRoomGameRules(room);
+  const selectedRoles = new Set(getSelectedNightActionRoles(room));
+  return rules.nightActionOrder.filter((role) => selectedRoles.has(role));
+}
+
+function getEffectiveNightActionOrder(room: Room) {
+  const order = room.nightTurnOrderSnapshot ? [...room.nightTurnOrderSnapshot] : getBaseNightActionOrder(room);
+
+  if (shouldIncludeSpiritWolfTurn(room)) {
+    const spiritRole: NightActionRole = "Linh sói";
+    if (!order.includes(spiritRole)) {
+      const witchIndex = order.indexOf("Phù thủy");
+      if (witchIndex >= 0) {
+        order.splice(witchIndex + 1, 0, spiritRole);
+      } else {
+        order.push(spiritRole);
+      }
+    }
+  }
+
+  return order;
+}
+
+function insertSpiritWolfIntoNightOrder(room: Room) {
+  const spiritRole: NightActionRole = "Linh sói";
+  if (!room.nightTurnOrderSnapshot) {
+    room.nightTurnOrderSnapshot = getBaseNightActionOrder(room);
+  }
+  if (room.nightTurnOrderSnapshot.includes(spiritRole)) return;
+
+  const insertAt = Math.min((room.nightTurnIndex ?? -1) + 1, room.nightTurnOrderSnapshot.length);
+  room.nightTurnOrderSnapshot.splice(insertAt, 0, spiritRole);
+}
+
+function finishSpiritWolfTurn(roomId: string, timedOut: boolean) {
+  const room = rooms[roomId];
+  if (!room) return;
+  if (room.phase !== "night") return;
+  if (room.nightTurnRole !== SPIRIT_WOLF_ROLE) return;
+
+  const pendingTargetId = room.spiritWolfPendingPoisonedWolfId;
+  if (timedOut && !room.spiritWolfDecisionMade) {
+    room.spiritWolfDecisionMade = true;
+    room.spiritWolfChoseSave = false;
+    if (pendingTargetId) {
+      appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", saved: false, timedOut: true });
+    }
+    const swid = getSpiritWolfId(room);
+    if (swid) {
+      io.to(swid).emit("spiritWolfDecisionRecorded", { saved: false });
+    }
+  }
+
+  room.spiritWolfPendingPoisonedWolfId = null;
+
+  io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  checkAndEndGame(roomId, timedOut ? "spirit_wolf_timeout" : "spirit_wolf_decision");
+
+  startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
+}
+
+function clearGameTimers(room: Room) {
+  clearNightTurnTimer(room);
+  if (room.wolfTimer) {
+    clearTimeout(room.wolfTimer);
+    room.wolfTimer = null;
+  }
+  if (room.dayDiscussionTimer) {
+    clearTimeout(room.dayDiscussionTimer);
+    room.dayDiscussionTimer = null;
+  }
+  if (room.dayTimer) {
+    clearTimeout(room.dayTimer);
+    room.dayTimer = null;
+  }
+  if (room.trialDefenseTimer) {
+    clearTimeout(room.trialDefenseTimer);
+    room.trialDefenseTimer = null;
+  }
+  if (room.trialVerdictTimer) {
+    clearTimeout(room.trialVerdictTimer);
+    room.trialVerdictTimer = null;
+  }
+}
+
+function resetRoomFromGameToLobby(room: Room) {
+  clearGameTimers(room);
+  clearTrialState(room);
+  resetNightTurnState(room);
+
+  delete room.phase;
+  room.gameOver = true;
+  room.winner = undefined;
+
+  room.wolves = [];
+  room.wolfVotes = {};
+  room.wolfVotes2 = {};
+  room.wolfLocked = {};
+  room.wolfDeadline = null;
+  room.killedTonight = null;
+  room.killedTonightExtra = null;
+  room.wolfBonusBiteThisNight = false;
+  room.wolfExtraBiteNextNight = false;
+
+  room.dayVoters = [];
+  room.dayVotes = {};
+  room.dayLocked = {};
+  room.dayDiscussionDeadline = null;
+  room.dayDeadline = null;
+
+  room.deadPlayers = [];
+  room.protectedTonight = null;
+  room.lastProtected = null;
+  room.seerUsedTonight = {};
+  room.hunterTargetTonight = {};
+  room.witchHealTargetTonight = {};
+  room.witchPoisonTargetTonight = {};
+  room.spiritWolfPendingPoisonedWolfId = null;
+
+  room.players = room.players.map((p) => ({ ...p, inGame: false }));
 }
 
 function buildTrialInteractionUpdatedPayload(room: Room) {
@@ -645,6 +917,7 @@ function startTrialDefense(roomId: string, targetId: string) {
   if (!room) return;
   if (room.gameOver) return;
   if (room.phase !== "day") return;
+  const rules = ensureRoomGameRules(room);
 
   clearTrialState(room);
 
@@ -655,7 +928,7 @@ function startTrialDefense(roomId: string, targetId: string) {
   room.trialInteractionActiveIds = [];
   room.trialSelectedInteractorId = null;
   room.trialSelectedInteractorIds = [];
-  room.trialInteractionSelectionLimit = 2;
+  room.trialInteractionSelectionLimit = rules.trialInteractionSelectionLimit;
   room.trialInteractionQueuedIds = [];
   room.trialVotes = {};
 
@@ -665,6 +938,7 @@ function startTrialDefense(roomId: string, targetId: string) {
     targetId,
     stage: "defense",
     defenseDeadline: room.trialDefenseDeadline,
+    selectionLimit: room.trialInteractionSelectionLimit,
   });
   io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
   io.to(roomId).emit("roomUpdated", toPublicRoom(room));
@@ -1208,28 +1482,39 @@ function resolveDraggedAgainstFixedOthers(dragged: PlayerPos, fixedOthers: Playe
 }
 
 
-function startWolfPhase(roomId: string) {
+function startWolfPhase(roomId: string, opts?: { durationMs?: number; initializeVotes?: boolean }) {
   const room = rooms[roomId];
   if (!room) return;
 
+  const initializeVotes = opts?.initializeVotes !== false;
   const wolves = room.players.filter(p => isWolfRole(room.playerRoles?.[p.id]));
 
-  room.wolfVotes = {};
-  room.wolfVotes2 = {};
-  room.wolfLocked = {};
-  wolves.forEach(w => {
-    room.wolfVotes![w.id] = null;
-    room.wolfVotes2![w.id] = null;
-    room.wolfLocked![w.id] = false;
-  });
+  if (initializeVotes) {
+    room.wolfVotes = {};
+    room.wolfVotes2 = {};
+    room.wolfLocked = {};
+    wolves.forEach(w => {
+      room.wolfVotes![w.id] = null;
+      room.wolfVotes2![w.id] = null;
+      room.wolfLocked![w.id] = false;
+    });
+  } else {
+    room.wolfVotes = room.wolfVotes || {};
+    room.wolfVotes2 = room.wolfVotes2 || {};
+    room.wolfLocked = room.wolfLocked || {};
+  }
+
+  const durationMs = Math.max(0, Math.floor(opts?.durationMs ?? WOLF_TURN_DURATION_MS));
+
   // Time chờ cho sói cắn
-  room.wolfDeadline = Date.now() + 20_000; // 20 giây
+  room.wolfDeadline = Date.now() + durationMs;
   // broadcast cho cả phòng (client cần biết deadline để đếm ngược)
   io.to(`wolves_${roomId}`).emit("wolfPhaseStarted", {
     wolves: wolves.map(w => w.id),
     activeWolves: getActiveWolves(room),
     deadline: room.wolfDeadline,
     maxTargets: room.wolfBonusBiteThisNight ? 2 : 1,
+    resetVotes: initializeVotes,
   });
 
   // Ensure clients have a defined state for bonus target voting.
@@ -1242,9 +1527,107 @@ function startWolfPhase(roomId: string) {
   }
 
   // khi hết thời gian → xử lý vote
+  if (durationMs <= 0) {
+    finishWolfVoting(roomId);
+    return;
+  }
+
   room.wolfTimer = setTimeout(() => {
     finishWolfVoting(roomId);
-  }, 20_000);
+  }, durationMs);
+}
+
+function getRoleTurnDurationMs(room: Room, role: NightActionRole) {
+  if (role === "Sói") return WOLF_TURN_DURATION_MS;
+  const rules = ensureRoomGameRules(room);
+  return clampNonWolfNightActionDurationSec(rules.nonWolfNightActionDurationSec) * 1000;
+}
+
+function startNightTurnByIndex(roomId: string, index: number, opts?: { durationMs?: number; initializeWolfVotes?: boolean }) {
+  const room = rooms[roomId];
+  if (!room) return;
+  if (room.phase !== "night") return;
+
+  const rules = ensureRoomGameRules(room);
+  if (rules.allNightActionsSimultaneous) return;
+
+  clearNightTurnTimer(room);
+
+  const order = getEffectiveNightActionOrder(room);
+  if (index < 0 || index >= order.length) {
+    room.nightTurnIndex = order.length;
+    room.nightTurnRole = null;
+    room.nightTurnDeadline = null;
+    room.nightTurnPaused = false;
+    room.nightTurnRemainingMs = null;
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    return;
+  }
+
+  const role = order[index]!;
+  const durationMs = Math.max(0, Math.floor(opts?.durationMs ?? getRoleTurnDurationMs(room, role)));
+
+  room.nightTurnIndex = index;
+  room.nightTurnRole = role;
+  room.nightTurnPaused = false;
+  room.nightTurnRemainingMs = durationMs;
+  room.nightTurnDeadline = Date.now() + durationMs;
+
+  if (role === "Sói") {
+    startWolfPhase(roomId, {
+      durationMs,
+      initializeVotes: opts?.initializeWolfVotes !== false,
+    });
+  } else if (role === "Linh sói") {
+    emitSpiritWolfDecisionNeeded(roomId);
+    if (durationMs <= 0) {
+      setTimeout(() => finishSpiritWolfTurn(roomId, true), 0);
+    } else {
+      room.nightTurnTimer = setTimeout(() => {
+        finishSpiritWolfTurn(roomId, true);
+      }, durationMs);
+    }
+  } else {
+    if (durationMs <= 0) {
+      setTimeout(() => {
+        const latest = rooms[roomId];
+        if (!latest) return;
+        if (latest.phase !== "night") return;
+        if (latest.nightTurnRole !== role) return;
+        startNightTurnByIndex(roomId, index + 1);
+      }, 0);
+    } else {
+      room.nightTurnTimer = setTimeout(() => {
+        startNightTurnByIndex(roomId, index + 1);
+      }, durationMs);
+    }
+  }
+
+  io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+}
+
+function startNightTurnFlow(roomId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  if (room.phase !== "night") return;
+
+  const rules = ensureRoomGameRules(room);
+  resetNightTurnState(room);
+  room.nightTurnOrderSnapshot = getBaseNightActionOrder(room);
+
+  if (rules.allNightActionsSimultaneous) {
+    startWolfPhase(roomId, { initializeVotes: true, durationMs: WOLF_TURN_DURATION_MS });
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    return;
+  }
+
+  const order = getEffectiveNightActionOrder(room);
+  if (!order.length) {
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    return;
+  }
+
+  startNightTurnByIndex(roomId, 0, { initializeWolfVotes: true });
 }
 
 function getWolfRoleCount(roles: string[] | undefined) {
@@ -1401,6 +1784,11 @@ function finishWolfVoting(roomId: string) {
 
   // Phù thủy chỉ thấy "người sắp chết" nếu không bị bảo vệ cứu.
   emitWitchPendingDeath(roomId);
+
+  const rules = ensureRoomGameRules(room);
+  if (!rules.allNightActionsSimultaneous && room.phase === "night" && room.nightTurnRole === "Sói") {
+    startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
+  }
   // Lưu trạng thái: thực tế xử lý "chết" sẽ diễn ra khi host chuyển sang buổi sáng
 }
 
@@ -1408,18 +1796,20 @@ function finishWolfVoting(roomId: string) {
 
 // Khi client kết nối
 io.on("connection", (socket) => {
-  socket.on("createRoom", ({ name }) => {
+  socket.on("createRoom", ({ name, gameRules }) => {
     const roomId = generateRoomId(activeRooms);
 
     rooms[roomId] = {
       id: roomId,
-      players: [{ id: socket.id, name, connected: true }],
+      players: [{ id: socket.id, name, connected: true, inGame: false }],
       hostId: socket.id,
+      hidePlayerRoleText: false,
       layoutHeightPx: BASE_FRAME_HEIGHT_PX,
       positions: ensureNonOverlappingPositions([socket.id], undefined, { ...POSITION_LAYOUT, heightPx: BASE_FRAME_HEIGHT_PX }),   // khởi tạo vị trí
       positionEditors: [], // ai được phép sắp xếp
       autoArrangeUsed: false,
       compactCircles: false,
+      gameRules: buildRoomGameRules(gameRules),
     };
 
     socket.join(roomId);
@@ -1435,7 +1825,9 @@ io.on("connection", (socket) => {
       return;
     }
 
-    room.players.push({ id: socket.id, name, connected: true });
+    ensureRoomGameRules(room);
+
+    room.players.push({ id: socket.id, name, connected: true, inGame: false });
 
     // Expand/shrink layout height as needed, without visually moving existing players.
     const nextHeightPx = desiredLayoutHeightPx(room.players.length);
@@ -1455,6 +1847,7 @@ io.on("connection", (socket) => {
   socket.on("getRoom", (roomId) => {
     const room = rooms[roomId];
     if (room) {
+      ensureRoomGameRules(room);
       socket.emit("roomUpdated", toPublicRoom(room));
       io.to(roomId).emit("positionsUpdated", room.positions);
       io.to(roomId).emit("positionEditorsUpdated", room.positionEditors || []);
@@ -1479,6 +1872,7 @@ io.on("connection", (socket) => {
           targetId: room.trialTargetId,
           stage: "defense",
           defenseDeadline: room.trialDefenseDeadline || null,
+          selectionLimit: room.trialInteractionSelectionLimit,
         });
         io.to(socket.id).emit("trialInteractionUpdated", {
           ...buildTrialInteractionUpdatedPayload(room),
@@ -1508,7 +1902,11 @@ io.on("connection", (socket) => {
 
       // Re-send Spirit Wolf pending decision on refresh/reconnect.
       if (room.playerRoles?.[socket.id] === SPIRIT_WOLF_ROLE) {
-        if (!room.spiritWolfDecisionMade && room.spiritWolfPendingPoisonedWolfId) {
+        if (
+          room.nightTurnRole === SPIRIT_WOLF_ROLE &&
+          !room.spiritWolfDecisionMade &&
+          room.spiritWolfPendingPoisonedWolfId
+        ) {
           emitSpiritWolfDecisionNeeded(roomId);
         }
       }
@@ -1516,6 +1914,66 @@ io.on("connection", (socket) => {
     } else {
       socket.emit("errorMessage", "Phòng không tồn tại :(");
     }
+  });
+
+  socket.on("setPlayerViewState", ({ roomId, view }: { roomId: string; view: "room" | "game" }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    const idx = room.players.findIndex((p) => p.id === socket.id);
+    if (idx < 0) return;
+
+    const nextInGame = view === "game";
+    const current = room.players[idx];
+    if (!current || current.inGame === nextInGame) return;
+
+    room.players[idx] = { ...current, inGame: nextInGame };
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("updateRoomGameRules", ({ roomId, rules }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (socket.id !== room.hostId) return;
+    if (!!room.phase && !room.gameOver) {
+      socket.emit("errorMessage", "Không thể thay đổi luật khi ván chơi đang diễn ra.");
+      return;
+    }
+
+    room.gameRules = buildRoomGameRules({ ...(ensureRoomGameRules(room) || {}), ...(rules || {}) });
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("requestReturnToRoom", ({ roomId }: { roomId: string }) => {
+    const room = rooms[roomId];
+    if (!room) {
+      io.to(socket.id).emit("returnToRoomResult", { ok: false, reason: "room_closed" });
+      return;
+    }
+
+    const idx = room.players.findIndex((p) => p.id === socket.id);
+    if (idx < 0) {
+      io.to(socket.id).emit("returnToRoomResult", { ok: false, reason: "kicked" });
+      return;
+    }
+
+    const current = room.players[idx];
+    if (current) {
+      room.players[idx] = { ...current, inGame: false };
+      io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    }
+
+    io.to(socket.id).emit("returnToRoomResult", { ok: true, roomId });
+  });
+
+  socket.on("hostReturnToRoom", ({ roomId }: { roomId: string }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (socket.id !== room.hostId) return;
+    if (!room.phase || room.gameOver) return;
+
+    resetRoomFromGameToLobby(room);
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    io.to(roomId).emit("forceReturnToRoom", { roomId, reason: "host_returned_to_room" });
   });
 
   socket.on("rolesSelected", ({ roomId, roles }) => {
@@ -1581,6 +2039,7 @@ io.on("connection", (socket) => {
       room.playerRoles![player.id] = role;
       io.to(player.id).emit("yourRole", role);
     });
+    room.players = room.players.map((p) => ({ ...p, inGame: true }));
 
     // Thiết lập lại danh sách sói để các chức năng sói hoạt động đúng
     room.wolves = room.players
@@ -1957,6 +2416,45 @@ io.on("connection", (socket) => {
       io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     }
 
+    // Reset toàn bộ state theo ván cũ trước khi deal ván mới.
+    clearGameTimers(room);
+    clearTrialState(room);
+    room.gameOver = false;
+    room.winner = undefined;
+    room.phase = "dusk";
+    room.nightCount = 0;
+    room.gameLog = [];
+    room.deadPlayers = [];
+    room.protectedTonight = null;
+    room.lastProtected = null;
+    room.seerUsedTonight = {};
+    room.hunterTargetTonight = {};
+    room.killedTonight = null;
+    room.killedTonightExtra = null;
+    room.wolfVotes = {};
+    room.wolfVotes2 = {};
+    room.wolfLocked = {};
+    room.wolfDeadline = null;
+    room.wolfExtraBiteNextNight = false;
+    room.wolfBonusBiteThisNight = false;
+    resetNightTurnState(room);
+    room.dayVoters = [];
+    room.dayVotes = {};
+    room.dayLocked = {};
+    room.dayDiscussionDeadline = null;
+    room.dayDeadline = null;
+    room.hidePlayerRoleText = false;
+    room.spiritWolfDecisionMade = false;
+    room.spiritWolfChoseSave = false;
+    room.spiritWolfWolfAligned = false;
+    room.spiritWolfWolfAlignedPending = false;
+    room.spiritWolfPendingPoisonedWolfId = null;
+    room.witchPotions = {};
+    room.witchHealTargetTonight = {};
+    room.witchPoisonTargetTonight = {};
+    room.wolves = [];
+    room.players = room.players.map((p) => ({ ...p, inGame: true }));
+
     // random role cho mỗi người và lưu mapping
     const rolesToUse = room.roles || roles;
     const shuffled = rolesToUse.slice().sort(() => Math.random() - 0.5);
@@ -1968,6 +2466,7 @@ io.on("connection", (socket) => {
       console.log(`[yourRole emit] Gửi role '${role}' cho player ${player.id}`);
       io.to(player.id).emit("yourRole", role);
     });
+    room.players = room.players.map((p) => ({ ...p, inGame: true }));
 
 
     // Thiết lập danh sách sói
@@ -2069,6 +2568,7 @@ io.on("connection", (socket) => {
       room.playerRoles![player.id] = role;
       io.to(player.id).emit("yourRole", role);
     });
+    room.players = room.players.map((p) => ({ ...p, inGame: true }));
 
     // Rebuild wolves room membership.
     room.wolves = room.players.filter(p => isWolfRole(room.playerRoles?.[p.id])).map(p => p.id);
@@ -2107,11 +2607,13 @@ io.on("connection", (socket) => {
     room.wolfDeadline = null;
     room.wolfExtraBiteNextNight = false;
     room.wolfBonusBiteThisNight = false;
+    resetNightTurnState(room);
     room.dayVoters = [];
     room.dayVotes = {};
     room.dayLocked = {};
     room.dayDiscussionDeadline = null;
     room.dayDeadline = null;
+    room.hidePlayerRoleText = false;
     clearTrialState(room);
 
     // Reset Linh sói state.
@@ -2207,9 +2709,11 @@ io.on("connection", (socket) => {
         emitHunterTarget(roomId, hid);
       }
 
-      startWolfPhase(roomId);
+      startNightTurnFlow(roomId);
     } 
     else if (phase === "day") {
+      resetNightTurnState(room);
+
       // khi chuyển sang sáng -> nếu có người bị cắn thì công bố và đánh dấu dead
       const killedCandidate = room.killedTonight;
       const killedCandidateExtra = room.killedTonightExtra;
@@ -2375,6 +2879,11 @@ io.on("connection", (socket) => {
       if (room.spiritWolfPendingPoisonedWolfId && !room.spiritWolfDecisionMade) {
         room.spiritWolfDecisionMade = true;
         room.spiritWolfChoseSave = false;
+        appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", saved: false, timedOut: true });
+        const swid = getSpiritWolfId(room);
+        if (swid) {
+          io.to(swid).emit("spiritWolfDecisionRecorded", { saved: false });
+        }
         room.spiritWolfPendingPoisonedWolfId = null;
       } else {
         room.spiritWolfPendingPoisonedWolfId = null;
@@ -2485,6 +2994,15 @@ io.on("connection", (socket) => {
     startDayVoting(roomId);
   });
 
+  socket.on("hostTogglePlayerRoleText", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (socket.id !== room.hostId) return;
+
+    room.hidePlayerRoleText = !(room.hidePlayerRoleText === true);
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
   // Host có thể chốt ngay giai đoạn vote/nghe thanh minh để không cần chờ hết giờ.
   socket.on("hostForceFinishDayVote", ({ roomId }) => {
     const room = rooms[roomId];
@@ -2503,6 +3021,82 @@ io.on("connection", (socket) => {
     }
     if (!room.dayDeadline) return;
     finishDayVoting(roomId);
+  });
+
+  socket.on("hostNightTurnNext", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+    if (socket.id !== room.hostId) return;
+
+    const rules = ensureRoomGameRules(room);
+    if (rules.allNightActionsSimultaneous) return;
+    if (!room.nightTurnRole) return;
+
+    if (room.nightTurnRole === "Sói") {
+      if (room.wolfTimer) {
+        clearTimeout(room.wolfTimer);
+        room.wolfTimer = null;
+      }
+      finishWolfVoting(roomId);
+      return;
+    }
+
+    clearNightTurnTimer(room);
+    startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
+  });
+
+  socket.on("hostToggleNightTurnPause", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+    if (socket.id !== room.hostId) return;
+
+    const rules = ensureRoomGameRules(room);
+    if (rules.allNightActionsSimultaneous) return;
+    if (!room.nightTurnRole) return;
+
+    if (!room.nightTurnPaused) {
+      const deadline = room.nightTurnDeadline ?? Date.now();
+      const remainingMs = Math.max(0, deadline - Date.now());
+      room.nightTurnRemainingMs = remainingMs;
+      room.nightTurnPaused = true;
+
+      if (room.nightTurnRole === "Sói") {
+        if (room.wolfTimer) {
+          clearTimeout(room.wolfTimer);
+          room.wolfTimer = null;
+        }
+      } else {
+        clearNightTurnTimer(room);
+      }
+
+      io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      return;
+    }
+
+    const remainingMs = Math.max(0, room.nightTurnRemainingMs ?? 0);
+    room.nightTurnPaused = false;
+    room.nightTurnDeadline = Date.now() + remainingMs;
+
+    if (room.nightTurnRole === "Sói") {
+      startWolfPhase(roomId, {
+        durationMs: remainingMs,
+        initializeVotes: false,
+      });
+    } else if (remainingMs <= 0) {
+      startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
+      return;
+    } else {
+      clearNightTurnTimer(room);
+      room.nightTurnTimer = setTimeout(() => {
+        startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
+      }, remainingMs);
+    }
+
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
   // Người chơi (trừ bị cáo) bấm nút "Tương tác" trong lúc bị cáo thanh minh.
@@ -2653,6 +3247,7 @@ io.on("connection", (socket) => {
     if (!room) return;
 
     if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, socket.id, "Thợ săn")) return;
     if (room.playerRoles?.[socket.id] !== "Thợ săn") return;
     if ((room.deadPlayers || []).includes(socket.id)) return;
 
@@ -2691,13 +3286,48 @@ io.on("connection", (socket) => {
   });
 
   // Kick người chơi khỏi phòng
-  socket.on("kickPlayer", ({ roomId, targetId }) => {
+  socket.on("kickPlayer", ({ roomId, targetId, source }: { roomId: string; targetId: string; source?: "room" | "game" }) => {
     const room = rooms[roomId];
     if (!room) return;
     if (socket.id !== room.hostId) return; // chỉ host mới được kick
     if (!room.players.find(p => p.id === targetId)) return;
+
+    const shouldForceReturnAll = source === "room" && !!room.phase && !room.gameOver;
+    if (shouldForceReturnAll) {
+      resetRoomFromGameToLobby(room);
+    }
+
     // Xoá player khỏi room
     room.players = room.players.filter(p => p.id !== targetId);
+    room.positions = (room.positions || []).filter((pos) => pos.playerId !== targetId);
+    room.positionEditors = (room.positionEditors || []).filter((id) => id !== targetId);
+    room.lockedPlayerIds = (room.lockedPlayerIds || []).filter((id) => id !== targetId);
+
+    if (room.playerRoles) {
+      delete room.playerRoles[targetId];
+    }
+    if (room.wolfVotes) {
+      delete room.wolfVotes[targetId];
+    }
+    if (room.wolfVotes2) {
+      delete room.wolfVotes2[targetId];
+    }
+    if (room.wolfLocked) {
+      delete room.wolfLocked[targetId];
+    }
+    if (room.dayVotes) {
+      delete room.dayVotes[targetId];
+    }
+    if (room.dayLocked) {
+      delete room.dayLocked[targetId];
+    }
+    if (room.trialVotes) {
+      delete room.trialVotes[targetId];
+    }
+    room.dayVoters = (room.dayVoters || []).filter((id) => id !== targetId);
+    room.deadPlayers = (room.deadPlayers || []).filter((id) => id !== targetId);
+    room.wolves = (room.wolves || []).filter((id) => id !== targetId);
+
     // Nếu bị kick là host (trường hợp hiếm), chuyển quyền cho người đầu tiên còn lại
     if (room.hostId === targetId && room.players.length > 0) {
       const firstPlayer = room.players[0];
@@ -2706,7 +3336,11 @@ io.on("connection", (socket) => {
         io.to(roomId).emit("hostChanged", room.hostId);
       }
     }
+    io.to(roomId).emit("positionsUpdated", room.positions || []);
     io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    if (shouldForceReturnAll) {
+      io.to(roomId).emit("forceReturnToRoom", { roomId, reason: "host_returned_to_room" });
+    }
     io.to(targetId).emit("kicked"); // thông báo cho người bị kick
   });
 
@@ -2719,6 +3353,7 @@ io.on("connection", (socket) => {
 
     // chỉ được dùng vào ban đêm
     if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, socket.id, "Tiên tri")) return;
 
     // chỉ tiên tri mới được dùng
     if (room.playerRoles?.[socket.id] !== "Tiên tri") return;
@@ -2770,6 +3405,7 @@ io.on("connection", (socket) => {
 
     // chỉ được dùng vào ban đêm
     if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, socket.id, "Bảo vệ")) return;
 
     // chỉ bảo vệ mới được chọn
     if (room.playerRoles?.[socket.id] !== "Bảo vệ") return;
@@ -2810,6 +3446,7 @@ io.on("connection", (socket) => {
     if (room.gameOver) return;
 
     if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, socket.id, "Phù thủy")) return;
     if (room.playerRoles?.[socket.id] !== "Phù thủy") return;
     if ((room.deadPlayers || []).includes(socket.id)) return;
 
@@ -2850,6 +3487,7 @@ io.on("connection", (socket) => {
     if (room.gameOver) return;
 
     if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, socket.id, "Phù thủy")) return;
     if (room.playerRoles?.[socket.id] !== "Phù thủy") return;
     if ((room.deadPlayers || []).includes(socket.id)) return;
 
@@ -2886,7 +3524,8 @@ io.on("connection", (socket) => {
       !room.spiritWolfPendingPoisonedWolfId
     ) {
       room.spiritWolfPendingPoisonedWolfId = targetId;
-      emitSpiritWolfDecisionNeeded(roomId);
+      insertSpiritWolfIntoNightOrder(room);
+      io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     }
   });
 
@@ -2896,6 +3535,7 @@ io.on("connection", (socket) => {
     if (!room) return;
     if (room.gameOver) return;
     if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, socket.id, "Linh sói")) return;
     if (room.playerRoles?.[socket.id] !== SPIRIT_WOLF_ROLE) return;
     if ((room.deadPlayers || []).includes(socket.id)) return;
 
@@ -2934,6 +3574,7 @@ io.on("connection", (socket) => {
     if (!isWolfRole(room.playerRoles?.[socket.id])) return; // chỉ phe sói mới được chọn
     if ((room.deadPlayers || []).includes(socket.id)) return; // sói chết -> bỏ qua
     if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, socket.id, "Sói")) return;
 
     // nếu sói đã cắn thì ko cho thay đổi
     if (room.wolfLocked?.[socket.id]) {
@@ -2972,6 +3613,7 @@ io.on("connection", (socket) => {
     if (!isWolfRole(room.playerRoles?.[socket.id])) return;
     if (room.phase !== "night") return;
     if ((room.deadPlayers || []).includes(socket.id)) return;
+    if (!canPerformNightRoleAction(room, socket.id, "Sói")) return;
 
     // Chỉ cho chọn mục tiêu #2 khi đêm này có bonus
     if (!room.wolfBonusBiteThisNight) return;
@@ -3013,6 +3655,7 @@ io.on("connection", (socket) => {
 
     if (!isWolfRole(room.playerRoles?.[socket.id])) return;
     if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, socket.id, "Sói")) return;
 
     room.wolfLocked = room.wolfLocked || {}; // khởi tạo nếu chưa có
     room.wolfLocked![socket.id] = true;

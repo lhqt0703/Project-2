@@ -17,6 +17,9 @@ export function useWitchRole({
   deadPlayers,
   witchPendingDeathTargetIds,
   witchPotions,
+  allNightActionsSimultaneous,
+  currentNightTurnRole,
+  nightTurnPaused: _nightTurnPaused,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -25,6 +28,9 @@ export function useWitchRole({
   deadPlayers: string[];
   witchPendingDeathTargetIds: string[];
   witchPotions: WitchPotionsPayload | null;
+  allNightActionsSimultaneous: boolean;
+  currentNightTurnRole: string | null;
+  nightTurnPaused: boolean;
 }) {
   const [poisonMode, setPoisonMode] = useState(false);
   const [poisonSelectedTargetId, setPoisonSelectedTargetId] = useState<string | null>(null);
@@ -36,12 +42,9 @@ export function useWitchRole({
 
   useEffect(() => {
     if (phase === "day") {
-      setPoisonMode(false);
       setPoisonSelectedTargetId(null);
       setShowPoisonConfirm(false);
-
       setHealMode(false);
-      setHealSelectedTargetId(null);
       setShowHealConfirm(false);
     }
   }, [phase]);
@@ -60,8 +63,17 @@ export function useWitchRole({
     if (phase !== "night") return false;
     if (role !== "Phù thủy") return false;
     if (socket.id && deadPlayers.includes(socket.id)) return false;
+    if (!allNightActionsSimultaneous) {
+      if (currentNightTurnRole !== "Phù thủy") return false;
+    }
     return true;
-  }, [deadPlayers, phase, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, phase, role]);
+
+  const isWitchTurnActive = useMemo(() => {
+    if (phase !== "night") return false;
+    if (allNightActionsSimultaneous) return true;
+    return currentNightTurnRole === "Phù thủy";
+  }, [allNightActionsSimultaneous, currentNightTurnRole, phase]);
 
   const healDisabled = useMemo(() => {
     if (!canAct) return true;
@@ -216,10 +228,10 @@ export function useWitchRole({
     ),
     playerPositionsProps: {
       dangerPlayerIds:
-        role === "Phù thủy" && phase === "night" && !witchPotions?.healUsed
+        role === "Phù thủy" && isWitchTurnActive && !witchPotions?.healUsed
           ? witchPendingDeathTargetIds
           : [],
-      selectedOutlinePlayerId: role === "Phù thủy" && phase === "night" ? poisonSelectedTargetId : null,
+      selectedOutlinePlayerId: role === "Phù thủy" && isWitchTurnActive ? poisonSelectedTargetId : null,
     },
   };
 }

@@ -9,6 +9,21 @@ interface PlayerPosition {
   y: number;
 }
 
+interface RoomLike {
+  id: string;
+  hostId: string;
+  players: Array<{ id: string; name: string; connected?: boolean; inGame?: boolean }>;
+  positions?: PlayerPosition[];
+  positionEditors?: string[];
+  autoArrangeUsed?: boolean;
+  compactCircles?: boolean;
+  phase?: string;
+  gameOver?: boolean;
+  wolfVotes?: Record<string, string | null>;
+  wolfVotes2?: Record<string, string | null>;
+  deadPlayers?: string[];
+}
+
 type BulletAnimation = {
   fromPlayerId: string;
   toPlayerId: string;
@@ -245,7 +260,9 @@ function applyMagnetSnap(
 
 export default function PlayerPositions({
   onPlayerClick,
+  onPlayerDoubleClick,
   mode = "edit",
+  roomOverride,
   seerResult,
   deadPlayersOverride,
   bulletAnimation,
@@ -261,12 +278,15 @@ export default function PlayerPositions({
   wolfBadgePlayerIds,
   showRoleBadges,
   roleBadges,
+  activeNightRole,
   trialOrangePlayerId,
   trialWhitePlayerIds,
   trialGreenPlayerId,
 }: {
   onPlayerClick: (playerId: string) => void;
+  onPlayerDoubleClick?: (playerId: string) => void;
   mode?: "edit" | "view";
+  roomOverride?: RoomLike | null;
   seerResult?: { playerId: string; isWolf: boolean } | null;
   deadPlayersOverride?: string[];
   bulletAnimation?: BulletAnimation | null;
@@ -282,11 +302,13 @@ export default function PlayerPositions({
   wolfBadgePlayerIds?: string[];
   showRoleBadges?: boolean;
   roleBadges?: Record<string, string>;
+  activeNightRole?: string | null;
   trialOrangePlayerId?: string | null;
   trialWhitePlayerIds?: string[];
   trialGreenPlayerId?: string | null;
 }) {
-  const { room } = useRoomContext();
+  const { room: contextRoom } = useRoomContext();
+  const room: RoomLike | null = roomOverride ?? (contextRoom as RoomLike | null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const dragOffsetRef = useRef<{ dxPx: number; dyPx: number } | null>(null);
@@ -311,7 +333,10 @@ export default function PlayerPositions({
 
   const wolfVotes = room.wolfVotes as Record<string, string | null> | undefined;
   const wolfVotes2 = room.wolfVotes2 as Record<string, string | null> | undefined;
-  const deadPlayers = deadPlayersOverride ?? (room.deadPlayers as string[] | undefined);
+  const deadPlayers =
+    mode === "view"
+      ? (deadPlayersOverride ?? (room.deadPlayers as string[] | undefined))
+      : (deadPlayersOverride ?? []);
   const wolfCount = wolfVoteVoterIds && wolfVoteVoterIds.length
     ? wolfVoteVoterIds.length
     : (() => {
@@ -882,13 +907,27 @@ export default function PlayerPositions({
           const trialGreenShadow = trialGreenPlayerId === pos.playerId
             ? "0 0 0 7px rgba(46,204,113,0.95), 0 0 16px 6px rgba(46,204,113,0.45)"
             : "";
-          const mergedBoxShadow = [boxShadow, dangerShadow, highlightShadow, trialOrangeShadow, trialWhiteShadow, trialGreenShadow].filter(Boolean).join(", ");
 
           const showSelectedOutline =
             (!!selectedOutlinePlayerId && selectedOutlinePlayerId === pos.playerId) ||
             (!!selectedOutlinePlayerIds && selectedOutlinePlayerIds.includes(pos.playerId));
           const showWolfBadge = !!showWolfBadges && (wolfBadgePlayerIds || []).includes(p.id);
           const roleBadgeText = (showRoleBadges && roleBadges) ? roleBadges[p.id] : undefined;
+          const isWolfBadgeRole = roleBadgeText === "Sói" || roleBadgeText === "Sói con" || roleBadgeText === "Bán sói";
+          const isActiveNightRoleBadge = !!activeNightRole && (
+            (activeNightRole === "Sói" && isWolfBadgeRole) ||
+            (activeNightRole !== "Sói" && roleBadgeText === activeNightRole)
+          );
+          const activeRoleShadow = isActiveNightRoleBadge
+            ? "0 0 0 7px rgba(255,215,120,0.38), 0 0 18px 8px rgba(255,215,120,0.22)"
+            : "";
+          const mergedBoxShadow = [boxShadow, dangerShadow, highlightShadow, activeRoleShadow, trialOrangeShadow, trialWhiteShadow, trialGreenShadow].filter(Boolean).join(", ");
+          const showDisconnectedByHostInRoom =
+            mode === "edit" &&
+            isHost &&
+            (!!room.phase || !!room.gameOver);
+          const showDisconnectedBadge = p.connected === false && (showDisconnectedByHostInRoom || !isDead);
+          const showInGameBadge = mode === "edit" && p.inGame === true;
 
           const isBulletView = mode === "view" && !!bulletRecoil;
 
@@ -981,6 +1020,9 @@ export default function PlayerPositions({
               onClick={() => {
                 if (!dragging) onPlayerClick(p.id);
               }}
+              onDoubleClick={() => {
+                if (!dragging) onPlayerDoubleClick?.(p.id);
+              }}
               className={isWitchDanger ? "witch-danger" : undefined}
               style={{
                 position: "absolute",
@@ -1059,7 +1101,26 @@ export default function PlayerPositions({
                 </div>
               )}
 
-              {p.connected === false && (
+              {showInGameBadge && (
+                <div style={{
+                  position: "absolute",
+                  top: -10,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  background: "#36506f",
+                  color: "#fff",
+                  padding: "2px 6px",
+                  borderRadius: 6,
+                  fontSize: 11,
+                  fontWeight: "bold",
+                  opacity: 0.9,
+                  width: "max-content",
+                }}>
+                  Trong trận
+                </div>
+              )}
+
+              {showDisconnectedBadge && (
                 <div style={{
                   position: "absolute",
                   bottom: -10,

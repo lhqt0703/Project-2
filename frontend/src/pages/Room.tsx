@@ -1,28 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { socket } from "../socket";
 import PlayerPositions from "../components/PlayerPositions";
+import ConfirmModal from "../components/ConfirmModal";
+import GameRulesModal from "../components/GameRulesModal";
+import { DEFAULT_ROOM_GAME_RULES, type NightActionRole, type Player, type RoomData } from "../context/RoomContext";
 import { useRoomContext } from "../context/RoomContext";
-
-
-interface Player {
-  id: string;
-  name: string;
-  connected?: boolean;
-}
-
-interface RoomData {
-  id: string;
-  players: Player[];
-  hostId: string;
-  roles?: string[];
-  rolesLocked?: boolean;
-  lockedPlayerIds?: string[];
-  positions?: PlayerPosition[];
-  positionEditors?: string[];
-  autoArrangeUsed?: boolean;
-  compactCircles?: boolean;
-}
 
 interface PlayerPosition {
   playerId: string;
@@ -30,9 +13,32 @@ interface PlayerPosition {
   y: number;
 }
 
+const NIGHT_ACTION_ROLE_ORDER: NightActionRole[] = ["Sói", "Bảo vệ", "Phù thủy", "Thợ săn", "Tiên tri"];
+const WOLF_ROLES = new Set(["Sói", "Sói con", "Bán sói"]);
+
+function getAvailableNightActionRoles(selectedRoles?: string[]) {
+  const roles = selectedRoles || [];
+  const available = new Set<NightActionRole>();
+
+  if (roles.some((role) => WOLF_ROLES.has(role))) {
+    available.add("Sói");
+  }
+
+  for (const role of NIGHT_ACTION_ROLE_ORDER.slice(1)) {
+    if (roles.includes(role)) {
+      available.add(role);
+    }
+  }
+
+  return NIGHT_ACTION_ROLE_ORDER.filter((role) => available.has(role));
+}
+
 
 export default function Room() {
   const { room, setRoom, setRole } = useRoomContext();
+  const [pendingKickByDoubleClick, setPendingKickByDoubleClick] = useState<Player | null>(null);
+  const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
+  const [showRulesModal, setShowRulesModal] = useState(false);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -41,6 +47,10 @@ export default function Room() {
   const location = useLocation();
   const nav = useNavigate();
 
+  const showNotice = (title: string, message: string, onConfirm?: () => void) => {
+    setNoticeModal({ title, message, onConfirm });
+  };
+
   // lấy roomId từ URL (?roomId=xxxxx)
   const query = new URLSearchParams(location.search);
   const roomId = query.get("roomId");
@@ -48,6 +58,7 @@ export default function Room() {
   useEffect(() => {
     if (roomId) {
       socket.emit("getRoom", roomId);
+      socket.emit("setPlayerViewState", { roomId, view: "room" });
     }
   }, [roomId]);
 
@@ -135,11 +146,11 @@ export default function Room() {
 
       // Trường hợp server báo thiếu tiếp sau khi đã auto-add một phần (newPlayers có thể là [])
       if ((newPlayers?.length ?? 0) === 0) {
-        alert(
-          `Danh sách vai trò vẫn đang thiếu ${missingRoles} vai trò so với số người chơi trong phòng.\n` +
-          `Hãy quay lại màn hình chọn vai trò để bổ sung tiếp.`
+        showNotice(
+          "Thiếu vai trò",
+          `Danh sách vai trò vẫn đang thiếu ${missingRoles} vai trò so với số người chơi trong phòng.\nHãy quay lại màn hình chọn vai trò để bổ sung tiếp.`,
+          () => nav(`/roleselect?roomId=${targetRoomId}`)
         );
-        nav(`/roleselect?roomId=${targetRoomId}`);
         return;
       }
 
@@ -147,13 +158,11 @@ export default function Room() {
 
       // Không thể auto-add thêm dân nữa
       if (autoAddCount <= 0) {
-        alert(
-          `Có người chơi mới (${names}) đã vào phòng sau khi bạn đã xác nhận vai trò.\n` +
-          `Bạn đang thiếu ${missingRoles} vai trò.\n` +
-          `Hệ thống không thể tự thêm "Dân" nữa (tối đa ${MAX_VILLAGERS}).\n\n` +
-          `Bạn sẽ được chuyển sang màn hình chọn vai trò để bổ sung tiếp.`
+        showNotice(
+          "Không thể tự thêm vai trò",
+          `Có người chơi mới (${names}) đã vào phòng sau khi bạn đã xác nhận vai trò.\nBạn đang thiếu ${missingRoles} vai trò.\nHệ thống không thể tự thêm "Dân" nữa (tối đa ${MAX_VILLAGERS}).\n\nBạn sẽ được chuyển sang màn hình chọn vai trò để bổ sung tiếp.`,
+          () => nav(`/roleselect?roomId=${targetRoomId}`)
         );
-        nav(`/roleselect?roomId=${targetRoomId}`);
         return;
       }
 
@@ -230,7 +239,7 @@ export default function Room() {
   useEffect(() => {
     // Khi host rời khi game đang diễn ra
     const handleHostDisconnected = () => {
-      alert("Chủ phòng đã rời đi. Bạn có thể chờ chủ phòng quay lại hoặc thoát khỏi phòng.");
+      showNotice("Thông báo", "Chủ phòng đã rời đi. Bạn có thể chờ chủ phòng quay lại hoặc thoát khỏi phòng.");
       // Có thể thêm logic cho phép người chơi tự thoát hoặc chờ
     };
     socket.on("hostDisconnected", handleHostDisconnected);
@@ -256,9 +265,29 @@ export default function Room() {
   // Xử lý kick
   const handleKick = () => {
     if (contextMenu?.player && room) {
-      socket.emit("kickPlayer", { roomId: room.id, targetId: contextMenu.player.id });
+      socket.emit("kickPlayer", { roomId: room.id, targetId: contextMenu.player.id, source: "room" });
       setContextMenu(null);
     }
+  };
+
+  const handlePlayerDoubleClickKick = (playerId: string) => {
+    if (!room) return;
+    if (!amIHost) return;
+    if (playerId === room.hostId) return;
+
+    const target = room.players.find((p) => p.id === playerId);
+    if (!target) return;
+    setPendingKickByDoubleClick(target);
+  };
+
+  const confirmDoubleClickKick = () => {
+    if (!room || !pendingKickByDoubleClick) return;
+    socket.emit("kickPlayer", {
+      roomId: room.id,
+      targetId: pendingKickByDoubleClick.id,
+      source: "room",
+    });
+    setPendingKickByDoubleClick(null);
   };
 
   // Xử lý trao quyền sắp xếp vị trí
@@ -289,8 +318,7 @@ export default function Room() {
   // Lắng nghe bị kick
   useEffect(() => {
     const handleKicked = () => {
-      alert("Bạn đã bị chủ phòng kick khỏi phòng!");
-      nav("/");
+      showNotice("Bạn đã bị mời khỏi phòng", "Bạn đã bị chủ phòng kick khỏi phòng!", () => nav("/lobby"));
     };
     socket.on("kicked", handleKicked);
     return () => {
@@ -298,9 +326,25 @@ export default function Room() {
     };
   }, [nav]);
 
+  const availableNightActionRoles = useMemo(
+    () => getAvailableNightActionRoles(room?.roles),
+    [room?.roles]
+  );
+
   if (!room) return <p>Đang tải phòng...</p>;
 
   const amIHost = socket.id === room.hostId;
+  const canEditRules = amIHost && (!room.phase || room.gameOver);
+  const hasInGamePlayers = room.players.some((p) => p.inGame === true);
+  const hasDisconnectedPlayers = room.players.some((p) => p.connected === false);
+  const startGameDisabled = hasInGamePlayers || hasDisconnectedPlayers;
+  const startGameTooltip = hasInGamePlayers && hasDisconnectedPlayers
+    ? "Trò chơi chỉ có thể bắt đầu ván mới khi tất cả người chơi đã quay về phòng chờ này và những người chơi đang mất kết nối cần kết nối lại hoặc bạn có thể xóa họ khỏi phòng"
+    : hasInGamePlayers
+      ? "Trò chơi chỉ có thể bắt đầu ván mới khi tất cả người chơi đã quay về phòng chờ này"
+      : hasDisconnectedPlayers
+        ? "Bạn cần chờ người chơi đang mất kết nối kết nối lại hoặc xóa họ khỏi phòng"
+        : undefined;
 
   return (
       <div style={{ padding: 20, position: "relative" }}>
@@ -324,10 +368,27 @@ export default function Room() {
           {amIHost && (
             <>
               <div style={{ marginTop: 12 }}>
+                <button
+                  onClick={() => setShowRulesModal(true)}
+                  disabled={!canEditRules}
+                  title={canEditRules ? "Thiết lập luật chơi" : "Không thể đổi luật khi ván chơi đang diễn ra"}
+                  style={{ opacity: canEditRules ? 1 : 0.5, cursor: canEditRules ? "pointer" : "not-allowed" }}
+                >
+                  Thiết lập luật chơi
+                </button>
+              </div>
+              <div style={{ marginTop: 8 }}>
                 <button onClick={() => nav(`/roleselect?roomId=${room.id}`)}>Chọn vai trò</button>
               </div>
               <div style={{ marginTop: 8 }}>
-                <button onClick={() => socket.emit("startGame", room.id)}>Bắt đầu trò chơi</button>
+                <button
+                  onClick={() => socket.emit("startGame", room.id)}
+                  disabled={startGameDisabled}
+                  title={startGameTooltip}
+                  style={{ opacity: startGameDisabled ? 0.6 : 1, cursor: startGameDisabled ? "not-allowed" : "pointer" }}
+                >
+                  Bắt đầu trò chơi
+                </button>
               </div>
             </>
           )}
@@ -340,7 +401,7 @@ export default function Room() {
              // Handle click if needed, e.g. show profile or context menu
              // Currently context menu is handled by onContextMenu on the list, 
              // but we might want it here too. For now, just log or ignore.
-          }} />
+          }} onPlayerDoubleClick={handlePlayerDoubleClickKick} />
         </div>
       </div>
 
@@ -374,6 +435,50 @@ export default function Room() {
 
           </div>
         )}
+
+        <ConfirmModal
+          open={!!pendingKickByDoubleClick}
+          title="Xác nhận xóa người chơi"
+          message={
+            pendingKickByDoubleClick
+              ? ((room?.phase && !room?.gameOver)
+                  ? `Bạn có chắc muốn xóa ${pendingKickByDoubleClick.name} khỏi phòng? Trò chơi hiện tại sẽ kết thúc ngay và  tất cả người chơi sẽ được đưa về phòng chờ.`
+                  : `Bạn có chắc muốn xóa ${pendingKickByDoubleClick.name} khỏi phòng?`)
+              : ""
+          }
+          confirmText="Xóa"
+          cancelText="Hủy"
+          onConfirm={confirmDoubleClickKick}
+          onCancel={() => setPendingKickByDoubleClick(null)}
+        />
+
+        <ConfirmModal
+          open={!!noticeModal}
+          infoOnly
+          title={noticeModal?.title || "Thông báo"}
+          message={noticeModal?.message || ""}
+          closeText="Đóng"
+          onConfirm={() => {
+            const action = noticeModal?.onConfirm;
+            setNoticeModal(null);
+            action?.();
+          }}
+          onCancel={() => setNoticeModal(null)}
+        />
+
+        <GameRulesModal
+          open={showRulesModal}
+          title="Thiết lập luật chơi cho phòng"
+          initialRules={room.gameRules || DEFAULT_ROOM_GAME_RULES}
+          availableNightActionRoles={availableNightActionRoles}
+          onClose={() => setShowRulesModal(false)}
+          onSave={(rules) => {
+            socket.emit("updateRoomGameRules", { roomId: room.id, rules });
+            setRoom(prev => (prev ? { ...prev, gameRules: rules } : prev));
+            setShowRulesModal(false);
+          }}
+          saveText="Cập nhật"
+        />
     </div>
   );
 }

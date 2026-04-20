@@ -36,6 +36,11 @@ function getRolesText(playerIds: string[] | undefined, rolesByPlayerId: RolesByP
   return playerIds.map((id) => getRoleName(id, rolesByPlayerId)).join(", ");
 }
 
+function getPlayerNamesText(playerIds: string[] | undefined, playerNamesById: PlayerNamesById): string {
+  if (!playerIds || playerIds.length === 0) return "(không ai)";
+  return playerIds.map((id) => getPlayerName(id, playerNamesById)).join(", ");
+}
+
 function getEliminationCauseText(causes: EliminationCause[] | undefined, rolesByPlayerId: RolesByPlayerId): string {
   if (!causes || causes.length === 0) return "Bị loại";
   const parts = causes.map((cause) => {
@@ -54,7 +59,138 @@ function getEliminationCauseText(causes: EliminationCause[] | undefined, rolesBy
     }
     return "Thợ săn đã bắn trúng";
   });
-  return parts.join(" va ");
+  return parts.join(" và ");
+}
+
+function TimeoutBadge({ message }: { message: string }) {
+  const [open, setOpen] = useState(false);
+  const badgeRef = useRef<HTMLButtonElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        popupRef.current && !popupRef.current.contains(e.target as Node) &&
+        badgeRef.current && !badgeRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [open]);
+
+  return (
+    <span style={{ position: "relative", display: "inline-block", marginLeft: 6 }}>
+      <button
+        ref={badgeRef}
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((prev) => !prev);
+        }}
+        style={{
+          border: "none",
+          background: "transparent",
+          padding: 0,
+          cursor: "help",
+          fontSize: 14,
+          lineHeight: 1,
+        }}
+        aria-label="Giải thích timeout"
+      >
+        ⏰
+      </button>
+      {open && (
+        <div
+          ref={popupRef}
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            marginTop: 4,
+            background: "var(--surface, #fff)",
+            border: "1px solid var(--border, #ccc)",
+            borderRadius: 6,
+            padding: "6px 10px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+            zIndex: 1000,
+            whiteSpace: "nowrap",
+            fontSize: 13,
+          }}
+        >
+          {message}
+        </div>
+      )}
+    </span>
+  );
+}
+
+function ActionSpan({
+  children,
+  tooltipDetail,
+  highlightPayload,
+  onHighlightPlayer,
+}: {
+  children: React.ReactNode;
+  tooltipDetail?: string;
+  highlightPayload: HighlightPayload;
+  onHighlightPlayer: (payload: HighlightPayload) => void;
+}) {
+  const [showPopup, setShowPopup] = useState(false);
+  const spanRef = useRef<HTMLSpanElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowPopup(true);
+    onHighlightPlayer(highlightPayload);
+  }, [highlightPayload, onHighlightPlayer]);
+
+  useEffect(() => {
+    if (!showPopup) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        popupRef.current && !popupRef.current.contains(e.target as Node) &&
+        spanRef.current && !spanRef.current.contains(e.target as Node)
+      ) {
+        setShowPopup(false);
+        onHighlightPlayer({ primaryId: null, secondaryIds: [], dangerIds: [] });
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showPopup, onHighlightPlayer]);
+
+  return (
+    <span style={{ position: "relative", display: "inline-block" }}>
+      <span ref={spanRef} onClick={handleClick} style={{ cursor: "pointer" }}>
+        {children}
+      </span>
+      {showPopup && (
+        <div
+          ref={popupRef}
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            marginTop: 4,
+            background: "var(--surface, #fff)",
+            border: "1px solid var(--border, #ccc)",
+            borderRadius: 6,
+            padding: "6px 10px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+            zIndex: 1000,
+            whiteSpace: "nowrap",
+            fontSize: 13,
+          }}
+        >
+          {tooltipDetail ? tooltipDetail : "Nhấn ra ngoài để tắt highlight"}
+        </div>
+      )}
+    </span>
+  );
 }
 
 function RoleSpan({
@@ -341,33 +477,19 @@ function LogEntryLine({
     case "trial_verdict": {
       const liveVoterIds = entry.liveVoterIds || [];
       const dieVoterIds = entry.dieVoterIds || [];
-      const actionStyle: React.CSSProperties = {
-        cursor: "pointer",
-      };
-
-      const onOpenAllHighlights = () => {
-        onHighlightPlayer({
-          primaryId: entry.targetId,
-          secondaryIds: liveVoterIds,
-          dangerIds: dieVoterIds,
-        });
-      };
-
-      const onOpenLiveHighlights = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        onHighlightPlayer({ primaryId: null, secondaryIds: liveVoterIds, dangerIds: [] });
-      };
-
-      const onOpenDieHighlights = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        onHighlightPlayer({ primaryId: null, secondaryIds: [], dangerIds: dieVoterIds });
-      };
+      const liveNamesText = getPlayerNamesText(liveVoterIds, playerNamesById);
+      const dieNamesText = getPlayerNamesText(dieVoterIds, playerNamesById);
+      const allVoteTooltip = `Người chơi sống: ${liveNamesText} | Người chơi chết: ${dieNamesText}`;
 
       return (
         <li style={lineStyle}>
-          <span onClick={onOpenAllHighlights} style={actionStyle}>
+          <ActionSpan
+            highlightPayload={{ primaryId: entry.targetId, secondaryIds: liveVoterIds, dangerIds: dieVoterIds }}
+            tooltipDetail={allVoteTooltip}
+            onHighlightPlayer={onHighlightPlayer}
+          >
             Kết quả sống/chết cho
-          </span>{" "}
+          </ActionSpan>{" "}
           {entry.targetId && (
             <RoleSpan
               playerId={entry.targetId}
@@ -380,24 +502,32 @@ function LogEntryLine({
             />
           )}:
           {" "}
-          <span onClick={onOpenAllHighlights} style={actionStyle}>
+          <ActionSpan
+            highlightPayload={{ primaryId: entry.targetId, secondaryIds: liveVoterIds, dangerIds: dieVoterIds }}
+            tooltipDetail={allVoteTooltip}
+            onHighlightPlayer={onHighlightPlayer}
+          >
             <span style={{ color: entry.executed ? "#e74c3c" : "#27ae60" }}>
               {entry.executed ? "CHẾT" : "SỐNG"}
-            </span>{" "}
-            (
-          </span>
-          <span onClick={onOpenLiveHighlights} style={{ ...actionStyle }}>
+            </span>
+          </ActionSpan>
+          {" ("}
+          <ActionSpan
+            highlightPayload={{ primaryId: null, secondaryIds: liveVoterIds, dangerIds: [] }}
+            tooltipDetail={`Người chơi chọn Sống: ${liveNamesText}`}
+            onHighlightPlayer={onHighlightPlayer}
+          >
             Sống {entry.liveVotes}
-          </span>
-          <span onClick={onOpenAllHighlights} style={actionStyle}>
-            {" "}-{" "}
-          </span>
-          <span onClick={onOpenDieHighlights} style={{ ...actionStyle }}>
+          </ActionSpan>
+          {" - "}
+          <ActionSpan
+            highlightPayload={{ primaryId: null, secondaryIds: [], dangerIds: dieVoterIds }}
+            tooltipDetail={`Người chơi chọn Chết: ${dieNamesText}`}
+            onHighlightPlayer={onHighlightPlayer}
+          >
             Chết {entry.dieVotes}
-          </span>
-          <span onClick={onOpenAllHighlights} style={actionStyle}>
-            )
-          </span>
+          </ActionSpan>
+          {")"}
         </li>
       );
     }
@@ -475,6 +605,9 @@ function LogEntryLine({
       return (
         <li style={lineStyle}>
           Linh sói quyết định: <span style={{ fontWeight: 600 }}>{entry.saved ? "CỨU" : "KHÔNG CỨU"}</span>
+          {entry.timedOut ? (
+            <TimeoutBadge message="Quá thời gian chờ thực hiện hành động" />
+          ) : null}
         </li>
       );
 
@@ -541,7 +674,21 @@ export default function GameLogPanel({
         const nightEntries = (n.entries || []).filter((e) => e.phase !== "day");
         const displayNightEntries = nightEntries.filter((e) => !(e.type === "wolf_vote" && (e.voteBreakdown?.length || 0) <= 1));
         const dayEntries = (n.entries || []).filter(
-          (e) => e.phase === "day" && e.type !== "saved_by_guardian" && e.type !== "saved_by_witch" && e.type !== "trial_started"
+          (e) => {
+            if (e.phase !== "day") return false;
+            if (e.type === "saved_by_guardian" || e.type === "saved_by_witch" || e.type === "trial_started") return false;
+            if (e.type === "eliminated") {
+              const targetIds = e.targetIds || [];
+              const trialVerdictOnly =
+                targetIds.length > 0 &&
+                targetIds.every((pid) => {
+                  const causes = e.causesByTarget?.[pid] || [];
+                  return causes.length > 0 && causes.every((c) => c.type === "trial_verdict");
+                });
+              if (trialVerdictOnly) return false;
+            }
+            return true;
+          }
         );
         const dayVoteEntry = dayEntries.find((e) => e.type === "day_vote");
         const dayVotersByTarget: Record<string, string[]> =

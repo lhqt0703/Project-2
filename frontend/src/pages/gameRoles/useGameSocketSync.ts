@@ -145,7 +145,15 @@ export function useGameSocketSync({
 
     const handleRoomUpdated = (data: any) => {
       if (roomId && data?.id && data.id !== roomId) return;
-      setRoom(data);
+      setRoom((prev: any) => {
+        if (!prev) return data;
+        return {
+          ...data,
+          wolfVotes: data?.wolfVotes ?? prev.wolfVotes,
+          wolfVotes2: data?.wolfVotes2 ?? prev.wolfVotes2,
+          wolfLocked: data?.wolfLocked ?? prev.wolfLocked,
+        };
+      });
       if (data?.phase === "dusk" || data?.phase === "day" || data?.phase === "night") {
         const nextPhase = data.phase as GamePhase;
         if (phaseRef.current !== nextPhase) {
@@ -284,15 +292,17 @@ export function useGameSocketSync({
       setWolfLocked(locked);
     };
 
-    const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline, maxTargets }: WolfPhaseStartedPayload) => {
+    const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline, maxTargets, resetVotes }: WolfPhaseStartedPayload) => {
       setWolves(wolves);
       setActiveWolves(activeWolves || []);
       setWolfDeadline(deadline);
       setWolfMaxTargets(typeof maxTargets === "number" ? maxTargets : 1);
-      setRoom((prev: any) => (prev ? { ...prev, wolfVotes: undefined } : prev));
-      setWolfLocked(null);
-      setWolfVotes2(null);
-      setRoom((prev: any) => (prev ? { ...prev, wolfVotes2: undefined } : prev));
+      if (resetVotes !== false) {
+        setRoom((prev: any) => (prev ? { ...prev, wolfVotes: undefined } : prev));
+        setWolfLocked(null);
+        setWolfVotes2(null);
+        setRoom((prev: any) => (prev ? { ...prev, wolfVotes2: undefined } : prev));
+      }
     };
 
     const handleSeerResult = (payload: SeerResultPayload) => {

@@ -2,6 +2,8 @@ export default function ConfirmModal({
   open,
   title,
   message,
+  infoOnly = false,
+  closeText = "Đóng",
   confirmText = "Xác nhận",
   cancelText = "Huỷ",
   onConfirm,
@@ -10,6 +12,8 @@ export default function ConfirmModal({
   open: boolean;
   title: string;
   message: string;
+  infoOnly?: boolean;
+  closeText?: string;
   confirmText?: string;
   cancelText?: string;
   onConfirm: () => void;
@@ -44,8 +48,14 @@ export default function ConfirmModal({
         <h2>{title}</h2>
         <p>{message}</p>
         <div style={{ display: "flex", gap: 16, marginTop: 24 }}>
-          <button onClick={onConfirm}>{confirmText}</button>
-          <button onClick={onCancel}>{cancelText}</button>
+          {infoOnly ? (
+            <button onClick={onConfirm}>{closeText}</button>
+          ) : (
+            <>
+              <button onClick={onConfirm}>{confirmText}</button>
+              <button onClick={onCancel}>{cancelText}</button>
+            </>
+          )}
         </div>
       </div>
     </div>

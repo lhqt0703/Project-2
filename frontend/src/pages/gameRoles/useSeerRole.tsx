@@ -9,12 +9,18 @@ export function useSeerRole({
   role,
   deadPlayers,
   seerResult,
+  allNightActionsSimultaneous,
+  currentNightTurnRole,
+  nightTurnPaused: _nightTurnPaused,
 }: {
   roomId: string | null;
   phase: GamePhase;
   role: string | null;
   deadPlayers: string[];
   seerResult: { playerId: string; isWolf: boolean } | null;
+  allNightActionsSimultaneous: boolean;
+  currentNightTurnRole: string | null;
+  nightTurnPaused: boolean;
 }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -31,8 +37,11 @@ export function useSeerRole({
     if (role !== "Tiên tri") return false;
     if (seerResult) return false; // đã soi rồi thì thôi
     if (socket.id && deadPlayers.includes(socket.id)) return false;
+    if (!allNightActionsSimultaneous) {
+      if (currentNightTurnRole !== "Tiên tri") return false;
+    }
     return true;
-  }, [deadPlayers, phase, role, seerResult]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, phase, role, seerResult]);
 
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;

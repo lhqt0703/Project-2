@@ -39,6 +39,16 @@ export default function Room() {
   const [pendingKickByDoubleClick, setPendingKickByDoubleClick] = useState<Player | null>(null);
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [showRulesModal, setShowRulesModal] = useState(false);
+  const [pendingRulesUpdate, setPendingRulesUpdate] = useState<RoomData["gameRules"] | null>(null);
+  const [showRulesApplyDecisionModal, setShowRulesApplyDecisionModal] = useState(false);
+  const [rulesRestartOverlay, setRulesRestartOverlay] = useState<{
+    message: string;
+    totalMs: number;
+    fadeInMs: number;
+    holdMs: number;
+    fadeOutMs: number;
+    key: number;
+  } | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -103,16 +113,27 @@ export default function Room() {
     const handleYourRole = (role: string) => {
       // Chỉ lưu role nếu chưa có hoặc khác role hiện tại
       setRole(role);
-  const targetRoomId = room?.id ?? roomId;
-  if (targetRoomId) {
-    nav(`/game?roomId=${targetRoomId}`);
-  } else {
-    nav("/game");
-  }
-};
+    };
 
-    const handleGameStarted = () => {
-      // nếu cần thì trigger UI chung
+    const handleGameStarted = (payload?: {
+      hostRestartCinematic?: {
+        roomId?: string;
+        message?: string;
+        fadeInMs?: number;
+        holdMs?: number;
+        fadeOutMs?: number;
+      };
+    }) => {
+      const targetRoomId = room?.id ?? roomId;
+      const cinematic = payload?.hostRestartCinematic;
+      if (targetRoomId && cinematic) {
+        sessionStorage.setItem(`hostRestartCinematic:${targetRoomId}`, JSON.stringify(cinematic));
+      }
+      if (targetRoomId) {
+        nav(`/game?roomId=${targetRoomId}`);
+      } else {
+        nav("/game");
+      }
     };
 
     socket.on("yourRole", handleYourRole);
@@ -122,7 +143,7 @@ export default function Room() {
       socket.off("yourRole", handleYourRole);
       socket.off("gameStarted", handleGameStarted);
     };
-  }, [nav, room, roomId, setRole]);
+  }, [nav, room?.id, roomId, setRole]);
 
   useEffect(() => {
     interface RoleMismatchData {
@@ -326,6 +347,43 @@ export default function Room() {
     };
   }, [nav]);
 
+  useEffect(() => {
+    const handleRulesRestartCinematic = (payload: {
+      roomId?: string;
+      message?: string;
+      fadeInMs?: number;
+      holdMs?: number;
+      fadeOutMs?: number;
+    }) => {
+      if (!roomId) return;
+      if (payload?.roomId && payload.roomId !== roomId) return;
+
+      const fadeInMs = Math.max(0, payload?.fadeInMs ?? 1000);
+      const holdMs = Math.max(0, payload?.holdMs ?? 2000);
+      const fadeOutMs = Math.max(0, payload?.fadeOutMs ?? 500);
+      const totalMs = fadeInMs + holdMs + fadeOutMs;
+      const overlayKey = Date.now();
+
+      setRulesRestartOverlay({
+        message: payload?.message || "Chủ phòng đã thiết lập lại luật chơi và khởi động lại ván chơi mới",
+        fadeInMs,
+        holdMs,
+        fadeOutMs,
+        totalMs,
+        key: overlayKey,
+      });
+
+      window.setTimeout(() => {
+        setRulesRestartOverlay((prev) => (prev && prev.key === overlayKey ? null : prev));
+      }, totalMs + 50);
+    };
+
+    socket.on("rulesRestartCinematic", handleRulesRestartCinematic);
+    return () => {
+      socket.off("rulesRestartCinematic", handleRulesRestartCinematic);
+    };
+  }, [roomId]);
+
   const availableNightActionRoles = useMemo(
     () => getAvailableNightActionRoles(room?.roles),
     [room?.roles]
@@ -334,10 +392,10 @@ export default function Room() {
   if (!room) return <p>Đang tải phòng...</p>;
 
   const amIHost = socket.id === room.hostId;
-  const canEditRules = amIHost && (!room.phase || room.gameOver);
+  const gameInProgress = !!room.phase && !room.gameOver;
   const hasInGamePlayers = room.players.some((p) => p.inGame === true);
   const hasDisconnectedPlayers = room.players.some((p) => p.connected === false);
-  const startGameDisabled = hasInGamePlayers || hasDisconnectedPlayers;
+  const startGameDisabled = !gameInProgress && (hasInGamePlayers || hasDisconnectedPlayers);
   const startGameTooltip = hasInGamePlayers && hasDisconnectedPlayers
     ? "Trò chơi chỉ có thể bắt đầu ván mới khi tất cả người chơi đã quay về phòng chờ này và những người chơi đang mất kết nối cần kết nối lại hoặc bạn có thể xóa họ khỏi phòng"
     : hasInGamePlayers
@@ -345,6 +403,23 @@ export default function Room() {
       : hasDisconnectedPlayers
         ? "Bạn cần chờ người chơi đang mất kết nối kết nối lại hoặc xóa họ khỏi phòng"
         : undefined;
+
+  const startButtonText = gameInProgress ? "Trở lại trò chơi" : "Bắt đầu trò chơi";
+  const startButtonAction = () => {
+    if (gameInProgress) {
+      socket.emit("returnToCurrentGame", { roomId: room.id });
+      nav(`/game?roomId=${room.id}`);
+      return;
+    }
+    socket.emit("startGame", room.id);
+  };
+
+  const rulesRestartAnimationName = rulesRestartOverlay
+    ? `roomRulesRestartOverlay_${rulesRestartOverlay.key}`
+    : "";
+  const rulesRestartTextAnimationName = rulesRestartOverlay
+    ? `roomRulesRestartText_${rulesRestartOverlay.key}`
+    : "";
 
   return (
       <div style={{ padding: 20, position: "relative" }}>
@@ -370,9 +445,7 @@ export default function Room() {
               <div style={{ marginTop: 12 }}>
                 <button
                   onClick={() => setShowRulesModal(true)}
-                  disabled={!canEditRules}
-                  title={canEditRules ? "Thiết lập luật chơi" : "Không thể đổi luật khi ván chơi đang diễn ra"}
-                  style={{ opacity: canEditRules ? 1 : 0.5, cursor: canEditRules ? "pointer" : "not-allowed" }}
+                  title="Thiết lập luật chơi"
                 >
                   Thiết lập luật chơi
                 </button>
@@ -382,12 +455,12 @@ export default function Room() {
               </div>
               <div style={{ marginTop: 8 }}>
                 <button
-                  onClick={() => socket.emit("startGame", room.id)}
+                  onClick={startButtonAction}
                   disabled={startGameDisabled}
-                  title={startGameTooltip}
+                  title={gameInProgress ? "Trở lại ván đang diễn ra" : startGameTooltip}
                   style={{ opacity: startGameDisabled ? 0.6 : 1, cursor: startGameDisabled ? "not-allowed" : "pointer" }}
                 >
-                  Bắt đầu trò chơi
+                  {startButtonText}
                 </button>
               </div>
             </>
@@ -469,16 +542,102 @@ export default function Room() {
         <GameRulesModal
           open={showRulesModal}
           title="Thiết lập luật chơi cho phòng"
-          initialRules={room.gameRules || DEFAULT_ROOM_GAME_RULES}
+          initialRules={room.pendingGameRules || room.gameRules || DEFAULT_ROOM_GAME_RULES}
           availableNightActionRoles={availableNightActionRoles}
           onClose={() => setShowRulesModal(false)}
           onSave={(rules) => {
+            if (gameInProgress) {
+              setPendingRulesUpdate(rules);
+              setShowRulesModal(false);
+              setShowRulesApplyDecisionModal(true);
+              return;
+            }
+
             socket.emit("updateRoomGameRules", { roomId: room.id, rules });
-            setRoom(prev => (prev ? { ...prev, gameRules: rules } : prev));
+            setRoom(prev => (prev ? { ...prev, gameRules: rules, pendingGameRules: undefined } : prev));
             setShowRulesModal(false);
           }}
           saveText="Cập nhật"
         />
+
+        <ConfirmModal
+          open={showRulesApplyDecisionModal && !!pendingRulesUpdate}
+          title="Áp dụng luật chơi mới"
+          message="Bạn muốn kết thúc trò chơi hiện tại ngay lập tức để áp dụng luật chơi mới hay tiếp tục ván hiện tại và áp dụng luật này vào ván sau?"
+          confirmText="Kết thúc trận và áp dụng ngay"
+          cancelText="Áp dụng vào ván sau"
+          onConfirm={() => {
+            if (!pendingRulesUpdate) return;
+            socket.emit("updateRoomGameRules", {
+              roomId: room.id,
+              rules: pendingRulesUpdate,
+              applyMode: "restart-now",
+            });
+            setRoom(prev => (prev ? { ...prev, gameRules: pendingRulesUpdate, pendingGameRules: undefined } : prev));
+            setPendingRulesUpdate(null);
+            setShowRulesApplyDecisionModal(false);
+          }}
+          onCancel={() => {
+            if (!pendingRulesUpdate) return;
+            socket.emit("updateRoomGameRules", {
+              roomId: room.id,
+              rules: pendingRulesUpdate,
+              applyMode: "next-round",
+            });
+            setRoom(prev => (prev ? { ...prev, pendingGameRules: pendingRulesUpdate } : prev));
+            setPendingRulesUpdate(null);
+            setShowRulesApplyDecisionModal(false);
+          }}
+        />
+
+        {rulesRestartOverlay && (
+          <>
+            <style>{`
+              @keyframes ${rulesRestartAnimationName} {
+                0% { opacity: 0; }
+                ${((rulesRestartOverlay.fadeInMs / rulesRestartOverlay.totalMs) * 100).toFixed(4)}% { opacity: 1; }
+                ${(((rulesRestartOverlay.fadeInMs + rulesRestartOverlay.holdMs) / rulesRestartOverlay.totalMs) * 100).toFixed(4)}% { opacity: 1; }
+                100% { opacity: 0; }
+              }
+
+              @keyframes ${rulesRestartTextAnimationName} {
+                0% { opacity: 0; }
+                ${((rulesRestartOverlay.fadeInMs / rulesRestartOverlay.totalMs) * 100).toFixed(4)}% { opacity: 0; }
+                ${((((rulesRestartOverlay.fadeInMs + Math.max(120, Math.min(220, rulesRestartOverlay.holdMs * 0.1))) / rulesRestartOverlay.totalMs)) * 100).toFixed(4)}% { opacity: 1; }
+                ${(((rulesRestartOverlay.fadeInMs + rulesRestartOverlay.holdMs) / rulesRestartOverlay.totalMs) * 100).toFixed(4)}% { opacity: 1; }
+                100% { opacity: 0; }
+              }
+            `}</style>
+
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 10000,
+                background: "#000",
+                animation: `${rulesRestartAnimationName} ${rulesRestartOverlay.totalMs}ms linear forwards`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                pointerEvents: "none",
+              }}
+            >
+              <div
+                style={{
+                  color: "#fff",
+                  fontSize: 28,
+                  fontWeight: 700,
+                  textAlign: "center",
+                  maxWidth: 980,
+                  padding: "0 24px",
+                  animation: `${rulesRestartTextAnimationName} ${rulesRestartOverlay.totalMs}ms linear forwards`,
+                }}
+              >
+                {rulesRestartOverlay.message}
+              </div>
+            </div>
+          </>
+        )}
     </div>
   );
 }

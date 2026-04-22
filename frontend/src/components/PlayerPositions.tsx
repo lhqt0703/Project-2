@@ -22,6 +22,8 @@ interface RoomLike {
   wolfVotes?: Record<string, string | null>;
   wolfVotes2?: Record<string, string | null>;
   deadPlayers?: string[];
+  sharedHeartsVisible?: boolean;
+  playerHearts?: Record<string, number>;
 }
 
 type BulletAnimation = {
@@ -317,6 +319,8 @@ export default function PlayerPositions({
 
   if (!room) return null;
 
+  const visiblePlayers = room.players.filter((p) => p.id !== room.hostId);
+
   // Sync circle size mode from server room state.
   useEffect(() => {
     setCompactCircles(room.compactCircles ?? false);
@@ -325,7 +329,7 @@ export default function PlayerPositions({
   const isHost = room.hostId === socket.id;
   const isEditor = mode === "edit" && (room.positionEditors?.includes(socket.id!) || isHost);
 
-  const isExpandedFrame = room.players.length > AUTO_TOP_LIMIT;
+  const isExpandedFrame = visiblePlayers.length > AUTO_TOP_LIMIT;
   const frameHeightPx = isExpandedFrame ? EXPANDED_FRAME_HEIGHT_PX : FRAME_HEIGHT_PX;
 
   const circleSizePx = compactCircles ? SMALL_CIRCLE_SIZE_PX : DEFAULT_CIRCLE_SIZE_PX;
@@ -383,8 +387,10 @@ export default function PlayerPositions({
   // We need local state for smooth dragging
   const [localPositions, setLocalPositions] = useState<PlayerPosition[]>([]);
   useEffect(() => {
-    if (room.positions) setLocalPositions(room.positions);
-  }, [room.positions]);
+    if (room.positions) {
+      setLocalPositions(room.positions.filter((pos) => pos.playerId !== room.hostId));
+    }
+  }, [room.hostId, room.positions]);
 
   const animPositionsRef = useRef<PlayerPosition[]>([]);
   useEffect(() => {
@@ -555,7 +561,7 @@ export default function PlayerPositions({
     // Build a stable top/wait split based on where players currently are,
     // so "Tự xếp" doesn't reshuffle everyone just because someone left/joined.
     const posById = new Map(localPositions.map(p => [p.playerId, p] as const));
-    const idsAll = room.players.map(p => p.id);
+    const idsAll = visiblePlayers.map(p => p.id);
     const allWithPos = idsAll.map(id => ({ id, pos: posById.get(id) }));
 
     // 19+ players: auto-switch to compact circles (if not already), then apply fixed 19–24 layouts.
@@ -729,11 +735,11 @@ export default function PlayerPositions({
 
     // For 19+ players: when returning to normal size, always reset the first 18 players
     // back to the 18-player layout; any extra players are pushed into the bottom extension row.
-    if (!nextCompact && isEditor && room.players.length > AUTO_TOP_LIMIT && containerRef.current) {
+    if (!nextCompact && isEditor && visiblePlayers.length > AUTO_TOP_LIMIT && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
       const nextCircleSizePx = DEFAULT_CIRCLE_SIZE_PX;
       const nextCircleRadiusPx = nextCircleSizePx / 2;
-      const idsAll = room.players.map(p => p.id);
+      const idsAll = visiblePlayers.map(p => p.id);
       const idsTopFixed = idsAll.slice(0, AUTO_TOP_LIMIT);
       const idsExtra = idsAll.slice(AUTO_TOP_LIMIT);
 
@@ -860,7 +866,7 @@ export default function PlayerPositions({
             />
           </div>
         )}
-        {localPositions.map((pos) => {
+        {localPositions.filter((pos) => pos.playerId !== room.hostId).map((pos) => {
           const p = room.players.find((x) => x.id === pos.playerId);
           if (!p) return null;
 
@@ -928,6 +934,10 @@ export default function PlayerPositions({
             (!!room.phase || !!room.gameOver);
           const showDisconnectedBadge = p.connected === false && (showDisconnectedByHostInRoom || !isDead);
           const showInGameBadge = mode === "edit" && p.inGame === true;
+          const playerHp = room.sharedHeartsVisible ? room.playerHearts?.[pos.playerId] : undefined;
+          const showHpBadge = room.sharedHeartsVisible && !isDead && typeof playerHp === "number";
+          const hpSafe = Math.max(0, Math.min(2, playerHp ?? 0));
+          const hpText = `${"♥️".repeat(hpSafe)}${"♡".repeat(2 - hpSafe)}`;
 
           const isBulletView = mode === "view" && !!bulletRecoil;
 
@@ -1117,6 +1127,24 @@ export default function PlayerPositions({
                   width: "max-content",
                 }}>
                   Trong trận
+                </div>
+              )}
+
+              {showHpBadge && (
+                <div style={{
+                  position: "absolute",
+                  top: -26,
+                  right: -6,
+                  background: "rgba(170,20,35,0.95)",
+                  color: "#fff",
+                  padding: "2px 8px",
+                  borderRadius: 999,
+                  fontSize: 12,
+                  fontWeight: "bold",
+                  letterSpacing: 0.5,
+                  boxShadow: "0 0 0 1px rgba(255,255,255,0.35)",
+                }}>
+                  {hpText}
                 </div>
               )}
 

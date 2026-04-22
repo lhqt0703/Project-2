@@ -36,7 +36,7 @@ export default function Game() {
   const deadPlayers = sync.deadPlayers;
   const isHost = !!room?.hostId && socket.id === room.hostId;
   const shouldHidePlayerRoleText = !isHost && !!room?.hidePlayerRoleText;
-  const allNightActionsSimultaneous = room?.gameRules?.allNightActionsSimultaneous !== false;
+  const allNightActionsSimultaneous = room?.gameRules?.allNightActionsSimultaneous === true;
   const currentNightTurnRole = (room?.nightTurnRole || null) as NightActionRole | null;
   const nightTurnPaused = !!room?.nightTurnPaused;
   const nightTurnDeadline = room?.nightTurnDeadline ?? null;
@@ -44,6 +44,14 @@ export default function Game() {
   const [nightTurnNow, setNightTurnNow] = useState(Date.now());
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [frozenRoomSnapshot, setFrozenRoomSnapshot] = useState<any | null>(null);
+  const [rulesRestartOverlay, setRulesRestartOverlay] = useState<{
+    message: string;
+    totalMs: number;
+    fadeInMs: number;
+    holdMs: number;
+    fadeOutMs: number;
+    key: number;
+  } | null>(null);
 
   const showNotice = useCallback((title: string, message: string, onConfirm?: () => void) => {
     setNoticeModal({ title, message, onConfirm });
@@ -117,6 +125,45 @@ export default function Game() {
   }, [roomId]);
 
   useEffect(() => {
+    if (!roomId) return;
+    const storageKey = `hostRestartCinematic:${roomId}`;
+    const raw = sessionStorage.getItem(storageKey);
+    if (!raw) return;
+
+    sessionStorage.removeItem(storageKey);
+
+    try {
+      const parsed = JSON.parse(raw) as {
+        message?: string;
+        fadeInMs?: number;
+        holdMs?: number;
+        fadeOutMs?: number;
+      };
+
+      const fadeInMs = Math.max(0, parsed?.fadeInMs ?? 1000);
+      const holdMs = Math.max(0, parsed?.holdMs ?? 2000);
+      const fadeOutMs = Math.max(0, parsed?.fadeOutMs ?? 500);
+      const totalMs = fadeInMs + holdMs + fadeOutMs;
+      const overlayKey = Date.now();
+
+      setRulesRestartOverlay({
+        message: parsed?.message || "Đang khởi tạo ván chơi mới",
+        fadeInMs,
+        holdMs,
+        fadeOutMs,
+        totalMs,
+        key: overlayKey,
+      });
+
+      window.setTimeout(() => {
+        setRulesRestartOverlay((prev) => (prev && prev.key === overlayKey ? null : prev));
+      }, totalMs + 50);
+    } catch {
+      // ignore malformed cached payload
+    }
+  }, [roomId]);
+
+  useEffect(() => {
     const handleReturnResult = (payload: { ok: boolean; roomId?: string; reason?: "kicked" | "room_closed" }) => {
       if (!roomId) return;
       if (payload?.roomId && payload.roomId !== roomId) return;
@@ -156,6 +203,43 @@ export default function Game() {
       socket.off("forceReturnToRoom", handleForceReturnToRoom);
     };
   }, [nav, roomId, showNotice]);
+
+  useEffect(() => {
+    const handleRulesRestartCinematic = (payload: {
+      roomId?: string;
+      message?: string;
+      fadeInMs?: number;
+      holdMs?: number;
+      fadeOutMs?: number;
+    }) => {
+      if (!roomId) return;
+      if (payload?.roomId && payload.roomId !== roomId) return;
+
+      const fadeInMs = Math.max(0, payload?.fadeInMs ?? 1000);
+      const holdMs = Math.max(0, payload?.holdMs ?? 2000);
+      const fadeOutMs = Math.max(0, payload?.fadeOutMs ?? 500);
+      const totalMs = fadeInMs + holdMs + fadeOutMs;
+      const overlayKey = Date.now();
+
+      setRulesRestartOverlay({
+        message: payload?.message || "Chủ phòng đã thiết lập lại luật chơi và khởi động lại ván chơi mới",
+        fadeInMs,
+        holdMs,
+        fadeOutMs,
+        totalMs,
+        key: overlayKey,
+      });
+
+      window.setTimeout(() => {
+        setRulesRestartOverlay((prev) => (prev && prev.key === overlayKey ? null : prev));
+      }, totalMs + 50);
+    };
+
+    socket.on("rulesRestartCinematic", handleRulesRestartCinematic);
+    return () => {
+      socket.off("rulesRestartCinematic", handleRulesRestartCinematic);
+    };
+  }, [roomId]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -502,6 +586,13 @@ export default function Game() {
     requestReturnToRoom();
   };
 
+  const rulesRestartAnimationName = rulesRestartOverlay
+    ? `gameRulesRestartOverlay_${rulesRestartOverlay.key}`
+    : "";
+  const rulesRestartTextAnimationName = rulesRestartOverlay
+    ? `gameRulesRestartText_${rulesRestartOverlay.key}`
+    : "";
+
   return (
     <div style={{ padding: 20 }}>
       {!room && (
@@ -509,8 +600,11 @@ export default function Game() {
           Hình như có gì đó sai sai... Lẽ ra bạn không nên thấy được những dòng này
         </p>
       )}
-      <h1>Trò chơi bắt đầu!</h1>
-      <h2>Vai trò của bạn là: {shouldHidePlayerRoleText ? "********" : role}</h2>
+
+      {!isHost && (
+        <h2>Vai trò của bạn là: {shouldHidePlayerRoleText ? "********" : role}</h2>
+      )}
+      
       {sync.gameEnded && (
         <h2>
           Kết thúc: {sync.gameEnded.winner === "wolves" ? "Phe Sói" : "Phe Dân"} chiến thắng
@@ -709,7 +803,56 @@ export default function Game() {
     {isHost && logPanel}
 
     {wolf.panel}
-    {dayVote.panel}
+    {!isHost && dayVote.panel}
+
+    {rulesRestartOverlay && (
+      <>
+        <style>{`
+          @keyframes ${rulesRestartAnimationName} {
+            0% { opacity: 0; }
+            ${((rulesRestartOverlay.fadeInMs / rulesRestartOverlay.totalMs) * 100).toFixed(4)}% { opacity: 1; }
+            ${(((rulesRestartOverlay.fadeInMs + rulesRestartOverlay.holdMs) / rulesRestartOverlay.totalMs) * 100).toFixed(4)}% { opacity: 1; }
+            100% { opacity: 0; }
+          }
+
+          @keyframes ${rulesRestartTextAnimationName} {
+            0% { opacity: 0; }
+            ${((rulesRestartOverlay.fadeInMs / rulesRestartOverlay.totalMs) * 100).toFixed(4)}% { opacity: 0; }
+            ${((((rulesRestartOverlay.fadeInMs + Math.max(120, Math.min(220, rulesRestartOverlay.holdMs * 0.1))) / rulesRestartOverlay.totalMs)) * 100).toFixed(4)}% { opacity: 1; }
+            ${(((rulesRestartOverlay.fadeInMs + rulesRestartOverlay.holdMs) / rulesRestartOverlay.totalMs) * 100).toFixed(4)}% { opacity: 1; }
+            100% { opacity: 0; }
+          }
+        `}</style>
+
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 10000,
+            background: "#000",
+            animation: `${rulesRestartAnimationName} ${rulesRestartOverlay.totalMs}ms linear forwards`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            pointerEvents: "none",
+          }}
+        >
+          <div
+            style={{
+              color: "#fff",
+              fontSize: 28,
+              fontWeight: 700,
+              textAlign: "center",
+              maxWidth: 980,
+              padding: "0 24px",
+              animation: `${rulesRestartTextAnimationName} ${rulesRestartOverlay.totalMs}ms linear forwards`,
+            }}
+          >
+            {rulesRestartOverlay.message}
+          </div>
+        </div>
+      </>
+    )}
 
     <ConfirmModal
       open={!!noticeModal}

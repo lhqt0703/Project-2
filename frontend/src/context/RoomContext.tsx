@@ -11,6 +11,7 @@ export interface Player {
 export type NightActionRole = "Sói" | "Bảo vệ" | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri";
 
 export interface RoomGameRules {
+  twoHeartsFirstTwoNights: boolean;
   allNightActionsSimultaneous: boolean;
   witchSeeBiteOnlyIfHasHealPotion: boolean;
   witchHideProtectedBiteInSimultaneous: boolean;
@@ -21,6 +22,7 @@ export interface RoomGameRules {
 }
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
+  twoHeartsFirstTwoNights: true,
   allNightActionsSimultaneous: false,
   witchSeeBiteOnlyIfHasHealPotion: true,
   witchHideProtectedBiteInSimultaneous: false,
@@ -45,6 +47,9 @@ export interface RoomData {
   autoArrangeUsed?: boolean;
   compactCircles?: boolean;
   gameRules?: RoomGameRules;
+  pendingGameRules?: RoomGameRules;
+  sharedHeartsVisible?: boolean;
+  playerHearts?: Record<string, number>;
 
   // Game-only ephemeral state that may be synced via sockets.
   wolfVotes?: Record<string, string | null>;

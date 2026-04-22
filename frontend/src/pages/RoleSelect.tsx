@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { socket } from "../socket";
+import ConfirmModal from "../components/ConfirmModal";
 
 const MAX_VILLAGERS = 10;
 const NON_VILLAGER_ROLES = ["Sói", "Bán sói", "Sói con", "Linh sói", "Kẻ bị nguyền", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn"] as const;
@@ -17,6 +18,14 @@ export default function RoleSelect() {
   // 10 separate villager slots
   const [villagerSlots, setVillagerSlots] = useState<boolean[]>(Array(MAX_VILLAGERS).fill(false));
   const [playerCount, setPlayerCount] = useState<number>(0);
+  const [roomSnapshot, setRoomSnapshot] = useState<{
+    hostId: string;
+    players: { id: string; name: string }[];
+    roles?: string[];
+    phase?: string;
+    gameOver?: boolean;
+  } | null>(null);
+  const [pendingRolesApply, setPendingRolesApply] = useState<string[] | null>(null);
   const didInitFromServer = useRef(false);
 
   const villagerCount = useMemo(
@@ -34,12 +43,14 @@ export default function RoleSelect() {
 
     // Định nghĩa kiểu dữ liệu cho phòng
     interface Room {
+      hostId: string;
       players: { id: string; name: string }[];
       roles?: string[];
     }
 
     const handleRoom = (room: Room) => {
-      setPlayerCount(room.players.length);
+      setRoomSnapshot(room);
+      setPlayerCount(room.players.filter((p) => p.id !== room.hostId).length);
 
       // Prefill previous selection when entering RoleSelect again
       if (!didInitFromServer.current) {
@@ -62,6 +73,62 @@ export default function RoleSelect() {
       socket.off("roomUpdated", handleRoom);
     };
   }, [roomId]);
+
+  useEffect(() => {
+    interface WolfRoleMismatchData {
+      currentWolfCount: number;
+      maxAllowedWolfCount: number;
+      playerCount: number;
+    }
+
+    const handleGameStarted = (payload?: {
+      hostRestartCinematic?: {
+        roomId?: string;
+        message?: string;
+        fadeInMs?: number;
+        holdMs?: number;
+        fadeOutMs?: number;
+      };
+    }) => {
+      if (!roomId) return;
+      const cinematic = payload?.hostRestartCinematic;
+      if (cinematic) {
+        sessionStorage.setItem(`hostRestartCinematic:${roomId}`, JSON.stringify(cinematic));
+      }
+      nav(`/game?roomId=${roomId}`);
+    };
+
+    const handleWolfMismatch = (data: WolfRoleMismatchData) => {
+      if (!roomId) return;
+
+      const ok = window.confirm(
+        `Danh sách vai trò hiện tại có ${data.currentWolfCount} sói, vượt quá mức tối đa ${data.maxAllowedWolfCount} cho phòng ${data.playerCount} người.\n\n` +
+        `Hệ thống sẽ tự giảm bớt số lượng sói để tránh phe sói thắng ngay khi bắt đầu.\n` +
+        `Nhấn OK để hệ thống tự điều chỉnh và tiếp tục khởi tạo ván chơi mới.\n` +
+        `Nhấn Hủy để ở lại màn hình chọn vai trò.`
+      );
+
+      if (!ok) {
+        return;
+      }
+
+      const rolesToUse = buildFinalRoles();
+      socket.emit("rolesSelected", {
+        roomId,
+        roles: rolesToUse,
+        applyMode: "restart-now",
+        forceAdjustWolfCount: true,
+      });
+    };
+
+    socket.on("gameStarted", handleGameStarted);
+    socket.on("wolfRoleMismatch", handleWolfMismatch);
+
+    return () => {
+      socket.off("gameStarted", handleGameStarted);
+      socket.off("wolfRoleMismatch", handleWolfMismatch);
+    };
+  }, [nav, roomId, selectedRoles, villagerCount]);
 
   const removeOne = (arr: string[], role: string) => {
     const idx = arr.indexOf(role);
@@ -112,6 +179,7 @@ export default function RoleSelect() {
     if (!roomId) return;
 
     const currentRoles = buildFinalRoles();
+    const gameInProgress = !!roomSnapshot?.phase && !roomSnapshot.gameOver;
 
     // Nếu role chọn ít hơn số người → hỏi bổ sung dân làng
     if (currentRoles.length < playerCount) {
@@ -152,6 +220,11 @@ export default function RoleSelect() {
 
       socket.emit("rolesSelected", { roomId, roles: finalRoles });
       nav(`/room?roomId=${roomId}`);
+      return;
+    }
+
+    if (gameInProgress) {
+      setPendingRolesApply(currentRoles);
       return;
     }
 
@@ -271,6 +344,33 @@ export default function RoleSelect() {
       >
         Xác nhận vai trò
       </button>
+
+      <ConfirmModal
+        open={!!pendingRolesApply}
+        title="Áp dụng danh sách vai trò mới"
+        message="Bạn muốn kết thúc trò chơi hiện tại ngay lập tức để áp dụng danh sách vai trò mới hay tiếp tục trò chơi hiện tại và áp dụng danh sách vai trò này vào ván sau?"
+        confirmText="Kết thúc trận và áp dụng ngay"
+        cancelText="Áp dụng vào ván sau"
+        onConfirm={() => {
+          if (!roomId || !pendingRolesApply) return;
+          socket.emit("rolesSelected", {
+            roomId,
+            roles: pendingRolesApply,
+            applyMode: "restart-now",
+          });
+          setPendingRolesApply(null);
+        }}
+        onCancel={() => {
+          if (!roomId || !pendingRolesApply) return;
+          socket.emit("rolesSelected", {
+            roomId,
+            roles: pendingRolesApply,
+            applyMode: "next-round",
+          });
+          setPendingRolesApply(null);
+          nav(`/room?roomId=${roomId}`);
+        }}
+      />
     </div>
   );
 }

@@ -197,6 +197,21 @@ export default function GameRulesModal({
         <div style={{ padding: 24, display: "grid", gap: 14 }}>
           <label style={rowStyle()}>
             <div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả nhân vật sẽ có 2 máu trong 2 đêm đầu</div>
+              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                Mặc định bật. Trong 2 đêm đầu, ai bị Sói cắn sẽ chỉ mất 1 máu (không chết ngay). Bình giết của Phù thủy và đạn Thợ săn vẫn hạ gục như bình thường.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={draftRules.twoHeartsFirstTwoNights}
+              onChange={(e) => updateRule("twoHeartsFirstTwoNights", e.target.checked)}
+              style={{ width: 20, height: 20, marginTop: 2 }}
+            />
+          </label>
+
+          <label style={rowStyle()}>
+            <div>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả người chơi có thể thực hiện chức năng cùng lúc trong đêm</div>
               <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
                 Tắt: hiển thị thứ tự hành động ban đêm. Bật: cho phép các vai trò xử lý song song theo luật hiện có.

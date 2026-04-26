@@ -28,7 +28,11 @@ import type {
   WolfPhaseStartedPayload,
   WolfVotesUpdatedPayload,
   WolfVotes2UpdatedPayload,
+  ElementalTargetUpdatedPayload,
+  ElementalBuffVoteStatePayload,
+  ElementalBuffSelectedPayload,
 } from "./socketEvents";
+import { ELEMENTAL_BUFF_LABELS, ELEMENTAL_BUFFS } from "../../constants/elemental";
 
 export function useGameSocketSync({
   roomId,
@@ -67,6 +71,16 @@ export function useGameSocketSync({
 
   const [gameEnded, setGameEnded] = useState<GameEndedPayload | null>(null);
   const [spiritWolfDecisionTargetId, setSpiritWolfDecisionTargetId] = useState<string | null>(null);
+  const [elementalTargetSeq, setElementalTargetSeq] = useState(0);
+  const [elementalTargetId, setElementalTargetId] = useState<string | null>(null);
+  const [elementalActionMode, setElementalActionMode] = useState<"guess" | "buff">("guess");
+  const [elementalBuffVoteState, setElementalBuffVoteState] = useState<ElementalBuffVoteStatePayload>({
+    pendingVote: false,
+    quickMode: true,
+    selectedBuffId: null,
+    availableBuffTier: 0,
+  });
+  const [elementalBuffResult, setElementalBuffResult] = useState<ElementalBuffSelectedPayload | null>(null);
 
   const [dayVotes, setDayVotes] = useState<DayVotesUpdatedPayload | null>(null);
   const [dayLocked, setDayLocked] = useState<DayLockedUpdatedPayload | null>(null);
@@ -141,6 +155,9 @@ export function useGameSocketSync({
       setWolves([]);
       setWolfVotes2(null);
       setWolfMaxTargets(1);
+      setElementalTargetId(null);
+      setElementalTargetSeq(0);
+      setElementalActionMode("guess");
     };
 
     const handleRoomUpdated = (data: any) => {
@@ -165,6 +182,16 @@ export function useGameSocketSync({
       }
       if (Array.isArray(data?.deadPlayers)) {
         setDeadPlayers(data.deadPlayers);
+      }
+      if (data?.elementalSelectedBuffId && data?.elementalSelectedBuffAppliesNight) {
+        const buffId = data.elementalSelectedBuffId as string;
+        setElementalBuffResult({
+          buffId,
+          label: (ELEMENTAL_BUFF_LABELS as Record<string, string>)[buffId] || buffId,
+          tier: ELEMENTAL_BUFFS.find((buff) => buff.id === buffId)?.tier || 0,
+          appliesNight: data.elementalSelectedBuffAppliesNight,
+          randomTieBreak: false,
+        });
       }
 
       if (data?.phase === "day") {
@@ -238,6 +265,7 @@ export function useGameSocketSync({
       setTrialVotes(null);
       setTrialVerdictFinished(null);
       setTrialVerdictFinishedSeq(0);
+      setElementalBuffResult(null);
     };
 
     const handleGameEnded = (payload: GameEndedPayload) => {
@@ -267,6 +295,25 @@ export function useGameSocketSync({
 
     const handleSpiritWolfDecisionRecorded = (_payload: SpiritWolfDecisionRecordedPayload) => {
       setSpiritWolfDecisionTargetId(null);
+    };
+
+    const handleElementalTargetUpdated = (payload: ElementalTargetUpdatedPayload) => {
+      setElementalTargetId(payload?.targetId ?? null);
+      setElementalActionMode(payload?.mode === "buff" ? "buff" : "guess");
+      setElementalTargetSeq((s) => s + 1);
+    };
+
+    const handleElementalBuffVoteStateUpdated = (payload: ElementalBuffVoteStatePayload) => {
+      setElementalBuffVoteState({
+        pendingVote: !!payload?.pendingVote,
+        quickMode: payload?.quickMode !== false,
+        selectedBuffId: payload?.selectedBuffId ?? null,
+        availableBuffTier: payload?.availableBuffTier ?? 0,
+      });
+    };
+
+    const handleElementalBuffSelected = (payload: ElementalBuffSelectedPayload) => {
+      setElementalBuffResult(payload);
     };
 
     const handlePlayerKilled = (playerId: string) => {
@@ -478,6 +525,9 @@ export function useGameSocketSync({
     socket.on("rolesRevealUpdated", handleRolesRevealUpdated);
     socket.on("spiritWolfDecisionNeeded", handleSpiritWolfDecisionNeeded);
     socket.on("spiritWolfDecisionRecorded", handleSpiritWolfDecisionRecorded);
+    socket.on("elementalTargetUpdated", handleElementalTargetUpdated);
+    socket.on("elementalBuffVoteStateUpdated", handleElementalBuffVoteStateUpdated);
+    socket.on("elementalBuffSelected", handleElementalBuffSelected);
 
     return () => {
       socket.off("roomUpdated", handleRoomUpdated);
@@ -517,6 +567,9 @@ export function useGameSocketSync({
       socket.off("rolesRevealUpdated", handleRolesRevealUpdated);
       socket.off("spiritWolfDecisionNeeded", handleSpiritWolfDecisionNeeded);
       socket.off("spiritWolfDecisionRecorded", handleSpiritWolfDecisionRecorded);
+      socket.off("elementalTargetUpdated", handleElementalTargetUpdated);
+      socket.off("elementalBuffVoteStateUpdated", handleElementalBuffVoteStateUpdated);
+      socket.off("elementalBuffSelected", handleElementalBuffSelected);
     };
   }, [roomId, setRoom]);
 
@@ -541,6 +594,11 @@ export function useGameSocketSync({
       wolfMaxTargets,
       gameEnded,
       spiritWolfDecisionTargetId,
+      elementalTargetSeq,
+      elementalTargetId,
+      elementalActionMode,
+      elementalBuffVoteState,
+      elementalBuffResult,
       dayVotes,
       dayLocked,
       dayDiscussionDeadline,
@@ -583,6 +641,11 @@ export function useGameSocketSync({
       wolfMaxTargets,
       gameEnded,
       spiritWolfDecisionTargetId,
+      elementalTargetSeq,
+      elementalTargetId,
+      elementalActionMode,
+      elementalBuffVoteState,
+      elementalBuffResult,
       dayVotes,
       dayLocked,
       dayDiscussionDeadline,

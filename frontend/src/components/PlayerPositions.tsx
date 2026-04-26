@@ -316,6 +316,7 @@ export default function PlayerPositions({
   const dragOffsetRef = useRef<{ dxPx: number; dyPx: number } | null>(null);
   const [swapSource, setSwapSource] = useState<string | null>(null);
   const [compactCircles, setCompactCircles] = useState<boolean>(() => room?.compactCircles ?? false);
+  const [frameScale, setFrameScale] = useState(1);
 
   if (!room) return null;
 
@@ -326,14 +327,47 @@ export default function PlayerPositions({
     setCompactCircles(room.compactCircles ?? false);
   }, [room.compactCircles]);
 
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const updateScale = () => {
+      const width = el.getBoundingClientRect().width || 600;
+      setFrameScale(clamp(width / 600, 0.55, 1));
+    };
+
+    updateScale();
+
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(el);
+    window.addEventListener("resize", updateScale);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateScale);
+    };
+  }, []);
+
   const isHost = room.hostId === socket.id;
   const isEditor = mode === "edit" && (room.positionEditors?.includes(socket.id!) || isHost);
 
   const isExpandedFrame = visiblePlayers.length > AUTO_TOP_LIMIT;
   const frameHeightPx = isExpandedFrame ? EXPANDED_FRAME_HEIGHT_PX : FRAME_HEIGHT_PX;
 
-  const circleSizePx = compactCircles ? SMALL_CIRCLE_SIZE_PX : DEFAULT_CIRCLE_SIZE_PX;
+  const scalePx = (value: number, min = 1) => Math.max(min, Math.round(value * frameScale));
+  const scaleNum = (value: number, min = 0) => Math.max(min, Number((value * frameScale).toFixed(2)));
+  const circleSizePx = scalePx(compactCircles ? SMALL_CIRCLE_SIZE_PX : DEFAULT_CIRCLE_SIZE_PX, 34);
   const circleRadiusPx = circleSizePx / 2;
+  const circleBorderPx = scalePx(2, 1);
+  const selectedBorderPx = scalePx(3, 2);
+  const playerFontSizePx = scalePx(12, 9);
+  const playerSubFontSizePx = scalePx(11, 8);
+  const badgeFontSizePx = scalePx(11, 8);
+  const hpBadgeFontSizePx = scalePx(12, 9);
+  const badgeOffsetPx = scalePx(10, 6);
+  const hpBadgeTopPx = scalePx(26, 16);
+  const badgePadding = `${scalePx(2, 1)}px ${scalePx(6, 3)}px`;
+  const hpBadgePadding = `${scalePx(2, 1)}px ${scalePx(8, 4)}px`;
 
   const wolfVotes = room.wolfVotes as Record<string, string | null> | undefined;
   const wolfVotes2 = room.wolfVotes2 as Record<string, string | null> | undefined;
@@ -737,7 +771,7 @@ export default function PlayerPositions({
     // back to the 18-player layout; any extra players are pushed into the bottom extension row.
     if (!nextCompact && isEditor && visiblePlayers.length > AUTO_TOP_LIMIT && containerRef.current) {
       const rect = containerRef.current.getBoundingClientRect();
-      const nextCircleSizePx = DEFAULT_CIRCLE_SIZE_PX;
+      const nextCircleSizePx = scalePx(DEFAULT_CIRCLE_SIZE_PX, 34);
       const nextCircleRadiusPx = nextCircleSizePx / 2;
       const idsAll = visiblePlayers.map(p => p.id);
       const idsTopFixed = idsAll.slice(0, AUTO_TOP_LIMIT);
@@ -799,7 +833,7 @@ export default function PlayerPositions({
   };
 
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth: 600, margin: "0 auto" }}>
+    <div className="player-position-shell">
       <style>{`
         @keyframes witchDangerShake {
           0% { transform: translate(-50%,-50%) translateX(0); }
@@ -814,7 +848,7 @@ export default function PlayerPositions({
         }
       `}</style>
       {isEditor && (
-        <div style={{ marginBottom: 8, display: "flex", gap: 8, justifyContent: "center" }}>
+        <div className="player-position-toolbar" style={{ marginBottom: 8, justifyContent: "center" }}>
           <button onClick={() => setSwapSource(prev => prev ? null : "SELECTING")}>
             {swapSource ? "Hủy đổi chỗ" : "Đổi chỗ"}
           </button>
@@ -826,6 +860,7 @@ export default function PlayerPositions({
       )}
       
       <div
+        className="player-position-frame"
         ref={containerRef}
         style={{
           width: "100%",
@@ -860,8 +895,8 @@ export default function PlayerPositions({
                 // The SVG's default facing is up-right; +45deg makes it face right.
                 transform: `translate(-50%, -50%) rotate(${(bulletRecoil?.angleDeg ?? 0) + 45}deg)`,
                 transformOrigin: "center",
-                width: 22,
-                height: 22,
+                width: scalePx(22, 14),
+                height: scalePx(22, 14),
               }}
             />
           </div>
@@ -889,29 +924,29 @@ export default function PlayerPositions({
           let boxShadow = "";
           if (seerResult && seerResult.playerId === pos.playerId) {
             boxShadow = seerResult.isWolf
-              ? "0 0 0 8px #d00, 0 0 16px 8px #222"
-              : "0 0 0 8px #222, 0 0 16px 8px #d00";
+              ? `0 0 0 ${scalePx(8, 4)}px #d00, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #222`
+              : `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #d00`;
           }
 
           const isWitchDanger =
             (!!dangerPlayerId && dangerPlayerId === pos.playerId) ||
             (!!dangerPlayerIds && dangerPlayerIds.includes(pos.playerId));
-          const dangerShadow = isWitchDanger ? "0 0 0 6px rgba(220,0,0,0.95), 0 0 14px rgba(220,0,0,0.55)" : "";
+          const dangerShadow = isWitchDanger ? `0 0 0 ${scalePx(6, 3)}px rgba(220,0,0,0.95), 0 0 ${scalePx(14, 7)}px rgba(220,0,0,0.55)` : "";
           const isHighlighted = !!highlightPlayerId && highlightPlayerId === pos.playerId;
           const isSecondaryHighlighted = !!secondaryHighlightPlayerIds && secondaryHighlightPlayerIds.includes(pos.playerId);
           const highlightShadow = isHighlighted
-            ? "0 0 0 6px rgba(108,92,231,0.55), 0 0 16px 6px rgba(108,92,231,0.45)"
+            ? `0 0 0 ${scalePx(6, 3)}px rgba(108,92,231,0.55), 0 0 ${scalePx(16, 8)}px ${scalePx(6, 3)}px rgba(108,92,231,0.45)`
             : isSecondaryHighlighted
-              ? "0 0 0 5px rgba(46,204,113,0.38), 0 0 12px 4px rgba(46,204,113,0.24)"
+              ? `0 0 0 ${scalePx(5, 3)}px rgba(46,204,113,0.38), 0 0 ${scalePx(12, 7)}px ${scalePx(4, 2)}px rgba(46,204,113,0.24)`
               : "";
           const trialOrangeShadow = trialOrangePlayerId === pos.playerId
-            ? "0 0 0 7px rgba(255,165,0,0.9), 0 0 16px 6px rgba(255,165,0,0.55)"
+            ? `0 0 0 ${scalePx(7, 4)}px rgba(255,165,0,0.9), 0 0 ${scalePx(16, 8)}px ${scalePx(6, 3)}px rgba(255,165,0,0.55)`
             : "";
           const trialWhiteShadow = (trialWhitePlayerIds || []).includes(pos.playerId)
-            ? "0 0 0 6px rgba(255,255,255,0.95), 0 0 14px 5px rgba(255,255,255,0.35)"
+            ? `0 0 0 ${scalePx(6, 3)}px rgba(255,255,255,0.95), 0 0 ${scalePx(14, 7)}px ${scalePx(5, 3)}px rgba(255,255,255,0.35)`
             : "";
           const trialGreenShadow = trialGreenPlayerId === pos.playerId
-            ? "0 0 0 7px rgba(46,204,113,0.95), 0 0 16px 6px rgba(46,204,113,0.45)"
+            ? `0 0 0 ${scalePx(7, 4)}px rgba(46,204,113,0.95), 0 0 ${scalePx(16, 8)}px ${scalePx(6, 3)}px rgba(46,204,113,0.45)`
             : "";
 
           const showSelectedOutline =
@@ -925,7 +960,7 @@ export default function PlayerPositions({
             (activeNightRole !== "Sói" && roleBadgeText === activeNightRole)
           );
           const activeRoleShadow = isActiveNightRoleBadge
-            ? "0 0 0 7px rgba(255,215,120,0.38), 0 0 18px 8px rgba(255,215,120,0.22)"
+            ? `0 0 0 ${scalePx(7, 4)}px rgba(255,215,120,0.38), 0 0 ${scalePx(18, 9)}px ${scalePx(8, 4)}px rgba(255,215,120,0.22)`
             : "";
           const mergedBoxShadow = [boxShadow, dangerShadow, highlightShadow, activeRoleShadow, trialOrangeShadow, trialWhiteShadow, trialGreenShadow].filter(Boolean).join(", ");
           const showDisconnectedByHostInRoom =
@@ -954,7 +989,7 @@ export default function PlayerPositions({
 
             // Hunter recoil: kick back quickly as bullet fires, then return slowly during slow-mo,
             // then finish returning quickly as bullet speeds up.
-            const HUNTER_RECOIL_PX = 38;
+            const HUNTER_RECOIL_PX = scaleNum(38, 20);
 
             const burst1Ms = 800;
             const slowMoMs = 100;
@@ -1001,7 +1036,7 @@ export default function PlayerPositions({
             }
 
             // Target knockback: delay until the *final* burst so it doesn't flinch early.
-            const TARGET_KNOCK_PX = 14;
+            const TARGET_KNOCK_PX = scaleNum(14, 8);
             const targetKickWindowMs = Math.min(90, Math.max(40, burst2Ms));
             const impactStart = Math.max(0, totalMs - targetKickWindowMs);
             const knockPulse = pulse((elapsedMs - impactStart) / targetKickWindowMs);
@@ -1043,16 +1078,16 @@ export default function PlayerPositions({
                 height: circleSizePx,
                 borderRadius: circleRadiusPx,
                 background: "var(--surface)",
-                border: isSwapSelected ? "3px solid #2196F3" : "2px solid #333",
+                border: isSwapSelected ? `${selectedBorderPx}px solid #2196F3` : `${circleBorderPx}px solid #333`,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: 12,
+                fontSize: playerFontSizePx,
                 cursor: isEditor ? (swapSource ? "crosshair" : "grab") : "pointer",
                 opacity: isDead ? 0.4 : 1,
                 zIndex: dragging === pos.playerId ? 10 : 1,
                 boxShadow: mergedBoxShadow || undefined,
-                outline: showSelectedOutline ? "3px solid rgba(255,165,0,0.9)" : undefined,
+                outline: showSelectedOutline ? `${selectedBorderPx}px solid rgba(255,165,0,0.9)` : undefined,
                 transition: dragging === pos.playerId
                   ? "none"
                   : "left 0.2s, top 0.2s, width 220ms ease, height 220ms ease, border-radius 220ms ease, box-shadow 300ms ease", // Smooth move + resize + glow
@@ -1061,13 +1096,13 @@ export default function PlayerPositions({
               {showWolfVoteBadges && effectiveWolfCount >= 2 && voteCountForThis > 0 && (
                 <div style={{
                   position: "absolute",
-                  top: -10,
-                  right: -10,
+                  top: -badgeOffsetPx,
+                  right: -badgeOffsetPx,
                   background: "#b71c1c",
                   color: "#fff",
-                  borderRadius: 10,
-                  padding: "2px 6px",
-                  fontSize: 11,
+                  borderRadius: badgeOffsetPx,
+                  padding: badgePadding,
+                  fontSize: badgeFontSizePx,
                   fontWeight: "bold",
                 }}>
                   {voteCountForThis}/{effectiveWolfCount}
@@ -1077,13 +1112,13 @@ export default function PlayerPositions({
               {showWolfBadge && (
                 <div style={{
                   position: "absolute",
-                  top: -10,
-                  left: -10,
+                  top: -badgeOffsetPx,
+                  left: -badgeOffsetPx,
                   background: "#000",
                   color: "#fff",
-                  padding: "2px 6px",
-                  borderRadius: 6,
-                  fontSize: 11,
+                  padding: badgePadding,
+                  borderRadius: scalePx(6, 3),
+                  fontSize: badgeFontSizePx,
                   fontWeight: "bold",
                   opacity: 0.9,
                 }}>
@@ -1094,15 +1129,15 @@ export default function PlayerPositions({
               {roleBadgeText && (
                 <div style={{
                   position: "absolute",
-                  bottom: -10,
+                  bottom: -badgeOffsetPx,
                   left: "50%",
                   transform: "translateX(-50%)",
                   background: "var(--accent-surface)",
                   color: "var(--text)",
                   border: "1px solid var(--border)",
-                  padding: "2px 6px",
-                  borderRadius: 6,
-                  fontSize: 11,
+                  padding: badgePadding,
+                  borderRadius: scalePx(6, 3),
+                  fontSize: badgeFontSizePx,
                   fontWeight: "bold",
                   opacity: 0.95,
                   width: "max-content",
@@ -1114,14 +1149,14 @@ export default function PlayerPositions({
               {showInGameBadge && (
                 <div style={{
                   position: "absolute",
-                  top: -10,
+                  top: -badgeOffsetPx,
                   left: "50%",
                   transform: "translateX(-50%)",
                   background: "#36506f",
                   color: "#fff",
-                  padding: "2px 6px",
-                  borderRadius: 6,
-                  fontSize: 11,
+                  padding: badgePadding,
+                  borderRadius: scalePx(6, 3),
+                  fontSize: badgeFontSizePx,
                   fontWeight: "bold",
                   opacity: 0.9,
                   width: "max-content",
@@ -1133,15 +1168,15 @@ export default function PlayerPositions({
               {showHpBadge && (
                 <div style={{
                   position: "absolute",
-                  top: -26,
-                  right: -6,
+                  top: -hpBadgeTopPx,
+                  right: -scalePx(6, 3),
                   background: "rgba(170,20,35,0.95)",
                   color: "#fff",
-                  padding: "2px 8px",
+                  padding: hpBadgePadding,
                   borderRadius: 999,
-                  fontSize: 12,
+                  fontSize: hpBadgeFontSizePx,
                   fontWeight: "bold",
-                  letterSpacing: 0.5,
+                  letterSpacing: scaleNum(0.5, 0.25),
                   boxShadow: "0 0 0 1px rgba(255,255,255,0.35)",
                 }}>
                   {hpText}
@@ -1151,14 +1186,14 @@ export default function PlayerPositions({
               {showDisconnectedBadge && (
                 <div style={{
                   position: "absolute",
-                  bottom: -10,
+                  bottom: -badgeOffsetPx,
                   left: "50%",
                   transform: "translateX(-50%)",
                   background: "#555",
                   color: "#fff",
-                  padding: "2px 6px",
-                  borderRadius: 6,
-                  fontSize: 11,
+                  padding: badgePadding,
+                  borderRadius: scalePx(6, 3),
+                  fontSize: badgeFontSizePx,
                   fontWeight: "bold",
                   opacity: 0.9,
                   width: "max-content",
@@ -1169,7 +1204,7 @@ export default function PlayerPositions({
 
               <div style={{ textAlign: "center", pointerEvents: "none" }}>
                 <div style={{ fontWeight: "bold" }}>{p.name}</div>
-                <div style={{ opacity: 0.6, fontSize: 11 }}>
+                <div style={{ opacity: 0.6, fontSize: playerSubFontSizePx }}>
                   {p.id === socket.id ? "(Bạn)" : ""}
                 </div>
               </div>

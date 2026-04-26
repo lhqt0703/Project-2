@@ -2,6 +2,17 @@
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import {
+  ELEMENTAL_BUFF_LABELS,
+  ELEMENTAL_BUFFS,
+  ELEMENTAL_GROUP_ROLE,
+  ELEMENTAL_ROLE_ORDER,
+  ELEMENTAL_ROLE_SET,
+  MIN_CORRECT_ELEMENTAL_GUESSES_FOR_BUFF,
+  getBuffTier,
+  type ElementalBuffId,
+  type ElementalRole,
+} from "./elemental.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -28,10 +39,12 @@ interface RoomGameRules {
   witchHideProtectedBiteWhenSequential: boolean;
   trialInteractionSelectionLimit: number;
   nonWolfNightActionDurationSec: number;
-  nightActionOrder: NightActionRole[];
+  nightActionOrder: NightActionOrderRole[];
 }
 
-type NightActionRole = "Sói" | "Bảo vệ" | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri";
+type NightActionRole = "Sói" | "Bảo vệ" | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | ElementalRole;
+
+type NightActionOrderRole = NightActionRole | typeof ELEMENTAL_GROUP_ROLE;
 
 interface Room {
   id: string;
@@ -93,7 +106,7 @@ interface Room {
   // --- Phần cho bảo vệ ---
   protectedTonight?: string | null; // playerId được bảo vệ trong đêm hiện tại
   lastProtected?: string | null; // playerId đã bảo vệ đêm trước (chống bảo vệ 2 đêm liên tiếp)
-  seerUsedTonight?: Record<string, boolean>; // playerId (tiên tri) đã dùng chức năng trong đêm này
+  seerUsedTonight?: Record<string, number>; // playerId (tiên tri) -> số lần đã soi trong đêm này
 
   // --- Phần cho phù thủy ---
   witchPotions?: Record<string, { healUsed: boolean; poisonUsed: boolean }>; // theo witchId
@@ -140,6 +153,15 @@ interface Room {
   // If true, Linh sói will become wolf-aligned starting next night.
   spiritWolfWolfAlignedPending?: boolean;
   spiritWolfPendingPoisonedWolfId?: string | null;
+  elementalTargetTonight?: Record<string, string | null>;
+  elementalCorrectGuessPlayerIdsTonight?: string[];
+  elementalCorrectGuessCountForBuff?: number;
+  elementalPendingBuffVoteNight?: number | null;
+  elementalBuffVotesTonight?: Record<string, ElementalBuffId | null>;
+  elementalBuffVotesResolvedNight?: number | null;
+  elementalSelectedBuffId?: ElementalBuffId | null;
+  elementalSelectedBuffAppliesNight?: number | null;
+  elementalBuffQuickMode?: boolean;
 }
 
 const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -153,6 +175,11 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   nightActionOrder: ["Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
 };
 
+DEFAULT_ROOM_GAME_RULES.nightActionOrder = [
+  ELEMENTAL_GROUP_ROLE,
+  ...DEFAULT_ROOM_GAME_RULES.nightActionOrder.filter((role) => role !== ELEMENTAL_GROUP_ROLE),
+];
+
 const WOLF_TURN_DURATION_MS = 20_000;
 const TWO_HEARTS_MAX_HP = 2;
 const TWO_HEARTS_NIGHT_LIMIT = 2;
@@ -162,16 +189,19 @@ const RULES_RESTART_FADE_OUT_MS = 500;
 const RULES_RESTART_TOTAL_MS = RULES_RESTART_FADE_IN_MS + RULES_RESTART_HOLD_MS + RULES_RESTART_FADE_OUT_MS;
 const RULES_RESTART_RESTART_AT_MS = RULES_RESTART_FADE_IN_MS + RULES_RESTART_HOLD_MS;
 
-const NIGHT_ACTION_ROLE_SET = new Set<NightActionRole>(DEFAULT_ROOM_GAME_RULES.nightActionOrder);
+const NIGHT_ACTION_ROLE_SET = new Set<NightActionOrderRole>([
+  ...DEFAULT_ROOM_GAME_RULES.nightActionOrder,
+  ELEMENTAL_GROUP_ROLE,
+]);
 
-function normalizeNightActionOrder(input: unknown): NightActionRole[] {
+function normalizeNightActionOrder(input: unknown): NightActionOrderRole[] {
   const raw = Array.isArray(input) ? input : [];
-  const unique: NightActionRole[] = [];
+  const unique: NightActionOrderRole[] = [];
   for (const role of raw) {
     if (typeof role !== "string") continue;
-    if (!NIGHT_ACTION_ROLE_SET.has(role as NightActionRole)) continue;
-    if (unique.includes(role as NightActionRole)) continue;
-    unique.push(role as NightActionRole);
+    if (!NIGHT_ACTION_ROLE_SET.has(role as NightActionOrderRole)) continue;
+    if (unique.includes(role as NightActionOrderRole)) continue;
+    unique.push(role as NightActionOrderRole);
   }
 
   for (const role of DEFAULT_ROOM_GAME_RULES.nightActionOrder) {
@@ -259,7 +289,11 @@ type GameLogEntry =
   | { type: "saved_by_guardian"; phase: GameLogEntryPhase; targetIds: string[] }
   | { type: "saved_by_witch"; phase: GameLogEntryPhase; targetIds: string[] }
   | { type: "eliminated"; phase: GameLogEntryPhase; targetIds: string[]; causesByTarget?: Record<string, EliminationCause[]> }
-  | { type: "no_death"; phase: GameLogEntryPhase };
+  | { type: "no_death"; phase: GameLogEntryPhase }
+  | { type: "elemental_buff"; phase: GameLogEntryPhase; buffId: ElementalBuffId | null; tier: number; randomTieBreak?: boolean }
+  | { type: "elemental_guess"; phase: GameLogEntryPhase; actorId: string; targetId: string; isCorrect: boolean }
+  | { type: "elemental_guess_summary"; phase: GameLogEntryPhase; correctCount: number; totalCount: number; triggeredBuffVote: boolean; nextBuffVoteNight?: number }
+  | { type: "elemental_buff_vote"; phase: GameLogEntryPhase; voteBreakdown: { buffId: ElementalBuffId; voterIds: string[] }[] };
 
 type GameLogNight = {
   night: number;
@@ -521,7 +555,6 @@ function toPublicRoom(room: Room) {
     witchPoisonTargetTonight: _witchPoisonTargetTonight,
     hunterTargetTonight: _hunterTargetTonight,
     gameLog: _gameLog,
-    nightCount: _nightCount,
     // Never leak roles / private night state to non-host clients.
     playerRoles: _playerRoles,
     wolves: _wolves,
@@ -540,6 +573,9 @@ function toPublicRoom(room: Room) {
     protectedTonight: _protectedTonight,
     lastProtected: _lastProtected,
     spiritWolfPendingPoisonedWolfId: _spiritWolfPendingPoisonedWolfId,
+    elementalTargetTonight: _elementalTargetTonight,
+    elementalCorrectGuessPlayerIdsTonight: _elementalCorrectGuessPlayerIdsTonight,
+    elementalBuffVotesTonight: _elementalBuffVotesTonight,
     ...rest
   } = room;
   return {
@@ -687,6 +723,137 @@ function canPerformNightRoleAction(room: Room, playerId: string, expectedRole: N
   return room.nightTurnRole === expectedRole;
 }
 
+function getSelectedElementalRoles(room: Room): ElementalRole[] {
+  const sourceRoles = room.playerRoles ? Object.values(room.playerRoles) : room.roles || [];
+  return ELEMENTAL_ROLE_ORDER.filter((role) => sourceRoles.includes(role));
+}
+
+function isElementalRoleTurn(role: string | null | undefined): role is ElementalRole {
+  return !!role && ELEMENTAL_ROLE_SET.has(role);
+}
+
+function shouldElementalsVoteBuffTonight(room: Room) {
+  return !!room.elementalPendingBuffVoteNight && room.elementalPendingBuffVoteNight === (room.nightCount || 0);
+}
+
+function isElementalQuickMode(room: Room) {
+  const rules = ensureRoomGameRules(room);
+  return rules.nightActionOrder[0] === ELEMENTAL_GROUP_ROLE;
+}
+
+function isElementalBuffActive(room: Room, buffId: ElementalBuffId) {
+  return room.elementalSelectedBuffId === buffId
+    && room.elementalSelectedBuffAppliesNight === (room.nightCount || 0);
+}
+
+function getWolfTurnDurationMs(room: Room) {
+  const baseDurationMs = WOLF_TURN_DURATION_MS;
+  if (isElementalBuffActive(room, "reduce-next-night-effect")) {
+    return Math.max(1, Math.floor(baseDurationMs / 2));
+  }
+  return baseDurationMs;
+}
+
+function emitElementalTarget(roomId: string, playerId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  const mode = shouldElementalsVoteBuffTonight(room) ? "buff" : "guess";
+  const targetId = room.elementalTargetTonight?.[playerId] ?? null;
+  io.to(playerId).emit("elementalTargetUpdated", { targetId, mode });
+}
+
+function emitElementalBuffVoteState(roomId: string, playerId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  const pendingVote = shouldElementalsVoteBuffTonight(room);
+  const selectedBuffId = room.elementalBuffVotesTonight?.[playerId] ?? null;
+  const availableBuffTier = room.elementalCorrectGuessCountForBuff ?? 0;
+  io.to(playerId).emit("elementalBuffVoteStateUpdated", {
+    pendingVote,
+    quickMode: room.elementalBuffQuickMode !== false,
+    selectedBuffId,
+    availableBuffTier,
+  });
+}
+
+function broadcastElementalBuffSelection(roomId: string, payload: {
+  buffId: ElementalBuffId | null;
+  tier: number;
+  appliesNight: number | null;
+  randomTieBreak: boolean;
+}) {
+  const label = payload.buffId ? ELEMENTAL_BUFF_LABELS[payload.buffId] : null;
+  io.to(roomId).emit("elementalBuffSelected", {
+    ...payload,
+    label,
+  });
+}
+
+function resolveElementalBuffVote(roomId: string) {
+  const room = rooms[roomId];
+  if (!room) return;
+  if (!shouldElementalsVoteBuffTonight(room)) return;
+
+  const availableTier = getBuffTier(room.elementalCorrectGuessCountForBuff || 0);
+  const voteMap = room.elementalBuffVotesTonight || {};
+  const counts = new Map<ElementalBuffId, number>();
+
+  for (const buffId of Object.values(voteMap)) {
+    if (!buffId) continue;
+    const buff = ELEMENTAL_BUFFS.find((item) => item.id === buffId);
+    if (!buff || buff.tier !== availableTier) continue;
+    counts.set(buffId, (counts.get(buffId) || 0) + 1);
+  }
+
+  const buffVoteBreakdown: { buffId: ElementalBuffId; voterIds: string[] }[] = [];
+  for (const buffId of counts.keys()) {
+    const voterIds = Object.entries(voteMap)
+      .filter(([, votedBuffId]) => votedBuffId === buffId)
+      .map(([voterId]) => voterId);
+    buffVoteBreakdown.push({ buffId, voterIds });
+  }
+  appendLogEntry(room, {
+    type: "elemental_buff_vote",
+    phase: "night",
+    voteBreakdown: buffVoteBreakdown,
+  });
+
+  let chosen: ElementalBuffId | null = null;
+  let wasRandom = false;
+  if (counts.size > 0) {
+    const top = Math.max(...Array.from(counts.values()));
+    const finalists = Array.from(counts.entries())
+      .filter(([, count]) => count === top)
+      .map(([buffId]) => buffId);
+    wasRandom = finalists.length > 1;
+    chosen = finalists[Math.floor(Math.random() * finalists.length)] || null;
+  }
+
+  room.elementalSelectedBuffId = chosen;
+  room.elementalSelectedBuffAppliesNight = chosen
+    ? (room.elementalBuffQuickMode !== false ? (room.nightCount || 0) : (room.nightCount || 0) + 1)
+    : null;
+  room.elementalBuffVotesResolvedNight = room.nightCount || 0;
+  room.elementalPendingBuffVoteNight = null;
+  room.elementalBuffVotesTonight = {};
+
+  appendLogEntry(room, {
+    type: "elemental_buff",
+    phase: "night",
+    buffId: chosen,
+    tier: chosen ? availableTier : 0,
+    randomTieBreak: wasRandom,
+  });
+
+  broadcastElementalBuffSelection(roomId, {
+    buffId: chosen,
+    tier: chosen ? availableTier : 0,
+    appliesNight: room.elementalSelectedBuffAppliesNight ?? null,
+    randomTieBreak: wasRandom,
+  });
+  io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+}
+
 function getSelectedNightActionRoles(room: Room): NightActionRole[] {
   const sourceRoles = room.playerRoles
     ? Object.values(room.playerRoles)
@@ -698,6 +865,10 @@ function getSelectedNightActionRoles(room: Room): NightActionRole[] {
   if (hasWolfRole) selected.add("Sói");
   for (const role of ["Bảo vệ", "Phù thủy", "Thợ săn", "Tiên tri"] as NightActionRole[]) {
     if (sourceRoles.includes(role)) selected.add(role);
+  }
+
+  for (const role of getSelectedElementalRoles(room)) {
+    selected.add(role as NightActionRole);
   }
 
   return Array.from(selected);
@@ -714,7 +885,21 @@ function shouldIncludeSpiritWolfTurn(room: Room) {
 function getBaseNightActionOrder(room: Room) {
   const rules = ensureRoomGameRules(room);
   const selectedRoles = new Set(getSelectedNightActionRoles(room));
-  return rules.nightActionOrder.filter((role) => selectedRoles.has(role));
+  const expanded: NightActionRole[] = [];
+  for (const role of rules.nightActionOrder) {
+    if (role === ELEMENTAL_GROUP_ROLE) {
+      for (const elementalRole of getSelectedElementalRoles(room)) {
+        if (selectedRoles.has(elementalRole as NightActionRole)) {
+          expanded.push(elementalRole as NightActionRole);
+        }
+      }
+      continue;
+    }
+    if (selectedRoles.has(role as NightActionRole)) {
+      expanded.push(role as NightActionRole);
+    }
+  }
+  return expanded;
 }
 
 function getEffectiveNightActionOrder(room: Room) {
@@ -1695,7 +1880,7 @@ function startWolfPhase(roomId: string, opts?: { durationMs?: number; initialize
     room.wolfLocked = room.wolfLocked || {};
   }
 
-  const durationMs = Math.max(0, Math.floor(opts?.durationMs ?? WOLF_TURN_DURATION_MS));
+  const durationMs = Math.max(0, Math.floor(opts?.durationMs ?? getWolfTurnDurationMs(room)));
 
   // Time chờ cho sói cắn
   room.wolfDeadline = Date.now() + durationMs;
@@ -1729,7 +1914,7 @@ function startWolfPhase(roomId: string, opts?: { durationMs?: number; initialize
 }
 
 function getRoleTurnDurationMs(room: Room, role: NightActionRole) {
-  if (role === "Sói") return WOLF_TURN_DURATION_MS;
+  if (role === "Sói") return getWolfTurnDurationMs(room);
   const rules = ensureRoomGameRules(room);
   return clampNonWolfNightActionDurationSec(rules.nonWolfNightActionDurationSec) * 1000;
 }
@@ -1745,6 +1930,12 @@ function startNightTurnByIndex(roomId: string, index: number, opts?: { durationM
   clearNightTurnTimer(room);
 
   const order = getEffectiveNightActionOrder(room);
+  const previousRole = index > 0 ? order[index - 1] : null;
+  const nextRole = index >= 0 && index < order.length ? order[index] : null;
+  if (isElementalRoleTurn(previousRole) && !isElementalRoleTurn(nextRole)) {
+    resolveElementalBuffVote(roomId);
+  }
+
   if (index < 0 || index >= order.length) {
     room.nightTurnIndex = order.length;
     room.nightTurnRole = null;
@@ -1807,7 +1998,7 @@ function startNightTurnFlow(roomId: string) {
   room.nightTurnOrderSnapshot = getBaseNightActionOrder(room);
 
   if (rules.allNightActionsSimultaneous) {
-    startWolfPhase(roomId, { initializeVotes: true, durationMs: WOLF_TURN_DURATION_MS });
+    startWolfPhase(roomId, { initializeVotes: true, durationMs: getWolfTurnDurationMs(room) });
     io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     return;
   }
@@ -2112,6 +2303,11 @@ io.on("connection", (socket) => {
       // Re-send private hunter target state on refresh/reconnect.
       if (room.playerRoles?.[socket.id] === "Thợ săn") {
         emitHunterTarget(roomId, socket.id);
+      }
+
+      if (isElementalRoleTurn(room.playerRoles?.[socket.id] || null)) {
+        emitElementalTarget(roomId, socket.id);
+        emitElementalBuffVoteState(roomId, socket.id);
       }
 
       // Re-send Spirit Wolf pending decision on refresh/reconnect.
@@ -2761,6 +2957,14 @@ io.on("connection", (socket) => {
     room.spiritWolfWolfAligned = false;
     room.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
+    room.elementalTargetTonight = {};
+    room.elementalCorrectGuessPlayerIdsTonight = [];
+    room.elementalPendingBuffVoteNight = null;
+    room.elementalBuffVotesTonight = {};
+    room.elementalBuffVotesResolvedNight = null;
+    room.elementalSelectedBuffId = null;
+    room.elementalSelectedBuffAppliesNight = null;
+    room.elementalBuffQuickMode = true;
     room.witchPotions = {};
     room.witchHealTargetTonight = {};
     room.witchPoisonTargetTonight = {};
@@ -2939,6 +3143,17 @@ io.on("connection", (socket) => {
       emitWitchPendingDeath(roomId);
 
       room.seerUsedTonight = {};
+      room.elementalTargetTonight = room.elementalTargetTonight || {};
+      room.elementalCorrectGuessPlayerIdsTonight = [];
+      room.elementalBuffVotesTonight = {};
+      room.elementalBuffQuickMode = isElementalQuickMode(room);
+      for (const elementalId of getParticipantPlayers(room)
+        .map((player) => player.id)
+        .filter((id) => isElementalRoleTurn(room.playerRoles?.[id] || null))) {
+        room.elementalTargetTonight[elementalId] = null;
+        emitElementalTarget(roomId, elementalId);
+        emitElementalBuffVoteState(roomId, elementalId);
+      }
 
       // reset lựa chọn thợ săn cho đêm mới
       room.hunterTargetTonight = room.hunterTargetTonight || {};
@@ -2950,9 +3165,31 @@ io.on("connection", (socket) => {
       startNightTurnFlow(roomId);
     } 
     else if (phase === "day") {
+      const wasElementalBuffVoteNight = shouldElementalsVoteBuffTonight(room);
       resetNightTurnState(room);
 
       // khi chuyển sang sáng -> nếu có người bị cắn thì công bố và đánh dấu dead
+      if (wasElementalBuffVoteNight) {
+        resolveElementalBuffVote(roomId);
+      } else if (getSelectedElementalRoles(room).length) {
+        const correctGuessCount = new Set(room.elementalCorrectGuessPlayerIdsTonight || []).size;
+        const totalGuessCount = Object.values(room.elementalTargetTonight || {}).filter(Boolean).length;
+        const triggeredBuffVote = correctGuessCount >= MIN_CORRECT_ELEMENTAL_GUESSES_FOR_BUFF;
+        const nextBuffVoteNight = triggeredBuffVote ? (room.nightCount || 0) + 1 : undefined;
+        room.elementalCorrectGuessCountForBuff = correctGuessCount;
+        if (triggeredBuffVote) {
+          room.elementalPendingBuffVoteNight = nextBuffVoteNight ?? null;
+        }
+        appendLogEntry(room, {
+          type: "elemental_guess_summary",
+          phase: "night",
+          correctCount: correctGuessCount,
+          totalCount: totalGuessCount,
+          triggeredBuffVote,
+          ...(nextBuffVoteNight ? { nextBuffVoteNight } : {}),
+        });
+      }
+
       const killedCandidate = room.killedTonight;
       const killedCandidateExtra = room.killedTonightExtra;
       const guardianTarget = room.protectedTonight;
@@ -3119,6 +3356,7 @@ io.on("connection", (socket) => {
       }
 
       room.seerUsedTonight = {};
+      resolveElementalBuffVote(roomId);
           // cleanup any wolf phase leftover
         if (room.wolfTimer) {
           clearTimeout(room.wolfTimer);
@@ -3529,6 +3767,68 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("elementalChooseTarget", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.phase !== "night") return;
+    const myRole = room.playerRoles?.[socket.id] || null;
+    if (!isElementalRoleTurn(myRole)) return;
+    if (!canPerformNightRoleAction(room, socket.id, myRole as NightActionRole)) return;
+    if ((room.deadPlayers || []).includes(socket.id)) return;
+    if (shouldElementalsVoteBuffTonight(room)) return;
+
+    room.elementalTargetTonight = room.elementalTargetTonight || {};
+
+    if (!targetId) {
+      room.elementalTargetTonight[socket.id] = null;
+      emitElementalTarget(roomId, socket.id);
+      return;
+    }
+
+    if (targetId === socket.id) {
+      socket.emit("errorMessage", "Bạn không thể chọn chính mình.");
+      return;
+    }
+    if (!room.players.find((p) => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    room.elementalTargetTonight[socket.id] = targetId;
+    const targetRole = room.playerRoles?.[targetId] || null;
+    const isCorrect = isElementalRoleTurn(targetRole);
+    if (isCorrect) {
+      room.elementalCorrectGuessPlayerIdsTonight = Array.from(new Set([...(room.elementalCorrectGuessPlayerIdsTonight || []), socket.id]));
+    } else {
+      room.elementalCorrectGuessPlayerIdsTonight = (room.elementalCorrectGuessPlayerIdsTonight || []).filter((id) => id !== socket.id);
+    }
+    // Log elemental guess for host
+    appendLogEntry(room, {
+      type: "elemental_guess",
+      phase: "night",
+      actorId: socket.id,
+      targetId,
+      isCorrect,
+    });
+    emitElementalTarget(roomId, socket.id);
+  });
+
+  socket.on("elementalChooseBuff", ({ roomId, buffId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.phase !== "night") return;
+    const myRole = room.playerRoles?.[socket.id] || null;
+    if (!isElementalRoleTurn(myRole)) return;
+    if (!canPerformNightRoleAction(room, socket.id, myRole as NightActionRole)) return;
+    if ((room.deadPlayers || []).includes(socket.id)) return;
+    if (!shouldElementalsVoteBuffTonight(room)) return;
+    const availableTier = getBuffTier(room.elementalCorrectGuessCountForBuff || 0);
+    const selectedBuff = ELEMENTAL_BUFFS.find((buff) => buff.id === buffId);
+    if (!selectedBuff || selectedBuff.tier !== availableTier) return;
+
+    room.elementalBuffVotesTonight = room.elementalBuffVotesTonight || {};
+    room.elementalBuffVotesTonight[socket.id] = buffId;
+    emitElementalBuffVoteState(roomId, socket.id);
+  });
+
   // Nhường quyền chủ phòng cho người khác
   socket.on("transferHost", ({ roomId, targetId }) => {
     const room = rooms[roomId];
@@ -3629,13 +3929,15 @@ io.on("connection", (socket) => {
     if (!room.players.find(p => p.id === targetId)) return;
     if ((room.deadPlayers || []).includes(targetId)) return;
 
-    // mỗi đêm chỉ dùng 1 lần
+    // mỗi đêm chỉ dùng 1 lần (hoặc 2 nếu có buff seer-check-two)
     room.seerUsedTonight = room.seerUsedTonight || {};
-    if (room.seerUsedTonight[socket.id]) {
+    const usedCount = room.seerUsedTonight[socket.id] || 0;
+    const maxChecks = (room.elementalSelectedBuffId === "seer-check-two" && room.elementalSelectedBuffAppliesNight === room.nightCount) ? 2 : 1;
+    if (usedCount >= maxChecks) {
       socket.emit("errorMessage", "Bạn đã dùng chức năng tiên tri trong đêm này rồi!");
       return;
     }
-    room.seerUsedTonight[socket.id] = true;
+    room.seerUsedTonight[socket.id] = usedCount + 1;
 
     const roleOfTarget = room.playerRoles[targetId];
     // Seer detection rules:

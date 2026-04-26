@@ -4,8 +4,11 @@ import { socket } from "../socket";
 import PlayerPositions from "../components/PlayerPositions";
 import ConfirmModal from "../components/ConfirmModal";
 import GameRulesModal from "../components/GameRulesModal";
-import { DEFAULT_ROOM_GAME_RULES, type NightActionRole, type Player, type RoomData } from "../context/RoomContext";
+import { DEFAULT_ROOM_GAME_RULES, type NightActionOrderRole, type Player, type RoomData } from "../context/RoomContext";
 import { useRoomContext } from "../context/RoomContext";
+import { ELEMENTAL_GROUP_ROLE, ELEMENTAL_ROLE_SET } from "../constants/elemental";
+
+type NightActionRole = NightActionOrderRole;
 
 interface PlayerPosition {
   playerId: string;
@@ -20,6 +23,10 @@ function getAvailableNightActionRoles(selectedRoles?: string[]) {
   const roles = selectedRoles || [];
   const available = new Set<NightActionRole>();
 
+  if (roles.some((role) => ELEMENTAL_ROLE_SET.has(role))) {
+    available.add(ELEMENTAL_GROUP_ROLE);
+  }
+
   if (roles.some((role) => WOLF_ROLES.has(role))) {
     available.add("Sói");
   }
@@ -30,7 +37,7 @@ function getAvailableNightActionRoles(selectedRoles?: string[]) {
     }
   }
 
-  return NIGHT_ACTION_ROLE_ORDER.filter((role) => available.has(role));
+  return [ELEMENTAL_GROUP_ROLE, ...NIGHT_ACTION_ROLE_ORDER].filter((role, index, arr) => arr.indexOf(role) === index && available.has(role));
 }
 
 
@@ -422,11 +429,35 @@ export default function Room() {
     : "";
 
   return (
-      <div style={{ padding: 20, position: "relative" }}>
+      <div className="page-shell room-page" style={{ padding: 20, position: "relative" }}>
         <h1>Phòng: {room.id}</h1>
-        <div style={{ display: "flex", gap: 20 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+          {(() => {
+            const isQuick = (room.gameRules?.nightActionOrder || DEFAULT_ROOM_GAME_RULES.nightActionOrder)[0] === ELEMENTAL_GROUP_ROLE;
+            const label = isQuick ? "Buff nhanh 🛼" : "Buff chậm 🕑";
+            const tooltip = isQuick
+              ? "Khi Dân làng nguyên tố thức đầu tiên trước các vai trò khác, buff sẽ có hiệu lực từ ngay trong đêm chọn buff"
+              : "Khi Dân làng nguyên tố thức sau các vai trò khác, buff sẽ chỉ có hiệu lực từ đêm tiếp theo thay vì áp dụng ngay trong đêm chọn buff";
+            return (
+              <div
+                title={tooltip}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  border: `1px solid ${isQuick ? "#ED6E7B" : "#8b8f98"}`,
+                  background: isQuick ? "rgba(237,110,123,0.14)" : "rgba(139,143,152,0.18)",
+                  color: "#fff",
+                  fontWeight: 700,
+                }}
+              >
+                {label}
+              </div>
+            );
+          })()}
+        </div>
+        <div className="room-main-layout">
         {/* left: players list */}
-        <div style={{ minWidth: 220 }}>
+        <div className="room-sidebar">
           <h3>Người chơi:</h3>
           <ul>
             {room.players.map((p) => (
@@ -468,7 +499,7 @@ export default function Room() {
         </div>
 
         {/* right: visual layout preview */}
-        <div style={{ flex: 1 }}>
+        <div className="room-board-panel">
           <h3>Bố cục:</h3>
           <PlayerPositions onPlayerClick={() => {
              // Handle click if needed, e.g. show profile or context menu
@@ -544,6 +575,7 @@ export default function Room() {
           title="Thiết lập luật chơi cho phòng"
           initialRules={room.pendingGameRules || room.gameRules || DEFAULT_ROOM_GAME_RULES}
           availableNightActionRoles={availableNightActionRoles}
+          includedElementalRoles={(room.roles || []).filter((role) => ELEMENTAL_ROLE_SET.has(role))}
           onClose={() => setShowRulesModal(false)}
           onSave={(rules) => {
             if (gameInProgress) {

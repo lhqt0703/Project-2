@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { socket } from "../socket";
+import { ELEMENTAL_GROUP_ROLE, type ElementalBuffId, type ElementalRole } from "../constants/elemental";
 
 export interface Player {
   id: string;
@@ -8,7 +9,23 @@ export interface Player {
   inGame?: boolean;
 }
 
-export type NightActionRole = "Sói" | "Bảo vệ" | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri";
+export type NightActionRole =
+  | "Sói"
+  | "Bảo vệ"
+  | "Phù thủy"
+  | "Linh sói"
+  | "Thợ săn"
+  | "Tiên tri"
+  | ElementalRole;
+
+export type NightActionOrderRole =
+  | "Sói"
+  | "Bảo vệ"
+  | "Phù thủy"
+  | "Linh sói"
+  | "Thợ săn"
+  | "Tiên tri"
+  | typeof ELEMENTAL_GROUP_ROLE;
 
 export interface RoomGameRules {
   twoHeartsFirstTwoNights: boolean;
@@ -18,7 +35,7 @@ export interface RoomGameRules {
   witchHideProtectedBiteWhenSequential: boolean;
   trialInteractionSelectionLimit: number;
   nonWolfNightActionDurationSec: number;
-  nightActionOrder: NightActionRole[];
+  nightActionOrder: NightActionOrderRole[];
 }
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -29,7 +46,7 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   witchHideProtectedBiteWhenSequential: true,
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 10,
-  nightActionOrder: ["Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
+  nightActionOrder: [ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
 };
 
 export interface RoomData {
@@ -50,19 +67,20 @@ export interface RoomData {
   pendingGameRules?: RoomGameRules;
   sharedHeartsVisible?: boolean;
   playerHearts?: Record<string, number>;
-
-  // Game-only ephemeral state that may be synced via sockets.
   wolfVotes?: Record<string, string | null>;
   wolfVotes2?: Record<string, string | null>;
   deadPlayers?: string[];
+  nightCount?: number;
   nightTurnIndex?: number;
   nightTurnRole?: NightActionRole | null;
   nightTurnDeadline?: number | null;
   nightTurnPaused?: boolean;
   nightTurnRemainingMs?: number | null;
+  elementalPendingBuffVote?: boolean;
+  elementalBuffQuickMode?: boolean;
+  elementalSelectedBuffId?: ElementalBuffId | null;
 }
 
-// Khi nào làm file PlayerPosition riêng thì import từ đó
 interface PlayerPosition {
   playerId: string;
   x: number;
@@ -72,7 +90,6 @@ interface PlayerPosition {
 interface RoomContextType {
   role: string | null;
   setRole: React.Dispatch<React.SetStateAction<string | null>>;
-
   room: RoomData | null;
   setRoom: React.Dispatch<React.SetStateAction<RoomData | null>>;
 }

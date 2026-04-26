@@ -17,6 +17,7 @@ import { useWitchRole } from "./gameRoles/useWitchRole";
 import { useHunterRole } from "./gameRoles/useHunterRole";
 import { useSpiritWolfRole } from "./gameRoles/useSpiritWolfRole";
 import { useDayVoteRole } from "./gameRoles/useDayVoteRole";
+import { useElementalRole } from "./gameRoles/useElementalRole";
 
 export default function Game() {
   const { role, room, setRoom } = useRoomContext();
@@ -401,6 +402,13 @@ export default function Game() {
     return displayDeadPlayers.filter((id) => id !== fromPlayerId && id !== toPlayerId);
   }, [displayDeadPlayers, hunterBulletAnim]);
 
+  const seerMaxChecksTonight = useMemo(() => {
+    const buff = sync.elementalBuffResult;
+    if (!buff || buff.buffId !== "seer-check-two") return 1;
+    if (buff.appliesNight !== room?.nightCount) return 1;
+    return 2;
+  }, [sync.elementalBuffResult, room?.nightCount]);
+
   const seer = useSeerRole({
     roomId,
     phase,
@@ -410,6 +418,7 @@ export default function Game() {
     allNightActionsSimultaneous,
     currentNightTurnRole,
     nightTurnPaused,
+    maxChecksTonight: seerMaxChecksTonight,
   });
   const wolf = useWolfRole({
     roomId,
@@ -474,6 +483,22 @@ export default function Game() {
     currentNightTurnRole,
     nightTurnPaused,
   });
+
+  const elemental = useElementalRole({
+    roomId,
+    phase,
+    role,
+    room: roomForRoles,
+    deadPlayers,
+    elementalTargetSeq: sync.elementalTargetSeq,
+    elementalTargetId: sync.elementalTargetId,
+    elementalActionMode: sync.elementalActionMode,
+    elementalBuffVoteState: sync.elementalBuffVoteState,
+    availableBuffTier: sync.elementalBuffVoteState.availableBuffTier || 0,
+    allNightActionsSimultaneous,
+    currentNightTurnRole,
+  });
+
 
   const dayVote = useDayVoteRole({
     roomId,
@@ -575,6 +600,7 @@ export default function Game() {
     if (guardian.onPlayerClick(playerId)) return;
     if (witch.onPlayerClick(playerId)) return;
     if (hunter.onPlayerClick(playerId)) return;
+    if (elemental.onPlayerClick(playerId)) return;
   };
 
   const requestReturnToRoom = () => {
@@ -594,7 +620,7 @@ export default function Game() {
     : "";
 
   return (
-    <div style={{ padding: 20 }}>
+    <div className="page-shell game-page" style={{ padding: 20 }}>
       {!room && (
         <p>
           Hình như có gì đó sai sai... Lẽ ra bạn không nên thấy được những dòng này
@@ -632,6 +658,29 @@ export default function Game() {
         </div>
       )}
 
+      {(() => {
+        const buff = sync.elementalBuffResult;
+        if (!buff?.buffId) return null;
+        const currentNight = room?.nightCount || 0;
+        if (buff.appliesNight == null) return null;
+        const isActiveTonight = buff.appliesNight === currentNight && phase === "night";
+        const isPending = buff.appliesNight > currentNight;
+        return (
+          <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: "rgba(109, 68, 232, 0.12)", border: "1px solid rgba(109, 68, 232, 0.3)" }}>
+            <div style={{ fontWeight: 700, color: "#6d44e8" }}>
+              ✨ Buff nguyên tố {isActiveTonight ? "đang kích hoạt" : isPending ? `sẽ kích hoạt đêm ${buff.appliesNight}` : `đã kích hoạt đêm ${buff.appliesNight}`}
+            </div>
+            <div style={{ marginTop: 4 }}>
+              <span style={{ fontWeight: 600 }}>{buff.label}</span>
+              {" "}(Tier {buff.tier})
+              {buff.randomTieBreak ? (
+                <span style={{ fontStyle: "italic", opacity: 0.75 }}> - Được chọn ngẫu nhiên do hòa phiếu</span>
+              ) : null}
+            </div>
+          </div>
+        );
+      })()}
+
       {isSequentialNight && currentNightTurnRole && !isHost && doesNightTurnMatchMyRole && nightTurnRemainingSec !== null && (
         <div style={{ marginTop: 8, fontWeight: 700 }}>
           Còn {nightTurnRemainingSec}s nữa để thực hiện chức năng{nightTurnPaused ? " (đang tạm ngưng)" : ""}
@@ -639,14 +688,14 @@ export default function Game() {
       )}
 
       {(isHost || !!sync.gameEnded) && (
-        <div style={{ marginTop: 12 }}>
+        <div className="game-top-actions" style={{ marginTop: 12 }}>
           <button onClick={handleBackToRoomClick}>Quay về phòng chờ</button>
         </div>
       )}
 
 
       {debugAnim && (
-        <div style={{ display: "flex", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+        <div className="game-top-actions" style={{ marginTop: 10 }}>
           <button
             onClick={() => {
               if (!room) return;
@@ -697,6 +746,7 @@ export default function Game() {
               dayVote.playerPositionsProps.selectedOutlinePlayerId ||
               guardian.playerPositionsProps.selectedOutlinePlayerId ||
               witch.playerPositionsProps.selectedOutlinePlayerId ||
+              elemental.playerPositionsProps.selectedOutlinePlayerId ||
               hunter.playerPositionsProps.selectedOutlinePlayerId ||
               null
             }
@@ -724,15 +774,17 @@ export default function Game() {
       {guardian.modal}
 
       {hunter.modal}
+      {elemental.modal}
 
       {spiritWolf.modal}
 
       {witch.panel}
+      {elemental.panel}
 
 
     {/* Host controls */}
     {isHost && (
-      <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+      <div className="game-host-controls">
         <button
           onClick={() =>
             socket.emit("changePhase", { roomId, phase: "night" })

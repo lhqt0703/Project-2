@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { socket } from "../socket";
 import ConfirmModal from "../components/ConfirmModal";
+import { ELEMENTAL_ROLE_ORDER } from "../constants/elemental";
 
-const MAX_VILLAGERS = 10;
 const NON_VILLAGER_ROLES = ["Sói", "Bán sói", "Sói con", "Linh sói", "Kẻ bị nguyền", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn"] as const;
 type NonVillagerRole = (typeof NON_VILLAGER_ROLES)[number];
 
@@ -13,10 +13,10 @@ export default function RoleSelect() {
   const query = new URLSearchParams(location.search);
   const roomId = query.get("roomId");
 
-  // Non-villager roles (can include duplicates for "Sói")
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
-  // 10 separate villager slots
-  const [villagerSlots, setVillagerSlots] = useState<boolean[]>(Array(MAX_VILLAGERS).fill(false));
+  const [selectedElementalRoles, setSelectedElementalRoles] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(ELEMENTAL_ROLE_ORDER.map((role) => [role, false]))
+  );
   const [playerCount, setPlayerCount] = useState<number>(0);
   const [roomSnapshot, setRoomSnapshot] = useState<{
     hostId: string;
@@ -28,20 +28,16 @@ export default function RoleSelect() {
   const [pendingRolesApply, setPendingRolesApply] = useState<string[] | null>(null);
   const didInitFromServer = useRef(false);
 
-  const villagerCount = useMemo(
-    () => villagerSlots.reduce((acc, v) => acc + (v ? 1 : 0), 0),
-    [villagerSlots]
+  const elementalCount = useMemo(
+    () => Object.values(selectedElementalRoles).filter(Boolean).length,
+    [selectedElementalRoles]
   );
-  const totalSelected = selectedRoles.length + villagerCount;
+  const totalSelected = selectedRoles.length + elementalCount;
 
-  // 🟦 Khi mở trang: yêu cầu thông tin phòng
   useEffect(() => {
     if (!roomId) return;
-
-    // Yêu cầu server gửi room hiện tại
     socket.emit("getRoom", roomId);
 
-    // Định nghĩa kiểu dữ liệu cho phòng
     interface Room {
       hostId: string;
       players: { id: string; name: string }[];
@@ -52,23 +48,21 @@ export default function RoleSelect() {
       setRoomSnapshot(room);
       setPlayerCount(room.players.filter((p) => p.id !== room.hostId).length);
 
-      // Prefill previous selection when entering RoleSelect again
       if (!didInitFromServer.current) {
         const roles = room.roles ?? [];
-        const villagers = Math.min(
-          MAX_VILLAGERS,
-          roles.filter(r => r === "Dân").length
+        const elementalRoleSet = new Set(ELEMENTAL_ROLE_ORDER);
+        const nextElemental = Object.fromEntries(
+          ELEMENTAL_ROLE_ORDER.map((role) => [role, roles.includes(role)])
         );
-        const nonVillagers = roles.filter(r => r !== "Dân");
+        const nonElemental = roles.filter((role) => !elementalRoleSet.has(role as any));
 
-        setSelectedRoles(nonVillagers);
-        setVillagerSlots(Array.from({ length: MAX_VILLAGERS }, (_, i) => i < villagers));
+        setSelectedRoles(nonElemental);
+        setSelectedElementalRoles(nextElemental);
         didInitFromServer.current = true;
       }
     };
 
     socket.on("roomUpdated", handleRoom);
-
     return () => {
       socket.off("roomUpdated", handleRoom);
     };
@@ -128,7 +122,7 @@ export default function RoleSelect() {
       socket.off("gameStarted", handleGameStarted);
       socket.off("wolfRoleMismatch", handleWolfMismatch);
     };
-  }, [nav, roomId, selectedRoles, villagerCount]);
+  }, [nav, roomId, selectedRoles, selectedElementalRoles]);
 
   const removeOne = (arr: string[], role: string) => {
     const idx = arr.indexOf(role);
@@ -136,90 +130,33 @@ export default function RoleSelect() {
     return [...arr.slice(0, idx), ...arr.slice(idx + 1)];
   };
 
-  // Toggle for non-villager roles
   const toggleRole = (role: NonVillagerRole) => {
-    setSelectedRoles(prev => {
+    setSelectedRoles((prev) => {
       if (role === "Sói") {
-        // Toggle add/remove ONE wolf
-        const count = prev.filter(r => r === "Sói").length;
+        const count = prev.filter((r) => r === "Sói").length;
         return count > 0 ? removeOne(prev, "Sói") : [...prev, "Sói"];
       }
-
-      // Single-instance roles
       return prev.includes(role) ? removeOne(prev, role) : [...prev, role];
     });
   };
 
-  const toggleVillagerSlot = (index: number) => {
-    setVillagerSlots(prev => prev.map((v, i) => (i === index ? !v : v)));
+  const toggleElementalRole = (role: string) => {
+    setSelectedElementalRoles((prev) => ({ ...prev, [role]: !prev[role] }));
   };
 
   const buildFinalRoles = () => {
-    const villagers = Math.min(MAX_VILLAGERS, villagerCount);
-    return [...selectedRoles, ...Array.from({ length: villagers }, () => "Dân")];
+    const elementalRoles = ELEMENTAL_ROLE_ORDER.filter((role) => selectedElementalRoles[role]);
+    return [...selectedRoles, ...elementalRoles];
   };
 
-  const autoFillVillagersInState = (count: number) => {
-    if (count <= 0) return;
-    setVillagerSlots(prev => {
-      const next = [...prev];
-      let left = count;
-      for (let i = 0; i < next.length && left > 0; i++) {
-        if (!next[i]) {
-          next[i] = true;
-          left--;
-        }
-      }
-      return next;
-    });
-  };
-
-  // 🟦 Khi host nhấn "Xác nhận"
   const handleConfirm = () => {
     if (!roomId) return;
 
     const currentRoles = buildFinalRoles();
     const gameInProgress = !!roomSnapshot?.phase && !roomSnapshot.gameOver;
 
-    // Nếu role chọn ít hơn số người → hỏi bổ sung dân làng
     if (currentRoles.length < playerCount) {
-      const missing = playerCount - currentRoles.length;
-      const availableVillagers = Math.max(0, MAX_VILLAGERS - villagerCount);
-      const autoAddCount = Math.min(missing, availableVillagers);
-      const stillMissingAfterAuto = Math.max(0, missing - autoAddCount);
-
-      if (autoAddCount <= 0) {
-        alert(
-          `Bạn đang thiếu ${missing} vai trò.\n` +
-          `Không thể tự thêm "Dân" nữa (tối đa ${MAX_VILLAGERS}).\n` +
-          `Hãy tự chọn thêm các vai trò còn thiếu.`
-        );
-        return;
-      }
-
-      if (stillMissingAfterAuto > 0) {
-        const ok = window.confirm(
-          `Bạn đang thiếu ${missing} vai trò.\n\n` +
-          `Hệ thống có thể tự thêm ${autoAddCount} vai trò "Dân" (tối đa ${MAX_VILLAGERS}).\n` +
-          `Sau đó bạn vẫn còn thiếu ${stillMissingAfterAuto} vai trò và cần chọn thêm.\n\n` +
-          `Bạn có muốn tự thêm ${autoAddCount} "Dân" ngay bây giờ không?`
-        );
-        if (ok) {
-          autoFillVillagersInState(autoAddCount);
-        }
-        return;
-      }
-
-      const ok = window.confirm(
-        `Bạn đang thiếu ${missing} vai trò.\n` +
-        `Bạn có muốn tự động thêm ${missing} "Dân" không? (tối đa ${MAX_VILLAGERS})`
-      );
-      if (!ok) return;
-
-      const finalRoles = [...currentRoles, ...Array.from({ length: missing }, () => "Dân")].slice(0, playerCount);
-
-      socket.emit("rolesSelected", { roomId, roles: finalRoles });
-      nav(`/room?roomId=${roomId}`);
+      alert(`Bạn đang thiếu ${playerCount - currentRoles.length} vai trò. Hãy chọn thêm vai trò trước khi xác nhận.`);
       return;
     }
 
@@ -228,32 +165,23 @@ export default function RoleSelect() {
       return;
     }
 
-    // Nếu đủ số role thì gửi luôn
     socket.emit("rolesSelected", { roomId, roles: currentRoles });
     nav(`/room?roomId=${roomId}`);
   };
 
   return (
-    <div style={{ padding: 20 }}>
+    <div className="page-shell roleselect-page" style={{ padding: 20 }}>
       <h1>Chọn Vai Trò Cho Ván Chơi</h1>
 
       <p>Số người chơi: <b>{playerCount}</b></p>
       <p>Đã chọn: <b>{totalSelected}</b></p>
 
-      {/* Lưới role card */}
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: 15,
-          marginTop: 20,
-        }}
-      >
-        {/* Sói */}
+      <div className="roleselect-grid">
         {(() => {
-          const count = selectedRoles.filter(r => r === "Sói").length;
+          const count = selectedRoles.filter((r) => r === "Sói").length;
           return (
             <div
+              className="role-card"
               key="Sói"
               onClick={() => toggleRole("Sói")}
               style={{
@@ -267,13 +195,11 @@ export default function RoleSelect() {
                 userSelect: "none",
               }}
             >
-              <div>
-                Sói {count > 1 ? `x${count}` : ""}
-              </div>
+              <div>Sói {count > 1 ? `x${count}` : ""}</div>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelectedRoles(prev => [...prev, "Sói"]);
+                  setSelectedRoles((prev) => [...prev, "Sói"]);
                 }}
                 style={{ marginLeft: 10 }}
               >
@@ -283,34 +209,34 @@ export default function RoleSelect() {
           );
         })()}
 
-        {/* 10 ô Dân */}
-        {Array.from({ length: MAX_VILLAGERS }, (_, i) => {
-          const selected = villagerSlots[i] === true;
+        {ELEMENTAL_ROLE_ORDER.map((role) => {
+          const selected = selectedElementalRoles[role];
           return (
             <div
-              key={`villager-${i}`}
-              onClick={() => toggleVillagerSlot(i)}
+              className="role-card"
+              key={role}
+              onClick={() => toggleElementalRole(role)}
               style={{
                 padding: "16px 22px",
                 borderRadius: 12,
                 cursor: "pointer",
-                border: selected ? "3px solid var(--accent)" : "2px solid var(--border-strong)",
-                background: selected ? "var(--accent-surface)" : "var(--surface-muted)",
+                border: selected ? "3px solid #ED6E7B" : "2px solid var(--border-strong)",
+                background: selected ? "rgba(237,110,123,0.16)" : "var(--surface-muted)",
                 transition: "0.2s",
                 fontSize: 18,
                 userSelect: "none",
               }}
             >
-              <div>Dân {i + 1}</div>
+              <div>{role}</div>
             </div>
           );
         })}
 
-        {/* Các role còn lại */}
         {(["Bán sói", "Sói con", "Linh sói", "Kẻ bị nguyền", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn"] as const).map((role) => {
           const selected = selectedRoles.includes(role);
           return (
             <div
+              className="role-card"
               key={role}
               onClick={() => toggleRole(role)}
               style={{
@@ -328,10 +254,8 @@ export default function RoleSelect() {
             </div>
           );
         })}
-
       </div>
 
-      {/* Nút xác nhận */}
       <button
         onClick={handleConfirm}
         style={{

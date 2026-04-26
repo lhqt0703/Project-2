@@ -1,5 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { GameLogNight, GameLogEntry, EliminationCause } from "../pages/gameRoles/socketEvents";
+import { ELEMENTAL_BUFF_LABELS } from "../constants/elemental";
+
+function getBuffLabel(buffId: string): string {
+  return (ELEMENTAL_BUFF_LABELS as Record<string, string>)[buffId] || buffId;
+}
 
 type RolesByPlayerId = Record<string, string>;
 type PlayerNamesById = Record<string, string>;
@@ -646,6 +651,63 @@ function LogEntryLine({
 
     case "no_death":
       return <li style={{ ...lineStyle, opacity: dimmed ? 0.28 : 0.75 }}>Đêm qua không ai bị loại</li>;
+
+    case "elemental_guess": {
+      const actorName = getRoleName(entry.actorId, rolesByPlayerId);
+      const targetName = getRoleName(entry.targetId, rolesByPlayerId);
+      return (
+        <li style={lineStyle}>
+          Nguyên tố {actorName} chọn {targetName} — {entry.isCorrect ? "✅ Đoán đúng" : "❌ Đoán sai"}
+        </li>
+      );
+    }
+
+    case "elemental_guess_summary": {
+      return (
+        <li style={lineStyle}>
+          Kết quả nguyên tố: <span style={{ fontWeight: 600 }}>{entry.correctCount}/{entry.totalCount}</span> chọn đúng
+          {entry.triggeredBuffVote && entry.nextBuffVoteNight ? (
+            <span style={{ opacity: 0.75 }}> - mở chọn buff vào đêm {entry.nextBuffVoteNight}</span>
+          ) : (
+            <span style={{ opacity: 0.75 }}> - chưa mở chọn buff</span>
+          )}
+        </li>
+      );
+    }
+
+    case "elemental_buff_vote": {
+      if (!entry.voteBreakdown || entry.voteBreakdown.length === 0) {
+        return <li style={lineStyle}>Nguyên tố không vote buff nào</li>;
+      }
+      return (
+        <li style={lineStyle}>
+          Vote buff nguyên tố:{" "}
+          {entry.voteBreakdown.map((v, idx) => {
+            const buffLabel = getBuffLabel(v.buffId);
+            const votersText = getRolesText(v.voterIds, rolesByPlayerId);
+            return (
+              <span key={v.buffId}>
+                <span style={{ fontWeight: 600 }}>{buffLabel}</span> ({votersText})
+                {idx < entry.voteBreakdown.length - 1 && ", "}
+              </span>
+            );
+          })}
+        </li>
+      );
+    }
+
+    case "elemental_buff": {
+      if (entry.tier === 0 || !entry.buffId) {
+        return <li style={lineStyle}>Không có buff nguyên tố nào được chọn</li>;
+      }
+      const buffLabel = getBuffLabel(entry.buffId);
+      return (
+        <li style={lineStyle}>
+          Buff nguyên tố được kích hoạt: <span style={{ fontWeight: 600 }}>{buffLabel}</span> (Tier {entry.tier})
+          {entry.randomTieBreak ? <span style={{ fontStyle: "italic", opacity: 0.75 }}> - được chọn ngẫu nhiên do hòa phiếu</span> : null}
+        </li>
+      );
+    }
 
     default:
       return <li style={lineStyle}>(log không rõ)</li>;

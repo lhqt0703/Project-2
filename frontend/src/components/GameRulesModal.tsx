@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
-import { DEFAULT_ROOM_GAME_RULES, type NightActionRole, type RoomGameRules } from "../context/RoomContext";
+import { useEffect, useMemo, useState } from "react";
+import { DEFAULT_ROOM_GAME_RULES, type NightActionOrderRole, type RoomGameRules } from "../context/RoomContext";
+import { ELEMENTAL_GROUP_ROLE, ELEMENTAL_ROLE_ORDER } from "../constants/elemental";
 
-const NIGHT_ACTION_ROLE_LABELS: Record<NightActionRole, string> = {
+const NIGHT_ACTION_ROLE_LABELS: Record<NightActionOrderRole, string> = {
+  [ELEMENTAL_GROUP_ROLE]: "Dân làng nguyên tố",
   "Sói": "Phe sói",
   "Bảo vệ": "Bảo vệ",
   "Phù thủy": "Phù thủy",
@@ -10,10 +12,10 @@ const NIGHT_ACTION_ROLE_LABELS: Record<NightActionRole, string> = {
   "Tiên tri": "Tiên tri",
 };
 
-function normalizeNightActionOrder(order: NightActionRole[], availableRoles: NightActionRole[]) {
+function normalizeNightActionOrder(order: NightActionOrderRole[], availableRoles: NightActionOrderRole[]) {
   const availableSet = new Set(availableRoles);
-  const seen = new Set<NightActionRole>();
-  const next: NightActionRole[] = [];
+  const seen = new Set<NightActionOrderRole>();
+  const next: NightActionOrderRole[] = [];
 
   for (const role of order) {
     if (!availableSet.has(role)) continue;
@@ -59,6 +61,7 @@ export default function GameRulesModal({
   title = "Thiết lập luật chơi",
   initialRules,
   availableNightActionRoles,
+  includedElementalRoles = [],
   onSave,
   onClose,
   saveText = "Lưu luật chơi",
@@ -66,14 +69,15 @@ export default function GameRulesModal({
   open: boolean;
   title?: string;
   initialRules: RoomGameRules;
-  availableNightActionRoles?: NightActionRole[];
+  availableNightActionRoles?: NightActionOrderRole[];
+  includedElementalRoles?: string[];
   onSave: (rules: RoomGameRules) => void;
   onClose: () => void;
   saveText?: string;
 }) {
   const [draftRules, setDraftRules] = useState<RoomGameRules>(initialRules);
-  const [draggedRole, setDraggedRole] = useState<NightActionRole | null>(null);
-  const [dragOverRole, setDragOverRole] = useState<NightActionRole | null>(null);
+  const [draggedRole, setDraggedRole] = useState<NightActionOrderRole | null>(null);
+  const [dragOverRole, setDragOverRole] = useState<NightActionOrderRole | null>(null);
   const selectableNightActionRoles = availableNightActionRoles?.length
     ? availableNightActionRoles
     : DEFAULT_ROOM_GAME_RULES.nightActionOrder;
@@ -91,15 +95,21 @@ export default function GameRulesModal({
     });
   }, [initialRules, open, selectableNightActionRoles]);
 
+  const includedElementalSummary = useMemo(() => {
+    const included = ELEMENTAL_ROLE_ORDER.filter((role) => includedElementalRoles.includes(role));
+    if (!included.length) return "Chưa chọn vai trò nguyên tố nào";
+    return `Bao gồm: ${included.join(", ")}`;
+  }, [includedElementalRoles]);
+
   if (!open) return null;
 
   const updateRule = <K extends keyof RoomGameRules>(key: K, value: RoomGameRules[K]) => {
-    setDraftRules(prev => ({ ...prev, [key]: value } as RoomGameRules));
+    setDraftRules((prev) => ({ ...prev, [key]: value } as RoomGameRules));
   };
 
-  const reorderRoles = (fromRole: NightActionRole, toRole: NightActionRole) => {
+  const reorderRoles = (fromRole: NightActionOrderRole, toRole: NightActionOrderRole) => {
     if (fromRole === toRole) return;
-    setDraftRules(prev => {
+    setDraftRules((prev) => {
       const nextOrder = [...prev.nightActionOrder];
       const fromIndex = nextOrder.indexOf(fromRole);
       const toIndex = nextOrder.indexOf(toRole);
@@ -109,23 +119,6 @@ export default function GameRulesModal({
       nextOrder.splice(toIndex, 0, fromRole);
       return { ...prev, nightActionOrder: nextOrder };
     });
-  };
-
-  const handleDragStart = (role: NightActionRole) => {
-    setDraggedRole(role);
-    setDragOverRole(role);
-  };
-
-  const handleDropOnRole = (targetRole: NightActionRole) => {
-    if (!draggedRole) return;
-    reorderRoles(draggedRole, targetRole);
-    setDraggedRole(null);
-    setDragOverRole(null);
-  };
-
-  const clearDragState = () => {
-    setDraggedRole(null);
-    setDragOverRole(null);
   };
 
   const handleSave = () => {
@@ -138,8 +131,8 @@ export default function GameRulesModal({
   };
 
   const thirdRuleLabel = draftRules.allNightActionsSimultaneous
-    ? "Phù thủy sẽ thấy vết cắn biến mất nếu người đó được Bảo Vệ bảo vệ trúng"
-    : "Phù Thủy sẽ không thấy vết cắn nếu Bảo vệ đã bảo vệ trúng";
+    ? "Phù thủy sẽ thấy vết cắn biến mất nếu người đó được Bảo vệ bảo vệ trúng"
+    : "Phù thủy sẽ không thấy vết cắn nếu Bảo vệ đã bảo vệ trúng";
 
   const thirdRuleDescription = draftRules.allNightActionsSimultaneous
     ? "Dùng cho chế độ xử lý đồng thời: khi Bảo vệ bảo vệ trúng, dấu hiệu vết cắn đang hiển thị cho Phù thủy sẽ biến mất."
@@ -189,18 +182,12 @@ export default function GameRulesModal({
               Đóng
             </button>
           </div>
-          <p style={{ margin: "12px 0 0", maxWidth: 720, color: "rgba(246,247,251,0.78)", lineHeight: 1.5 }}>
-            Chọn cách vận hành đêm, luật hiển thị cho phù thủy và số lượt tương tác trong phiên thanh minh.
-          </p>
         </div>
 
         <div style={{ padding: 24, display: "grid", gap: 14 }}>
           <label style={rowStyle()}>
             <div>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả nhân vật sẽ có 2 máu trong 2 đêm đầu</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Mặc định bật. Trong 2 đêm đầu, ai bị Sói cắn sẽ chỉ mất 1 máu (không chết ngay). Bình giết của Phù thủy và đạn Thợ săn vẫn hạ gục như bình thường.
-              </div>
             </div>
             <input
               type="checkbox"
@@ -213,9 +200,6 @@ export default function GameRulesModal({
           <label style={rowStyle()}>
             <div>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả người chơi có thể thực hiện chức năng cùng lúc trong đêm</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Tắt: hiển thị thứ tự hành động ban đêm. Bật: cho phép các vai trò xử lý song song theo luật hiện có.
-              </div>
             </div>
             <input
               type="checkbox"
@@ -226,19 +210,11 @@ export default function GameRulesModal({
           </label>
 
           {!draftRules.allNightActionsSimultaneous && (
-            <div
-              style={{
-                ...rowStyle(),
-                flexDirection: "column",
-              }}
-            >
+            <div style={{ ...rowStyle(), flexDirection: "column" }}>
               <div style={{ width: "100%" }}>
                 <div style={{ fontWeight: 700, marginBottom: 4 }}>Thứ tự hành động ban đêm</div>
                 <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5, marginBottom: 12 }}>
-                  Danh sách này chỉ lấy từ những vai trò đã được chọn trong màn chọn vai trò.
-                </div>
-                <div style={{ fontSize: 12, color: "rgba(246,247,251,0.58)", lineHeight: 1.5 }}>
-                  Kéo thả từng vai trò để đổi thứ tự.
+                  Riêng Dân làng nguyên tố sẽ được kéo thả bằng 1 mục đại diện, nhưng khi vào đêm hệ thống vẫn tách thành từng lượt theo thứ tự cố định.
                 </div>
               </div>
 
@@ -247,18 +223,25 @@ export default function GameRulesModal({
                   <div
                     key={role}
                     draggable
-                    onDragStart={() => handleDragStart(role)}
+                    onDragStart={() => {
+                      setDraggedRole(role);
+                      setDragOverRole(role);
+                    }}
                     onDragOver={(e) => {
                       e.preventDefault();
-                      if (dragOverRole !== role) {
-                        setDragOverRole(role);
-                      }
+                      if (dragOverRole !== role) setDragOverRole(role);
                     }}
                     onDrop={(e) => {
                       e.preventDefault();
-                      handleDropOnRole(role);
+                      if (!draggedRole) return;
+                      reorderRoles(draggedRole, role);
+                      setDraggedRole(null);
+                      setDragOverRole(null);
                     }}
-                    onDragEnd={clearDragState}
+                    onDragEnd={() => {
+                      setDraggedRole(null);
+                      setDragOverRole(null);
+                    }}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -267,9 +250,7 @@ export default function GameRulesModal({
                       padding: "12px 14px",
                       borderRadius: 12,
                       background: draggedRole === role ? "rgba(246,200,95,0.16)" : "rgba(255,255,255,0.05)",
-                      border: dragOverRole === role
-                        ? "1px solid rgba(246,200,95,0.9)"
-                        : "1px solid rgba(255,255,255,0.08)",
+                      border: dragOverRole === role ? "1px solid rgba(246,200,95,0.9)" : "1px solid rgba(255,255,255,0.08)",
                       cursor: "grab",
                     }}
                   >
@@ -289,7 +270,9 @@ export default function GameRulesModal({
                       </div>
                       <div>
                         <div style={{ fontWeight: 700 }}>{NIGHT_ACTION_ROLE_LABELS[role]}</div>
-                        <div style={{ fontSize: 12, color: "rgba(246,247,251,0.62)" }}>{role}</div>
+                        <div style={{ fontSize: 12, color: "rgba(246,247,251,0.62)" }}>
+                          {role === ELEMENTAL_GROUP_ROLE ? includedElementalSummary : role}
+                        </div>
                       </div>
                     </div>
 
@@ -303,9 +286,6 @@ export default function GameRulesModal({
           <label style={rowStyle()}>
             <div>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>Phù thủy chỉ có thể thấy được vết cắn nếu còn bình cứu</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Mặc định bật để phù thủy chỉ nhận thông tin khi còn bình cứu chưa dùng.
-              </div>
             </div>
             <input
               type="checkbox"
@@ -339,9 +319,6 @@ export default function GameRulesModal({
           <label style={rowStyle()}>
             <div>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian mỗi lượt cho vai trò đêm (trừ phe sói)</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Chủ phòng có thể đặt từ 10 đến 30 giây. Mặc định là 10 giây.
-              </div>
             </div>
             <input
               type="number"
@@ -356,9 +333,6 @@ export default function GameRulesModal({
           <label style={rowStyle()}>
             <div>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>Số lượt tương tác của người bị lên giàn</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Cho phép từ 0 đến 10 lượt. Mặc định là 2.
-              </div>
             </div>
             <input
               type="number"

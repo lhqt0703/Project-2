@@ -89,7 +89,11 @@ export type GameLogEntry =
   | { type: "saved_by_guardian"; phase: GameLogEntryPhase; targetIds: string[] }
   | { type: "saved_by_witch"; phase: GameLogEntryPhase; targetIds: string[] }
   | { type: "eliminated"; phase: GameLogEntryPhase; targetIds: string[]; causesByTarget?: Record<string, EliminationCause[]> }
-  | { type: "no_death"; phase: GameLogEntryPhase };
+  | { type: "no_death"; phase: GameLogEntryPhase }
+  | { type: "elemental_guess"; phase: GameLogEntryPhase; actorId: string; targetId: string; isCorrect: boolean }
+  | { type: "elemental_guess_summary"; phase: GameLogEntryPhase; correctCount: number; totalCount: number; triggeredBuffVote: boolean; nextBuffVoteNight?: number }
+  | { type: "elemental_buff_vote"; phase: GameLogEntryPhase; voteBreakdown: { buffId: string; voterIds: string[] }[] }
+  | { type: "elemental_buff"; phase: GameLogEntryPhase; buffId: string | null; tier: number; randomTieBreak?: boolean };
 
 export type GameLogNight = {
   night: number;
@@ -103,3 +107,19 @@ export type RolesRevealUpdatedPayload = { roomId: string; rolesByPlayerId: Recor
 
 export type SpiritWolfDecisionNeededPayload = { targetId: string };
 export type SpiritWolfDecisionRecordedPayload = { saved: boolean };
+
+export type ElementalTargetUpdatedPayload = { targetId: string | null; mode: "guess" | "buff" };
+export type ElementalBuffVoteStatePayload = {
+  pendingVote: boolean;
+  quickMode: boolean;
+  selectedBuffId: string | null;
+  availableBuffTier?: number;
+};
+
+export type ElementalBuffSelectedPayload = {
+  buffId: string | null;
+  label: string | null;
+  tier: number;
+  appliesNight: number | null;
+  randomTieBreak: boolean;
+};

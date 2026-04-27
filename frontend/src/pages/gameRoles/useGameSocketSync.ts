@@ -107,9 +107,13 @@ export function useGameSocketSync({
   const [revealedRolesByPlayerId, setRevealedRolesByPlayerId] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (roomId) {
+    const syncGameRoom = () => {
+      if (!roomId) return;
       socket.emit("getRoom", roomId);
-    }
+    };
+
+    syncGameRoom();
+    socket.on("connect", syncGameRoom);
 
     const applyPhaseTransition = (newPhase: GamePhase) => {
       setPhase(newPhase);
@@ -570,6 +574,7 @@ export function useGameSocketSync({
       socket.off("elementalTargetUpdated", handleElementalTargetUpdated);
       socket.off("elementalBuffVoteStateUpdated", handleElementalBuffVoteStateUpdated);
       socket.off("elementalBuffSelected", handleElementalBuffSelected);
+      socket.off("connect", syncGameRoom);
     };
   }, [roomId, setRoom]);
 

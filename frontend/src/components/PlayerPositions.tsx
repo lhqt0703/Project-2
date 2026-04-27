@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { socket } from "../socket";
+import { socket, clientId } from "../socket";
 import { useRoomContext } from "../context/RoomContext";
 import { getDeterministicSlots1to18, getDeterministicSlots19Plus } from "./layouts";
 
@@ -348,8 +348,8 @@ export default function PlayerPositions({
     };
   }, []);
 
-  const isHost = room.hostId === socket.id;
-  const isEditor = mode === "edit" && (room.positionEditors?.includes(socket.id!) || isHost);
+  const isHost = room.hostId === clientId;
+  const isEditor = mode === "edit" && (room.positionEditors?.includes(clientId!) || isHost);
 
   const isExpandedFrame = visiblePlayers.length > AUTO_TOP_LIMIT;
   const frameHeightPx = isExpandedFrame ? EXPANDED_FRAME_HEIGHT_PX : FRAME_HEIGHT_PX;
@@ -1205,7 +1205,7 @@ export default function PlayerPositions({
               <div style={{ textAlign: "center", pointerEvents: "none" }}>
                 <div style={{ fontWeight: "bold" }}>{p.name}</div>
                 <div style={{ opacity: 0.6, fontSize: playerSubFontSizePx }}>
-                  {p.id === socket.id ? "(Bạn)" : ""}
+                  {p.id === clientId ? "(Bạn)" : ""}
                 </div>
               </div>
             </div>

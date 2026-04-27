@@ -65,15 +65,17 @@ export default function GameRulesModal({
   onSave,
   onClose,
   saveText = "Lưu luật chơi",
+  readOnly = false,
 }: {
   open: boolean;
   title?: string;
   initialRules: RoomGameRules;
   availableNightActionRoles?: NightActionOrderRole[];
   includedElementalRoles?: string[];
-  onSave: (rules: RoomGameRules) => void;
+  onSave?: (rules: RoomGameRules) => void;
   onClose: () => void;
   saveText?: string;
+  readOnly?: boolean;
 }) {
   const [draftRules, setDraftRules] = useState<RoomGameRules>(initialRules);
   const [draggedRole, setDraggedRole] = useState<NightActionOrderRole | null>(null);
@@ -104,10 +106,12 @@ export default function GameRulesModal({
   if (!open) return null;
 
   const updateRule = <K extends keyof RoomGameRules>(key: K, value: RoomGameRules[K]) => {
+    if (readOnly) return;
     setDraftRules((prev) => ({ ...prev, [key]: value } as RoomGameRules));
   };
 
   const reorderRoles = (fromRole: NightActionOrderRole, toRole: NightActionOrderRole) => {
+    if (readOnly) return;
     if (fromRole === toRole) return;
     setDraftRules((prev) => {
       const nextOrder = [...prev.nightActionOrder];
@@ -122,6 +126,7 @@ export default function GameRulesModal({
   };
 
   const handleSave = () => {
+    if (!onSave) return;
     onSave({
       ...draftRules,
       nightActionOrder: normalizeNightActionOrder(draftRules.nightActionOrder, selectableNightActionRoles),
@@ -192,6 +197,7 @@ export default function GameRulesModal({
             <input
               type="checkbox"
               checked={draftRules.twoHeartsFirstTwoNights}
+              disabled={readOnly}
               onChange={(e) => updateRule("twoHeartsFirstTwoNights", e.target.checked)}
               style={{ width: 20, height: 20, marginTop: 2 }}
             />
@@ -204,6 +210,7 @@ export default function GameRulesModal({
             <input
               type="checkbox"
               checked={draftRules.allNightActionsSimultaneous}
+              disabled={readOnly}
               onChange={(e) => updateRule("allNightActionsSimultaneous", e.target.checked)}
               style={{ width: 20, height: 20, marginTop: 2 }}
             />
@@ -222,16 +229,19 @@ export default function GameRulesModal({
                 {draftRules.nightActionOrder.map((role, index) => (
                   <div
                     key={role}
-                    draggable
+                    draggable={!readOnly}
                     onDragStart={() => {
+                      if (readOnly) return;
                       setDraggedRole(role);
                       setDragOverRole(role);
                     }}
                     onDragOver={(e) => {
+                      if (readOnly) return;
                       e.preventDefault();
                       if (dragOverRole !== role) setDragOverRole(role);
                     }}
                     onDrop={(e) => {
+                      if (readOnly) return;
                       e.preventDefault();
                       if (!draggedRole) return;
                       reorderRoles(draggedRole, role);
@@ -251,7 +261,7 @@ export default function GameRulesModal({
                       borderRadius: 12,
                       background: draggedRole === role ? "rgba(246,200,95,0.16)" : "rgba(255,255,255,0.05)",
                       border: dragOverRole === role ? "1px solid rgba(246,200,95,0.9)" : "1px solid rgba(255,255,255,0.08)",
-                      cursor: "grab",
+                      cursor: readOnly ? "default" : "grab",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -276,7 +286,7 @@ export default function GameRulesModal({
                       </div>
                     </div>
 
-                    <div style={{ fontSize: 18, opacity: 0.6, userSelect: "none" }}>⋮⋮</div>
+                    {!readOnly && <div style={{ fontSize: 18, opacity: 0.6, userSelect: "none" }}>⋮⋮</div>}
                   </div>
                 ))}
               </div>
@@ -290,6 +300,7 @@ export default function GameRulesModal({
             <input
               type="checkbox"
               checked={draftRules.witchSeeBiteOnlyIfHasHealPotion}
+              disabled={readOnly}
               onChange={(e) => updateRule("witchSeeBiteOnlyIfHasHealPotion", e.target.checked)}
               style={{ width: 20, height: 20, marginTop: 2 }}
             />
@@ -305,6 +316,7 @@ export default function GameRulesModal({
             <input
               type="checkbox"
               checked={thirdRuleChecked}
+              disabled={readOnly}
               onChange={(e) => {
                 if (draftRules.allNightActionsSimultaneous) {
                   updateRule("witchHideProtectedBiteInSimultaneous", e.target.checked);
@@ -325,6 +337,7 @@ export default function GameRulesModal({
               min={10}
               max={30}
               value={draftRules.nonWolfNightActionDurationSec}
+              disabled={readOnly}
               onChange={(e) => updateRule("nonWolfNightActionDurationSec", clampNonWolfNightActionDurationSec(Number(e.target.value)))}
               style={{ width: 96, padding: "10px 12px" }}
             />
@@ -339,6 +352,7 @@ export default function GameRulesModal({
               min={0}
               max={10}
               value={draftRules.trialInteractionSelectionLimit}
+              disabled={readOnly}
               onChange={(e) => updateRule("trialInteractionSelectionLimit", clampSelectionLimit(Number(e.target.value)))}
               style={{ width: 96, padding: "10px 12px" }}
             />
@@ -347,8 +361,9 @@ export default function GameRulesModal({
 
         <div style={{ padding: 24, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "flex-end", gap: 12 }}>
           <button onClick={onClose} style={{ padding: "11px 16px", cursor: "pointer" }}>
-            Huỷ
+            {readOnly ? "Đóng" : "Huỷ"}
           </button>
+          {!readOnly && (
           <button
             onClick={handleSave}
             style={{
@@ -362,6 +377,7 @@ export default function GameRulesModal({
           >
             {saveText}
           </button>
+          )}
         </div>
       </div>
     </div>

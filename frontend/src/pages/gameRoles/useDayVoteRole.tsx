@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { socket } from "../../socket";
+import { socket, clientId } from "../../socket";
 import type { DayLockedUpdatedPayload, DayVotesUpdatedPayload, GamePhase, TrialVotesUpdatedPayload } from "./socketEvents";
 
 type Player = { id: string; name: string; connected?: boolean };
@@ -66,45 +66,45 @@ export function useDayVoteRole({
       setLocalSelectedTarget(null);
       return;
     }
-    const myId = socket.id;
+    const myId = clientId;
     if (!myId) return;
     setLocalSelectedTarget(dayVotes?.[myId] ?? null);
   }, [dayVotes, phase]);
 
   const canAct = useMemo(() => {
     if (phase !== "day") return false;
-    if (!socket.id) return false;
+    if (!clientId) return false;
     if (!dayDeadline) return false;
-    if (deadPlayers.includes(socket.id)) return false;
-    if (dayVoters.length > 0 && !dayVoters.includes(socket.id)) return false;
+    if (deadPlayers.includes(clientId)) return false;
+    if (dayVoters.length > 0 && !dayVoters.includes(clientId)) return false;
     if (trialStage !== "none") return false;
     return true;
   }, [dayDeadline, dayVoters, deadPlayers, phase, trialStage]);
 
-  const myTrialVote = socket.id ? (trialVotes?.[socket.id] ?? null) : null;
+  const myTrialVote = clientId ? (trialVotes?.[clientId] ?? null) : null;
 
-  const isTrialTarget = !!socket.id && !!trialTargetId && socket.id === trialTargetId;
-  const alreadyChosenByTrialTarget = !!socket.id && trialSelectedInteractorIds.includes(socket.id);
+  const isTrialTarget = !!clientId && !!trialTargetId && clientId === trialTargetId;
+  const alreadyChosenByTrialTarget = !!clientId && trialSelectedInteractorIds.includes(clientId);
   const canToggleInteraction =
     phase === "day" &&
     trialStage === "defense" &&
-    !!socket.id &&
+    !!clientId &&
     !isTrialTarget &&
-    !deadPlayers.includes(socket.id) &&
+    !deadPlayers.includes(clientId) &&
     !alreadyChosenByTrialTarget &&
     !trialInteractionCut;
-  const hasInteracted = !!socket.id && trialInteractionActiveIds.includes(socket.id);
+  const hasInteracted = !!clientId && trialInteractionActiveIds.includes(clientId);
   const remainingInteractionTurns = Math.max(0, trialInteractionSelectionLimit - trialSelectedInteractorIds.length);
 
   const canVoteVerdict =
     phase === "day" &&
     trialStage === "verdict" &&
-    !!socket.id &&
-    !deadPlayers.includes(socket.id) &&
+    !!clientId &&
+    !deadPlayers.includes(clientId) &&
     !isTrialTarget;
 
   const onPlayerClick = useCallback((playerId: string) => {
-    if (!socket.id) return false;
+    if (!clientId) return false;
 
     if (trialStage === "defense" && isTrialTarget) {
       if (!trialInteractionActiveIds.includes(playerId)) return true;
@@ -114,10 +114,10 @@ export function useDayVoteRole({
 
     if (!canAct) return false;
 
-    if (playerId === socket.id) return true;
+    if (playerId === clientId) return true;
     if (deadPlayers.includes(playerId)) return true;
 
-    if (dayLocked?.[socket.id]) return true;
+    if (dayLocked?.[clientId]) return true;
     if (dayDeadline && Date.now() >= dayDeadline) return true;
 
     if (localSelectedTarget === playerId) {
@@ -139,7 +139,7 @@ export function useDayVoteRole({
   }, [dayDeadline, dayDiscussionDeadline, trialDefenseDeadline, trialStage, trialVerdictDeadline]);
 
   const panel =
-    phase === "day" && socket.id && !deadPlayers.includes(socket.id) ? (
+    phase === "day" && clientId && !deadPlayers.includes(clientId) ? (
       <div style={{ marginTop: 12 }}>
         {trialStage === "none" && (
           <>
@@ -163,7 +163,7 @@ export function useDayVoteRole({
                       socket.emit("dayLockVote", { roomId });
                     }}
                     style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer" }}
-                    disabled={!!dayLocked?.[socket.id]}
+                    disabled={!!dayLocked?.[clientId]}
                   >
                     🗳️ Khóa phiếu biểu quyết
                   </button>
@@ -173,12 +173,12 @@ export function useDayVoteRole({
                       socket.emit("dayLockVote", { roomId });
                     }}
                     style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer" }}
-                    disabled={!!dayLocked?.[socket.id]}
+                    disabled={!!dayLocked?.[clientId]}
                   >
                     ⭕ Bỏ phiếu trống
                   </button>
                 </div>
-                {dayLocked?.[socket.id] && (
+                {dayLocked?.[clientId] && (
                   <div style={{ marginTop: 6, opacity: 0.85 }}>Bạn đã khóa phiếu.</div>
                 )}
               </>

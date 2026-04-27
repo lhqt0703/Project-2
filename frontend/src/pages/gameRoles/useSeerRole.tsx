@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { socket } from "../../socket";
+import { socket, clientId } from "../../socket";
 import type { GamePhase } from "./socketEvents";
 import ConfirmModal from "../../components/ConfirmModal";
 
@@ -54,7 +54,7 @@ export function useSeerRole({
     if (role !== "Tiên tri") return false;
     const max = maxChecksTonight ?? 1;
     if (checksUsed >= max) return false;
-    if (socket.id && deadPlayers.includes(socket.id)) return false;
+    if (clientId && deadPlayers.includes(clientId)) return false;
     if (!allNightActionsSimultaneous) {
       if (currentNightTurnRole !== "Tiên tri") return false;
     }
@@ -63,7 +63,7 @@ export function useSeerRole({
 
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;
-    if (playerId === socket.id) return true; // Không cho chọn chính mình
+    if (playerId === clientId) return true; // Không cho chọn chính mình
 
     setSelectedPlayerId(playerId);
     setShowConfirm(true);

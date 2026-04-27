@@ -32,7 +32,7 @@ export default function ThemeToggle() {
     localStorage.setItem(STORAGE_KEY, theme);
   }, [theme]);
 
-  return (
+/*   return (
     <div className="theme-toggle">
       <button
         type="button"
@@ -43,5 +43,5 @@ export default function ThemeToggle() {
         {theme === "dark" ? "Light" : "Dark"}
       </button>
     </div>
-  );
+  ); */
 }

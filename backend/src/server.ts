@@ -308,6 +308,67 @@ type RolesRevealPayload = {
 
 const rooms: Record<string, Room> = {};
 const activeRooms = new Set<string>(); // chứa toàn bộ mã phòng đã tạo
+const disconnectedCleanupTimers: Record<string, NodeJS.Timeout> = {};
+const activeClientSockets: Record<string, Set<string>> = {};
+const DISCONNECTED_PLAYER_GRACE_MS = 5 * 60 * 1000;
+
+function getClientIdFromSocket(socket: any) {
+  const raw = socket.handshake?.auth?.clientId;
+  return typeof raw === "string" && raw.trim() ? raw.trim() : socket.id;
+}
+
+function disconnectedCleanupKey(roomId: string, playerId: string) {
+  return `${roomId}:${playerId}`;
+}
+
+function clearDisconnectedCleanup(roomId: string, playerId: string) {
+  const key = disconnectedCleanupKey(roomId, playerId);
+  const timer = disconnectedCleanupTimers[key];
+  if (timer) {
+    clearTimeout(timer);
+    delete disconnectedCleanupTimers[key];
+  }
+}
+
+function isClientCurrentlyConnected(playerId: string) {
+  return (activeClientSockets[playerId]?.size || 0) > 0;
+}
+
+function scheduleDisconnectedCleanup(roomId: string, playerId: string) {
+  clearDisconnectedCleanup(roomId, playerId);
+  const key = disconnectedCleanupKey(roomId, playerId);
+  disconnectedCleanupTimers[key] = setTimeout(() => {
+    delete disconnectedCleanupTimers[key];
+    const room = rooms[roomId];
+    if (!room) return;
+    const player = room.players.find((p) => p.id === playerId);
+    if (!player || player.connected !== false) return;
+
+    if (room.phase) return;
+
+    const wasHost = room.hostId === playerId;
+    room.players = room.players.filter((p) => p.id !== playerId);
+    room.positions = (room.positions || []).filter((pos) => pos.playerId !== playerId);
+    room.positionEditors = (room.positionEditors || []).filter((id) => id !== playerId);
+
+    if (room.players.length === 0) {
+      delete rooms[roomId];
+      activeRooms.delete(roomId);
+      return;
+    }
+
+    if (wasHost && room.players[0]) {
+      room.hostId = room.players[0].id;
+      io.to(roomId).emit("hostChanged", room.hostId);
+    }
+
+    const nextHeightPx = desiredLayoutHeightPx(getParticipantCount(room));
+    rescaleRoomPositionsForHeight(room, nextHeightPx);
+    room.positions = ensureNonOverlappingPositions(getParticipantIds(room), room.positions, layoutOptsForRoom(room));
+    io.to(roomId).emit("positionsUpdated", room.positions || []);
+    io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  }, DISCONNECTED_PLAYER_GRACE_MS);
+}
 
 const WOLF_ROLES = new Set(["Sói", "Sói con", "Bán sói"]);
 const SPIRIT_WOLF_ROLE = "Linh sói";
@@ -541,6 +602,27 @@ function emitWitchPotions(roomId: string, witchId: string) {
   if (!room) return;
   ensureWitchState(room, witchId);
   io.to(witchId).emit("witchPotionsUpdated", room.witchPotions![witchId]);
+}
+
+function syncPrivateRoleStateForSocket(socket: any, roomId: string, room: Room, playerId: string) {
+  const role = room.playerRoles?.[playerId];
+  if (!role) return;
+
+  socket.emit("yourRole", role);
+
+  if (isWolfRole(role)) {
+    socket.join(`wolves_${roomId}`);
+  } else {
+    socket.leave(`wolves_${roomId}`);
+  }
+
+  if (role === "Phù thủy") {
+    socket.join(`witches_${roomId}`);
+    ensureWitchState(room, playerId);
+    emitWitchPotions(roomId, playerId);
+  } else {
+    socket.leave(`witches_${roomId}`);
+  }
 }
 
 function toPublicRoom(room: Room) {
@@ -1039,10 +1121,8 @@ function startFreshRoundWithCurrentRoles(roomId: string) {
 
   // Remove everyone from private role rooms to prevent information leakage.
   for (const p of room.players) {
-    const s = io.sockets.sockets.get(p.id);
-    if (!s) continue;
-    s.leave(`wolves_${roomId}`);
-    s.leave(`witches_${roomId}`);
+    io.in(p.id).socketsLeave(`wolves_${roomId}`);
+    io.in(p.id).socketsLeave(`witches_${roomId}`);
   }
 
   // Re-shuffle and assign roles.
@@ -1059,8 +1139,7 @@ function startFreshRoundWithCurrentRoles(roomId: string) {
   // Rebuild wolves room membership.
   room.wolves = participants.filter(p => isWolfRole(room.playerRoles?.[p.id])).map(p => p.id);
   room.wolves.forEach(wolfId => {
-    const wolfSocket = io.sockets.sockets.get(wolfId);
-    if (wolfSocket) wolfSocket.join(`wolves_${roomId}`);
+    io.in(wolfId).socketsJoin(`wolves_${roomId}`);
   });
 
   // Rebuild witches room membership and reset potion state.
@@ -1068,8 +1147,7 @@ function startFreshRoundWithCurrentRoles(roomId: string) {
   room.witchHealTargetTonight = {};
   room.witchPoisonTargetTonight = {};
   for (const wid of getWitches(room)) {
-    const witchSocket = io.sockets.sockets.get(wid);
-    if (witchSocket) witchSocket.join(`witches_${roomId}`);
+    io.in(wid).socketsJoin(`witches_${roomId}`);
     ensureWitchState(room, wid);
     emitWitchPotions(roomId, wid);
   }
@@ -2201,13 +2279,18 @@ function finishWolfVoting(roomId: string) {
 
 // Khi client kết nối
 io.on("connection", (socket) => {
+  const clientId = getClientIdFromSocket(socket);
+  socket.join(clientId);
+  activeClientSockets[clientId] = activeClientSockets[clientId] || new Set<string>();
+  activeClientSockets[clientId].add(socket.id);
+
   socket.on("createRoom", ({ name, gameRules }) => {
     const roomId = generateRoomId(activeRooms);
 
     rooms[roomId] = {
       id: roomId,
-      players: [{ id: socket.id, name, connected: true, inGame: false }],
-      hostId: socket.id,
+      players: [{ id: clientId, name, connected: true, inGame: false }],
+      hostId: clientId,
       hidePlayerRoleText: false,
       layoutHeightPx: BASE_FRAME_HEIGHT_PX,
       positions: ensureNonOverlappingPositions([], undefined, { ...POSITION_LAYOUT, heightPx: BASE_FRAME_HEIGHT_PX }),   // host không tham gia nên không có vị trí vòng tròn
@@ -2232,7 +2315,19 @@ io.on("connection", (socket) => {
 
     ensureRoomGameRules(room);
 
-    room.players.push({ id: socket.id, name, connected: true, inGame: false });
+    clearDisconnectedCleanup(roomId, clientId);
+    const existingPlayerIndex = room.players.findIndex((p) => p.id === clientId);
+    if (existingPlayerIndex >= 0) {
+      const current = room.players[existingPlayerIndex]!;
+      room.players[existingPlayerIndex] = {
+        ...current,
+        name: typeof name === "string" && name.trim() ? name : current.name,
+        connected: true,
+        inGame: false,
+      };
+    } else {
+      room.players.push({ id: clientId, name, connected: true, inGame: false });
+    }
 
     // Expand/shrink layout height as needed, without visually moving existing players.
     const nextHeightPx = desiredLayoutHeightPx(getParticipantCount(room));
@@ -2241,6 +2336,7 @@ io.on("connection", (socket) => {
     const opts = layoutOptsForRoom(room);
     room.positions = ensureNonOverlappingPositions(getParticipantIds(room), room.positions, opts);
     socket.join(roomId);
+    syncPrivateRoleStateForSocket(socket, roomId, room, clientId);
 
     // 1) gửi riêng cho người vừa join
     socket.emit("roomJoined", toPublicRoom(room));
@@ -2253,65 +2349,73 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (room) {
       ensureRoomGameRules(room);
+      socket.join(roomId);
+      clearDisconnectedCleanup(roomId, clientId);
+      const playerIndex = room.players.findIndex((p) => p.id === clientId);
+      if (playerIndex >= 0 && room.players[playerIndex]?.connected === false) {
+        room.players[playerIndex] = { ...room.players[playerIndex]!, connected: true };
+        io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      }
+      syncPrivateRoleStateForSocket(socket, roomId, room, clientId);
       socket.emit("roomUpdated", toPublicRoom(room));
       io.to(roomId).emit("positionsUpdated", room.positions);
       io.to(roomId).emit("positionEditorsUpdated", room.positionEditors || []);
 
       if (room.phase === "day" && room.dayDeadline) {
-        io.to(socket.id).emit("dayPhaseStarted", {
+        io.to(clientId).emit("dayPhaseStarted", {
           voters: getActiveDayVoters(room),
           deadline: room.dayDeadline,
         });
-        io.to(socket.id).emit("dayVotesUpdated", room.dayVotes || {});
-        io.to(socket.id).emit("dayLockedUpdated", room.dayLocked || {});
+        io.to(clientId).emit("dayVotesUpdated", room.dayVotes || {});
+        io.to(clientId).emit("dayLockedUpdated", room.dayLocked || {});
       }
 
       if (room.phase === "day" && !room.dayDeadline && room.dayDiscussionDeadline) {
-        io.to(socket.id).emit("dayDiscussionStarted", {
+        io.to(clientId).emit("dayDiscussionStarted", {
           deadline: room.dayDiscussionDeadline,
         });
       }
 
       if (room.phase === "day" && room.trialTargetId && room.trialStage === "defense") {
-        io.to(socket.id).emit("trialPhaseStarted", {
+        io.to(clientId).emit("trialPhaseStarted", {
           targetId: room.trialTargetId,
           stage: "defense",
           defenseDeadline: room.trialDefenseDeadline || null,
           selectionLimit: room.trialInteractionSelectionLimit,
         });
-        io.to(socket.id).emit("trialInteractionUpdated", {
+        io.to(clientId).emit("trialInteractionUpdated", {
           ...buildTrialInteractionUpdatedPayload(room),
         });
       }
 
       if (room.phase === "day" && room.trialTargetId && room.trialStage === "verdict") {
-        io.to(socket.id).emit("trialVerdictStarted", {
+        io.to(clientId).emit("trialVerdictStarted", {
           targetId: room.trialTargetId,
           voters: getTrialVoters(room),
           deadline: room.trialVerdictDeadline || null,
         });
-        io.to(socket.id).emit("trialVotesUpdated", room.trialVotes || {});
+        io.to(clientId).emit("trialVotesUpdated", room.trialVotes || {});
       }
 
       // Re-send private witch potion state on refresh/reconnect.
-      if (room.playerRoles?.[socket.id] === "Phù thủy") {
-        ensureWitchState(room, socket.id);
-        emitWitchPotions(roomId, socket.id);
+      if (room.playerRoles?.[clientId] === "Phù thủy") {
+        ensureWitchState(room, clientId);
+        emitWitchPotions(roomId, clientId);
         emitWitchPendingDeath(roomId);
       }
 
       // Re-send private hunter target state on refresh/reconnect.
-      if (room.playerRoles?.[socket.id] === "Thợ săn") {
-        emitHunterTarget(roomId, socket.id);
+      if (room.playerRoles?.[clientId] === "Thợ săn") {
+        emitHunterTarget(roomId, clientId);
       }
 
-      if (isElementalRoleTurn(room.playerRoles?.[socket.id] || null)) {
-        emitElementalTarget(roomId, socket.id);
-        emitElementalBuffVoteState(roomId, socket.id);
+      if (isElementalRoleTurn(room.playerRoles?.[clientId] || null)) {
+        emitElementalTarget(roomId, clientId);
+        emitElementalBuffVoteState(roomId, clientId);
       }
 
       // Re-send Spirit Wolf pending decision on refresh/reconnect.
-      if (room.playerRoles?.[socket.id] === SPIRIT_WOLF_ROLE) {
+      if (room.playerRoles?.[clientId] === SPIRIT_WOLF_ROLE) {
         if (
           room.nightTurnRole === SPIRIT_WOLF_ROLE &&
           !room.spiritWolfDecisionMade &&
@@ -2329,7 +2433,7 @@ io.on("connection", (socket) => {
   socket.on("setPlayerViewState", ({ roomId, view }: { roomId: string; view: "room" | "game" }) => {
     const room = rooms[roomId];
     if (!room) return;
-    const idx = room.players.findIndex((p) => p.id === socket.id);
+    const idx = room.players.findIndex((p) => p.id === clientId);
     if (idx < 0) return;
 
     const nextInGame = view === "game";
@@ -2343,7 +2447,7 @@ io.on("connection", (socket) => {
   socket.on("updateRoomGameRules", ({ roomId, rules, applyMode }: { roomId: string; rules: Partial<RoomGameRules>; applyMode?: "next-round" | "restart-now" }) => {
     const room = rooms[roomId];
     if (!room) return;
-    if (socket.id !== room.hostId) return;
+    if (clientId !== room.hostId) return;
 
     const mergedRules = buildRoomGameRules({ ...(ensureRoomGameRules(room) || {}), ...(rules || {}) });
     const gameInProgress = !!room.phase && !room.gameOver;
@@ -2379,27 +2483,27 @@ io.on("connection", (socket) => {
   socket.on("returnToCurrentGame", ({ roomId }: { roomId: string }) => {
     const room = rooms[roomId];
     if (!room) return;
-    if (socket.id !== room.hostId) return;
+    if (clientId !== room.hostId) return;
     if (!room.phase || room.gameOver) return;
 
-    const idx = room.players.findIndex((p) => p.id === socket.id);
+    const idx = room.players.findIndex((p) => p.id === clientId);
     if (idx >= 0) {
       room.players[idx] = { ...room.players[idx]!, inGame: true };
       io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     }
-    io.to(socket.id).emit("gameStarted");
+    io.to(clientId).emit("gameStarted");
   });
 
   socket.on("requestReturnToRoom", ({ roomId }: { roomId: string }) => {
     const room = rooms[roomId];
     if (!room) {
-      io.to(socket.id).emit("returnToRoomResult", { ok: false, reason: "room_closed" });
+      io.to(clientId).emit("returnToRoomResult", { ok: false, reason: "room_closed" });
       return;
     }
 
-    const idx = room.players.findIndex((p) => p.id === socket.id);
+    const idx = room.players.findIndex((p) => p.id === clientId);
     if (idx < 0) {
-      io.to(socket.id).emit("returnToRoomResult", { ok: false, reason: "kicked" });
+      io.to(clientId).emit("returnToRoomResult", { ok: false, reason: "kicked" });
       return;
     }
 
@@ -2409,13 +2513,13 @@ io.on("connection", (socket) => {
       io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     }
 
-    io.to(socket.id).emit("returnToRoomResult", { ok: true, roomId });
+    io.to(clientId).emit("returnToRoomResult", { ok: true, roomId });
   });
 
   socket.on("hostReturnToRoom", ({ roomId }: { roomId: string }) => {
     const room = rooms[roomId];
     if (!room) return;
-    if (socket.id !== room.hostId) return;
+    if (clientId !== room.hostId) return;
     if (!room.phase || room.gameOver) return;
 
     resetRoomFromGameToLobby(room);
@@ -2436,7 +2540,7 @@ io.on("connection", (socket) => {
   }) => {
     const room = rooms[roomId];
     if (!room) return;
-    if (socket.id !== room.hostId) return;
+    if (clientId !== room.hostId) return;
 
     const gameInProgress = !!room.phase && !room.gameOver;
 
@@ -2542,8 +2646,7 @@ io.on("connection", (socket) => {
       .map(p => p.id);
 
     room.wolves.forEach(wolfId => {
-      const wolfSocket = io.sockets.sockets.get(wolfId);
-      if (wolfSocket) wolfSocket.join(`wolves_${roomId}`);
+      io.in(wolfId).socketsJoin(`wolves_${roomId}`);
     });
 
     // Khởi tạo mảng người chết (để tránh lỗi undefined)
@@ -2604,8 +2707,8 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
 
-    const isHost = socket.id === room.hostId;
-    const isEditor = room.positionEditors?.includes(socket.id);
+    const isHost = clientId === room.hostId;
+    const isEditor = room.positionEditors?.includes(clientId);
 
     if (!isHost && !isEditor) {
       socket.emit("errorMessage", "Bạn không có quyền chỉnh vị trí.");
@@ -2672,8 +2775,8 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
 
-    const isHost = socket.id === room.hostId;
-    const isEditor = room.positionEditors?.includes(socket.id);
+    const isHost = clientId === room.hostId;
+    const isEditor = room.positionEditors?.includes(clientId);
     if (!isHost && !isEditor) {
       socket.emit("errorMessage", "Bạn không có quyền chỉnh vị trí.");
       return;
@@ -2686,7 +2789,7 @@ io.on("connection", (socket) => {
   socket.on("grantPositionEdit", ({ roomId, targetId }) => {
     const room = rooms[roomId];
     if (!room) return;
-    if (socket.id !== room.hostId) return;
+    if (clientId !== room.hostId) return;
 
     room.positionEditors = room.positionEditors || [];
     if (!room.positionEditors.includes(targetId)) {
@@ -2699,35 +2802,40 @@ io.on("connection", (socket) => {
   socket.on("revokePositionEdit", ({ roomId, targetId }) => {
     const room = rooms[roomId];
     if (!room) return;
-    if (socket.id !== room.hostId) return;
+    if (clientId !== room.hostId) return;
 
     room.positionEditors = (room.positionEditors || []).filter(id => id !== targetId);
     io.to(roomId).emit("positionEditorsUpdated", room.positionEditors);
   });
 
-  console.log("Một client đã kết nối:", socket.id);
+  console.log("Một client đã kết nối:", clientId);
 
   socket.on("disconnect", () => {
-    console.log("Client ngắt:", socket.id);
+    console.log("Client ngắt:", clientId);
+    activeClientSockets[clientId]?.delete(socket.id);
+    if (activeClientSockets[clientId]?.size === 0) {
+      delete activeClientSockets[clientId];
+    }
+    if (isClientCurrentlyConnected(clientId)) return;
 
     for (const roomId in rooms) {
       const room = rooms[roomId];
       if (!room) continue;
 
       // tìm user trong room
-      const playerIndex = room.players.findIndex(p => p.id === socket.id);
+      const playerIndex = room.players.findIndex(p => p.id === clientId);
       if (playerIndex !== -1) {
-        const isHost = room.hostId === socket.id;
+        const isHost = room.hostId === clientId;
 
         // Nếu game đã bắt đầu -> không xoá khỏi phòng, chỉ đánh dấu mất kết nối
         if (room.phase) {
           room.players[playerIndex] = { ...room.players[playerIndex]!, connected: false };
 
           // Nếu là sói và đang ở night phase -> bỏ qua hành động của họ
-          if (isWolfRole(room.playerRoles?.[socket.id])) {
-            if (room.wolfVotes) room.wolfVotes[socket.id] = null;
-            if (room.wolfVotes2) room.wolfVotes2[socket.id] = null;
-            if (room.wolfLocked) room.wolfLocked[socket.id] = false;
+          if (isWolfRole(room.playerRoles?.[clientId])) {
+            if (room.wolfVotes) room.wolfVotes[clientId] = null;
+            if (room.wolfVotes2) room.wolfVotes2[clientId] = null;
+            if (room.wolfLocked) room.wolfLocked[clientId] = false;
             io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes || {});
             io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2 || {});
             io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked || {});
@@ -2742,8 +2850,8 @@ io.on("connection", (socket) => {
 
           // Nếu đang ở ban ngày, người mất kết nối sẽ bị loại khỏi danh sách biểu quyết hiệu lực.
           if (room.phase === "day") {
-            if (room.dayVotes) room.dayVotes[socket.id] = null;
-            if (room.dayLocked) room.dayLocked[socket.id] = false;
+            if (room.dayVotes) room.dayVotes[clientId] = null;
+            if (room.dayLocked) room.dayLocked[clientId] = false;
 
             io.to(roomId).emit("dayVotesUpdated", room.dayVotes || {});
             io.to(roomId).emit("dayLockedUpdated", room.dayLocked || {});
@@ -2769,20 +2877,20 @@ io.on("connection", (socket) => {
             // Trial updates on disconnect.
             if (room.trialStage === "defense") {
               const activeSet = new Set(room.trialInteractionActiveIds || []);
-              if (activeSet.has(socket.id)) {
-                activeSet.delete(socket.id);
+              if (activeSet.has(clientId)) {
+                activeSet.delete(clientId);
                 room.trialInteractionActiveIds = Array.from(activeSet);
               }
               const queuedSet = new Set(room.trialInteractionQueuedIds || []);
-              if (queuedSet.has(socket.id)) {
-                queuedSet.delete(socket.id);
+              if (queuedSet.has(clientId)) {
+                queuedSet.delete(clientId);
                 room.trialInteractionQueuedIds = Array.from(queuedSet);
               }
-              if (room.trialSelectedInteractorId === socket.id) {
+              if (room.trialSelectedInteractorId === clientId) {
                 room.trialSelectedInteractorId = null;
               }
 
-              if (room.trialTargetId === socket.id) {
+              if (room.trialTargetId === clientId) {
                 // Nếu bị cáo mất kết nối, chuyển luôn sang biểu quyết sống/chết.
                 startTrialVerdictVoting(roomId);
               } else {
@@ -2791,7 +2899,7 @@ io.on("connection", (socket) => {
             }
 
             if (room.trialStage === "verdict") {
-              if (room.trialVotes) room.trialVotes[socket.id] = null;
+              if (room.trialVotes) room.trialVotes[clientId] = null;
               io.to(roomId).emit("trialVotesUpdated", room.trialVotes || {});
 
               const activeTrialVoters = getTrialVoters(room);
@@ -2819,46 +2927,9 @@ io.on("connection", (socket) => {
           break;
         }
 
-        // Game chưa bắt đầu -> xoá user khỏi room như cũ
-        room.players.splice(playerIndex, 1);
-        // Xóa cả position luôn
-        room.positions = (room.positions || []).filter(pos => pos.playerId !== socket.id);
-
-        // If we crossed the 18↔19 boundary, rescale remaining positions back.
-        const nextHeightPx = desiredLayoutHeightPx(getParticipantCount(room));
-        const changed = rescaleRoomPositionsForHeight(room, nextHeightPx);
-        if (changed) {
-          const opts = layoutOptsForRoom(room);
-          room.positions = (room.positions || []).map(p => clampToBounds({ ...p }, opts));
-        }
-
-        io.to(roomId).emit("positionsUpdated", room.positions);
-
-        // nếu phòng trống → xoá phòng
-        if (room.players.length === 0) {
-          delete rooms[roomId];
-          activeRooms.delete(roomId);
-          console.log(`Phòng ${roomId} đã đóng vì trống.`);
-        } else {
-          // Nếu host rời phòng
-          if (isHost) {
-            // Chuyển quyền host cho người đầu tiên còn lại
-            if (room.players[0]) {
-              room.hostId = room.players[0].id;
-              const nextHeightPxAfterHostChange = desiredLayoutHeightPx(getParticipantCount(room));
-              rescaleRoomPositionsForHeight(room, nextHeightPxAfterHostChange);
-              const hostChangedOpts = layoutOptsForRoom(room);
-              room.positions = ensureNonOverlappingPositions(getParticipantIds(room), room.positions, hostChangedOpts);
-              io.to(roomId).emit("positionsUpdated", room.positions || []);
-              io.to(roomId).emit("hostChanged", room.hostId);
-              io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-              console.log(`Chủ phòng rời, chuyển quyền cho ${room.hostId}`);
-            }
-          } else {
-            // nếu còn người → cập nhật room
-            io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-          }
-        }
+        room.players[playerIndex] = { ...room.players[playerIndex]!, connected: false };
+        scheduleDisconnectedCleanup(roomId, clientId);
+        io.to(roomId).emit("roomUpdated", toPublicRoom(room));
         break;
       }
     }
@@ -2996,15 +3067,13 @@ io.on("connection", (socket) => {
       .map(p => p.id);
 
     room.wolves.forEach(wolfId => {
-      const wolfSocket = io.sockets.sockets.get(wolfId);
-      if (wolfSocket) wolfSocket.join(`wolves_${roomId}`);
+      io.in(wolfId).socketsJoin(`wolves_${roomId}`);
     });
 
     // Thiết lập danh sách phù thủy
     const witches = getWitches(room);
     witches.forEach(witchId => {
-      const witchSocket = io.sockets.sockets.get(witchId);
-      if (witchSocket) witchSocket.join(`witches_${roomId}`);
+      io.in(witchId).socketsJoin(`witches_${roomId}`);
       ensureWitchState(room, witchId);
       emitWitchPotions(roomId, witchId);
     });
@@ -3051,7 +3120,7 @@ io.on("connection", (socket) => {
   socket.on("restartGame", ({ roomId }) => {
     const room = rooms[roomId];
     if (!room) return;
-    if (socket.id !== room.hostId) return;
+    if (clientId !== room.hostId) return;
 
     const ok = startFreshRoundWithCurrentRoles(roomId);
     if (!ok) {
@@ -3397,17 +3466,17 @@ io.on("connection", (socket) => {
   socket.on("requestGameLog", ({ roomId }) => {
     const room = rooms[roomId];
     if (!room) return;
-    const isHost = socket.id === room.hostId;
+    const isHost = clientId === room.hostId;
     if (!isHost && !room.gameOver) return;
-    emitGameLogToSocket(roomId, socket.id);
+    emitGameLogToSocket(roomId, clientId);
   });
 
   socket.on("requestRolesReveal", ({ roomId }) => {
     const room = rooms[roomId];
     if (!room) return;
-    const isHost = socket.id === room.hostId;
+    const isHost = clientId === room.hostId;
     if (!isHost && !room.gameOver) return;
-    emitRolesRevealToSocket(roomId, socket.id);
+    emitRolesRevealToSocket(roomId, clientId);
   });
 
   // Xử lý vote ban ngày: chọn người để biểu quyết treo
@@ -3418,12 +3487,12 @@ io.on("connection", (socket) => {
     if (room.phase !== "day") return;
     if (room.trialStage && room.trialStage !== "none") return;
     if (!room.dayDeadline) return;
-    if ((room.deadPlayers || []).includes(socket.id)) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
 
     const activeVoters = getActiveDayVoters(room);
-    if (!activeVoters.includes(socket.id)) return;
+    if (!activeVoters.includes(clientId)) return;
 
-    if (room.dayLocked?.[socket.id]) {
+    if (room.dayLocked?.[clientId]) {
       socket.emit("errorMessage", "Bạn đã khóa phiếu biểu quyết, không thể thay đổi.");
       return;
     }
@@ -3434,7 +3503,7 @@ io.on("connection", (socket) => {
 
     // Cho phép bỏ chọn
     if (!targetId) {
-      room.dayVotes[socket.id] = null;
+      room.dayVotes[clientId] = null;
       io.to(roomId).emit("dayVotesUpdated", room.dayVotes);
       return;
     }
@@ -3444,9 +3513,9 @@ io.on("connection", (socket) => {
     if ((room.deadPlayers || []).includes(targetId)) return;
 
     // không cho tự vote bản thân
-    if (targetId === socket.id) return;
+    if (targetId === clientId) return;
 
-    room.dayVotes[socket.id] = targetId;
+    room.dayVotes[clientId] = targetId;
     io.to(roomId).emit("dayVotesUpdated", room.dayVotes);
   });
 
@@ -3458,13 +3527,13 @@ io.on("connection", (socket) => {
     if (room.phase !== "day") return;
     if (room.trialStage && room.trialStage !== "none") return;
     if (!room.dayDeadline) return;
-    if ((room.deadPlayers || []).includes(socket.id)) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
 
     const activeVoters = getActiveDayVoters(room);
-    if (!activeVoters.includes(socket.id)) return;
+    if (!activeVoters.includes(clientId)) return;
 
     room.dayLocked = room.dayLocked || {};
-    room.dayLocked[socket.id] = true;
+    room.dayLocked[clientId] = true;
     io.to(roomId).emit("dayLockedUpdated", room.dayLocked);
 
     const allLocked =
@@ -3480,7 +3549,7 @@ io.on("connection", (socket) => {
     if (!room) return;
     if (room.gameOver) return;
     if (room.phase !== "day") return;
-    if (socket.id !== room.hostId) return;
+    if (clientId !== room.hostId) return;
     if (room.trialStage && room.trialStage !== "none") return;
     if (room.dayDeadline) return;
 
@@ -3490,7 +3559,7 @@ io.on("connection", (socket) => {
   socket.on("hostTogglePlayerRoleText", ({ roomId }) => {
     const room = rooms[roomId];
     if (!room) return;
-    if (socket.id !== room.hostId) return;
+    if (clientId !== room.hostId) return;
 
     room.hidePlayerRoleText = !(room.hidePlayerRoleText === true);
     io.to(roomId).emit("roomUpdated", toPublicRoom(room));
@@ -3502,7 +3571,7 @@ io.on("connection", (socket) => {
     if (!room) return;
     if (room.gameOver) return;
     if (room.phase !== "day") return;
-    if (socket.id !== room.hostId) return;
+    if (clientId !== room.hostId) return;
 
     if (room.trialStage === "verdict") {
       finishTrialVerdict(roomId);
@@ -3521,7 +3590,7 @@ io.on("connection", (socket) => {
     if (!room) return;
     if (room.gameOver) return;
     if (room.phase !== "night") return;
-    if (socket.id !== room.hostId) return;
+    if (clientId !== room.hostId) return;
 
     const rules = ensureRoomGameRules(room);
     if (rules.allNightActionsSimultaneous) return;
@@ -3545,7 +3614,7 @@ io.on("connection", (socket) => {
     if (!room) return;
     if (room.gameOver) return;
     if (room.phase !== "night") return;
-    if (socket.id !== room.hostId) return;
+    if (clientId !== room.hostId) return;
 
     const rules = ensureRoomGameRules(room);
     if (rules.allNightActionsSimultaneous) return;
@@ -3600,21 +3669,21 @@ io.on("connection", (socket) => {
     if (room.phase !== "day") return;
     if (room.trialStage !== "defense") return;
     if (!room.trialTargetId) return;
-    if ((room.deadPlayers || []).includes(socket.id)) return;
-    if (socket.id === room.trialTargetId) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (clientId === room.trialTargetId) return;
     if (room.trialInteractionCut) return;
-    if ((room.trialSelectedInteractorIds || []).includes(socket.id)) return;
+    if ((room.trialSelectedInteractorIds || []).includes(clientId)) return;
 
     const activeSet = new Set(room.trialInteractionActiveIds || []);
     const queuedSet = new Set(room.trialInteractionQueuedIds || []);
-    if (active) activeSet.add(socket.id);
-    else activeSet.delete(socket.id);
-    if (active) queuedSet.add(socket.id);
-    else queuedSet.delete(socket.id);
+    if (active) activeSet.add(clientId);
+    else activeSet.delete(clientId);
+    if (active) queuedSet.add(clientId);
+    else queuedSet.delete(clientId);
 
     room.trialInteractionActiveIds = Array.from(activeSet);
     room.trialInteractionQueuedIds = Array.from(queuedSet);
-    if (!active && room.trialSelectedInteractorId === socket.id) {
+    if (!active && room.trialSelectedInteractorId === clientId) {
       room.trialSelectedInteractorId = null;
     }
 
@@ -3630,7 +3699,7 @@ io.on("connection", (socket) => {
     if (room.phase !== "day") return;
     if (room.trialStage !== "defense") return;
     if (!room.trialTargetId) return;
-    if (socket.id !== room.trialTargetId) return;
+    if (clientId !== room.trialTargetId) return;
 
     const active = new Set(room.trialInteractionActiveIds || []);
     if (!active.has(targetId)) return;
@@ -3667,7 +3736,7 @@ io.on("connection", (socket) => {
     if (room.phase !== "day") return;
     if (room.trialStage !== "defense") return;
     if (!room.trialTargetId) return;
-    if (socket.id !== room.hostId) return;
+    if (clientId !== room.hostId) return;
 
     const nextLimit = Math.max(0, room.trialInteractionSelectionLimit || 0) + 1;
     room.trialInteractionSelectionLimit = nextLimit;
@@ -3700,7 +3769,7 @@ io.on("connection", (socket) => {
     if (room.phase !== "day") return;
     if (room.trialStage !== "defense") return;
     if (!room.trialTargetId) return;
-    if (socket.id !== room.trialTargetId) return;
+    if (clientId !== room.trialTargetId) return;
 
     room.trialInteractionCut = true;
     io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
@@ -3716,19 +3785,19 @@ io.on("connection", (socket) => {
     if (room.phase !== "day") return;
     if (room.trialStage !== "verdict") return;
     if (!room.trialTargetId) return;
-    if (socket.id === room.trialTargetId) return;
-    if ((room.deadPlayers || []).includes(socket.id)) return;
+    if (clientId === room.trialTargetId) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
 
     const voters = getTrialVoters(room);
-    if (!voters.includes(socket.id)) return;
+    if (!voters.includes(clientId)) return;
 
     if (room.trialVerdictDeadline && Date.now() >= room.trialVerdictDeadline) return;
 
     room.trialVotes = room.trialVotes || {};
     if (vote !== "live" && vote !== "die") {
-      room.trialVotes[socket.id] = null;
+      room.trialVotes[clientId] = null;
     } else {
-      room.trialVotes[socket.id] = vote;
+      room.trialVotes[clientId] = vote;
     }
 
     io.to(roomId).emit("trialVotesUpdated", room.trialVotes);
@@ -3740,18 +3809,18 @@ io.on("connection", (socket) => {
     if (!room) return;
 
     if (room.phase !== "night") return;
-    if (!canPerformNightRoleAction(room, socket.id, "Thợ săn")) return;
-    if (room.playerRoles?.[socket.id] !== "Thợ săn") return;
-    if ((room.deadPlayers || []).includes(socket.id)) return;
+    if (!canPerformNightRoleAction(room, clientId, "Thợ săn")) return;
+    if (room.playerRoles?.[clientId] !== "Thợ săn") return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
 
     room.hunterTargetTonight = room.hunterTargetTonight || {};
 
-    const prev = room.hunterTargetTonight[socket.id] ?? null;
+    const prev = room.hunterTargetTonight[clientId] ?? null;
 
     // Cho phép clear bằng null/undefined
     if (!targetId) {
-      room.hunterTargetTonight[socket.id] = null;
-      emitHunterTarget(roomId, socket.id);
+      room.hunterTargetTonight[clientId] = null;
+      emitHunterTarget(roomId, clientId);
       return;
     }
 
@@ -3759,11 +3828,11 @@ io.on("connection", (socket) => {
     if (!room.players.find(p => p.id === targetId)) return;
     if ((room.deadPlayers || []).includes(targetId)) return;
 
-    room.hunterTargetTonight[socket.id] = targetId;
-    emitHunterTarget(roomId, socket.id);
+    room.hunterTargetTonight[clientId] = targetId;
+    emitHunterTarget(roomId, clientId);
 
     if (prev !== targetId) {
-      appendLogEntry(room, { type: "hunter_mark", phase: "night", actorId: socket.id, targetId });
+      appendLogEntry(room, { type: "hunter_mark", phase: "night", actorId: clientId, targetId });
     }
   });
 
@@ -3771,69 +3840,69 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
     if (room.phase !== "night") return;
-    const myRole = room.playerRoles?.[socket.id] || null;
+    const myRole = room.playerRoles?.[clientId] || null;
     if (!isElementalRoleTurn(myRole)) return;
-    if (!canPerformNightRoleAction(room, socket.id, myRole as NightActionRole)) return;
-    if ((room.deadPlayers || []).includes(socket.id)) return;
+    if (!canPerformNightRoleAction(room, clientId, myRole as NightActionRole)) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
     if (shouldElementalsVoteBuffTonight(room)) return;
 
     room.elementalTargetTonight = room.elementalTargetTonight || {};
 
     if (!targetId) {
-      room.elementalTargetTonight[socket.id] = null;
-      emitElementalTarget(roomId, socket.id);
+      room.elementalTargetTonight[clientId] = null;
+      emitElementalTarget(roomId, clientId);
       return;
     }
 
-    if (targetId === socket.id) {
+    if (targetId === clientId) {
       socket.emit("errorMessage", "Bạn không thể chọn chính mình.");
       return;
     }
     if (!room.players.find((p) => p.id === targetId)) return;
     if ((room.deadPlayers || []).includes(targetId)) return;
 
-    room.elementalTargetTonight[socket.id] = targetId;
+    room.elementalTargetTonight[clientId] = targetId;
     const targetRole = room.playerRoles?.[targetId] || null;
     const isCorrect = isElementalRoleTurn(targetRole);
     if (isCorrect) {
-      room.elementalCorrectGuessPlayerIdsTonight = Array.from(new Set([...(room.elementalCorrectGuessPlayerIdsTonight || []), socket.id]));
+      room.elementalCorrectGuessPlayerIdsTonight = Array.from(new Set([...(room.elementalCorrectGuessPlayerIdsTonight || []), clientId]));
     } else {
-      room.elementalCorrectGuessPlayerIdsTonight = (room.elementalCorrectGuessPlayerIdsTonight || []).filter((id) => id !== socket.id);
+      room.elementalCorrectGuessPlayerIdsTonight = (room.elementalCorrectGuessPlayerIdsTonight || []).filter((id) => id !== clientId);
     }
     // Log elemental guess for host
     appendLogEntry(room, {
       type: "elemental_guess",
       phase: "night",
-      actorId: socket.id,
+      actorId: clientId,
       targetId,
       isCorrect,
     });
-    emitElementalTarget(roomId, socket.id);
+    emitElementalTarget(roomId, clientId);
   });
 
   socket.on("elementalChooseBuff", ({ roomId, buffId }) => {
     const room = rooms[roomId];
     if (!room) return;
     if (room.phase !== "night") return;
-    const myRole = room.playerRoles?.[socket.id] || null;
+    const myRole = room.playerRoles?.[clientId] || null;
     if (!isElementalRoleTurn(myRole)) return;
-    if (!canPerformNightRoleAction(room, socket.id, myRole as NightActionRole)) return;
-    if ((room.deadPlayers || []).includes(socket.id)) return;
+    if (!canPerformNightRoleAction(room, clientId, myRole as NightActionRole)) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
     if (!shouldElementalsVoteBuffTonight(room)) return;
     const availableTier = getBuffTier(room.elementalCorrectGuessCountForBuff || 0);
     const selectedBuff = ELEMENTAL_BUFFS.find((buff) => buff.id === buffId);
     if (!selectedBuff || selectedBuff.tier !== availableTier) return;
 
     room.elementalBuffVotesTonight = room.elementalBuffVotesTonight || {};
-    room.elementalBuffVotesTonight[socket.id] = buffId;
-    emitElementalBuffVoteState(roomId, socket.id);
+    room.elementalBuffVotesTonight[clientId] = buffId;
+    emitElementalBuffVoteState(roomId, clientId);
   });
 
   // Nhường quyền chủ phòng cho người khác
   socket.on("transferHost", ({ roomId, targetId }) => {
     const room = rooms[roomId];
     if (!room) return;
-    if (socket.id !== room.hostId) return; // chỉ host mới được nhường quyền
+    if (clientId !== room.hostId) return; // chỉ host mới được nhường quyền
     if (!room.players.find(p => p.id === targetId)) return;
     room.hostId = targetId;
     const nextHeightPxAfterHostChange = desiredLayoutHeightPx(getParticipantCount(room));
@@ -3849,7 +3918,7 @@ io.on("connection", (socket) => {
   socket.on("kickPlayer", ({ roomId, targetId, source }: { roomId: string; targetId: string; source?: "room" | "game" }) => {
     const room = rooms[roomId];
     if (!room) return;
-    if (socket.id !== room.hostId) return; // chỉ host mới được kick
+    if (clientId !== room.hostId) return; // chỉ host mới được kick
     if (!room.players.find(p => p.id === targetId)) return;
 
     const shouldForceReturnAll = source === "room" && !!room.phase && !room.gameOver;
@@ -3917,13 +3986,13 @@ io.on("connection", (socket) => {
 
     // chỉ được dùng vào ban đêm
     if (room.phase !== "night") return;
-    if (!canPerformNightRoleAction(room, socket.id, "Tiên tri")) return;
+    if (!canPerformNightRoleAction(room, clientId, "Tiên tri")) return;
 
     // chỉ tiên tri mới được dùng
-    if (room.playerRoles?.[socket.id] !== "Tiên tri") return;
+    if (room.playerRoles?.[clientId] !== "Tiên tri") return;
 
     // tiên tri chết thì không được chọn
-    if ((room.deadPlayers || []).includes(socket.id)) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
 
     // target phải tồn tại trong phòng và còn sống
     if (!room.players.find(p => p.id === targetId)) return;
@@ -3931,13 +4000,13 @@ io.on("connection", (socket) => {
 
     // mỗi đêm chỉ dùng 1 lần (hoặc 2 nếu có buff seer-check-two)
     room.seerUsedTonight = room.seerUsedTonight || {};
-    const usedCount = room.seerUsedTonight[socket.id] || 0;
+    const usedCount = room.seerUsedTonight[clientId] || 0;
     const maxChecks = (room.elementalSelectedBuffId === "seer-check-two" && room.elementalSelectedBuffAppliesNight === room.nightCount) ? 2 : 1;
     if (usedCount >= maxChecks) {
       socket.emit("errorMessage", "Bạn đã dùng chức năng tiên tri trong đêm này rồi!");
       return;
     }
-    room.seerUsedTonight[socket.id] = usedCount + 1;
+    room.seerUsedTonight[clientId] = usedCount + 1;
 
     const roleOfTarget = room.playerRoles[targetId];
     // Seer detection rules:
@@ -3956,10 +4025,10 @@ io.on("connection", (socket) => {
           : isSpiritWolfMarkedWolf
             ? true
             : isWolfRole(roleOfTarget);
-    io.to(socket.id).emit("seerResult", { playerId: targetId, isWolf });
+    io.to(clientId).emit("seerResult", { playerId: targetId, isWolf });
 
               // Log seer action (revealed after game; host can view anytime).
-              appendLogEntry(room, { type: "seer_check", phase: "night", actorId: socket.id, targetId, isWolf });
+              appendLogEntry(room, { type: "seer_check", phase: "night", actorId: clientId, targetId, isWolf });
   });
 
   // Xử lý chức năng bảo vệ bảo vệ người
@@ -3971,13 +4040,13 @@ io.on("connection", (socket) => {
 
     // chỉ được dùng vào ban đêm
     if (room.phase !== "night") return;
-    if (!canPerformNightRoleAction(room, socket.id, "Bảo vệ")) return;
+    if (!canPerformNightRoleAction(room, clientId, "Bảo vệ")) return;
 
     // chỉ bảo vệ mới được chọn
-    if (room.playerRoles?.[socket.id] !== "Bảo vệ") return;
+    if (room.playerRoles?.[clientId] !== "Bảo vệ") return;
 
     // bảo vệ chết thì không được chọn
-    if ((room.deadPlayers || []).includes(socket.id)) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
 
     // đã xác nhận bảo vệ đêm nay thì không được đổi nữa
     if (room.protectedTonight) {
@@ -3996,9 +4065,9 @@ io.on("connection", (socket) => {
     }
 
     room.protectedTonight = targetId;
-    io.to(socket.id).emit("guardianProtected", targetId);
+    io.to(clientId).emit("guardianProtected", targetId);
 
-    appendLogEntry(room, { type: "guardian_protect", phase: "night", actorId: socket.id, targetId });
+    appendLogEntry(room, { type: "guardian_protect", phase: "night", actorId: clientId, targetId });
 
     // Nếu bảo vệ trúng người sói cắn, phù thủy sẽ không còn thấy ai sắp chết.
     emitWitchPendingDeath(roomId);
@@ -4012,13 +4081,13 @@ io.on("connection", (socket) => {
     if (room.gameOver) return;
 
     if (room.phase !== "night") return;
-    if (!canPerformNightRoleAction(room, socket.id, "Phù thủy")) return;
-    if (room.playerRoles?.[socket.id] !== "Phù thủy") return;
-    if ((room.deadPlayers || []).includes(socket.id)) return;
+    if (!canPerformNightRoleAction(room, clientId, "Phù thủy")) return;
+    if (room.playerRoles?.[clientId] !== "Phù thủy") return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
 
-    ensureWitchState(room, socket.id);
+    ensureWitchState(room, clientId);
 
-    const potions = room.witchPotions![socket.id]!;
+    const potions = room.witchPotions![clientId]!;
     if (potions.healUsed) {
       socket.emit("errorMessage", "Bạn đã dùng bình cứu rồi!");
       return;
@@ -4036,10 +4105,10 @@ io.on("connection", (socket) => {
     }
 
     potions.healUsed = true;
-    room.witchHealTargetTonight![socket.id] = targetId;
-    emitWitchPotions(roomId, socket.id);
+    room.witchHealTargetTonight![clientId] = targetId;
+    emitWitchPotions(roomId, clientId);
 
-    appendLogEntry(room, { type: "witch_heal", phase: "night", actorId: socket.id, targetId });
+    appendLogEntry(room, { type: "witch_heal", phase: "night", actorId: clientId, targetId });
 
     // After using heal, this witch should no longer see pending deaths.
     emitWitchPendingDeath(roomId);
@@ -4053,20 +4122,20 @@ io.on("connection", (socket) => {
     if (room.gameOver) return;
 
     if (room.phase !== "night") return;
-    if (!canPerformNightRoleAction(room, socket.id, "Phù thủy")) return;
-    if (room.playerRoles?.[socket.id] !== "Phù thủy") return;
-    if ((room.deadPlayers || []).includes(socket.id)) return;
+    if (!canPerformNightRoleAction(room, clientId, "Phù thủy")) return;
+    if (room.playerRoles?.[clientId] !== "Phù thủy") return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
 
-    ensureWitchState(room, socket.id);
+    ensureWitchState(room, clientId);
 
-    const potions = room.witchPotions![socket.id]!;
+    const potions = room.witchPotions![clientId]!;
     if (potions.poisonUsed) {
       socket.emit("errorMessage", "Bạn đã dùng bình giết rồi!");
       return;
     }
 
     // không giết bản thân
-    if (targetId === socket.id) {
+    if (targetId === clientId) {
       socket.emit("errorMessage", "Bạn không thể dùng bình giết lên chính mình.");
       return;
     }
@@ -4076,10 +4145,10 @@ io.on("connection", (socket) => {
     if ((room.deadPlayers || []).includes(targetId)) return;
 
     potions.poisonUsed = true;
-    room.witchPoisonTargetTonight![socket.id] = targetId;
-    emitWitchPotions(roomId, socket.id);
+    room.witchPoisonTargetTonight![clientId] = targetId;
+    emitWitchPotions(roomId, clientId);
 
-    appendLogEntry(room, { type: "witch_poison", phase: "night", actorId: socket.id, targetId });
+    appendLogEntry(room, { type: "witch_poison", phase: "night", actorId: clientId, targetId });
 
     // If witch poisons a wolf, Linh sói may choose to save.
     const targetRole = room.playerRoles?.[targetId];
@@ -4101,9 +4170,9 @@ io.on("connection", (socket) => {
     if (!room) return;
     if (room.gameOver) return;
     if (room.phase !== "night") return;
-    if (!canPerformNightRoleAction(room, socket.id, "Linh sói")) return;
-    if (room.playerRoles?.[socket.id] !== SPIRIT_WOLF_ROLE) return;
-    if ((room.deadPlayers || []).includes(socket.id)) return;
+    if (!canPerformNightRoleAction(room, clientId, "Linh sói")) return;
+    if (room.playerRoles?.[clientId] !== SPIRIT_WOLF_ROLE) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
 
     const pendingTargetId = room.spiritWolfPendingPoisonedWolfId;
     if (!pendingTargetId) return;
@@ -4123,7 +4192,7 @@ io.on("connection", (socket) => {
     }
 
     room.spiritWolfPendingPoisonedWolfId = null;
-    io.to(socket.id).emit("spiritWolfDecisionRecorded", { saved: !!save });
+    io.to(clientId).emit("spiritWolfDecisionRecorded", { saved: !!save });
     io.to(roomId).emit("roomUpdated", toPublicRoom(room));
 
     appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", saved: !!save });
@@ -4137,13 +4206,13 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
     if (room.gameOver) return;
-    if (!isWolfRole(room.playerRoles?.[socket.id])) return; // chỉ phe sói mới được chọn
-    if ((room.deadPlayers || []).includes(socket.id)) return; // sói chết -> bỏ qua
+    if (!isWolfRole(room.playerRoles?.[clientId])) return; // chỉ phe sói mới được chọn
+    if ((room.deadPlayers || []).includes(clientId)) return; // sói chết -> bỏ qua
     if (room.phase !== "night") return;
-    if (!canPerformNightRoleAction(room, socket.id, "Sói")) return;
+    if (!canPerformNightRoleAction(room, clientId, "Sói")) return;
 
     // nếu sói đã cắn thì ko cho thay đổi
-    if (room.wolfLocked?.[socket.id]) {
+    if (room.wolfLocked?.[clientId]) {
       socket.emit("errorMessage", "Bạn đã bấm CẮN, không thể thay đổi lựa chọn.");
       return;
     }
@@ -4152,7 +4221,7 @@ io.on("connection", (socket) => {
 
     // Allow clear by null/undefined
     if (!targetId) {
-      room.wolfVotes[socket.id] = null;
+      room.wolfVotes[clientId] = null;
       io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes);
       return;
     }
@@ -4162,10 +4231,10 @@ io.on("connection", (socket) => {
     if ((room.deadPlayers || []).includes(targetId)) return;
 
     // Prevent voting for yourself or wolf-team
-    if (targetId === socket.id) return;
+    if (targetId === clientId) return;
     if (isWolfRole(room.playerRoles?.[targetId])) return;
 
-    room.wolfVotes[socket.id] = targetId;
+    room.wolfVotes[clientId] = targetId;
 
     // Gửi cập nhật vote cho tất cả sói để họ nhìn thấy
     io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes); 
@@ -4176,16 +4245,16 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
     if (room.gameOver) return;
-    if (!isWolfRole(room.playerRoles?.[socket.id])) return;
+    if (!isWolfRole(room.playerRoles?.[clientId])) return;
     if (room.phase !== "night") return;
-    if ((room.deadPlayers || []).includes(socket.id)) return;
-    if (!canPerformNightRoleAction(room, socket.id, "Sói")) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPerformNightRoleAction(room, clientId, "Sói")) return;
 
     // Chỉ cho chọn mục tiêu #2 khi đêm này có bonus
     if (!room.wolfBonusBiteThisNight) return;
 
     // nếu sói đã lock thì ko cho thay đổi
-    if (room.wolfLocked?.[socket.id]) {
+    if (room.wolfLocked?.[clientId]) {
       socket.emit("errorMessage", "Bạn đã bấm CẮN, không thể thay đổi lựa chọn.");
       return;
     }
@@ -4194,7 +4263,7 @@ io.on("connection", (socket) => {
 
     // Allow clear by null/undefined
     if (!targetId) {
-      room.wolfVotes2[socket.id] = null;
+      room.wolfVotes2[clientId] = null;
       io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
       return;
     }
@@ -4204,13 +4273,13 @@ io.on("connection", (socket) => {
     if ((room.deadPlayers || []).includes(targetId)) return;
 
     // Prevent voting for yourself or wolf-team
-    if (targetId === socket.id) return;
+    if (targetId === clientId) return;
     if (isWolfRole(room.playerRoles?.[targetId])) return;
 
     // Prevent selecting the same as primary
-    if (room.wolfVotes?.[socket.id] && room.wolfVotes[socket.id] === targetId) return;
+    if (room.wolfVotes?.[clientId] && room.wolfVotes[clientId] === targetId) return;
 
-    room.wolfVotes2[socket.id] = targetId;
+    room.wolfVotes2[clientId] = targetId;
     io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
   });
 
@@ -4219,12 +4288,12 @@ io.on("connection", (socket) => {
     const room = rooms[roomId];
     if (!room) return;
 
-    if (!isWolfRole(room.playerRoles?.[socket.id])) return;
+    if (!isWolfRole(room.playerRoles?.[clientId])) return;
     if (room.phase !== "night") return;
-    if (!canPerformNightRoleAction(room, socket.id, "Sói")) return;
+    if (!canPerformNightRoleAction(room, clientId, "Sói")) return;
 
     room.wolfLocked = room.wolfLocked || {}; // khởi tạo nếu chưa có
-    room.wolfLocked![socket.id] = true;
+    room.wolfLocked![clientId] = true;
 
     // Gửi cập nhật trạng thái lock cho tất cả sói
     io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked);

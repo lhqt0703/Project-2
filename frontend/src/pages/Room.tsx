@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { socket } from "../socket";
+import { socket, clientId } from "../socket";
 import PlayerPositions from "../components/PlayerPositions";
 import ConfirmModal from "../components/ConfirmModal";
 import GameRulesModal from "../components/GameRulesModal";
@@ -46,6 +46,7 @@ export default function Room() {
   const [pendingKickByDoubleClick, setPendingKickByDoubleClick] = useState<Player | null>(null);
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [showRulesModal, setShowRulesModal] = useState(false);
+  const [showCurrentRulesModal, setShowCurrentRulesModal] = useState(false);
   const [pendingRulesUpdate, setPendingRulesUpdate] = useState<RoomData["gameRules"] | null>(null);
   const [showRulesApplyDecisionModal, setShowRulesApplyDecisionModal] = useState(false);
   const [rulesRestartOverlay, setRulesRestartOverlay] = useState<{
@@ -73,10 +74,18 @@ export default function Room() {
   const roomId = query.get("roomId");
 
   useEffect(() => {
-    if (roomId) {
+    const syncRoomPresence = () => {
+      if (!roomId) return;
       socket.emit("getRoom", roomId);
       socket.emit("setPlayerViewState", { roomId, view: "room" });
-    }
+    };
+
+    syncRoomPresence();
+    socket.on("connect", syncRoomPresence);
+
+    return () => {
+      socket.off("connect", syncRoomPresence);
+    };
   }, [roomId]);
 
   useEffect(() => {
@@ -398,7 +407,7 @@ export default function Room() {
 
   if (!room) return <p>Đang tải phòng...</p>;
 
-  const amIHost = socket.id === room.hostId;
+  const amIHost = clientId === room.hostId;
   const gameInProgress = !!room.phase && !room.gameOver;
   const hasInGamePlayers = room.players.some((p) => p.inGame === true);
   const hasDisconnectedPlayers = room.players.some((p) => p.connected === false);
@@ -470,6 +479,15 @@ export default function Room() {
               </li>
             ))}
           </ul>
+
+          <div style={{ marginTop: 12 }}>
+            <button
+              onClick={() => setShowCurrentRulesModal(true)}
+              title="Xem luật hiện tại của phòng"
+            >
+              Xem luật hiện tại
+            </button>
+          </div>
 
           {amIHost && (
             <>
@@ -590,6 +608,16 @@ export default function Room() {
             setShowRulesModal(false);
           }}
           saveText="Cập nhật"
+        />
+
+        <GameRulesModal
+          open={showCurrentRulesModal}
+          title="Luật hiện tại của phòng"
+          initialRules={room.gameRules || DEFAULT_ROOM_GAME_RULES}
+          availableNightActionRoles={availableNightActionRoles}
+          includedElementalRoles={(room.roles || []).filter((role) => ELEMENTAL_ROLE_SET.has(role))}
+          onClose={() => setShowCurrentRulesModal(false)}
+          readOnly
         />
 
         <ConfirmModal

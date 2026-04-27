@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { socket } from "../../socket";
+import { socket, clientId } from "../../socket";
 import type { GamePhase, WitchPotionsPayload } from "./socketEvents";
 import ConfirmModal from "../../components/ConfirmModal";
 
@@ -62,7 +62,7 @@ export function useWitchRole({
   const canAct = useMemo(() => {
     if (phase !== "night") return false;
     if (role !== "Phù thủy") return false;
-    if (socket.id && deadPlayers.includes(socket.id)) return false;
+    if (clientId && deadPlayers.includes(clientId)) return false;
     if (!allNightActionsSimultaneous) {
       if (currentNightTurnRole !== "Phù thủy") return false;
     }
@@ -104,7 +104,7 @@ export function useWitchRole({
       if (poisonDisabled) return true;
 
       // không giết bản thân
-      if (playerId === socket.id) return true;
+      if (playerId === clientId) return true;
       // không chọn người đã chết
       if (deadPlayers.includes(playerId)) return true;
       // target phải tồn tại
@@ -132,7 +132,7 @@ export function useWitchRole({
   }, [poisonSelectedTargetId, roomId]);
 
   const panel =
-    role === "Phù thủy" && phase === "night" && socket.id && !deadPlayers.includes(socket.id) ? (
+    role === "Phù thủy" && phase === "night" && clientId && !deadPlayers.includes(clientId) ? (
       <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <button
           disabled={healDisabled}
@@ -175,7 +175,7 @@ export function useWitchRole({
 
   const healConfirmModal = (
     (() => {
-      const isSelfHeal = !!healSelectedTargetId && healSelectedTargetId === socket.id;
+      const isSelfHeal = !!healSelectedTargetId && healSelectedTargetId === clientId;
       const targetName = healSelectedTargetId
         ? room.players.find(p => p.id === healSelectedTargetId)?.name
         : undefined;

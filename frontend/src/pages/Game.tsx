@@ -1,7 +1,7 @@
 
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { socket } from "../socket";
+import { socket, clientId } from "../socket";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useRoomContext } from "../context/RoomContext";
 import PlayerPositions from "../components/PlayerPositions";
@@ -35,7 +35,7 @@ export default function Game() {
     sync.trialStage === "none" &&
     !sync.gameEnded;
   const deadPlayers = sync.deadPlayers;
-  const isHost = !!room?.hostId && socket.id === room.hostId;
+  const isHost = !!room?.hostId && clientId === room.hostId;
   const shouldHidePlayerRoleText = !isHost && !!room?.hidePlayerRoleText;
   const allNightActionsSimultaneous = room?.gameRules?.allNightActionsSimultaneous === true;
   const currentNightTurnRole = (room?.nightTurnRole || null) as NightActionRole | null;
@@ -122,7 +122,16 @@ export default function Game() {
 
   useEffect(() => {
     if (!roomId) return;
-    socket.emit("setPlayerViewState", { roomId, view: "game" });
+    const syncGamePresence = () => {
+      socket.emit("setPlayerViewState", { roomId, view: "game" });
+    };
+
+    syncGamePresence();
+    socket.on("connect", syncGamePresence);
+
+    return () => {
+      socket.off("connect", syncGamePresence);
+    };
   }, [roomId]);
 
   useEffect(() => {
@@ -919,7 +928,7 @@ export default function Game() {
       }}
       onCancel={() => setNoticeModal(null)}
     />
-  
+
     </div>
   );
 }

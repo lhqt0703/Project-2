@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { socket } from "../../socket";
+import { socket, clientId } from "../../socket";
 import type { GamePhase } from "./socketEvents";
 import ConfirmModal from "../../components/ConfirmModal";
 
@@ -63,7 +63,7 @@ export function useGuardianRole({
   const canAct = useMemo(() => {
     if (phase !== "night") return false;
     if (role !== "Bảo vệ") return false;
-    if (socket.id && deadPlayers.includes(socket.id)) return false;
+    if (clientId && deadPlayers.includes(clientId)) return false;
     if (!allNightActionsSimultaneous) {
       if (currentNightTurnRole !== "Bảo vệ") return false;
     }

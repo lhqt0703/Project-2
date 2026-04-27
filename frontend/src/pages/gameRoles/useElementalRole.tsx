@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { socket } from "../../socket";
+import { socket, clientId } from "../../socket";
 import ConfirmModal from "../../components/ConfirmModal";
 import { ELEMENTAL_BUFFS, ELEMENTAL_BUFF_LABELS, ELEMENTAL_ROLE_SET, type ElementalBuffId } from "../../constants/elemental";
 import type { GamePhase } from "./socketEvents";
@@ -63,7 +63,7 @@ export function useElementalRole({
   const canAct = useMemo(() => {
     if (phase !== "night") return false;
     if (!isElementalRole) return false;
-    if (socket.id && deadPlayers.includes(socket.id)) return false;
+    if (clientId && deadPlayers.includes(clientId)) return false;
     if (!allNightActionsSimultaneous && currentNightTurnRole !== role) return false;
     return true;
   }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, isElementalRole, phase, role]);
@@ -80,7 +80,7 @@ export function useElementalRole({
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;
     if (elementalActionMode !== "guess") return false;
-    if (playerId === socket.id) return true;
+    if (playerId === clientId) return true;
     if (lockedTargetId) return true;
     setSelectedPlayerId(playerId);
     setShowConfirm(true);

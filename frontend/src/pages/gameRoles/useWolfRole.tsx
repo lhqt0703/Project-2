@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { socket } from "../../socket";
+import { socket, clientId } from "../../socket";
 import type { GamePhase } from "./socketEvents";
 
 type Player = { id: string; name: string; connected?: boolean };
@@ -78,14 +78,14 @@ export function useWolfRole({
   }, [isWolfTeam, isWolfTurnActive]);
 
   const isLocked = useMemo(() => {
-    if (socket.id && wolfLocked?.[socket.id]) return true;
+    if (clientId && wolfLocked?.[clientId]) return true;
     return hasSubmittedLock;
   }, [hasSubmittedLock, wolfLocked]);
 
   const canAct = useMemo(() => {
     if (phase !== "night") return false;
     if (!isWolfTeam) return false;
-    if (socket.id && deadPlayers.includes(socket.id)) return false;
+    if (clientId && deadPlayers.includes(clientId)) return false;
     if (!allNightActionsSimultaneous) {
       if (currentNightTurnRole !== "Sói") return false;
     }
@@ -98,7 +98,7 @@ export function useWolfRole({
     if (!canAct) return false;
 
     // không cho chọn chính mình
-    if (playerId === socket.id) return true;
+    if (playerId === clientId) return true;
     // không cho chọn sói khác
     if (wolves.includes(playerId)) return true;
     // lock vote rồi thì không được chọn nữa
@@ -157,7 +157,7 @@ export function useWolfRole({
   }, []);
 
   const panel =
-    isWolfTeam && isWolfTurnActive && socket.id && !deadPlayers.includes(socket.id) ? (
+    isWolfTeam && isWolfTurnActive && clientId && !deadPlayers.includes(clientId) ? (
       <div style={{ marginTop: 12 }}>
         {wolfMaxTargets >= 2 && (
           <div style={{ marginBottom: 8 }}>

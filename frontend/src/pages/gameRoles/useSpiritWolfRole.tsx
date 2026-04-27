@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from "react";
 import ConfirmModal from "../../components/ConfirmModal";
-import { socket } from "../../socket";
+import { socket, clientId } from "../../socket";
 import type { GamePhase } from "./socketEvents";
 
 type Player = { id: string; name: string; connected?: boolean };
@@ -34,8 +34,8 @@ export function useSpiritWolfRole({
     if (!roomId) return false;
     if (phase !== "night") return false;
     if (role !== "Linh sói") return false;
-    if (!socket.id) return false;
-    if (deadPlayers.includes(socket.id)) return false;
+    if (!clientId) return false;
+    if (deadPlayers.includes(clientId)) return false;
     if (!decisionTargetId) return false;
     if (!allNightActionsSimultaneous && currentNightTurnRole !== "Linh sói") return false;
     return true;

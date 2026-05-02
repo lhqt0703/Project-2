@@ -1,0 +1,1880 @@
+import type { Socket } from "socket.io";
+import type { ServerContext } from "./serverContext.js";
+import { getServerContext } from "./serverContext.js";
+import {
+  desiredLayoutHeightPx,
+  ensureNonOverlappingPositions,
+  layoutOptsForRoom,
+  rescaleRoomPositionsForHeight,
+  clampToBounds,
+  resolveDraggedAgainstFixedOthers,
+  BASE_FRAME_HEIGHT_PX,
+  POSITION_LAYOUT,
+  type PlayerPos,
+} from "./serverPositions.js";
+import {
+  clearGameTimers,
+  clearNightTurnTimer,
+  clearTrialState,
+  ensureWitchState,
+  getActiveDayVoters,
+  getActiveWolves,
+  getAlivePlayerIds,
+  getHunters,
+  getParticipantCount,
+  getParticipantIds,
+  getParticipantPlayers,
+  getSpiritWolfId,
+  getTrialVoters,
+  getWitches,
+  isPlayerConnected,
+  isSpiritWolfAlive,
+  isWolfAlignedPlayer,
+  isWolfRole,
+  resetNightTurnState,
+  resetRoomFromGameToLobby,
+} from "./roomState.js";
+import {
+  buildRoomGameRules,
+  ensureRoomGameRules,
+  type Room,
+  type RoomGameRules,
+} from "./serverTypes.js";
+import {
+  appendLogEntry,
+  buildDayVoteBreakdown,
+  buildWolfVoteBreakdown,
+  ensureNightLog,
+} from "./gameLog.js";
+import {
+  emitGameLogToSocket,
+  emitHunterTarget,
+  emitRolesRevealToSocket,
+  emitSpiritWolfDecisionNeeded,
+  emitWitchPendingDeath,
+  emitWitchPotions,
+  getWitchPendingDeaths,
+  getSelectedElementalRoles,
+  isElementalQuickMode,
+  isElementalRoleTurn,
+  shouldElementalsVoteBuffTonight,
+  syncPrivateRoleStateForSocket,
+  toPublicRoom,
+  broadcastElementalBuffSelection,
+} from "./serverEmitters.js";
+import {
+  ELEMENTAL_BUFFS,
+  getBuffTier,
+  type ElementalBuffId,
+} from "./elemental.js";
+import {
+  RULES_RESTART_FADE_IN_MS,
+  RULES_RESTART_FADE_OUT_MS,
+  RULES_RESTART_HOLD_MS,
+  RULES_RESTART_RESTART_AT_MS,
+  RULES_RESTART_TOTAL_MS,
+  TWO_HEARTS_MAX_HP,
+  TWO_HEARTS_NIGHT_LIMIT,
+  WOLF_TURN_DURATION_MS,
+  clampNonWolfNightActionDurationSec,
+  initTwoHeartsForParticipants,
+  isTwoHeartsDamageMode,
+} from "./gameConfig.js";
+import type { createConnectionState } from "./connectionState.js";
+import type { createLifecycleFlow } from "./lifecycle.js";
+import type { createDayFlow } from "./dayFlow.js";
+import type { createNightFlow } from "./nightFlow.js";
+import type { createElementalFlow } from "./elementalFlow.js";
+
+const SPIRIT_WOLF_ROLE = "Linh sói";
+
+type RegisterSocketHandlersParams = {
+  socket: Socket;
+  clientId: string;
+  activeClientSockets: Record<string, Set<string>>;
+  connectionState: ReturnType<typeof createConnectionState>;
+  lifecycle: ReturnType<typeof createLifecycleFlow>;
+  dayFlow: ReturnType<typeof createDayFlow>;
+  nightFlow: ReturnType<typeof createNightFlow>;
+  elementalFlow: ReturnType<typeof createElementalFlow>;
+};
+
+export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
+  const {
+    socket,
+    clientId,
+    activeClientSockets,
+    connectionState,
+    lifecycle,
+    dayFlow,
+    nightFlow,
+    elementalFlow,
+  } = params;
+
+  const ctx = getServerContext()!;
+  const { rooms, activeRooms } = ctx;
+
+  const {
+    getClientIdFromSocket,
+    disconnectedCleanupKey,
+    clearDisconnectedCleanup,
+    isClientCurrentlyConnected,
+    scheduleDisconnectedCleanup,
+  } = connectionState;
+
+  const {
+    emitRestartCinematicToPlayers,
+    returnHostToGameView,
+    startFreshRoundWithCurrentRoles,
+    getWolfRoleCount,
+    getMaxAllowedWolfCount,
+    rebalanceWolfRoles,
+    checkAndEndGame,
+  } = lifecycle;
+
+  const {
+    buildTrialInteractionUpdatedPayload,
+    startTrialVerdictVoting,
+    finishTrialVerdict,
+    startTrialDefense,
+    startDayVoting,
+    startDayDiscussion,
+    finishDayVoting,
+  } = dayFlow;
+
+  const {
+    canPerformNightRoleAction,
+    getSelectedNightActionRoles,
+    shouldIncludeSpiritWolfTurn,
+    getBaseNightActionOrder,
+    getEffectiveNightActionOrder,
+    insertSpiritWolfIntoNightOrder,
+    finishSpiritWolfTurn,
+    getWolfTurnDurationMs,
+    startWolfPhase,
+    getRoleTurnDurationMs,
+    startNightTurnByIndex,
+    startNightTurnFlow,
+    finishWolfVoting,
+  } = nightFlow;
+
+  const {
+    emitElementalTarget,
+    emitElementalBuffVoteState,
+    resolveElementalBuffVote,
+  } = elementalFlow;
+
+  // Register all socket event handlers
+  socket.on("createRoom", ({ name, gameRules }) => {
+    const roomId = generateRoomId(activeRooms!);
+
+    rooms[roomId] = {
+      id: roomId,
+      players: [{ id: clientId, name, connected: true, inGame: false }],
+      hostId: clientId,
+      hidePlayerRoleText: false,
+      layoutHeightPx: BASE_FRAME_HEIGHT_PX,
+      positions: ensureNonOverlappingPositions([], undefined, { ...POSITION_LAYOUT, heightPx: BASE_FRAME_HEIGHT_PX }),
+      positionEditors: [],
+      autoArrangeUsed: false,
+      compactCircles: false,
+      gameRules: buildRoomGameRules(gameRules),
+    };
+
+    socket.join(roomId);
+    socket.emit("roomCreated", toPublicRoom(rooms[roomId]));
+  });
+
+  socket.on("joinRoom", ({ roomId, name }) => {
+    const room = rooms[roomId];
+    if (!room) {
+      socket.emit("errorMessage", "Phòng không tồn tại :(");
+      return;
+    }
+
+    ensureRoomGameRules(room);
+    clearDisconnectedCleanup(roomId, clientId);
+    const existingPlayerIndex = room.players.findIndex((p) => p.id === clientId);
+    if (existingPlayerIndex >= 0) {
+      const current = room.players[existingPlayerIndex]!;
+      room.players[existingPlayerIndex] = {
+        ...current,
+        name: typeof name === "string" && name.trim() ? name : current.name,
+        connected: true,
+        inGame: false,
+      };
+    } else {
+      room.players.push({ id: clientId, name, connected: true, inGame: false });
+    }
+
+    const nextHeightPx = desiredLayoutHeightPx(getParticipantCount(room));
+    rescaleRoomPositionsForHeight(room, nextHeightPx);
+
+    const opts = layoutOptsForRoom(room);
+    room.positions = ensureNonOverlappingPositions(getParticipantIds(room), room.positions, opts);
+    socket.join(roomId);
+    syncPrivateRoleStateForSocket(socket, roomId, room, clientId);
+
+    socket.emit("roomJoined", toPublicRoom(room));
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("getRoom", (roomId) => {
+    const room = rooms[roomId];
+    if (room) {
+      ensureRoomGameRules(room);
+      socket.join(roomId);
+      clearDisconnectedCleanup(roomId, clientId);
+      const playerIndex = room.players.findIndex((p) => p.id === clientId);
+      if (playerIndex >= 0 && room.players[playerIndex]?.connected === false) {
+        room.players[playerIndex] = { ...room.players[playerIndex]!, connected: true };
+        ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      }
+      syncPrivateRoleStateForSocket(socket, roomId, room, clientId);
+      socket.emit("roomUpdated", toPublicRoom(room));
+      ctx.io.to(roomId).emit("positionsUpdated", room.positions);
+      ctx.io.to(roomId).emit("positionEditorsUpdated", room.positionEditors || []);
+
+      if (room.phase === "day" && room.dayDeadline) {
+        ctx.io.to(clientId).emit("dayPhaseStarted", {
+          voters: getActiveDayVoters(room),
+          deadline: room.dayDeadline,
+        });
+        ctx.io.to(clientId).emit("dayVotesUpdated", room.dayVotes || {});
+        ctx.io.to(clientId).emit("dayLockedUpdated", room.dayLocked || {});
+      }
+
+      if (room.phase === "day" && !room.dayDeadline && room.dayDiscussionDeadline) {
+        ctx.io.to(clientId).emit("dayDiscussionStarted", {
+          deadline: room.dayDiscussionDeadline,
+        });
+      }
+
+      if (room.phase === "day" && room.trialTargetId && room.trialStage === "defense") {
+        ctx.io.to(clientId).emit("trialPhaseStarted", {
+          targetId: room.trialTargetId,
+          stage: "defense",
+          defenseDeadline: room.trialDefenseDeadline || null,
+          selectionLimit: room.trialInteractionSelectionLimit,
+        });
+        ctx.io.to(clientId).emit("trialInteractionUpdated", {
+          ...buildTrialInteractionUpdatedPayload(room),
+        });
+      }
+
+      if (room.phase === "day" && room.trialTargetId && room.trialStage === "verdict") {
+        ctx.io.to(clientId).emit("trialVerdictStarted", {
+          targetId: room.trialTargetId,
+          voters: getTrialVoters(room),
+          deadline: room.trialVerdictDeadline || null,
+        });
+        ctx.io.to(clientId).emit("trialVotesUpdated", room.trialVotes || {});
+      }
+
+      if (room.playerRoles?.[clientId] === "Phù thủy") {
+        ensureWitchState(room, clientId);
+        emitWitchPotions(roomId, clientId);
+        emitWitchPendingDeath(roomId);
+      }
+
+      if (room.playerRoles?.[clientId] === "Thợ săn") {
+        emitHunterTarget(roomId, clientId);
+      }
+
+      if (isElementalRoleTurn(room.playerRoles?.[clientId] || null)) {
+        emitElementalTarget(roomId, clientId);
+        emitElementalBuffVoteState(roomId, clientId);
+      }
+
+      if (room.playerRoles?.[clientId] === SPIRIT_WOLF_ROLE) {
+        if (
+          room.nightTurnRole === SPIRIT_WOLF_ROLE &&
+          !room.spiritWolfDecisionMade &&
+          room.spiritWolfPendingPoisonedWolfId
+        ) {
+          emitSpiritWolfDecisionNeeded(roomId);
+        }
+      }
+
+    } else {
+      socket.emit("errorMessage", "Phòng không tồn tại :(");
+    }
+  });
+
+  socket.on("setPlayerViewState", ({ roomId, view }: { roomId: string; view: "room" | "game" }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    const idx = room.players.findIndex((p) => p.id === clientId);
+    if (idx < 0) return;
+
+    const nextInGame = view === "game";
+    const current = room.players[idx];
+    if (!current || current.inGame === nextInGame) return;
+
+    room.players[idx] = { ...current, inGame: nextInGame };
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("updateRoomGameRules", ({ roomId, rules, applyMode }: { roomId: string; rules: Partial<RoomGameRules>; applyMode?: "next-round" | "restart-now" }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+
+    const mergedRules = buildRoomGameRules({ ...(ensureRoomGameRules(room) || {}), ...(rules || {}) });
+    const gameInProgress = !!room.phase && !room.gameOver;
+
+    if (!gameInProgress) {
+      room.gameRules = mergedRules;
+      delete room.pendingGameRules;
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      return;
+    }
+
+    if (applyMode === "next-round") {
+      room.pendingGameRules = mergedRules;
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      return;
+    }
+
+    if (applyMode === "restart-now") {
+      room.gameRules = mergedRules;
+      delete room.pendingGameRules;
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      returnHostToGameView(roomId, "Đang khởi tạo ván chơi mới");
+      emitRestartCinematicToPlayers(roomId, "Chủ phòng đã thiết lập lại luật chơi và khởi động lại ván chơi mới");
+      setTimeout(() => {
+        startFreshRoundWithCurrentRoles(roomId);
+      }, RULES_RESTART_RESTART_AT_MS);
+      return;
+    }
+
+    socket.emit("errorMessage", "Ván chơi đang diễn ra. Hãy chọn áp dụng luật cho ván sau hoặc khởi động lại ván mới.");
+  });
+
+  socket.on("returnToCurrentGame", ({ roomId }: { roomId: string }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+    if (!room.phase || room.gameOver) return;
+
+    const idx = room.players.findIndex((p) => p.id === clientId);
+    if (idx >= 0) {
+      room.players[idx] = { ...room.players[idx]!, inGame: true };
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    }
+    ctx.io.to(clientId).emit("gameStarted");
+    emitRolesRevealToSocket(roomId, clientId);
+  });
+
+  socket.on("requestReturnToRoom", ({ roomId }: { roomId: string }) => {
+    const room = rooms[roomId];
+    if (!room) {
+      ctx.io.to(clientId).emit("returnToRoomResult", { ok: false, reason: "room_closed" });
+      return;
+    }
+
+    const idx = room.players.findIndex((p) => p.id === clientId);
+    if (idx < 0) {
+      ctx.io.to(clientId).emit("returnToRoomResult", { ok: false, reason: "kicked" });
+      return;
+    }
+
+    const current = room.players[idx];
+    if (current) {
+      room.players[idx] = { ...current, inGame: false };
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    }
+
+    ctx.io.to(clientId).emit("returnToRoomResult", { ok: true, roomId });
+  });
+
+  socket.on("hostReturnToRoom", ({ roomId }: { roomId: string }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+    if (!room.phase || room.gameOver) return;
+
+    resetRoomFromGameToLobby(room);
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    ctx.io.to(roomId).emit("forceReturnToRoom", { roomId, reason: "host_returned_to_room" });
+  });
+
+  socket.on("rolesSelected", ({
+    roomId,
+    roles,
+    applyMode,
+    forceAdjustWolfCount,
+  }: {
+    roomId: string;
+    roles: string[];
+    applyMode?: "next-round" | "restart-now";
+    forceAdjustWolfCount?: boolean;
+  }) => {
+    const room = rooms[roomId];
+    if (!room) {
+      return;
+    }
+    if (clientId !== room.hostId) {
+      return;
+    }
+
+    const gameInProgress = !!room.phase && !room.gameOver;
+    const participantCount = getParticipantCount(room);
+    const incomingRoles = Array.isArray(roles) ? roles : [];
+
+    if (incomingRoles.length < participantCount) {
+      socket.emit("errorMessage", "Danh sách vai trò không hợp lệ hoặc chưa được chọn.");
+      return;
+    }
+
+    const incomingWolfCount = getWolfRoleCount(incomingRoles);
+    const maxAllowedWolfCount = getMaxAllowedWolfCount(participantCount);
+
+    if (incomingWolfCount > maxAllowedWolfCount && !forceAdjustWolfCount) {
+      ctx.io.to(room.hostId).emit("wolfRoleMismatch", {
+        currentWolfCount: incomingWolfCount,
+        maxAllowedWolfCount,
+        playerCount: participantCount,
+      });
+      return;
+    }
+
+    room.roles = incomingRoles;
+    room.rolesLocked = true;
+    room.lockedPlayerIds = getParticipantIds(room);
+
+    if (incomingWolfCount > maxAllowedWolfCount && forceAdjustWolfCount) {
+      rebalanceWolfRoles(room, maxAllowedWolfCount);
+    }
+
+    if (gameInProgress && applyMode === "restart-now") {
+      const wolfCount = getWolfRoleCount(room.roles);
+
+      if (wolfCount > maxAllowedWolfCount) {
+        if (!forceAdjustWolfCount) {
+          ctx.io.to(room.hostId).emit("wolfRoleMismatch", {
+            currentWolfCount: wolfCount,
+            maxAllowedWolfCount,
+            playerCount: participantCount,
+          });
+          return;
+        }
+
+        rebalanceWolfRoles(room, maxAllowedWolfCount);
+      }
+
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      returnHostToGameView(roomId, "Đang khởi tạo ván chơi mới");
+      emitRestartCinematicToPlayers(roomId, "Chủ phòng đã cập nhật danh sách vai trò và khởi động lại ván chơi mới");
+      setTimeout(() => {
+        startFreshRoundWithCurrentRoles(roomId);
+      }, RULES_RESTART_RESTART_AT_MS);
+      return;
+    }
+
+    if (gameInProgress && applyMode === "next-round") {
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      ctx.io.to(roomId).emit("rolesReady", room.roles);
+      return;
+    }
+
+    ctx.io.to(roomId).emit("rolesReady", room.roles);
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("addAutoRoles", ({ roomId, count }) => {
+    const room = rooms[roomId];
+    if (!room) {
+      return;
+    }
+    room.roles = room.roles || [];
+
+    for (let i = 0; i < count; i++) {
+      room.roles.push("Dân làng");
+    }
+
+    const stillMissing = getParticipantCount(room) - room.roles.length;
+
+    if (stillMissing > 0) {
+      ctx.io.to(room.hostId).emit("roleMismatch", {
+        newPlayers: [],
+        missingRoles: stillMissing
+      });
+      return;
+    }
+
+    const shuffled = room.roles.slice().sort(() => Math.random() - 0.5);
+    room.playerRoles = {};
+    const participants = getParticipantPlayers(room);
+
+    participants.forEach((player, index) => {
+      const role = shuffled[index]!;
+      room.playerRoles![player.id] = role;
+      ctx.io.to(player.id).emit("yourRole", role);
+    });
+    room.players = room.players.map((p) => ({ ...p, inGame: p.id !== room.hostId }));
+
+    room.wolves = participants
+      .filter(p => isWolfRole(room.playerRoles?.[p.id]))
+      .map(p => p.id);
+
+    room.wolves.forEach(wolfId => {
+      ctx.io.in(wolfId).socketsJoin(`wolves_${roomId}`);
+    });
+
+    room.deadPlayers = room.deadPlayers || [];
+    room.wolfExtraBiteNextNight = room.wolfExtraBiteNextNight || false;
+    room.wolfBonusBiteThisNight = false;
+    room.killedTonightExtra = null;
+    room.dayVoters = [];
+    room.dayVotes = {};
+    room.dayLocked = {};
+    room.dayDiscussionDeadline = null;
+    room.dayDeadline = null;
+    if (room.dayDiscussionTimer) {
+      clearTimeout(room.dayDiscussionTimer);
+      room.dayDiscussionTimer = null;
+    }
+    if (room.dayTimer) {
+      clearTimeout(room.dayTimer);
+      room.dayTimer = null;
+    }
+    clearTrialState(room);
+
+    room.gameOver = false;
+    room.winner = undefined;
+    room.spiritWolfId = getSpiritWolfId(room);
+    room.spiritWolfDecisionMade = false;
+    room.spiritWolfChoseSave = false;
+    room.spiritWolfWolfAligned = false;
+    room.spiritWolfWolfAlignedPending = false;
+    room.spiritWolfPendingPoisonedWolfId = null;
+
+    room.phase = "dusk";
+
+    ctx.io.to(roomId).emit("gameStarted");
+    ctx.io.to(roomId).emit("phaseChanged", "dusk");
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+
+    checkAndEndGame(roomId, "after_game_start");
+
+    room.lockedPlayerIds = getParticipantIds(room);  });
+
+  socket.on("updatePositions", ({ roomId, positions, markAutoArrangeUsed }) => {
+    const room = rooms[roomId];
+    if (!room) {      return;
+    }    const isHost = clientId === room.hostId;
+    const isEditor = room.positionEditors?.includes(clientId);
+
+    if (!isHost && !isEditor) {      socket.emit("errorMessage", "Bạn không có quyền chỉnh vị trí.");
+      return;
+    }
+
+    const playerIds = getParticipantIds(room);
+    const desiredHeightPx = desiredLayoutHeightPx(playerIds.length);
+    rescaleRoomPositionsForHeight(room, desiredHeightPx);
+
+    const opts = layoutOptsForRoom(room);
+    const hasAllPlayers = (room.positions || []).length === playerIds.length;
+    const current = room.positions && hasAllPlayers
+      ? room.positions.map(p => clampToBounds({ ...p }, opts))
+      : ensureNonOverlappingPositions(playerIds, room.positions, opts);
+
+    const incomingById = new Map<string, PlayerPos>();
+    (positions || []).forEach((p: PlayerPos) => incomingById.set(p.playerId, p));
+    const currentById = new Map<string, PlayerPos>();
+    current.forEach(p => currentById.set(p.playerId, p));
+
+    const EPS = 0.0005;
+    const changedIds: string[] = [];
+    for (const id of playerIds) {
+      const inc = incomingById.get(id);
+      const cur = currentById.get(id);
+      if (!inc || !cur) continue;
+      if (Math.abs(inc.x - cur.x) > EPS || Math.abs(inc.y - cur.y) > EPS) changedIds.push(id);
+    }
+
+    if (changedIds.length === 1) {
+      const draggedId = changedIds[0]!;
+      const draggedIncoming = incomingById.get(draggedId);
+      const draggedCurrent = currentById.get(draggedId);
+
+      if (draggedIncoming && draggedCurrent) {
+        const fixedOthers = current.filter(p => p.playerId !== draggedId);
+        const resolvedDragged = resolveDraggedAgainstFixedOthers(
+          { ...draggedCurrent, x: draggedIncoming.x, y: draggedIncoming.y },
+          fixedOthers,
+          opts
+        );
+        room.positions = [...fixedOthers, resolvedDragged];
+        ctx.io.to(roomId).emit("positionsUpdated", room.positions);
+        return;
+      }
+    }
+
+    room.positions = ensureNonOverlappingPositions(playerIds, positions, opts);
+    ctx.io.to(roomId).emit("positionsUpdated", room.positions);
+
+    if (markAutoArrangeUsed && !room.autoArrangeUsed) {
+      room.autoArrangeUsed = true;
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    }  });
+
+  socket.on("setCompactCircles", ({ roomId, compact }: { roomId: string; compact: boolean }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const isHost = clientId === room.hostId;
+    const isEditor = room.positionEditors?.includes(clientId);
+    if (!isHost && !isEditor) {
+      socket.emit("errorMessage", "Bạn không có quyền chỉnh vị trí.");
+      return;
+    }
+
+    room.compactCircles = !!compact;
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("grantPositionEdit", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+
+    room.positionEditors = room.positionEditors || [];
+    if (!room.positionEditors.includes(targetId)) {
+      room.positionEditors.push(targetId);
+    }
+
+    ctx.io.to(roomId).emit("positionEditorsUpdated", room.positionEditors);
+  });
+
+  socket.on("revokePositionEdit", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+
+    room.positionEditors = (room.positionEditors || []).filter(id => id !== targetId);
+    ctx.io.to(roomId).emit("positionEditorsUpdated", room.positionEditors);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Client ngắt:", clientId);
+    activeClientSockets[clientId]?.delete(socket.id);
+    if (activeClientSockets[clientId]?.size === 0) {
+      delete activeClientSockets[clientId];
+    }
+    if (isClientCurrentlyConnected(clientId)) return;
+
+    for (const roomId in rooms) {
+      const room = rooms[roomId];
+      if (!room) continue;
+
+      const playerIndex = room.players.findIndex(p => p.id === clientId);
+      if (playerIndex !== -1) {
+        const isHost = room.hostId === clientId;
+
+        if (room.phase) {
+          room.players[playerIndex] = { ...room.players[playerIndex]!, connected: false };
+
+          if (isWolfRole(room.playerRoles?.[clientId])) {
+            if (room.wolfVotes) room.wolfVotes[clientId] = null;
+            if (room.wolfVotes2) room.wolfVotes2[clientId] = null;
+            if (room.wolfLocked) room.wolfLocked[clientId] = false;
+            ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes || {});
+            ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2 || {});
+            ctx.io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked || {});
+
+            const activeWolves = getActiveWolves(room);
+            const allLocked = activeWolves.length > 0 && activeWolves.every(id => room.wolfLocked?.[id] === true);
+            if (allLocked) {
+              finishWolfVoting(roomId);
+            }
+          }
+
+          if (room.phase === "day") {
+            if (room.dayVotes) room.dayVotes[clientId] = null;
+            if (room.dayLocked) room.dayLocked[clientId] = false;
+
+            ctx.io.to(roomId).emit("dayVotesUpdated", room.dayVotes || {});
+            ctx.io.to(roomId).emit("dayLockedUpdated", room.dayLocked || {});
+            if (room.dayDeadline) {
+              ctx.io.to(roomId).emit("dayPhaseStarted", {
+                voters: getActiveDayVoters(room),
+                deadline: room.dayDeadline,
+              });
+            } else {
+              ctx.io.to(roomId).emit("dayDiscussionStarted", {
+                deadline: room.dayDiscussionDeadline || null,
+              });
+            }
+
+            const activeDayVoters = getActiveDayVoters(room);
+            const allDayLocked =
+              activeDayVoters.length > 0 &&
+              activeDayVoters.every((id) => room.dayLocked?.[id] === true);
+            if (allDayLocked && (!room.trialStage || room.trialStage === "none")) {
+              finishDayVoting(roomId);
+            }
+
+            if (room.trialStage === "defense") {
+              const activeSet = new Set(room.trialInteractionActiveIds || []);
+              if (activeSet.has(clientId)) {
+                activeSet.delete(clientId);
+                room.trialInteractionActiveIds = Array.from(activeSet);
+              }
+              const queuedSet = new Set(room.trialInteractionQueuedIds || []);
+              if (queuedSet.has(clientId)) {
+                queuedSet.delete(clientId);
+                room.trialInteractionQueuedIds = Array.from(queuedSet);
+              }
+              if (room.trialSelectedInteractorId === clientId) {
+                room.trialSelectedInteractorId = null;
+              }
+
+              if (room.trialTargetId === clientId) {
+                startTrialVerdictVoting(roomId);
+              } else {
+                ctx.io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
+              }
+            }
+
+            if (room.trialStage === "verdict") {
+              if (room.trialVotes) room.trialVotes[clientId] = null;
+              ctx.io.to(roomId).emit("trialVotesUpdated", room.trialVotes || {});
+
+              const activeTrialVoters = getTrialVoters(room);
+              const allVoted =
+                activeTrialVoters.length > 0 &&
+                activeTrialVoters.every((id) => {
+                  const v = room.trialVotes?.[id];
+                  return v === "live" || v === "die";
+                });
+              if (allVoted) {
+                finishTrialVerdict(roomId);
+              }
+            }
+          }
+
+          ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+
+          if (isHost) {
+            ctx.io.to(roomId).emit("hostDisconnected");
+            console.log(`Host mất kết nối khi game đang diễn ra ở phòng ${roomId}`);
+          }
+
+          break;
+        }
+
+        room.players[playerIndex] = { ...room.players[playerIndex]!, connected: false };
+        scheduleDisconnectedCleanup(roomId, clientId);
+        ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+        break;
+      }
+    }
+  });
+
+  socket.on("startGame", (payload) => {
+    const roomId = typeof payload === "string" ? payload : payload?.roomId;
+    const forceAdjustWolfCount = typeof payload === "object" && payload !== null ? !!payload.forceAdjustWolfCount : false;
+
+    if (!roomId) {      return;
+    }
+
+    const room = rooms[roomId];
+    if (!room) {      return;
+    }    if (room.pendingGameRules) {
+      room.gameRules = buildRoomGameRules(room.pendingGameRules);
+      delete room.pendingGameRules;
+    }
+
+    if (room.rolesLocked && room.lockedPlayerIds) {
+      const lockedCount = room.lockedPlayerIds.length;
+      const currentCount = getParticipantCount(room);
+      if (currentCount > lockedCount) {
+        const newPlayers = getParticipantPlayers(room).filter(
+          p => !room.lockedPlayerIds!.includes(p.id)
+        );
+        const missingRoles = Math.max(0, currentCount - (room.roles?.length || 0));
+        if (missingRoles > 0) {          ctx.io.to(room.hostId).emit("roleMismatch", {
+            newPlayers,
+            missingRoles
+          });
+          return;
+        }
+      }
+    }
+
+    const roles = room.roles;
+    const participantCount = getParticipantCount(room);
+    if (!roles || roles.length < participantCount) {      socket.emit("errorMessage", "Danh sách vai trò không hợp lệ hoặc chưa được chọn.");
+      return;
+    }
+
+    const wolfCount = getWolfRoleCount(roles);
+    const maxAllowedWolfCount = getMaxAllowedWolfCount(participantCount);
+
+    if (wolfCount > maxAllowedWolfCount) {
+      if (!forceAdjustWolfCount) {        ctx.io.to(room.hostId).emit("wolfRoleMismatch", {
+          currentWolfCount: wolfCount,
+          maxAllowedWolfCount,
+          playerCount: participantCount,
+        });
+        return;
+      }
+
+      rebalanceWolfRoles(room, maxAllowedWolfCount);
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    }
+
+    clearGameTimers(room);
+    clearTrialState(room);
+    room.gameOver = false;
+    room.winner = undefined;
+    room.phase = "dusk";
+    room.nightCount = 0;
+    room.gameLog = [];
+    room.deadPlayers = [];
+    room.sharedHeartsVisible = false;
+    room.playerHearts = {};
+    room.protectedTonight = null;
+    room.lastProtected = null;
+    room.seerUsedTonight = {};
+    room.hunterTargetTonight = {};
+    room.killedTonight = null;
+    room.killedTonightExtra = null;
+    room.wolfVotes = {};
+    room.wolfVotes2 = {};
+    room.wolfLocked = {};
+    room.wolfDeadline = null;
+    room.wolfExtraBiteNextNight = false;
+    room.wolfBonusBiteThisNight = false;
+    resetNightTurnState(room);
+    room.dayVoters = [];
+    room.dayVotes = {};
+    room.dayLocked = {};
+    room.dayDiscussionDeadline = null;
+    room.dayDeadline = null;
+    room.hidePlayerRoleText = false;
+    room.spiritWolfDecisionMade = false;
+    room.spiritWolfChoseSave = false;
+    room.spiritWolfWolfAligned = false;
+    room.spiritWolfWolfAlignedPending = false;
+    room.spiritWolfPendingPoisonedWolfId = null;
+    room.elementalTargetTonight = {};
+    room.elementalCorrectGuessPlayerIdsTonight = [];
+    room.elementalPendingBuffVoteNight = null;
+    room.elementalBuffVotesTonight = {};
+    room.elementalBuffVotesResolvedNight = null;
+    room.elementalSelectedBuffId = null;
+    room.elementalSelectedBuffAppliesNight = null;
+    room.elementalBuffQuickMode = true;
+    room.witchPotions = {};
+    room.witchHealTargetTonight = {};
+    room.witchPoisonTargetTonight = {};
+    room.wolves = [];
+    room.players = room.players.map((p) => ({ ...p, inGame: p.id !== room.hostId }));
+
+    if (ensureRoomGameRules(room).twoHeartsFirstTwoNights) {
+      initTwoHeartsForParticipants(room);
+    }
+
+    function shuffle<T>(arr: T[]): T[] {
+  return arr.slice().sort(() => Math.random() - 0.5);
+}
+
+function pickRolesForParticipants(allRoles: string[], participantCount: number): string[] {
+  const normalizedRoles = allRoles.filter((role): role is string => typeof role === "string" && role.trim().length > 0);
+  if (normalizedRoles.length <= participantCount) {
+    return shuffle(normalizedRoles);
+  }
+
+  const selectedRoles: string[] = [];
+  const shuffledRoles = shuffle(normalizedRoles);
+  const firstWolfIndex = shuffledRoles.findIndex(isWolfRole);
+
+  if (firstWolfIndex >= 0) {
+    selectedRoles.push(shuffledRoles[firstWolfIndex]!);
+    shuffledRoles.splice(firstWolfIndex, 1);
+  }
+
+  for (const role of shuffledRoles) {
+    if (selectedRoles.length >= participantCount) break;
+    selectedRoles.push(role);
+  }
+
+  return shuffle(selectedRoles);
+}
+
+    const rolesToUse = pickRolesForParticipants(room.roles || roles, participantCount);
+    if (rolesToUse.length < participantCount) {
+      socket.emit("errorMessage", "Danh sách vai trò không hợp lệ hoặc chưa được chọn.");
+      return;
+    }
+    const shuffled = rolesToUse;
+    room.playerRoles = {};
+    const participants = getParticipantPlayers(room);
+    participants.forEach((player, index) => {
+      const role = shuffled[index]!;
+      room.playerRoles![player.id] = role;
+      ctx.io.to(player.id).emit("yourRole", role);
+    });
+    room.players = room.players.map((p) => ({ ...p, inGame: p.id !== room.hostId }));
+
+    room.wolves = participants
+      .filter(p => isWolfRole(room.playerRoles?.[p.id]))
+      .map(p => p.id);
+
+    room.wolves.forEach(wolfId => {
+      ctx.io.in(wolfId).socketsJoin(`wolves_${roomId}`);
+    });
+
+    const witches = getWitches(room);
+    witches.forEach(witchId => {
+      ctx.io.in(witchId).socketsJoin(`witches_${roomId}`);
+      ensureWitchState(room, witchId);
+      emitWitchPotions(roomId, witchId);
+    });
+
+    room.deadPlayers = room.deadPlayers || [];
+    room.wolfExtraBiteNextNight = room.wolfExtraBiteNextNight || false;
+    room.wolfBonusBiteThisNight = false;
+    room.killedTonightExtra = null;
+    room.dayVoters = [];
+    room.dayVotes = {};
+    room.dayLocked = {};
+    room.dayDiscussionDeadline = null;
+    room.dayDeadline = null;
+    if (room.dayDiscussionTimer) {
+      clearTimeout(room.dayDiscussionTimer);
+      room.dayDiscussionTimer = null;
+    }
+    if (room.dayTimer) {
+      clearTimeout(room.dayTimer);
+      room.dayTimer = null;
+    }
+    clearTrialState(room);
+
+    room.phase = "dusk";
+
+    ctx.io.to(roomId).emit("gameStarted");
+    ctx.io.to(roomId).emit("phaseChanged", "dusk");
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    
+    emitRolesRevealToSocket(roomId, room.hostId);
+    
+    checkAndEndGame(roomId, "after_game_start");
+  });
+
+  socket.on("requestRolesReveal", ({ roomId }: { roomId: string }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+
+    emitRolesRevealToSocket(roomId, clientId);
+  });
+
+  socket.on("restartGame", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+
+    const ok = startFreshRoundWithCurrentRoles(roomId);
+    if (!ok) {
+      socket.emit("errorMessage", "Danh sách vai trò không hợp lệ hoặc chưa được chọn.");
+    }
+  });
+
+  socket.on("changePhase", ({ roomId, phase }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (room.gameOver) return;
+
+    room.phase = phase;
+    console.log(`[changePhase] Phòng ${roomId} chuyển sang phase '${phase}'`);
+    ctx.io.to(roomId).emit("phaseChanged", phase);
+
+    if (phase === "night") {
+      if (room.dayTimer) {
+        clearTimeout(room.dayTimer);
+        room.dayTimer = null;
+      }
+      if (room.dayDiscussionTimer) {
+        clearTimeout(room.dayDiscussionTimer);
+        room.dayDiscussionTimer = null;
+      }
+      room.dayVoters = [];
+      room.dayVotes = {};
+      room.dayLocked = {};
+      room.dayDiscussionDeadline = null;
+      room.dayDeadline = null;
+      ctx.io.to(roomId).emit("dayDiscussionStarted", { deadline: null });
+      clearTrialState(room);
+
+      room.nightCount = (room.nightCount || 0) + 1;
+
+      if (ensureRoomGameRules(room).twoHeartsFirstTwoNights) {
+        if (room.nightCount <= TWO_HEARTS_NIGHT_LIMIT) {
+          if (!room.sharedHeartsVisible) {
+            initTwoHeartsForParticipants(room);
+          }
+        } else {
+          room.sharedHeartsVisible = false;
+          room.playerHearts = {};
+        }
+      } else {
+        room.sharedHeartsVisible = false;
+        room.playerHearts = {};
+      }
+
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+
+      ensureNightLog(room);
+
+      if (room.spiritWolfWolfAlignedPending && !room.spiritWolfWolfAligned) {
+        room.spiritWolfWolfAligned = true;
+        room.spiritWolfWolfAlignedPending = false;
+        checkAndEndGame(roomId, "spirit_wolf_aligned_next_night");
+        if (room.gameOver) return;
+      }
+
+      room.wolfBonusBiteThisNight = !!room.wolfExtraBiteNextNight;
+      room.wolfExtraBiteNextNight = false;
+      room.killedTonightExtra = null;
+
+      if (room.wolfBonusBiteThisNight) {
+        appendLogEntry(room, { type: "bonus_bite", phase: "night" });
+      }
+
+      // Reset night action state.
+      room.protectedTonight = null;
+      room.hunterTargetTonight = {};
+      room.elementalTargetTonight = {};
+      room.elementalCorrectGuessPlayerIdsTonight = [];
+      room.seerUsedTonight = {};
+      room.witchHealTargetTonight = {};
+      room.witchPoisonTargetTonight = {};
+      room.wolfVotes = {};
+      room.wolfVotes2 = {};
+      room.wolfLocked = {};
+
+      // Determine which roles will take turns this night.
+      const roles = getSelectedNightActionRoles(room);
+      room.nightTurnOrderSnapshot = roles;
+
+      // Create a time-ordered action sequence.
+      startNightTurnFlow(roomId);
+    }
+  });
+
+  socket.on("dayVote", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (!room.dayDeadline) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+
+    const activeVoters = getActiveDayVoters(room);
+    if (!activeVoters.includes(clientId)) return;
+
+    if (room.dayLocked?.[clientId]) {
+      socket.emit("errorMessage", "Bạn đã khóa phiếu biểu quyết, không thể thay đổi.");
+      return;
+    }
+
+    if (room.dayDeadline && Date.now() >= room.dayDeadline) return;
+
+    room.dayVotes = room.dayVotes || {};
+
+    if (!targetId) {
+      room.dayVotes[clientId] = null;
+      ctx.io.to(roomId).emit("dayVotesUpdated", room.dayVotes);
+      return;
+    }
+
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    if (targetId === clientId) return;
+
+    room.dayVotes[clientId] = targetId;
+    ctx.io.to(roomId).emit("dayVotesUpdated", room.dayVotes);
+  });
+
+  socket.on("dayLockVote", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.trialStage && room.trialStage !== "none") return;
+    if (!room.dayDeadline) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+
+    const activeVoters = getActiveDayVoters(room);
+    if (!activeVoters.includes(clientId)) return;
+
+    room.dayLocked = room.dayLocked || {};
+    room.dayLocked[clientId] = true;
+    ctx.io.to(roomId).emit("dayLockedUpdated", room.dayLocked);
+
+    const allLocked =
+      activeVoters.length > 0 &&
+      activeVoters.every((id) => room.dayLocked?.[id] === true);
+    if (allLocked) {
+      finishDayVoting(roomId);
+    }
+  });
+
+  socket.on("hostStartDayVoting", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (clientId !== room.hostId) return;
+    if (room.trialStage && room.trialStage !== "none") return;
+    if (room.dayDeadline) return;
+
+    startDayVoting(roomId);
+  });
+
+  socket.on("hostTogglePlayerRoleText", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+
+    room.hidePlayerRoleText = !(room.hidePlayerRoleText === true);
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("hostForceFinishDayVote", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (clientId !== room.hostId) return;
+
+    if (room.trialStage === "verdict") {
+      finishTrialVerdict(roomId);
+      return;
+    }
+    if (room.trialStage === "defense") {
+      startTrialVerdictVoting(roomId);
+      return;
+    }
+    if (!room.dayDeadline) return;
+    finishDayVoting(roomId);
+  });
+
+  socket.on("hostNightTurnNext", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+    if (clientId !== room.hostId) return;
+
+    const rules = ensureRoomGameRules(room);
+    if (rules.allNightActionsSimultaneous) return;
+    if (!room.nightTurnRole) return;
+
+    if (room.nightTurnRole === "Sói") {
+      if (room.wolfTimer) {
+        clearTimeout(room.wolfTimer);
+        room.wolfTimer = null;
+      }
+      finishWolfVoting(roomId);
+      return;
+    }
+
+    clearNightTurnTimer(room);
+    startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
+  });
+
+  socket.on("hostToggleNightTurnPause", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+    if (clientId !== room.hostId) return;
+
+    const rules = ensureRoomGameRules(room);
+    if (rules.allNightActionsSimultaneous) return;
+    if (!room.nightTurnRole) return;
+
+    if (!room.nightTurnPaused) {
+      const deadline = room.nightTurnDeadline ?? Date.now();
+      const remainingMs = Math.max(0, deadline - Date.now());
+      room.nightTurnRemainingMs = remainingMs;
+      room.nightTurnPaused = true;
+
+      if (room.nightTurnRole === "Sói") {
+        if (room.wolfTimer) {
+          clearTimeout(room.wolfTimer);
+          room.wolfTimer = null;
+        }
+      } else {
+        clearNightTurnTimer(room);
+      }
+
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      return;
+    }
+
+    const remainingMs = Math.max(0, room.nightTurnRemainingMs ?? 0);
+    room.nightTurnPaused = false;
+    room.nightTurnDeadline = Date.now() + remainingMs;
+
+    if (room.nightTurnRole === "Sói") {
+      startWolfPhase(roomId, {
+        durationMs: remainingMs,
+        initializeVotes: false,
+      });
+    } else if (remainingMs <= 0) {
+      startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
+      return;
+    } else {
+      clearNightTurnTimer(room);
+      room.nightTurnTimer = setTimeout(() => {
+        startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
+      }, remainingMs);
+    }
+
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("hostEndGameNow", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (clientId !== room.hostId) return;
+
+    clearGameTimers(room);
+
+    room.gameOver = true;
+    room.winner = "nobody";
+
+    // Add log entry
+    ensureNightLog(room);
+    const phase = (room.phase || "night") as "night" | "day";
+    appendLogEntry(room, {
+      type: "host_ended_game",
+      phase,
+    });
+
+    // Emit events
+    ctx.io.to(roomId).emit("gameEnded", {
+      winner: room.winner,
+      reason: "host_ended_game",
+    });
+    ctx.io.to(roomId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
+    ctx.io.to(roomId).emit(
+      "rolesRevealUpdated",
+      { roomId, rolesByPlayerId: room.playerRoles || {} }
+    );
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("trialToggleInteraction", ({ roomId, active }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.trialStage !== "defense") return;
+    if (!room.trialTargetId) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (clientId === room.trialTargetId) return;
+    if (room.trialInteractionCut) return;
+    if ((room.trialSelectedInteractorIds || []).includes(clientId)) return;
+
+    const activeSet = new Set(room.trialInteractionActiveIds || []);
+    const queuedSet = new Set(room.trialInteractionQueuedIds || []);
+    if (active) activeSet.add(clientId);
+    else activeSet.delete(clientId);
+    if (active) queuedSet.add(clientId);
+    else queuedSet.delete(clientId);
+
+    room.trialInteractionActiveIds = Array.from(activeSet);
+    room.trialInteractionQueuedIds = Array.from(queuedSet);
+    if (!active && room.trialSelectedInteractorId === clientId) {
+      room.trialSelectedInteractorId = null;
+    }
+
+    ctx.io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("trialSelectInteractor", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.trialStage !== "defense") return;
+    if (!room.trialTargetId) return;
+    if (clientId !== room.trialTargetId) return;
+
+    const active = new Set(room.trialInteractionActiveIds || []);
+    if (!active.has(targetId)) return;
+
+    const selectedIds = room.trialSelectedInteractorIds || [];
+    if (selectedIds.includes(targetId)) return;
+
+    selectedIds.push(targetId);
+    room.trialSelectedInteractorIds = selectedIds;
+
+    active.delete(targetId);
+    room.trialInteractionActiveIds = Array.from(active);
+
+    const queued = new Set(room.trialInteractionQueuedIds || []);
+    queued.delete(targetId);
+    room.trialInteractionQueuedIds = Array.from(queued);
+
+    room.trialSelectedInteractorId = targetId;
+
+    const selectionLimit = Math.max(0, room.trialInteractionSelectionLimit || 0);
+    if (selectionLimit > 0 && selectedIds.length >= selectionLimit) {
+      room.trialInteractionCut = true;
+      room.trialInteractionActiveIds = [];
+    }
+
+    ctx.io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("trialAddInteractionTurn", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.trialStage !== "defense") return;
+    if (!room.trialTargetId) return;
+    if (clientId !== room.hostId) return;
+
+    const nextLimit = Math.max(0, room.trialInteractionSelectionLimit || 0) + 1;
+    room.trialInteractionSelectionLimit = nextLimit;
+
+    const selectedSet = new Set(room.trialSelectedInteractorIds || []);
+    if (room.trialInteractionCut && (room.trialSelectedInteractorIds || []).length < nextLimit) {
+      room.trialInteractionCut = false;
+
+      const deadSet = new Set(room.deadPlayers || []);
+      const queued = room.trialInteractionQueuedIds || [];
+      room.trialInteractionActiveIds = queued.filter((id) => {
+        if (!id) return false;
+        if (id === room.trialTargetId) return false;
+        if (selectedSet.has(id)) return false;
+        if (deadSet.has(id)) return false;
+        if (!isPlayerConnected(room, id)) return false;
+        return !!room.players.find((p) => p.id === id);
+      });
+    }
+
+    ctx.io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("trialCutInteraction", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.trialStage !== "defense") return;
+    if (!room.trialTargetId) return;
+    if (clientId !== room.trialTargetId) return;
+
+    room.trialInteractionCut = true;
+    ctx.io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
+
+    startTrialVerdictVoting(roomId);
+  });
+
+  socket.on("trialVoteLifeDeath", ({ roomId, vote }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.trialStage !== "verdict") return;
+    if (!room.trialTargetId) return;
+    if (clientId === room.trialTargetId) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+
+    const voters = getTrialVoters(room);
+    if (!voters.includes(clientId)) return;
+
+    if (room.trialVerdictDeadline && Date.now() >= room.trialVerdictDeadline) return;
+
+    room.trialVotes = room.trialVotes || {};
+    if (vote !== "live" && vote !== "die") {
+      room.trialVotes[clientId] = null;
+    } else {
+      room.trialVotes[clientId] = vote;
+    }
+
+    ctx.io.to(roomId).emit("trialVotesUpdated", room.trialVotes);
+  });
+
+  socket.on("hunterChooseTarget", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, clientId, "Thợ săn")) return;
+    if (room.playerRoles?.[clientId] !== "Thợ săn") return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+
+    room.hunterTargetTonight = room.hunterTargetTonight || {};
+
+    const prev = room.hunterTargetTonight[clientId] ?? null;
+
+    if (!targetId) {
+      room.hunterTargetTonight[clientId] = null;
+      emitHunterTarget(roomId, clientId);
+      return;
+    }
+
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    room.hunterTargetTonight[clientId] = targetId;
+    emitHunterTarget(roomId, clientId);
+
+    if (prev !== targetId) {
+      appendLogEntry(room, { type: "hunter_mark", phase: "night", actorId: clientId, targetId });
+    }
+  });
+
+  socket.on("elementalChooseTarget", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.phase !== "night") return;
+    const myRole = room.playerRoles?.[clientId] || null;
+    if (!isElementalRoleTurn(myRole)) return;
+    if (!canPerformNightRoleAction(room, clientId, myRole as any)) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (shouldElementalsVoteBuffTonight(room)) return;
+
+    room.elementalTargetTonight = room.elementalTargetTonight || {};
+
+    if (!targetId) {
+      room.elementalTargetTonight[clientId] = null;
+      emitElementalTarget(roomId, clientId);
+      return;
+    }
+
+    if (targetId === clientId) {
+      socket.emit("errorMessage", "Bạn không thể chọn chính mình.");
+      return;
+    }
+    if (!room.players.find((p) => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    room.elementalTargetTonight[clientId] = targetId;
+    const targetRole = room.playerRoles?.[targetId] || null;
+    const isCorrect = isElementalRoleTurn(targetRole);
+    if (isCorrect) {
+      room.elementalCorrectGuessPlayerIdsTonight = Array.from(new Set([...(room.elementalCorrectGuessPlayerIdsTonight || []), clientId]));
+    } else {
+      room.elementalCorrectGuessPlayerIdsTonight = (room.elementalCorrectGuessPlayerIdsTonight || []).filter((id) => id !== clientId);
+    }
+    appendLogEntry(room, {
+      type: "elemental_guess",
+      phase: "night",
+      actorId: clientId,
+      targetId,
+      isCorrect,
+    });
+    emitElementalTarget(roomId, clientId);
+  });
+
+  socket.on("elementalChooseBuff", ({ roomId, buffId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.phase !== "night") return;
+    const myRole = room.playerRoles?.[clientId] || null;
+    if (!isElementalRoleTurn(myRole)) return;
+    if (!canPerformNightRoleAction(room, clientId, myRole as any)) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!shouldElementalsVoteBuffTonight(room)) return;
+    const availableTier = getBuffTier(room.elementalCorrectGuessCountForBuff || 0);
+    const selectedBuff = ELEMENTAL_BUFFS.find((buff) => buff.id === buffId);
+    if (!selectedBuff || selectedBuff.tier !== availableTier) return;
+
+    room.elementalBuffVotesTonight = room.elementalBuffVotesTonight || {};
+    room.elementalBuffVotesTonight[clientId] = buffId;
+    emitElementalBuffVoteState(roomId, clientId);
+  });
+
+  socket.on("transferHost", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+    if (!room.players.find(p => p.id === targetId)) return;
+    room.hostId = targetId;
+    const nextHeightPxAfterHostChange = desiredLayoutHeightPx(getParticipantCount(room));
+    rescaleRoomPositionsForHeight(room, nextHeightPxAfterHostChange);
+    const hostChangedOpts = layoutOptsForRoom(room);
+    room.positions = ensureNonOverlappingPositions(getParticipantIds(room), room.positions, hostChangedOpts);
+    ctx.io.to(roomId).emit("positionsUpdated", room.positions || []);
+    ctx.io.to(roomId).emit("hostChanged", room.hostId);
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("kickPlayer", ({ roomId, targetId, source }: { roomId: string; targetId: string; source?: "room" | "game" }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+    if (!room.players.find(p => p.id === targetId)) return;
+
+    const shouldForceReturnAll = source === "room" && !!room.phase && !room.gameOver;
+    if (shouldForceReturnAll) {
+      resetRoomFromGameToLobby(room);
+    }
+
+    room.players = room.players.filter(p => p.id !== targetId);
+    room.positions = (room.positions || []).filter((pos) => pos.playerId !== targetId);
+    room.positionEditors = (room.positionEditors || []).filter((id) => id !== targetId);
+    room.lockedPlayerIds = (room.lockedPlayerIds || []).filter((id) => id !== targetId);
+
+    if (room.playerRoles) {
+      delete room.playerRoles[targetId];
+    }
+    if (room.wolfVotes) {
+      delete room.wolfVotes[targetId];
+    }
+    if (room.wolfVotes2) {
+      delete room.wolfVotes2[targetId];
+    }
+    if (room.wolfLocked) {
+      delete room.wolfLocked[targetId];
+    }
+    if (room.dayVotes) {
+      delete room.dayVotes[targetId];
+    }
+    if (room.dayLocked) {
+      delete room.dayLocked[targetId];
+    }
+    if (room.trialVotes) {
+      delete room.trialVotes[targetId];
+    }
+    room.dayVoters = (room.dayVoters || []).filter((id) => id !== targetId);
+    room.deadPlayers = (room.deadPlayers || []).filter((id) => id !== targetId);
+    room.wolves = (room.wolves || []).filter((id) => id !== targetId);
+
+    if (room.hostId === targetId && room.players.length > 0) {
+      const firstPlayer = room.players[0];
+      if (firstPlayer) {
+        room.hostId = firstPlayer.id;
+        const nextHeightPxAfterHostChange = desiredLayoutHeightPx(getParticipantCount(room));
+        rescaleRoomPositionsForHeight(room, nextHeightPxAfterHostChange);
+        const hostChangedOpts = layoutOptsForRoom(room);
+        room.positions = ensureNonOverlappingPositions(getParticipantIds(room), room.positions, hostChangedOpts);
+        ctx.io.to(roomId).emit("hostChanged", room.hostId);
+      }
+    }
+    ctx.io.to(roomId).emit("positionsUpdated", room.positions || []);
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    if (shouldForceReturnAll) {
+      ctx.io.to(roomId).emit("forceReturnToRoom", { roomId, reason: "host_returned_to_room" });
+    }
+    ctx.io.to(targetId).emit("kicked");
+  });
+
+  socket.on("seerCheck", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room || !room.playerRoles) return;
+
+    if (room.gameOver) return;
+
+    if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, clientId, "Tiên tri")) return;
+
+    if (room.playerRoles?.[clientId] !== "Tiên tri") return;
+
+    if ((room.deadPlayers || []).includes(clientId)) return;
+
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    room.seerUsedTonight = room.seerUsedTonight || {};
+    const usedCount = room.seerUsedTonight[clientId] || 0;
+    const maxChecks = (room.elementalSelectedBuffId === "seer-check-two" && room.elementalSelectedBuffAppliesNight === room.nightCount) ? 2 : 1;
+    if (usedCount >= maxChecks) {
+      socket.emit("errorMessage", "Bạn đã dùng chức năng tiên tri trong đêm này rồi!");
+      return;
+    }
+    room.seerUsedTonight[clientId] = usedCount + 1;
+
+    const roleOfTarget = room.playerRoles[targetId];
+    const isSpiritWolfMarkedWolf =
+      roleOfTarget === SPIRIT_WOLF_ROLE &&
+      room.spiritWolfChoseSave === true &&
+      getSpiritWolfId(room) === targetId;
+
+    const isWolf =
+      roleOfTarget === "Kẻ bị nguyền"
+        ? true
+        : roleOfTarget === "Bán sói"
+          ? false
+          : isSpiritWolfMarkedWolf
+            ? true
+            : isWolfRole(roleOfTarget);
+    ctx.io.to(clientId).emit("seerResult", { playerId: targetId, isWolf });
+
+    appendLogEntry(room, { type: "seer_check", phase: "night", actorId: clientId, targetId, isWolf });
+  });
+
+  socket.on("guardianProtect", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (room.gameOver) return;
+
+    if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, clientId, "Bảo vệ")) return;
+
+    if (room.playerRoles?.[clientId] !== "Bảo vệ") return;
+
+    if ((room.deadPlayers || []).includes(clientId)) return;
+
+    if (room.protectedTonight) {
+      socket.emit("errorMessage", "Bạn đã xác nhận bảo vệ đêm nay rồi, không thể thay đổi lựa chọn.");
+      return;
+    }
+
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    if (room.lastProtected && room.lastProtected === targetId) {
+      socket.emit("errorMessage", "Không thể bảo vệ cùng người hai đêm liên tiếp!");
+      return;
+    }
+
+    room.protectedTonight = targetId;
+    ctx.io.to(clientId).emit("guardianProtected", targetId);
+
+    appendLogEntry(room, { type: "guardian_protect", phase: "night", actorId: clientId, targetId });
+
+    emitWitchPendingDeath(roomId);
+  });
+
+  socket.on("witchHeal", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (room.gameOver) return;
+
+    if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, clientId, "Phù thủy")) return;
+    if (room.playerRoles?.[clientId] !== "Phù thủy") return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+
+    ensureWitchState(room, clientId);
+
+    const potions = room.witchPotions![clientId]!;
+    if (potions.healUsed) {
+      socket.emit("errorMessage", "Bạn đã dùng bình cứu rồi!");
+      return;
+    }
+
+    const pendingTargets = getWitchPendingDeaths(room);
+    if (!pendingTargets.length) {
+      socket.emit("errorMessage", "Không có ai sắp chết để dùng bình cứu.");
+      return;
+    }
+
+    if (!targetId || !pendingTargets.includes(targetId)) {
+      socket.emit("errorMessage", "Mục tiêu bình cứu không hợp lệ.");
+      return;
+    }
+
+    potions.healUsed = true;
+    room.witchHealTargetTonight![clientId] = targetId;
+    emitWitchPotions(roomId, clientId);
+
+    appendLogEntry(room, { type: "witch_heal", phase: "night", actorId: clientId, targetId });
+
+    emitWitchPendingDeath(roomId);
+  });
+
+  socket.on("witchPoison", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (room.gameOver) return;
+
+    if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, clientId, "Phù thủy")) return;
+    if (room.playerRoles?.[clientId] !== "Phù thủy") return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+
+    ensureWitchState(room, clientId);
+
+    const potions = room.witchPotions![clientId]!;
+    if (potions.poisonUsed) {
+      socket.emit("errorMessage", "Bạn đã dùng bình giết rồi!");
+      return;
+    }
+
+    if (targetId === clientId) {
+      socket.emit("errorMessage", "Bạn không thể dùng bình giết lên chính mình.");
+      return;
+    }
+
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    potions.poisonUsed = true;
+    room.witchPoisonTargetTonight![clientId] = targetId;
+    emitWitchPotions(roomId, clientId);
+
+    appendLogEntry(room, { type: "witch_poison", phase: "night", actorId: clientId, targetId });
+
+    const targetRole = room.playerRoles?.[targetId];
+    if (
+      isWolfRole(targetRole) &&
+      isSpiritWolfAlive(room) &&
+      !room.spiritWolfDecisionMade &&
+      !room.spiritWolfPendingPoisonedWolfId
+    ) {
+      room.spiritWolfPendingPoisonedWolfId = targetId;
+      insertSpiritWolfIntoNightOrder(room);
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    }
+  });
+
+  socket.on("spiritWolfDecide", ({ roomId, save }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, clientId, "Linh sói")) return;
+    if (room.playerRoles?.[clientId] !== SPIRIT_WOLF_ROLE) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+
+    const pendingTargetId = room.spiritWolfPendingPoisonedWolfId;
+    if (!pendingTargetId) return;
+    if (room.spiritWolfDecisionMade) return;
+
+    room.spiritWolfDecisionMade = true;
+    room.spiritWolfChoseSave = !!save;
+    if (save) {
+      room.spiritWolfWolfAlignedPending = true;
+      room.witchPoisonTargetTonight = room.witchPoisonTargetTonight || {};
+      for (const wid of getWitches(room)) {
+        if (room.witchPoisonTargetTonight[wid] === pendingTargetId) {
+          room.witchPoisonTargetTonight[wid] = null;
+        }
+      }
+    }
+
+    room.spiritWolfPendingPoisonedWolfId = null;
+    ctx.io.to(clientId).emit("spiritWolfDecisionRecorded", { saved: !!save });
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+
+    appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", saved: !!save });
+
+    checkAndEndGame(roomId, "after_spirit_wolf_decision");
+  });
+
+  socket.on("wolfChooseTarget", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (!isWolfRole(room.playerRoles?.[clientId])) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, clientId, "Sói")) return;
+
+    if (room.wolfLocked?.[clientId]) {
+      socket.emit("errorMessage", "Bạn đã bấm CẮN, không thể thay đổi lựa chọn.");
+      return;
+    }
+
+    room.wolfVotes = room.wolfVotes || {};
+
+    if (!targetId) {
+      room.wolfVotes[clientId] = null;
+      ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes);
+      return;
+    }
+
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    if (targetId === clientId) return;
+    if (isWolfRole(room.playerRoles?.[targetId])) return;
+
+    room.wolfVotes[clientId] = targetId;
+
+    ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes);
+  });
+
+  socket.on("wolfChooseTarget2", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (!isWolfRole(room.playerRoles?.[clientId])) return;
+    if (room.phase !== "night") return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPerformNightRoleAction(room, clientId, "Sói")) return;
+
+    if (!room.wolfBonusBiteThisNight) return;
+
+    if (room.wolfLocked?.[clientId]) {
+      socket.emit("errorMessage", "Bạn đã bấm CẮN, không thể thay đổi lựa chọn.");
+      return;
+    }
+
+    room.wolfVotes2 = room.wolfVotes2 || {};
+
+    if (!targetId) {
+      room.wolfVotes2[clientId] = null;
+      ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
+      return;
+    }
+
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    if (targetId === clientId) return;
+    if (isWolfRole(room.playerRoles?.[targetId])) return;
+
+    if (room.wolfVotes?.[clientId] && room.wolfVotes[clientId] === targetId) return;
+
+    room.wolfVotes2[clientId] = targetId;
+    ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
+  });
+
+  socket.on("wolfLockVote", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (!isWolfRole(room.playerRoles?.[clientId])) return;
+    if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, clientId, "Sói")) return;
+
+    room.wolfLocked = room.wolfLocked || {};
+    room.wolfLocked![clientId] = true;
+
+    ctx.io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked);
+
+    const activeWolves = getActiveWolves(room);
+    const allLocked = activeWolves.length > 0 && activeWolves.every(id => room.wolfLocked?.[id] === true);
+    if (allLocked) {
+      if (room.wolfTimer) {
+        clearTimeout(room.wolfTimer);
+        room.wolfTimer = null;
+      }
+      finishWolfVoting(roomId);
+    }
+  });
+}
+
+// Tạo mã phòng ngẫu nhiên gồm 3 chữ số, đảm bảo không trùng với các phòng đang hoạt động.
+function generateRoomId(activeRooms: Set<string>): string {
+  let roomId: string;
+  do {
+    roomId = String(Math.floor(Math.random() * 1000)).padStart(3, "0");
+  } while (activeRooms.has(roomId));
+  activeRooms.add(roomId);
+  return roomId;
+}

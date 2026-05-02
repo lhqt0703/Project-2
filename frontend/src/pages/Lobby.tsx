@@ -12,15 +12,18 @@ export default function Lobby() {
   const [gameRules, setGameRules] = useState<RoomGameRules>(DEFAULT_ROOM_GAME_RULES);
 
   useEffect(() => {
-    socket.on("roomCreated", (room) => {
+    const handleRoomCreated = (room: { id: string }) => {
       nav(`/room?roomId=${room.id}`);
-    });
-    socket.on("roomJoined", (room) => {
+    };
+    const handleRoomJoined = (room: { id: string }) => {
       nav(`/room?roomId=${room.id}`);
-    });
+    };
+
+    socket.on("roomCreated", handleRoomCreated);
+    socket.on("roomJoined", handleRoomJoined);
     return () => {
-      socket.off("roomCreated");
-      socket.off("roomJoined");
+      socket.off("roomCreated", handleRoomCreated);
+      socket.off("roomJoined", handleRoomJoined);
     };
   }, [nav]);
 
@@ -43,6 +46,25 @@ export default function Lobby() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+          <section style={{ padding: 24, borderRadius: 24, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)" }}>
+            <h2 style={{ marginTop: 0 }}>Tham gia phòng</h2>
+            <div style={{ display: "grid", gap: 12 }}>
+              <input
+                placeholder="Tên của bạn"
+                onChange={(e) => setName(e.target.value)}
+                style={{ padding: "12px 14px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "inherit" }}
+              />
+              <input
+                placeholder="Mã phòng"
+                onChange={(e) => setRoomIdInput(e.target.value)}
+                style={{ padding: "12px 14px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "inherit" }}
+              />
+              <button onClick={joinRoom} style={{ padding: "13px 14px", cursor: "pointer" }}>
+                Tham gia phòng
+              </button>
+            </div>
+          </section>
+          
           <section style={{ padding: 24, borderRadius: 24, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)" }}>
             <h2 style={{ marginTop: 0 }}>Tạo phòng</h2>
             <div style={{ display: "grid", gap: 12 }}>
@@ -74,24 +96,7 @@ export default function Lobby() {
             </div>
           </section>
 
-          <section style={{ padding: 24, borderRadius: 24, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)" }}>
-            <h2 style={{ marginTop: 0 }}>Tham gia phòng</h2>
-            <div style={{ display: "grid", gap: 12 }}>
-              <input
-                placeholder="Tên của bạn"
-                onChange={(e) => setName(e.target.value)}
-                style={{ padding: "12px 14px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "inherit" }}
-              />
-              <input
-                placeholder="Mã phòng"
-                onChange={(e) => setRoomIdInput(e.target.value)}
-                style={{ padding: "12px 14px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "inherit" }}
-              />
-              <button onClick={joinRoom} style={{ padding: "13px 14px", cursor: "pointer" }}>
-                Tham gia phòng
-              </button>
-            </div>
-          </section>
+
         </div>
       </div>
 

@@ -7,8 +7,19 @@ export default function DevSpawn() {
   const [debugAnim, setDebugAnim] = useState(true);
 
   const spawn = () => {
+    const rid = (roomId || "").trim();
+    if (!rid) return;
+    const spawnBatchId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
     for (let i = 1; i <= count; i++) {
-      window.open(`/?roomId=${roomId}&name=${prefix}${i}`, "_blank");
+      const params = new URLSearchParams();
+      params.set("roomId", rid);
+      params.set("name", `${prefix}${i}`);
+      params.set("devClientId", `dev-${spawnBatchId}-${i}`);
+      window.open(`/?${params.toString()}`, "_blank");
 
     }
   };

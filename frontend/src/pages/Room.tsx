@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { socket, clientId } from "../socket";
 import PlayerPositions from "../components/PlayerPositions";
@@ -62,12 +62,13 @@ export default function Room() {
     y: number;
     player: Player | null;
   } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const location = useLocation();
   const nav = useNavigate();
 
-  const showNotice = (title: string, message: string, onConfirm?: () => void) => {
+  const showNotice = useCallback((title: string, message: string, onConfirm?: () => void) => {
     setNoticeModal({ title, message, onConfirm });
-  };
+  }, []);
 
   // lấy roomId từ URL (?roomId=xxxxx)
   const query = new URLSearchParams(location.search);
@@ -94,19 +95,19 @@ export default function Room() {
       if (roomId && data?.id !== roomId) return;
       setRoom(data);
     };
+    const handlePositionsUpdated = (positions: PlayerPosition[]) => {
+      setRoom(prev => prev ? { ...prev, positions } : prev);
+    };
+
+    const handlePositionEditorsUpdated = (editors: string[]) => {
+      setRoom(prev => prev ? { ...prev, positionEditors: editors } : prev);
+    };
+
     socket.on("roomCreated", handleRoom);
     socket.on("roomJoined", handleRoom);
     socket.on("roomUpdated", handleRoom);
-    socket.on("roomUpdated", (data) => console.log("ROOM UPDATED:", data));
-
-
-    socket.on("positionsUpdated", (positions: PlayerPosition[]) => {
-      setRoom(prev => prev ? { ...prev, positions } : prev);
-    });
-
-    socket.on("positionEditorsUpdated", (editors: string[]) => {
-      setRoom(prev => prev ? { ...prev, positionEditors: editors } : prev);
-    });
+    socket.on("positionsUpdated", handlePositionsUpdated);
+    socket.on("positionEditorsUpdated", handlePositionEditorsUpdated);
 
 
     // Lắng nghe hostChanged để cập nhật hostId realtime
@@ -120,8 +121,8 @@ export default function Room() {
       socket.off("roomJoined", handleRoom);
       socket.off("roomUpdated", handleRoom);
       socket.off("hostChanged", handleHostChanged);
-      socket.off("positionsUpdated"); 
-      socket.off("positionEditorsUpdated"); 
+      socket.off("positionsUpdated", handlePositionsUpdated);
+      socket.off("positionEditorsUpdated", handlePositionEditorsUpdated);
     };
   }, [roomId, setRoom]); // giữ listener ổn định và lọc đúng room theo URL
 
@@ -173,14 +174,6 @@ export default function Room() {
       const targetRoomId = room?.id ?? roomId;
       if (!targetRoomId) return;
 
-      // Server cap: tối đa 10 "Dân" trong toàn bộ danh sách role
-      const MAX_VILLAGERS = 10;
-      const currentRoles = room?.roles ?? [];
-      const currentVillagers = currentRoles.filter(r => r === "Dân").length;
-      const availableVillagers = Math.max(0, MAX_VILLAGERS - currentVillagers);
-      const autoAddCount = Math.min(missingRoles, availableVillagers);
-      const stillMissingAfterAuto = Math.max(0, missingRoles - autoAddCount);
-
       // Trường hợp server báo thiếu tiếp sau khi đã auto-add một phần (newPlayers có thể là [])
       if ((newPlayers?.length ?? 0) === 0) {
         showNotice(
@@ -193,41 +186,11 @@ export default function Room() {
 
       const names = newPlayers.map((p: Player) => p.name).join(", ");
 
-      // Không thể auto-add thêm dân nữa
-      if (autoAddCount <= 0) {
-        showNotice(
-          "Không thể tự thêm vai trò",
-          `Có người chơi mới (${names}) đã vào phòng sau khi bạn đã xác nhận vai trò.\nBạn đang thiếu ${missingRoles} vai trò.\nHệ thống không thể tự thêm "Dân" nữa (tối đa ${MAX_VILLAGERS}).\n\nBạn sẽ được chuyển sang màn hình chọn vai trò để bổ sung tiếp.`,
-          () => nav(`/roleselect?roomId=${targetRoomId}`)
-        );
-        return;
-      }
-
-      // Auto-add được nhưng vẫn còn thiếu sau khi thêm tối đa
-      if (stillMissingAfterAuto > 0) {
-        const ok = window.confirm(
-          `Có người chơi mới (${names}) đã vào phòng sau khi bạn đã xác nhận vai trò.\n` +
-          `Bạn đang thiếu ${missingRoles} vai trò.\n\n` +
-          `Hệ thống có thể tự động thêm ${autoAddCount} vai trò "Dân" (tối đa ${MAX_VILLAGERS}).\n` +
-          `Tuy nhiên sau đó vẫn còn thiếu ${stillMissingAfterAuto} vai trò.\n\n` +
-          `Bạn có muốn tự thêm ${autoAddCount} "Dân" ngay bây giờ không?\n` +
-          `Sau đó bạn sẽ được chuyển sang màn hình chọn vai trò để chọn tiếp.`
-        );
-
-        if (ok) {
-          socket.emit("addAutoRoles", { roomId: targetRoomId, count: autoAddCount });
-          nav(`/roleselect?roomId=${targetRoomId}`);
-        } else {
-          nav(`/roleselect?roomId=${targetRoomId}`);
-        }
-        return;
-      }
-
       // Auto-add đủ để hết thiếu
       const ok = window.confirm(
         `Có người chơi mới (${names}) đã vào phòng sau khi bạn đã xác nhận vai trò.\n` +
         `Bạn đang thiếu ${missingRoles} vai trò.\n\n` +
-        `Bạn có muốn tự động thêm ${missingRoles} "Dân" không? (tối đa ${MAX_VILLAGERS})`
+        `Bạn có muốn tự động thêm ${missingRoles} "Dân làng" không?`
       );
       if (ok) {
         socket.emit("addAutoRoles", { roomId: targetRoomId, count: missingRoles });
@@ -240,7 +203,7 @@ export default function Room() {
     return () => {
       socket.off("roleMismatch", handleMismatch);
     };
-  }, [room]);
+  }, [room, roomId, nav]);
 
   useEffect(() => {
     interface WolfRoleMismatchData {
@@ -285,11 +248,64 @@ export default function Room() {
     };
   }, []);
 
-  // Xử lý click chuột phải vào tên người chơi
-  const handlePlayerRightClick = (e: React.MouseEvent, player: Player) => {
-    e.preventDefault();
+  useEffect(() => {
+    const handleErrorMessage = (message: string) => {
+      setNoticeModal({
+        title: "Thông báo",
+        message: message || "Có lỗi xảy ra. Hãy thử lại.",
+      });
+    };
+
+    socket.on("errorMessage", handleErrorMessage);
+    return () => {
+      socket.off("errorMessage", handleErrorMessage);
+    };
+  }, []);
+
+  // Xử lý click chuột trái vào tên người chơi
+  const handlePlayerLeftClick = (e: React.MouseEvent, player: Player) => {
+    e.stopPropagation();
     setContextMenu({ x: e.clientX, y: e.clientY, player });
   };
+
+  useEffect(() => {
+    if (!contextMenu) return;
+
+    const adjustMenuPosition = () => {
+      const menuElement = contextMenuRef.current;
+      if (!menuElement) return;
+
+      const VIEWPORT_PADDING = 8;
+      const rect = menuElement.getBoundingClientRect();
+      let nextX = contextMenu.x;
+      let nextY = contextMenu.y;
+
+      if (rect.right > window.innerWidth - VIEWPORT_PADDING) {
+        nextX -= rect.right - (window.innerWidth - VIEWPORT_PADDING);
+      }
+      if (rect.bottom > window.innerHeight - VIEWPORT_PADDING) {
+        nextY -= rect.bottom - (window.innerHeight - VIEWPORT_PADDING);
+      }
+      if (rect.left < VIEWPORT_PADDING) {
+        nextX += VIEWPORT_PADDING - rect.left;
+      }
+      if (rect.top < VIEWPORT_PADDING) {
+        nextY += VIEWPORT_PADDING - rect.top;
+      }
+
+      if (Math.abs(nextX - contextMenu.x) > 0.5 || Math.abs(nextY - contextMenu.y) > 0.5) {
+        setContextMenu((prev) => (prev ? { ...prev, x: Math.round(nextX), y: Math.round(nextY) } : prev));
+      }
+    };
+
+    const rafId = window.requestAnimationFrame(adjustMenuPosition);
+    window.addEventListener("resize", adjustMenuPosition);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", adjustMenuPosition);
+    };
+  }, [contextMenu]);
 
   // Xử lý nhường quyền
   const handleTransferHost = () => {
@@ -411,6 +427,9 @@ export default function Room() {
   const gameInProgress = !!room.phase && !room.gameOver;
   const hasInGamePlayers = room.players.some((p) => p.inGame === true);
   const hasDisconnectedPlayers = room.players.some((p) => p.connected === false);
+  const participantCount = room.players.filter((p) => p.id !== room.hostId).length;
+  const selectedRoleCount = room.roles?.length ?? 0;
+  const hasEnoughRolesToStart = selectedRoleCount >= participantCount && selectedRoleCount > 0;
   const startGameDisabled = !gameInProgress && (hasInGamePlayers || hasDisconnectedPlayers);
   const startGameTooltip = hasInGamePlayers && hasDisconnectedPlayers
     ? "Trò chơi chỉ có thể bắt đầu ván mới khi tất cả người chơi đã quay về phòng chờ này và những người chơi đang mất kết nối cần kết nối lại hoặc bạn có thể xóa họ khỏi phòng"
@@ -425,6 +444,17 @@ export default function Room() {
     if (gameInProgress) {
       socket.emit("returnToCurrentGame", { roomId: room.id });
       nav(`/game?roomId=${room.id}`);
+      return;
+    }
+    if (!hasEnoughRolesToStart) {
+      const missingRoles = Math.max(0, participantCount - selectedRoleCount);
+      showNotice(
+        "Chưa chọn vai trò",
+        selectedRoleCount <= 0
+          ? "Bạn cần chọn vai trò trước khi bắt đầu trò chơi."
+          : `Danh sách vai trò đang thiếu ${missingRoles} vai trò. Hãy bổ sung trước khi bắt đầu trò chơi.`,
+        () => nav(`/roleselect?roomId=${room.id}`)
+      );
       return;
     }
     socket.emit("startGame", room.id);
@@ -466,32 +496,21 @@ export default function Room() {
         </div>
         <div className="room-main-layout">
         {/* left: players list */}
-        <div className="room-sidebar">
-          <h3>Người chơi:</h3>
-          <ul>
-            {room.players.map((p) => (
-              <li
-                key={p.id}
-                onContextMenu={amIHost && p.id !== room.hostId ? (e) => handlePlayerRightClick(e, p) : undefined}
-                style={{ cursor: amIHost && p.id !== room.hostId ? "context-menu" : undefined }}
-              >
-                {p.name} {p.id === room.hostId && "(Chủ phòng)"} {room.positionEditors?.includes(p.id) && " • (Quyền sắp xếp)"}
-              </li>
-            ))}
-          </ul>
 
-          <div style={{ marginTop: 12 }}>
-            <button
-              onClick={() => setShowCurrentRulesModal(true)}
-              title="Xem luật hiện tại của phòng"
-            >
-              Xem luật hiện tại
-            </button>
-          </div>
+          {!amIHost && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                onClick={() => setShowCurrentRulesModal(true)}
+                title="Xem luật hiện tại của phòng"
+              >
+                Xem luật hiện tại
+              </button>
+            </div>
+          )}
 
           {amIHost && (
             <>
-              <div style={{ marginTop: 12 }}>
+              <div style={{ marginTop: 8 }}>
                 <button
                   onClick={() => setShowRulesModal(true)}
                   title="Thiết lập luật chơi"
@@ -521,15 +540,33 @@ export default function Room() {
           <h3>Bố cục:</h3>
           <PlayerPositions onPlayerClick={() => {
              // Handle click if needed, e.g. show profile or context menu
-             // Currently context menu is handled by onContextMenu on the list, 
+             // Currently context menu is handled by click on the list,
              // but we might want it here too. For now, just log or ignore.
           }} onPlayerDoubleClick={handlePlayerDoubleClickKick} />
         </div>
+
+          
+        <div className="room-sidebar">
+          <h3>Người chơi:</h3>
+          <ul>
+            {room.players.map((p) => (
+              <li
+                key={p.id}
+                onClick={amIHost && p.id !== room.hostId ? (e) => handlePlayerLeftClick(e, p) : undefined}
+                style={{ cursor: amIHost && p.id !== room.hostId ? "pointer" : undefined }}
+              >
+                {p.name} {p.id === room.hostId && "(Chủ phòng)"} {room.positionEditors?.includes(p.id) && " • (Quyền sắp xếp)"}
+              </li>
+            ))}
+          </ul>
+
       </div>
 
-        {/* Menu chuột phải cho host */}
+        {/* Menu thao tác cho host */}
         {contextMenu && (
           <div
+            ref={contextMenuRef}
+            onClick={(e) => e.stopPropagation()}
             style={{
               position: "fixed",
               top: contextMenu.y,

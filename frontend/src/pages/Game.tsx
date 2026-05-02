@@ -44,6 +44,7 @@ export default function Game() {
   const nightTurnRemainingMs = room?.nightTurnRemainingMs ?? null;
   const [nightTurnNow, setNightTurnNow] = useState(Date.now());
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
+  const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const [frozenRoomSnapshot, setFrozenRoomSnapshot] = useState<any | null>(null);
   const [rulesRestartOverlay, setRulesRestartOverlay] = useState<{
     message: string;
@@ -621,6 +622,12 @@ export default function Game() {
     requestReturnToRoom();
   };
 
+  const handleEndGameConfirm = () => {
+    if (!roomId) return;
+    setEndGameConfirmOpen(false);
+    socket.emit("hostEndGameNow", { roomId });
+  };
+
   const rulesRestartAnimationName = rulesRestartOverlay
     ? `gameRulesRestartOverlay_${rulesRestartOverlay.key}`
     : "";
@@ -858,6 +865,14 @@ export default function Game() {
         <button onClick={() => socket.emit("hostTogglePlayerRoleText", { roomId })}>
           {room?.hidePlayerRoleText ? "Hiện vai trò người chơi" : "Ẩn vai trò người chơi"}
         </button>
+        {!sync.gameEnded && (
+          <button 
+            onClick={() => setEndGameConfirmOpen(true)}
+            style={{ background: "#e74c3c", color: "#fff" }}
+          >
+            Kết thúc ngay trò chơi
+          </button>
+        )}
       </div>
     )}
 
@@ -927,6 +942,16 @@ export default function Game() {
         action?.();
       }}
       onCancel={() => setNoticeModal(null)}
+    />
+
+    <ConfirmModal
+      open={endGameConfirmOpen}
+      title="Kết thúc trò chơi"
+      message="Bạn có chắc chắn muốn kết thúc trò chơi ngay bây giờ? Hành động này sẽ dừng trò chơi và hiển thị vai trò của tất cả người chơi."
+      confirmText="Kết thúc"
+      cancelText="Hủy"
+      onConfirm={handleEndGameConfirm}
+      onCancel={() => setEndGameConfirmOpen(false)}
     />
 
     </div>

@@ -4,7 +4,7 @@ import { socket } from "../socket";
 import ConfirmModal from "../components/ConfirmModal";
 import { ELEMENTAL_ROLE_ORDER } from "../constants/elemental";
 
-const NON_VILLAGER_ROLES = ["Sói", "Bán sói", "Sói con", "Linh sói", "Kẻ bị nguyền", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn"] as const;
+const NON_VILLAGER_ROLES = ["Dân làng", "Sói", "Bán sói", "Sói con", "Linh sói", "Kẻ bị nguyền", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn"] as const;
 type NonVillagerRole = (typeof NON_VILLAGER_ROLES)[number];
 
 export default function RoleSelect() {
@@ -115,12 +115,19 @@ export default function RoleSelect() {
       });
     };
 
+    const handleRolesReady = () => {
+      if (!roomId) return;
+      nav(`/room?roomId=${roomId}`);
+    };
+
     socket.on("gameStarted", handleGameStarted);
     socket.on("wolfRoleMismatch", handleWolfMismatch);
+    socket.on("rolesReady", handleRolesReady);
 
     return () => {
       socket.off("gameStarted", handleGameStarted);
       socket.off("wolfRoleMismatch", handleWolfMismatch);
+      socket.off("rolesReady", handleRolesReady);
     };
   }, [nav, roomId, selectedRoles, selectedElementalRoles]);
 
@@ -132,9 +139,9 @@ export default function RoleSelect() {
 
   const toggleRole = (role: NonVillagerRole) => {
     setSelectedRoles((prev) => {
-      if (role === "Sói") {
-        const count = prev.filter((r) => r === "Sói").length;
-        return count > 0 ? removeOne(prev, "Sói") : [...prev, "Sói"];
+      if (role === "Sói" || role === "Dân làng") {
+        const count = prev.filter((r) => r === role).length;
+        return count > 0 ? removeOne(prev, role) : [...prev, role];
       }
       return prev.includes(role) ? removeOne(prev, role) : [...prev, role];
     });
@@ -166,7 +173,6 @@ export default function RoleSelect() {
     }
 
     socket.emit("rolesSelected", { roomId, roles: currentRoles });
-    nav(`/room?roomId=${roomId}`);
   };
 
   return (
@@ -177,6 +183,38 @@ export default function RoleSelect() {
       <p>Đã chọn: <b>{totalSelected}</b></p>
 
       <div className="roleselect-grid">
+        {(() => {
+          const count = selectedRoles.filter((r) => r === "Dân làng").length;
+          return (
+            <div
+              className="role-card"
+              key="Dân làng"
+              onClick={() => toggleRole("Dân làng")}
+              style={{
+                padding: "16px 22px",
+                borderRadius: 12,
+                cursor: "pointer",
+                border: count > 0 ? "3px solid var(--accent)" : "2px solid var(--border-strong)",
+                background: count > 0 ? "var(--accent-surface)" : "var(--surface-muted)",
+                transition: "0.2s",
+                fontSize: 18,
+                userSelect: "none",
+              }}
+            >
+              <div>Dân làng {count > 1 ? `x${count}` : ""}</div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedRoles((prev) => [...prev, "Dân làng"]);
+                }}
+                style={{ marginLeft: 10 }}
+              >
+                + Dân làng
+              </button>
+            </div>
+          );
+        })()}
+
         {(() => {
           const count = selectedRoles.filter((r) => r === "Sói").length;
           return (

@@ -194,7 +194,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         correctCount,
         totalCount,
         triggeredBuffVote,
-        nextBuffVoteNight,
+        ...(nextBuffVoteNight !== undefined ? { nextBuffVoteNight } : {}),
       });
     }
   }

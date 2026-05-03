@@ -454,7 +454,7 @@ function LogEntryLine({
 
     case "day_result":
       if (!entry.targetId) {
-        return <li style={lineStyle}>Kết quả biểu quyết: hòa phiếu / không ai bị loại</li>;
+        return <li style={lineStyle}>Kết quả biểu quyết: hòa phiếu / không ai lên giàn</li>;
       }
       {
         const voterIds = dayVotersByTarget[entry.targetId] || [];
@@ -493,7 +493,7 @@ function LogEntryLine({
             tooltipDetail={allVoteTooltip}
             onHighlightPlayer={onHighlightPlayer}
           >
-            Kết quả sống/chết cho
+            Kết quả cho
           </ActionSpan>{" "}
           {entry.targetId && (
             <RoleSpan
@@ -657,7 +657,7 @@ function LogEntryLine({
       const targetName = getRoleName(entry.targetId, rolesByPlayerId);
       return (
         <li style={lineStyle}>
-          Nguyên tố {actorName} chọn {targetName} — {entry.isCorrect ? "✅ Đoán đúng" : "❌ Đoán sai"}
+          {actorName} chọn {targetName} - {entry.isCorrect ? "✅" : "❌"}
         </li>
       );
     }

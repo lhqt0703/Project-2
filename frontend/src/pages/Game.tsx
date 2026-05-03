@@ -579,13 +579,13 @@ export default function Game() {
     if (sync.dayVoteFinished.targetId) {
       const targetName = room?.players.find((p) => p.id === sync.dayVoteFinished?.targetId)?.name || "một người chơi";
       if (sync.dayVoteFinished.startedTrial) {
-        showNotice("Kết quả biểu quyết", `${targetName} bị đưa lên thanh minh`);
+        showNotice("Kết quả biểu quyết", `${targetName} bị đưa lên giàn`);
       } else {
         showNotice("Kết quả biểu quyết", `${targetName} bị loại`);
       }
       return;
     }
-    showNotice("Kết quả biểu quyết", "Không ai bị loại");
+    showNotice("Kết quả biểu quyết", "Không ai bị lên giàn");
   }, [room?.players, showNotice, sync.dayVoteFinished, sync.dayVoteFinishedSeq]);
 
   useEffect(() => {
@@ -596,10 +596,19 @@ export default function Game() {
 
     const targetName = room?.players.find((p) => p.id === sync.trialVerdictFinished?.targetId)?.name || "người bị biểu quyết";
     if (sync.trialVerdictFinished.executed) {
-      showNotice("Kết quả sống/chết", `${targetName} bị xử tử.`);
+      const executedNotices = [
+        `${targetName} bị bắn xử tử`,
+        `${targetName} bị hỏa thiêu`,
+        `${targetName} bị thả trôi sông`,
+        `${targetName} bị treo cổ`,
+        `${targetName} bị bóp mũi tới chết`,
+      ];
+      // Use shared verdict sequence để hiện thông báo đồng bộ giống nhau giữa mọi người.
+      const noticeIndex = Math.abs(seq) % executedNotices.length;
+      showNotice("Kết quả cuối", executedNotices[noticeIndex]!);
       return;
     }
-    showNotice("Kết quả sống/chết", `${targetName} được tha (sống).`);
+    showNotice("Kết quả cuối", `${targetName} được tha (sống).`);
   }, [room?.players, showNotice, sync.trialVerdictFinished, sync.trialVerdictFinishedSeq]);
 
   // Xử lý click vào avatar người chơi
@@ -641,7 +650,7 @@ export default function Game() {
     : "";
 
   return (
-    <div className="page-shell game-page" style={{ padding: 20 }}>
+    <div className="page-shell game-page" style={{ padding: "1.25rem", height: "100dvh", overflow: "hidden" }}>
       {!room && (
         <p>
           Hình như có gì đó sai sai... Lẽ ra bạn không nên thấy được những dòng này
@@ -657,16 +666,20 @@ export default function Game() {
           Kết thúc: {sync.gameEnded.winner === "wolves" ? "Phe Sói" : "Phe Dân"} chiến thắng
         </h2>
       )}
-      {phase === "dusk" ? (
-        <h1>🌥️ Hoàng hôn</h1>
-      ) : phase === "day" ? (
-        <h1>🌞 Ban ngày – Thảo luận</h1>
-      ) : (
-        <h1>🌙 Ban đêm – Các vai trò thực hiện hành động</h1>
+      {!sync.gameEnded && (
+        <>
+          {phase === "dusk" ? (
+            <h1>🌥️ Hoàng hôn</h1>
+          ) : phase === "day" ? (
+            <h1>🌞 Ban ngày – Thảo luận</h1>
+          ) : (
+            <h1>🌙 Ban đêm – Các vai trò thực hiện hành động</h1>
+          )}
+        </>
       )}
 
       {isSequentialNight && currentNightTurnRole && isHost && (
-        <div style={{ marginTop: 8, fontWeight: 700 }}>
+        <div style={{ marginTop: "0.5rem", fontWeight: 700 }}>
           Lượt hiện tại: {currentNightTurnRole}
           {nightTurnRemainingSec !== null ? ` - còn ${nightTurnRemainingSec}s` : ""}
           {nightTurnPaused ? " (đang tạm ngưng)" : ""}
@@ -674,7 +687,7 @@ export default function Game() {
       )}
 
       {isHost && hasSecretConditionalRolePrompt && (
-        <div style={{ marginTop: 6, fontWeight: 700 }}>
+        <div style={{ marginTop: "0.5rem", fontWeight: 700 }}>
           🤐 Có vai trò kích hoạt bí mật đang chờ phản ứng
         </div>
       )}
@@ -687,11 +700,11 @@ export default function Game() {
         const isActiveTonight = buff.appliesNight === currentNight && phase === "night";
         const isPending = buff.appliesNight > currentNight;
         return (
-          <div style={{ marginTop: 12, padding: 12, borderRadius: 8, background: "rgba(109, 68, 232, 0.12)", border: "1px solid rgba(109, 68, 232, 0.3)" }}>
+          <div style={{ marginTop: "0.75rem", padding: "0.75rem", borderRadius: "0.5rem", background: "rgba(109, 68, 232, 0.12)", border: "0.0625rem solid rgba(109, 68, 232, 0.3)" }}>
             <div style={{ fontWeight: 700, color: "#6d44e8" }}>
               ✨ Buff nguyên tố {isActiveTonight ? "đang kích hoạt" : isPending ? `sẽ kích hoạt đêm ${buff.appliesNight}` : `đã kích hoạt đêm ${buff.appliesNight}`}
             </div>
-            <div style={{ marginTop: 4 }}>
+            <div style={{ marginTop: "0.25rem" }}>
               <span style={{ fontWeight: 600 }}>{buff.label}</span>
               {" "}(Tier {buff.tier})
               {buff.randomTieBreak ? (
@@ -709,7 +722,7 @@ export default function Game() {
       )}
 
       {(isHost || !!sync.gameEnded || hostDisconnected) && (
-        <div className="game-top-actions" style={{ marginTop: 12 }}>
+        <div className="game-top-actions" style={{ marginTop: "0.75rem" }}>
           {!hostDisconnected && (
             <button onClick={handleBackToRoomClick}>Quay về phòng chờ</button>
           )}
@@ -724,7 +737,7 @@ export default function Game() {
 
 
       {debugAnim && (
-        <div className="game-top-actions" style={{ marginTop: 10 }}>
+        <div className="game-top-actions" style={{ marginTop: "0.625rem" }}>
           <button
             onClick={() => {
               if (!room) return;
@@ -751,14 +764,14 @@ export default function Game() {
             Replay last shot
           </button>
 
-          <div style={{ opacity: 0.7, fontSize: 12, alignSelf: "center" }}>
+          <div style={{ opacity: 0.7, fontSize: "0.75rem", alignSelf: "center" }}>
             Tip: Shift+H để random shot
           </div>
         </div>
       )}
       {/* Hiển thị bố cục vị trí người chơi khi có room.positions */}
       {roomForDisplay?.positions && (
-        <div style={{ margin: "32px auto" }}>
+        <div style={{ margin: "2rem auto" }}>
           <PlayerPositions
             mode="view"
             roomOverride={roomForDisplay}
@@ -926,14 +939,14 @@ export default function Game() {
             pointerEvents: "none",
           }}
         >
-          <div
+              <div
             style={{
               color: "#fff",
-              fontSize: 28,
+              fontSize: "1.75rem",
               fontWeight: 700,
               textAlign: "center",
-              maxWidth: 980,
-              padding: "0 24px",
+              maxWidth: "61.25rem",
+              padding: "0 1.5rem",
               animation: `${rulesRestartTextAnimationName} ${rulesRestartOverlay.totalMs}ms linear forwards`,
             }}
           >

@@ -1061,6 +1061,9 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       checkAndEndGame(roomId, "after_night_kills");
+      if (!room.gameOver) {
+        startDayDiscussion(roomId);
+      }
     } else if (phase === "night") {
       if (room.dayTimer) {
         clearTimeout(room.dayTimer);
@@ -1137,7 +1140,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     }
   });
 
-  socket.on("dayVote", ({ roomId, targetId }) => {
+  socket.on("dayChooseTarget", ({ roomId, targetId }) => {
     const room = rooms[roomId];
     if (!room) return;
     if (room.gameOver) return;

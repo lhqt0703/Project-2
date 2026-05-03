@@ -65,6 +65,7 @@ import {
 import {
   ELEMENTAL_BUFFS,
   getBuffTier,
+  MIN_CORRECT_ELEMENTAL_GUESSES_FOR_BUFF,
   type ElementalBuffId,
 } from "./elemental.js";
 import {
@@ -163,6 +164,40 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     emitElementalBuffVoteState,
     resolveElementalBuffVote,
   } = elementalFlow;
+
+  function getAliveElementalPlayerIds(room: Room) {
+    const dead = new Set(room.deadPlayers || []);
+    return getParticipantPlayers(room)
+      .filter((player) => !dead.has(player.id))
+      .filter((player) => isElementalRoleTurn(room.playerRoles?.[player.id] || null))
+      .map((player) => player.id);
+  }
+
+  function finalizeElementalGuessNight(room: Room) {
+    const eligibleElementalIds = new Set(getAliveElementalPlayerIds(room));
+    const correctIds = Array.from(new Set(room.elementalCorrectGuessPlayerIdsTonight || []))
+      .filter((playerId) => eligibleElementalIds.has(playerId));
+    const correctCount = correctIds.length;
+    const totalCount = eligibleElementalIds.size;
+    const triggeredBuffVote = correctCount >= MIN_CORRECT_ELEMENTAL_GUESSES_FOR_BUFF;
+    const nextBuffVoteNight = triggeredBuffVote ? (room.nightCount || 0) + 1 : undefined;
+
+    room.elementalCorrectGuessCountForBuff = triggeredBuffVote ? correctCount : 0;
+    room.elementalPendingBuffVoteNight = nextBuffVoteNight ?? null;
+    room.elementalBuffVotesTonight = {};
+    room.elementalBuffQuickMode = isElementalQuickMode(room);
+
+    if (totalCount > 0 || (room.elementalTargetTonight && Object.keys(room.elementalTargetTonight).length > 0)) {
+      appendLogEntry(room, {
+        type: "elemental_guess_summary",
+        phase: "night",
+        correctCount,
+        totalCount,
+        triggeredBuffVote,
+        nextBuffVoteNight,
+      });
+    }
+  }
 
   // Register all socket event handlers
   socket.on("createRoom", ({ name, gameRules }) => {
@@ -862,6 +897,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.spiritWolfPendingPoisonedWolfId = null;
     room.elementalTargetTonight = {};
     room.elementalCorrectGuessPlayerIdsTonight = [];
+    room.elementalCorrectGuessCountForBuff = 0;
     room.elementalPendingBuffVoteNight = null;
     room.elementalBuffVotesTonight = {};
     room.elementalBuffVotesResolvedNight = null;
@@ -1003,6 +1039,13 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     ctx.io.to(roomId).emit("phaseChanged", phase);
 
     if (phase === "day") {
+      const wasElementalBuffVoteNight = shouldElementalsVoteBuffTonight(room);
+      if (wasElementalBuffVoteNight) {
+        resolveElementalBuffVote(roomId);
+      } else {
+        finalizeElementalGuessNight(room);
+      }
+
       // Process night kills and apply protections/heals
       const dead = new Set(room.deadPlayers || []);
       const spiritWolfId = getSpiritWolfId(room);
@@ -1124,6 +1167,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       room.hunterTargetTonight = {};
       room.elementalTargetTonight = {};
       room.elementalCorrectGuessPlayerIdsTonight = [];
+      room.elementalBuffVotesTonight = {};
       room.seerUsedTonight = {};
       room.witchHealTargetTonight = {};
       room.witchPoisonTargetTonight = {};

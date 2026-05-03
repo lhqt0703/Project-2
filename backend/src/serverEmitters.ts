@@ -78,6 +78,7 @@ function shouldElementalsVoteBuffTonight(room: Room) {
 
 function isElementalQuickMode(room: Room) {
   const rules = ensureRoomGameRules(room);
+  if (rules.allNightActionsSimultaneous) return false;
   return rules.nightActionOrder[0] === ELEMENTAL_GROUP_ROLE;
 }
 

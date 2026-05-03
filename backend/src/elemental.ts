@@ -21,7 +21,7 @@ export const ELEMENTAL_BUFFS = [
   { id: "witch-restore-potion", label: "Phù thủy hồi 1 bình", tier: 3 },
   { id: "guardian-double-protect", label: "Bảo vệ bảo vệ 2 người (1 lần)", tier: 3 },
   { id: "immune-one-negative-element", label: "Miễn nhiễm 1 nguyên tố bất lợi", tier: 3 },
-  { id: "cancel-pending-element-effect", label: "Hủy 1 hiệu ứng nguyên tố sắp kích hoạt", tier: 4 },
+  { id: "cancel-pending-element-effect", label: "Hủy hoàn toàn hiệu ứng nguyên tố bất lợi", tier: 4 },
   { id: "seer-check-two", label: "Tiên tri soi 2 người", tier: 4 },
   { id: "hunter-double-shot", label: "Thợ săn bắn 2 phát (không cần chết)", tier: 4 },
 ] as const;

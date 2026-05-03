@@ -37,6 +37,7 @@ const elementalFlow = createElementalFlow(ctx);
 const dayFlow = createDayFlow(ctx, { checkAndEndGame: lifecycle.checkAndEndGame });
 const nightFlow = createNightFlow(ctx, {
   checkAndEndGame: lifecycle.checkAndEndGame,
+  emitElementalNightState: elementalFlow.emitElementalNightState,
   resolveElementalBuffVote: elementalFlow.resolveElementalBuffVote,
 });
 

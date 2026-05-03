@@ -22,6 +22,7 @@ import { toPublicRoom } from "./serverEmitters.js";
 
 type NightFlowDeps = {
   checkAndEndGame: (roomId: string, reason?: string) => void;
+  emitElementalNightState: (roomId: string, playerId: string) => void;
   resolveElementalBuffVote: (roomId: string) => void;
 };
 
@@ -61,6 +62,29 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     if (!isSpiritWolfAlive(room)) return false;
     if ((room.deadPlayers || []).includes(room.spiritWolfPendingPoisonedWolfId)) return false;
     return true;
+  }
+
+  function emitElementalNightStateForRole(roomId: string, role: NightActionRole) {
+    const room = ctx.rooms[roomId];
+    if (!room) return;
+    if (!isElementalRoleTurn(role)) return;
+    const dead = new Set(room.deadPlayers || []);
+    for (const player of room.players) {
+      if (dead.has(player.id)) continue;
+      if (room.playerRoles?.[player.id] !== role) continue;
+      deps.emitElementalNightState(roomId, player.id);
+    }
+  }
+
+  function emitElementalNightStateForAll(roomId: string) {
+    const room = ctx.rooms[roomId];
+    if (!room) return;
+    const dead = new Set(room.deadPlayers || []);
+    for (const player of room.players) {
+      if (dead.has(player.id)) continue;
+      if (!isElementalRoleTurn(room.playerRoles?.[player.id] || null)) continue;
+      deps.emitElementalNightState(roomId, player.id);
+    }
   }
 
   function getBaseNightActionOrder(room: Room) {
@@ -262,6 +286,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     }
 
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    emitElementalNightStateForRole(roomId, role);
   }
 
   function startNightTurnFlow(roomId: string) {
@@ -276,6 +301,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     if (rules.allNightActionsSimultaneous) {
       startWolfPhase(roomId, { initializeVotes: true, durationMs: getWolfTurnDurationMs(room) });
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      emitElementalNightStateForAll(roomId);
       return;
     }
 

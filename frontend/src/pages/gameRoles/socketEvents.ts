@@ -1,6 +1,6 @@
 export type GamePhase = "dusk" | "day" | "night";
 
-export type RoomUpdatedPayload = any;
+export type RoomUpdatedPayload = unknown;
 
 export type WolfVotesUpdatedPayload = Record<string, string | null>;
 export type WolfVotes2UpdatedPayload = Record<string, string | null>;
@@ -93,7 +93,7 @@ export type GameLogEntry =
   | { type: "elemental_guess"; phase: GameLogEntryPhase; actorId: string; targetId: string; isCorrect: boolean }
   | { type: "elemental_guess_summary"; phase: GameLogEntryPhase; correctCount: number; totalCount: number; triggeredBuffVote: boolean; nextBuffVoteNight?: number }
   | { type: "elemental_buff_vote"; phase: GameLogEntryPhase; voteBreakdown: { buffId: string; voterIds: string[] }[] }
-  | { type: "elemental_buff"; phase: GameLogEntryPhase; buffId: string | null; tier: number; randomTieBreak?: boolean };
+  | { type: "elemental_buff"; phase: GameLogEntryPhase; buffId: string | null; tier: number; randomTieBreak?: boolean; tiedBuffIds?: string[] };
 
 export type GameLogNight = {
   night: number;

@@ -25,13 +25,18 @@ export function createElementalFlow(ctx: ServerContext) {
     if (!room) return;
     const pendingVote = shouldElementalsVoteBuffTonight(room);
     const selectedBuffId = room.elementalBuffVotesTonight?.[playerId] ?? null;
-    const availableBuffTier = room.elementalCorrectGuessCountForBuff ?? 0;
+    const availableBuffTier = getBuffTier(room.elementalCorrectGuessCountForBuff ?? 0);
     ctx.io.to(playerId).emit("elementalBuffVoteStateUpdated", {
       pendingVote,
       quickMode: room.elementalBuffQuickMode !== false,
       selectedBuffId,
       availableBuffTier,
     });
+  }
+
+  function emitElementalNightState(roomId: string, playerId: string) {
+    emitElementalTarget(roomId, playerId);
+    emitElementalBuffVoteState(roomId, playerId);
   }
 
   function resolveElementalBuffVote(roomId: string) {
@@ -65,12 +70,14 @@ export function createElementalFlow(ctx: ServerContext) {
 
     let chosen: ElementalBuffId | null = null;
     let wasRandom = false;
+    let tiedBuffIds: ElementalBuffId[] = [];
     if (counts.size > 0) {
       const top = Math.max(...Array.from(counts.values()));
       const finalists = Array.from(counts.entries())
         .filter(([, count]) => count === top)
         .map(([buffId]) => buffId);
       wasRandom = finalists.length > 1;
+      tiedBuffIds = wasRandom ? finalists : [];
       chosen = finalists[Math.floor(Math.random() * finalists.length)] || null;
     }
 
@@ -88,6 +95,7 @@ export function createElementalFlow(ctx: ServerContext) {
       buffId: chosen,
       tier: chosen ? availableTier : 0,
       randomTieBreak: wasRandom,
+      tiedBuffIds,
     });
 
     broadcastElementalBuffSelection(roomId, {
@@ -102,6 +110,7 @@ export function createElementalFlow(ctx: ServerContext) {
   return {
     emitElementalTarget,
     emitElementalBuffVoteState,
+    emitElementalNightState,
     resolveElementalBuffVote,
   };
 }

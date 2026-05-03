@@ -42,11 +42,14 @@ export default function ConfirmModal({
           padding: 32,
           borderRadius: 12,
           minWidth: 320,
+          maxWidth: "min(92vw, 760px)",
+          maxHeight: "82vh",
+          overflowY: "auto",
           boxShadow: "0 2px 16px rgba(0,0,0,0.2)",
         }}
       >
         <h2>{title}</h2>
-        <p>{message}</p>
+        <p style={{ whiteSpace: "pre-line", lineHeight: 1.55 }}>{message}</p>
         <div style={{ display: "flex", gap: 16, marginTop: 24 }}>
           {infoOnly ? (
             <button onClick={onConfirm}>{closeText}</button>

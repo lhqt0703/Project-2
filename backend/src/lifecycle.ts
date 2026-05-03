@@ -225,6 +225,15 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
     room.spiritWolfBittenThisNight = false;
+    room.elementalTargetTonight = {};
+    room.elementalCorrectGuessPlayerIdsTonight = [];
+    room.elementalCorrectGuessCountForBuff = 0;
+    room.elementalPendingBuffVoteNight = null;
+    room.elementalBuffVotesTonight = {};
+    room.elementalBuffVotesResolvedNight = null;
+    room.elementalSelectedBuffId = null;
+    room.elementalSelectedBuffAppliesNight = null;
+    room.elementalBuffQuickMode = true;
 
     ctx.io.to(roomId).emit("phaseChanged", "dusk");
     ctx.io.to(roomId).emit("gameStarted");

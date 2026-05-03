@@ -6,7 +6,13 @@ import ConfirmModal from "../components/ConfirmModal";
 import GameRulesModal from "../components/GameRulesModal";
 import { DEFAULT_ROOM_GAME_RULES, type NightActionOrderRole, type Player, type RoomData } from "../context/RoomContext";
 import { useRoomContext } from "../context/RoomContext";
-import { ELEMENTAL_GROUP_ROLE, ELEMENTAL_ROLE_SET } from "../constants/elemental";
+import {
+  ELEMENTAL_BUFFS,
+  ELEMENTAL_COMBINED_LIGHT_DARK_EFFECT,
+  ELEMENTAL_EFFECT_GUIDE,
+  ELEMENTAL_GROUP_ROLE,
+  ELEMENTAL_ROLE_SET,
+} from "../constants/elemental";
 
 type NightActionRole = NightActionOrderRole;
 
@@ -40,6 +46,30 @@ function getAvailableNightActionRoles(selectedRoles?: string[]) {
   return [ELEMENTAL_GROUP_ROLE, ...NIGHT_ACTION_ROLE_ORDER].filter((role, index, arr) => arr.indexOf(role) === index && available.has(role));
 }
 
+function formatElementalBuffGuide() {
+  const byTier = new Map<number, string[]>();
+  for (const buff of ELEMENTAL_BUFFS) {
+    byTier.set(buff.tier, [...(byTier.get(buff.tier) || []), buff.label]);
+  }
+
+  return Array.from(byTier.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([tier, buffs]) => `Tier ${tier}\n${buffs.map((buff) => `- ${buff}`).join("\n")}`)
+    .join("\n\n");
+}
+
+function formatElementalEffectGuide() {
+  const lines = ELEMENTAL_EFFECT_GUIDE.map(
+    (item) => `${item.role}\n- Sói cắn chết: ${item.wolfBite}\n- Phe dân giết nhầm trong đêm: ${item.villagerMistake}`
+  );
+
+  lines.push(
+    `Ánh Sáng + Bóng Tối\n- Sói cắn chết: ${ELEMENTAL_COMBINED_LIGHT_DARK_EFFECT.wolfBite}\n- Phe dân giết nhầm trong đêm: ${ELEMENTAL_COMBINED_LIGHT_DARK_EFFECT.villagerMistake}`
+  );
+
+  return lines.join("\n\n");
+}
+
 
 export default function Room() {
   const { room, setRoom, setRole } = useRoomContext();
@@ -47,6 +77,7 @@ export default function Room() {
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [showCurrentRulesModal, setShowCurrentRulesModal] = useState(false);
+  const [elementalInfoModal, setElementalInfoModal] = useState<{ title: string; message: string } | null>(null);
   const [pendingRulesUpdate, setPendingRulesUpdate] = useState<RoomData["gameRules"] | null>(null);
   const [showRulesApplyDecisionModal, setShowRulesApplyDecisionModal] = useState(false);
   const [rulesRestartOverlay, setRulesRestartOverlay] = useState<{
@@ -499,12 +530,30 @@ export default function Room() {
         {/* left: players list */}
 
           {!amIHost && (
-            <div style={{ marginTop: 8 }}>
+            <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 8 }}>
               <button
                 onClick={() => setShowCurrentRulesModal(true)}
                 title="Xem luật hiện tại của phòng"
               >
                 Xem luật hiện tại
+              </button>
+              <button
+                onClick={() => setElementalInfoModal({
+                  title: "Buff nguyên tố theo tier",
+                  message: formatElementalBuffGuide(),
+                })}
+                title="Xem các buff nguyên tố có thể được chọn"
+              >
+                Xem buff nguyên tố
+              </button>
+              <button
+                onClick={() => setElementalInfoModal({
+                  title: "Hiệu ứng bất lợi của nguyên tố",
+                  message: formatElementalEffectGuide(),
+                })}
+                title="Xem hậu quả khi dân làng nguyên tố bị giết"
+              >
+                Xem hiệu ứng nguyên tố
               </button>
             </div>
           )}
@@ -624,6 +673,16 @@ export default function Room() {
             action?.();
           }}
           onCancel={() => setNoticeModal(null)}
+        />
+
+        <ConfirmModal
+          open={!!elementalInfoModal}
+          infoOnly
+          title={elementalInfoModal?.title || "Thông tin nguyên tố"}
+          message={elementalInfoModal?.message || ""}
+          closeText="Đóng"
+          onConfirm={() => setElementalInfoModal(null)}
+          onCancel={() => setElementalInfoModal(null)}
         />
 
         <GameRulesModal

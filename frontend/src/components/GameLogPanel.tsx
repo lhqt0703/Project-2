@@ -704,7 +704,12 @@ function LogEntryLine({
       return (
         <li style={lineStyle}>
           Buff nguyên tố được kích hoạt: <span style={{ fontWeight: 600 }}>{buffLabel}</span> (Tier {entry.tier})
-          {entry.randomTieBreak ? <span style={{ fontStyle: "italic", opacity: 0.75 }}> - được chọn ngẫu nhiên do hòa phiếu</span> : null}
+          {entry.randomTieBreak ? (
+            <span style={{ fontStyle: "italic", opacity: 0.75 }}>
+              {" "}- được chọn ngẫu nhiên do hòa phiếu
+              {entry.tiedBuffIds?.length ? ` (${entry.tiedBuffIds.map(getBuffLabel).join(", ")})` : ""}
+            </span>
+          ) : null}
         </li>
       );
     }

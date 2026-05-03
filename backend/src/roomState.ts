@@ -203,6 +203,14 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.witchHealTargetTonight = {};
   room.witchPoisonTargetTonight = {};
   room.spiritWolfPendingPoisonedWolfId = null;
+  room.elementalTargetTonight = {};
+  room.elementalCorrectGuessPlayerIdsTonight = [];
+  room.elementalCorrectGuessCountForBuff = 0;
+  room.elementalPendingBuffVoteNight = null;
+  room.elementalBuffVotesTonight = {};
+  room.elementalBuffVotesResolvedNight = null;
+  room.elementalSelectedBuffId = null;
+  room.elementalSelectedBuffAppliesNight = null;
 
   room.players = room.players.map((p) => ({ ...p, inGame: false }));
 }

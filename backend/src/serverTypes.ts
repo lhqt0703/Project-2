@@ -20,6 +20,7 @@ export interface RoomGameRules {
   trialInteractionSelectionLimit: number;
   nonWolfNightActionDurationSec: number;
   nightActionOrder: NightActionOrderRole[];
+  spiritWolfBecomeWolfEvenIfHealed: boolean;
 }
 
 export interface Room {
@@ -96,6 +97,7 @@ export interface Room {
   spiritWolfWolfAligned?: boolean;
   spiritWolfWolfAlignedPending?: boolean;
   spiritWolfPendingPoisonedWolfId?: string | null;
+  spiritWolfBittenThisNight?: boolean;
   elementalTargetTonight?: Record<string, string | null>;
   elementalCorrectGuessPlayerIdsTonight?: string[];
   elementalCorrectGuessCountForBuff?: number;
@@ -116,6 +118,7 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 10,
   nightActionOrder: ["Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
+  spiritWolfBecomeWolfEvenIfHealed: false,
 };
 
 DEFAULT_ROOM_GAME_RULES.nightActionOrder = [

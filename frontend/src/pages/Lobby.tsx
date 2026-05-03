@@ -39,7 +39,7 @@ export default function Lobby() {
     <div className="page-shell lobby-page" style={{ minHeight: "100vh", padding: 24, background: "radial-gradient(circle at top, rgba(255,190,92,0.18), transparent 30%), linear-gradient(180deg, #09111f, #050813)", color: "#f4f6fb" }}>
       <div style={{ maxWidth: 980, margin: "0 auto", display: "grid", gap: 18 }}>
         <div style={{ padding: 28, borderRadius: 24, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(10,14,26,0.78)", boxShadow: "0 24px 80px rgba(0,0,0,0.35)" }}>
-          <h1 style={{ margin: 0, fontSize: 40, letterSpacing: -0.03 }}>Phòng chờ</h1>
+          <h1 style={{ margin: 0, fontSize: 40, letterSpacing: -0.03 }}>Sảnh chờ</h1>
           <p style={{ margin: "10px 0 0", maxWidth: 760, lineHeight: 1.6, color: "rgba(244,246,251,0.75)" }}>
             Tạo phòng, thiết lập luật chơi trước khi bắt đầu, hoặc tham gia một phòng đã có sẵn bằng mã phòng.
           </p>

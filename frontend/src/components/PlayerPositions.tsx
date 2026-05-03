@@ -312,6 +312,7 @@ export default function PlayerPositions({
   const { room: contextRoom } = useRoomContext();
   const room: RoomLike | null = roomOverride ?? (contextRoom as RoomLike | null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [revealDisconnectedToAll, setRevealDisconnectedToAll] = useState<boolean>(false);
   const [dragging, setDragging] = useState<string | null>(null);
   const dragOffsetRef = useRef<{ dxPx: number; dyPx: number } | null>(null);
   const [swapSource, setSwapSource] = useState<string | null>(null);
@@ -417,6 +418,18 @@ export default function PlayerPositions({
     dragOffsetRef.current = { dxPx: pointerX - centerX, dyPx: pointerY - centerY };
     setDragging(playerId);
   };
+
+  useEffect(() => {
+    const handler = (payload: { show: boolean }) => {
+      setRevealDisconnectedToAll(!!payload.show);
+    };
+    socket.on("revealDisconnectedBadge", handler);
+    return () => {
+      socket.off("revealDisconnectedBadge", handler);
+    };
+  }, []);
+
+  const hasDisconnectedPlayers = room.players.some((p) => p.connected === false);
   
   // We need local state for smooth dragging
   const [localPositions, setLocalPositions] = useState<PlayerPosition[]>([]);
@@ -858,6 +871,19 @@ export default function PlayerPositions({
           </button>
         </div>
       )}
+      {isHost && hasDisconnectedPlayers && (
+        <div style={{ marginBottom: 8, textAlign: "center" }}>
+          <button
+            onClick={() => {
+              const next = !revealDisconnectedToAll;
+              socket.emit("hostRevealDisconnectedBadge", { roomId: room.id, show: next });
+              setRevealDisconnectedToAll(next);
+            }}
+          >
+            {revealDisconnectedToAll ? "Ẩn mất kết nối cho mọi người" : "Hiện mất kết nối cho mọi người"}
+          </button>
+        </div>
+      )}
       
       <div
         className="player-position-frame"
@@ -963,11 +989,9 @@ export default function PlayerPositions({
             ? `0 0 0 ${scalePx(7, 4)}px rgba(255,215,120,0.38), 0 0 ${scalePx(18, 9)}px ${scalePx(8, 4)}px rgba(255,215,120,0.22)`
             : "";
           const mergedBoxShadow = [boxShadow, dangerShadow, highlightShadow, activeRoleShadow, trialOrangeShadow, trialWhiteShadow, trialGreenShadow].filter(Boolean).join(", ");
-          const showDisconnectedByHostInRoom =
-            mode === "edit" &&
-            isHost &&
-            (!!room.phase || !!room.gameOver);
-          const showDisconnectedBadge = p.connected === false && (showDisconnectedByHostInRoom || !isDead);
+          // Only show disconnected badge to host by default. Host can broadcast visibility to all clients
+          const showDisconnectedBadge =
+            p.connected === false && (isHost || (revealDisconnectedToAll && !isDead));
           const showInGameBadge = mode === "edit" && p.inGame === true;
           const playerHp = room.sharedHeartsVisible ? room.playerHearts?.[pos.playerId] : undefined;
           const showHpBadge = room.sharedHeartsVisible && !isDead && typeof playerHp === "number";

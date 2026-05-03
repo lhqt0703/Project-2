@@ -45,6 +45,7 @@ export default function Game() {
   const [nightTurnNow, setNightTurnNow] = useState(Date.now());
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
+  const [hostDisconnected, setHostDisconnected] = useState(false);
   const [frozenRoomSnapshot, setFrozenRoomSnapshot] = useState<any | null>(null);
   const [rulesRestartOverlay, setRulesRestartOverlay] = useState<{
     message: string;
@@ -537,6 +538,7 @@ export default function Game() {
   useEffect(() => {
     // Khi host rời khi game đang diễn ra
     const handleHostDisconnected = () => {
+      setHostDisconnected(true);
       showNotice(
         "Thông báo",
         "Chủ phòng đã rời đi. Bạn có thể chờ chủ phòng quay lại hoặc thoát khỏi phòng."
@@ -551,13 +553,16 @@ export default function Game() {
 
   useEffect(() => {
     const handleErrorMessage = (msg: string) => {
-      if (msg) showNotice("Thông báo", msg);
+      if (msg) {
+        const onConfirm = msg.includes("Phòng không tồn tại") ? () => nav("/lobby") : undefined;
+        showNotice("Thông báo", msg, onConfirm);
+      }
     };
     socket.on("errorMessage", handleErrorMessage);
     return () => {
       socket.off("errorMessage", handleErrorMessage);
     };
-  }, [showNotice]);
+  }, [showNotice, nav]);
 
   useEffect(() => {
     if (!sync.gameEnded) return;
@@ -703,9 +708,17 @@ export default function Game() {
         </div>
       )}
 
-      {(isHost || !!sync.gameEnded) && (
+      {(isHost || !!sync.gameEnded || hostDisconnected) && (
         <div className="game-top-actions" style={{ marginTop: 12 }}>
-          <button onClick={handleBackToRoomClick}>Quay về phòng chờ</button>
+          {!hostDisconnected && (
+            <button onClick={handleBackToRoomClick}>Quay về phòng chờ</button>
+          )}
+          {hostDisconnected && (
+            <button onClick={() => {
+              setNoticeModal(null);
+              nav("/lobby");
+            }}>Quay về sảnh chờ</button>
+          )}
         </div>
       )}
 

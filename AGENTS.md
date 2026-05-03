@@ -1,1 +1,0 @@
-Không cần typecheck frontend quick

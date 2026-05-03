@@ -253,6 +253,7 @@ export default function Room() {
       setNoticeModal({
         title: "Thông báo",
         message: message || "Có lỗi xảy ra. Hãy thử lại.",
+        onConfirm: message?.includes("Phòng không tồn tại") ? () => nav("/lobby") : undefined,
       });
     };
 
@@ -260,7 +261,7 @@ export default function Room() {
     return () => {
       socket.off("errorMessage", handleErrorMessage);
     };
-  }, []);
+  }, [nav]);
 
   // Xử lý click chuột trái vào tên người chơi
   const handlePlayerLeftClick = (e: React.MouseEvent, player: Player) => {

@@ -973,6 +973,14 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     emitRolesRevealToSocket(roomId, clientId);
   });
 
+  socket.on("hostRevealDisconnectedBadge", ({ roomId, show }: { roomId: string; show: boolean }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+
+    ctx.io.to(roomId).emit("revealDisconnectedBadge", { show: !!show });
+  });
+
   socket.on("restartGame", ({ roomId }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -994,7 +1002,66 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     console.log(`[changePhase] Phòng ${roomId} chuyển sang phase '${phase}'`);
     ctx.io.to(roomId).emit("phaseChanged", phase);
 
-    if (phase === "night") {
+    if (phase === "day") {
+      // Process night kills and apply protections/heals
+      const dead = new Set(room.deadPlayers || []);
+      const spiritWolfId = getSpiritWolfId(room);
+      const rules = ensureRoomGameRules(room);
+
+      // Process killed players
+      if (room.killedTonight) {
+        const killedId = room.killedTonight;
+        const healTargets = Object.values(room.witchHealTargetTonight || {});
+        const wasHealed = healTargets.includes(killedId);
+        const isProtected = room.protectedTonight === killedId;
+
+        // Check if killed is spirit wolf
+        if (killedId === spiritWolfId) {
+          // If spirit wolf was cured or protected, it survives and stays as villager
+          // If not cured and not protected, mark for wolf alignment
+          if (!wasHealed && !isProtected) {
+            // Spirit wolf was bitten and not saved, will become wolf
+            room.spiritWolfWolfAlignedPending = true;
+          }
+          // Don't add spirit wolf to dead if it survives
+          if (!dead.has(killedId)) {
+            // Even if saved, spirit wolf doesn't die
+          }
+        } else if (!isProtected && !wasHealed) {
+          // Regular kill: add to dead if not healed or protected
+          if (!dead.has(killedId)) {
+            dead.add(killedId);
+            room.deadPlayers = room.deadPlayers || [];
+            room.deadPlayers.push(killedId);
+          }
+        }
+      }
+
+      // Process extra killed (bonus bite)
+      if (room.killedTonightExtra) {
+        const killedId = room.killedTonightExtra;
+        const healTargets = Object.values(room.witchHealTargetTonight || {});
+        const wasHealed = healTargets.includes(killedId);
+        const isProtected = room.protectedTonight === killedId;
+
+        // Check if killed is spirit wolf
+        if (killedId === spiritWolfId) {
+          // Same logic as above
+          if (!wasHealed && !isProtected) {
+            room.spiritWolfWolfAlignedPending = true;
+          }
+        } else if (!isProtected && !wasHealed) {
+          if (!dead.has(killedId)) {
+            dead.add(killedId);
+            room.deadPlayers = room.deadPlayers || [];
+            room.deadPlayers.push(killedId);
+          }
+        }
+      }
+
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      checkAndEndGame(roomId, "after_night_kills");
+    } else if (phase === "night") {
       if (room.dayTimer) {
         clearTimeout(room.dayTimer);
         room.dayTimer = null;
@@ -1037,6 +1104,9 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
         checkAndEndGame(roomId, "spirit_wolf_aligned_next_night");
         if (room.gameOver) return;
       }
+
+      // Reset spirit wolf bitten flag for next night
+      room.spiritWolfBittenThisNight = false;
 
       room.wolfBonusBiteThisNight = !!room.wolfExtraBiteNextNight;
       room.wolfExtraBiteNextNight = false;
@@ -1604,19 +1674,13 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     room.seerUsedTonight[clientId] = usedCount + 1;
 
     const roleOfTarget = room.playerRoles[targetId];
-    const isSpiritWolfMarkedWolf =
-      roleOfTarget === SPIRIT_WOLF_ROLE &&
-      room.spiritWolfChoseSave === true &&
-      getSpiritWolfId(room) === targetId;
 
     const isWolf =
       roleOfTarget === "Kẻ bị nguyền"
         ? true
-        : roleOfTarget === "Bán sói"
-          ? false
-          : isSpiritWolfMarkedWolf
-            ? true
-            : isWolfRole(roleOfTarget);
+        : isWolfAlignedPlayer(room, targetId)
+          ? true
+          : isWolfRole(roleOfTarget);
     ctx.io.to(clientId).emit("seerResult", { playerId: targetId, isWolf });
 
     appendLogEntry(room, { type: "seer_check", phase: "night", actorId: clientId, targetId, isWolf });
@@ -1756,8 +1820,17 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     room.spiritWolfDecisionMade = true;
     room.spiritWolfChoseSave = !!save;
-    if (save) {
+    room.spiritWolfBittenThisNight = true;
+    
+    // Check if spirit wolf should become wolf aligned
+    const rules = ensureRoomGameRules(room);
+    const shouldBecomeWolf = !save || rules.spiritWolfBecomeWolfEvenIfHealed;
+    
+    if (shouldBecomeWolf) {
       room.spiritWolfWolfAlignedPending = true;
+    }
+    
+    if (save) {
       room.witchPoisonTargetTonight = room.witchPoisonTargetTonight || {};
       for (const wid of getWitches(room)) {
         if (room.witchPoisonTargetTonight[wid] === pendingTargetId) {

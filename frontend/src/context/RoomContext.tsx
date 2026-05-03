@@ -36,6 +36,7 @@ export interface RoomGameRules {
   trialInteractionSelectionLimit: number;
   nonWolfNightActionDurationSec: number;
   nightActionOrder: NightActionOrderRole[];
+  spiritWolfBecomeWolfEvenIfHealed: boolean;
 }
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -47,6 +48,7 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 10,
   nightActionOrder: [ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
+  spiritWolfBecomeWolfEvenIfHealed: false,
 };
 
 export interface RoomData {

@@ -1,6 +1,6 @@
 import { type Room, type NightActionRole } from "./serverTypes.js";
 
-const WOLF_ROLES = new Set(["Sói", "Sói con", "Bán sói"]);
+const WOLF_ROLES = new Set(["Sói", "Sói con"]);
 const SPIRIT_WOLF_ROLE = "Linh sói";
 
 export function isWolfRole(role: string | undefined) {

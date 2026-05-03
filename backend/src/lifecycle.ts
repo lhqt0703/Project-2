@@ -224,6 +224,7 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.spiritWolfWolfAligned = false;
     room.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
+    room.spiritWolfBittenThisNight = false;
 
     ctx.io.to(roomId).emit("phaseChanged", "dusk");
     ctx.io.to(roomId).emit("gameStarted");
@@ -288,13 +289,11 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     }
 
     const bitingWolvesAlive = getAlivePlayerIds(room)
-      .filter((id) => isWolfRole(room.playerRoles?.[id]))
+      .filter((id) => isWolfAlignedPlayer(room, id))
       .length;
     const spiritWolfId = getSpiritWolfId(room);
     const villagersAlive = aliveIds.filter((id) => {
-      const role = room.playerRoles?.[id];
-      if (isWolfRole(role)) return false;
-      if (role === SPIRIT_WOLF_ROLE && room.spiritWolfChoseSave === true && spiritWolfId === id) return false;
+      if (isWolfAlignedPlayer(room, id)) return false;
       return true;
     }).length;
 

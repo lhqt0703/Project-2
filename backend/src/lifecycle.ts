@@ -3,6 +3,7 @@ import { ensureRoomGameRules, buildRoomGameRules, type Room } from "./serverType
 import { clearGameTimers, clearTrialState, ensureWitchState, getParticipantCount, getParticipantPlayers, getParticipantIds, getSpiritWolfId, getWitches, isWolfRole, resetNightTurnState, getAlivePlayerIds, isWolfAlignedPlayer } from "./roomState.js";
 import { RULES_RESTART_FADE_IN_MS, RULES_RESTART_FADE_OUT_MS, RULES_RESTART_HOLD_MS, RULES_RESTART_RESTART_AT_MS, TWO_HEARTS_NIGHT_LIMIT, initTwoHeartsForParticipants } from "./gameConfig.js";
 import { emitRolesRevealToSocket, toPublicRoom } from "./serverEmitters.js";
+import { dealRolesWithPendingAssignments } from "./roleAssignment.js";
 
 const SPIRIT_WOLF_ROLE = "Linh sói";
 
@@ -159,14 +160,25 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
   return shuffle(selected);
 }
 
-    const shuffled =
-  roles.length > participantCount
-    ? pickRolesForParticipants(roles, participantCount)
-    : shuffle(roles);
-    room.playerRoles = {};
     const participants = getParticipantPlayers(room);
-    participants.forEach((player, index) => {
-      const role: string = shuffled[index] || "";
+    const deal = dealRolesWithPendingAssignments(
+      participants,
+      roles,
+      room.pendingRoleAssignments,
+      (remainingRoles, remainingPlayerCount) =>
+        remainingRoles.length > remainingPlayerCount
+          ? pickRolesForParticipants(remainingRoles, remainingPlayerCount)
+          : shuffle(remainingRoles),
+    );
+
+    if (!deal) return false;
+
+    room.playerRoles = deal.playerRoles;
+    delete room.pendingRoleAssignments;
+    ctx.io.to(room.hostId).emit("pendingRoleAssignmentsUpdated", {});
+
+    participants.forEach((player) => {
+      const role: string = room.playerRoles![player.id] || "";
       room.playerRoles![player.id] = role;
       ctx.io.to(player.id).emit("yourRole", role);
     });
@@ -211,7 +223,7 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.dayLocked = {};
     room.dayDiscussionDeadline = null;
     room.dayDeadline = null;
-    room.hidePlayerRoleText = false;
+    room.hidePlayerRoleText = true;
     clearTrialState(room);
 
     if (rules.twoHeartsFirstTwoNights) {
@@ -236,8 +248,8 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.elementalBuffQuickMode = true;
 
     ctx.io.to(roomId).emit("phaseChanged", "dusk");
-    ctx.io.to(roomId).emit("gameStarted");
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    ctx.io.to(roomId).emit("gameStarted");
     emitRolesRevealToSocket(roomId, room.hostId);
 
     checkAndEndGame(roomId, "after_restart_game");

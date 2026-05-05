@@ -31,6 +31,7 @@ export interface Room {
   roles?: string[];
   rolesLocked?: boolean;
   lockedPlayerIds?: string[];
+  pendingRoleAssignments?: Record<string, string>;
   phase?: string;
   positions?: { playerId: string; x: number; y: number }[];
   positionEditors?: string[];

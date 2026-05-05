@@ -7,6 +7,7 @@ import { useRoomContext } from "../context/RoomContext";
 import PlayerPositions from "../components/PlayerPositions";
 import GameLogPanel from "../components/GameLogPanel";
 import ConfirmModal from "../components/ConfirmModal";
+import RoleCharacterPortrait from "../components/RoleCharacterPortrait";
 import type { GamePhase } from "./gameRoles/socketEvents";
 import type { NightActionRole } from "../context/RoomContext";
 import { useSeerRole } from "./gameRoles/useSeerRole";
@@ -316,10 +317,6 @@ export default function Game() {
       rolesByPlayerId={sync.revealedRolesByPlayerId || {}}
       playerNamesById={playerNamesById}
       onHighlightPlayer={handleLogHighlightPlayer}
-      onRequestRefresh={() => {
-        if (!roomId) return;
-        socket.emit("requestGameLog", { roomId });
-      }}
     />
   ) : null;
 
@@ -648,9 +645,10 @@ export default function Game() {
   const rulesRestartTextAnimationName = rulesRestartOverlay
     ? `gameRulesRestartText_${rulesRestartOverlay.key}`
     : "";
+  const shouldShowRolePortrait = !isHost && !!role && (!shouldHidePlayerRoleText || !!sync.gameEnded);
 
   return (
-    <div className="page-shell game-page" style={{ padding: "1.25rem", height: "100dvh", overflow: "hidden" }}>
+    <div className={`page-shell game-page${shouldShowRolePortrait ? " has-role-portrait" : ""}`} style={{ padding: "1.25rem"/* , height: "100dvh", overflow: "hidden" */ }}>
       {!room && (
         <p>
           Hình như có gì đó sai sai... Lẽ ra bạn không nên thấy được những dòng này
@@ -808,6 +806,7 @@ export default function Game() {
             trialWhitePlayerIds={dayVote.playerPositionsProps.trialWhitePlayerIds}
             trialGreenPlayerId={dayVote.playerPositionsProps.trialGreenPlayerId}
           />
+          <RoleCharacterPortrait role={shouldShowRolePortrait ? role : null} />
         </div>
       )}
 

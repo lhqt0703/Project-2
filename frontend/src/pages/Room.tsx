@@ -4,12 +4,11 @@ import { socket, clientId } from "../socket";
 import PlayerPositions from "../components/PlayerPositions";
 import ConfirmModal from "../components/ConfirmModal";
 import GameRulesModal from "../components/GameRulesModal";
+import ElementalEffectGuideModal from "../components/ElementalEffectGuideModal";
 import { DEFAULT_ROOM_GAME_RULES, type NightActionOrderRole, type Player, type RoomData } from "../context/RoomContext";
 import { useRoomContext } from "../context/RoomContext";
 import {
   ELEMENTAL_BUFFS,
-  ELEMENTAL_COMBINED_LIGHT_DARK_EFFECT,
-  ELEMENTAL_EFFECT_GUIDE,
   ELEMENTAL_GROUP_ROLE,
   ELEMENTAL_ROLE_SET,
 } from "../constants/elemental";
@@ -22,7 +21,7 @@ interface PlayerPosition {
   y: number;
 }
 
-const NIGHT_ACTION_ROLE_ORDER: NightActionRole[] = ["Sói", "Bảo vệ", "Phù thủy", "Thợ săn", "Tiên tri"];
+const NIGHT_ACTION_ROLE_ORDER: NightActionRole[] = ["Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"];
 const WOLF_ROLES = new Set(["Sói", "Sói con", "Bán sói"]);
 
 function getAvailableNightActionRoles(selectedRoles?: string[]) {
@@ -58,18 +57,13 @@ function formatElementalBuffGuide() {
     .join("\n\n");
 }
 
-function formatElementalEffectGuide() {
-  const lines = ELEMENTAL_EFFECT_GUIDE.map(
-    (item) => `${item.role}\n- Sói cắn chết: ${item.wolfBite}\n- Phe dân giết nhầm trong đêm: ${item.villagerMistake}`
-  );
-
-  lines.push(
-    `Ánh Sáng + Bóng Tối\n- Sói cắn chết: ${ELEMENTAL_COMBINED_LIGHT_DARK_EFFECT.wolfBite}\n- Phe dân giết nhầm trong đêm: ${ELEMENTAL_COMBINED_LIGHT_DARK_EFFECT.villagerMistake}`
-  );
-
-  return lines.join("\n\n");
+function countRoles(roles?: string[]) {
+  const counts = new Map<string, number>();
+  for (const role of roles || []) {
+    counts.set(role, (counts.get(role) || 0) + 1);
+  }
+  return counts;
 }
-
 
 export default function Room() {
   const { room, setRoom, setRole } = useRoomContext();
@@ -77,6 +71,7 @@ export default function Room() {
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [showCurrentRulesModal, setShowCurrentRulesModal] = useState(false);
+  const [showElementalEffectGuide, setShowElementalEffectGuide] = useState(false);
   const [elementalInfoModal, setElementalInfoModal] = useState<{ title: string; message: string } | null>(null);
   const [pendingRulesUpdate, setPendingRulesUpdate] = useState<RoomData["gameRules"] | null>(null);
   const [showRulesApplyDecisionModal, setShowRulesApplyDecisionModal] = useState(false);
@@ -93,6 +88,7 @@ export default function Room() {
     y: number;
     player: Player | null;
   } | null>(null);
+  const [roleAssignmentPlayer, setRoleAssignmentPlayer] = useState<Player | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const location = useLocation();
   const nav = useNavigate();
@@ -124,7 +120,16 @@ export default function Room() {
     // Khi server gửi cập nhật phòng
     const handleRoom = (data: RoomData) => {
       if (roomId && data?.id !== roomId) return;
-      setRoom(data);
+      setRoom((prev) => {
+        const shouldKeepHostOnlyAssignments = data.hostId === clientId;
+        const pendingRoleAssignments = shouldKeepHostOnlyAssignments
+          ? data.pendingRoleAssignments ?? prev?.pendingRoleAssignments
+          : undefined;
+
+        return pendingRoleAssignments
+          ? { ...data, pendingRoleAssignments }
+          : data;
+      });
     };
     const handlePositionsUpdated = (positions: PlayerPosition[]) => {
       setRoom(prev => prev ? { ...prev, positions } : prev);
@@ -134,11 +139,16 @@ export default function Room() {
       setRoom(prev => prev ? { ...prev, positionEditors: editors } : prev);
     };
 
+    const handlePendingRoleAssignmentsUpdated = (assignments: Record<string, string>) => {
+      setRoom(prev => prev ? { ...prev, pendingRoleAssignments: assignments || {} } : prev);
+    };
+
     socket.on("roomCreated", handleRoom);
     socket.on("roomJoined", handleRoom);
     socket.on("roomUpdated", handleRoom);
     socket.on("positionsUpdated", handlePositionsUpdated);
     socket.on("positionEditorsUpdated", handlePositionEditorsUpdated);
+    socket.on("pendingRoleAssignmentsUpdated", handlePendingRoleAssignmentsUpdated);
 
 
     // Lắng nghe hostChanged để cập nhật hostId realtime
@@ -154,6 +164,7 @@ export default function Room() {
       socket.off("hostChanged", handleHostChanged);
       socket.off("positionsUpdated", handlePositionsUpdated);
       socket.off("positionEditorsUpdated", handlePositionEditorsUpdated);
+      socket.off("pendingRoleAssignmentsUpdated", handlePendingRoleAssignmentsUpdated);
     };
   }, [roomId, setRoom]); // giữ listener ổn định và lọc đúng room theo URL
 
@@ -234,7 +245,7 @@ export default function Room() {
     return () => {
       socket.off("roleMismatch", handleMismatch);
     };
-  }, [room, roomId, nav]);
+  }, [room, roomId, nav, showNotice]);
 
   useEffect(() => {
     interface WolfRoleMismatchData {
@@ -277,7 +288,7 @@ export default function Room() {
     return () => {
       socket.off("hostDisconnected", handleHostDisconnected);
     };
-  }, []);
+  }, [showNotice]);
 
   useEffect(() => {
     const handleErrorMessage = (message: string) => {
@@ -292,7 +303,7 @@ export default function Room() {
     return () => {
       socket.off("errorMessage", handleErrorMessage);
     };
-  }, [nav]);
+  }, [nav, showNotice]);
 
   // Xử lý click chuột trái vào tên người chơi
   const handlePlayerLeftClick = (e: React.MouseEvent, player: Player) => {
@@ -355,6 +366,22 @@ export default function Room() {
     }
   };
 
+  const handleOpenRoleAssignment = () => {
+    if (!contextMenu?.player) return;
+    setRoleAssignmentPlayer(contextMenu.player);
+    setContextMenu(null);
+  };
+
+  const handleSetPendingRoleAssignment = (role: string | null) => {
+    if (!room || !roleAssignmentPlayer) return;
+    socket.emit("setPendingRoleAssignment", {
+      roomId: room.id,
+      targetId: roleAssignmentPlayer.id,
+      role,
+    });
+    setRoleAssignmentPlayer(null);
+  };
+
   const handlePlayerDoubleClickKick = (playerId: string) => {
     if (!room) return;
     if (!amIHost) return;
@@ -409,7 +436,7 @@ export default function Room() {
     return () => {
       socket.off("kicked", handleKicked);
     };
-  }, [nav]);
+  }, [nav, showNotice]);
 
   useEffect(() => {
     const handleRulesRestartCinematic = (payload: {
@@ -452,6 +479,29 @@ export default function Room() {
     () => getAvailableNightActionRoles(room?.roles),
     [room?.roles]
   );
+
+  const roleAssignmentOptions = useMemo(() => {
+    if (!room || !roleAssignmentPlayer) return [];
+
+    const roleCounts = countRoles(room.roles);
+    const usedByOthers = new Map<string, number>();
+    for (const [playerId, role] of Object.entries(room.pendingRoleAssignments || {})) {
+      if (playerId === roleAssignmentPlayer.id) continue;
+      usedByOthers.set(role, (usedByOthers.get(role) || 0) + 1);
+    }
+
+    return Array.from(roleCounts.entries()).map(([role, total]) => {
+      const remaining = total - (usedByOthers.get(role) || 0);
+      const selected = room.pendingRoleAssignments?.[roleAssignmentPlayer.id] === role;
+      return {
+        role,
+        total,
+        remaining,
+        selected,
+        disabled: remaining <= 0 && !selected,
+      };
+    });
+  }, [room, roleAssignmentPlayer]);
 
   if (!room) return <p>Đang tải phòng...</p>;
 
@@ -547,10 +597,7 @@ export default function Room() {
                 Xem buff nguyên tố
               </button>
               <button
-                onClick={() => setElementalInfoModal({
-                  title: "Hiệu ứng bất lợi của nguyên tố",
-                  message: formatElementalEffectGuide(),
-                })}
+                onClick={() => setShowElementalEffectGuide(true)}
                 title="Xem hậu quả khi dân làng nguyên tố bị giết"
               >
                 Xem hiệu ứng nguyên tố
@@ -599,15 +646,23 @@ export default function Room() {
         <div className="room-sidebar">
           <h3>Người chơi:</h3>
           <ul>
-            {room.players.map((p) => (
-              <li
-                key={p.id}
-                onClick={amIHost && p.id !== room.hostId ? (e) => handlePlayerLeftClick(e, p) : undefined}
-                style={{ cursor: amIHost && p.id !== room.hostId ? "pointer" : undefined }}
-              >
-                {p.name} {p.id === room.hostId && "(Chủ phòng)"} {room.positionEditors?.includes(p.id) && " • (Quyền sắp xếp)"}
-              </li>
-            ))}
+            {room.players.map((p) => {
+              const pendingRole = amIHost ? room.pendingRoleAssignments?.[p.id] : undefined;
+              return (
+                <li
+                  key={p.id}
+                  onClick={amIHost && p.id !== room.hostId ? (e) => handlePlayerLeftClick(e, p) : undefined}
+                  style={{ cursor: amIHost && p.id !== room.hostId ? "pointer" : undefined }}
+                >
+                  {p.name} {p.id === room.hostId && "(Chủ phòng)"} {room.positionEditors?.includes(p.id) && " • (Quyền sắp xếp)"}
+                  {pendingRole && (
+                    <span style={{ color: "var(--accent)", fontWeight: 700 }}>
+                      {" • "}(Phát trước: {pendingRole})
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
 
       </div>
@@ -626,7 +681,7 @@ export default function Room() {
               borderRadius: 6,
               boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
               zIndex: 1000,
-              minWidth: 120,
+              minWidth: 190,
             }}
           >
             <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleTransferHost}>
@@ -635,6 +690,9 @@ export default function Room() {
             <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer", color: "var(--danger)" }} onClick={handleKick}>
               Kick khỏi phòng
             </button>
+            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleOpenRoleAssignment}>
+              Phát trước role
+            </button>
             <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleGrantPosition}>
               Trao quyền sắp xếp vị trí
             </button>
@@ -642,6 +700,82 @@ export default function Room() {
               Thu lại quyền sắp xếp
             </button>
 
+          </div>
+        )}
+
+        {roleAssignmentPlayer && (
+          <div
+            onClick={() => setRoleAssignmentPlayer(null)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 9999,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 20,
+              background: "rgba(0,0,0,0.32)",
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "min(92vw, 520px)",
+                maxHeight: "82vh",
+                overflowY: "auto",
+                padding: 24,
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
+                boxShadow: "0 12px 32px rgba(0,0,0,0.25)",
+              }}
+            >
+              <h2 style={{ marginTop: 0 }}>Phát trước role cho {roleAssignmentPlayer.name}</h2>
+
+              {roleAssignmentOptions.length > 0 ? (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+                  {roleAssignmentOptions.map((option) => (
+                    <button
+                      key={option.role}
+                      onClick={() => handleSetPendingRoleAssignment(option.role)}
+                      disabled={option.disabled}
+                      title={option.disabled ? "Đã hết số lượng role này" : undefined}
+                      style={{
+                        minHeight: 46,
+                        borderColor: option.selected ? "var(--accent)" : "var(--border)",
+                        background: option.selected ? "var(--accent-surface)" : "var(--surface-muted)",
+                        cursor: option.disabled ? "not-allowed" : "pointer",
+                        opacity: option.disabled ? 0.5 : 1,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
+                      }}
+                    >
+                      <span>{option.role}</span>
+                      {option.total > 1 && (
+                        <span style={{ fontSize: 12, opacity: 0.72 }}>
+                          {option.remaining}/{option.total}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p>Chưa có vai trò để phát trước.</p>
+              )}
+
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 20 }}>
+                <button
+                  onClick={() => handleSetPendingRoleAssignment(null)}
+                  disabled={!room.pendingRoleAssignments?.[roleAssignmentPlayer.id]}
+                  style={{ opacity: room.pendingRoleAssignments?.[roleAssignmentPlayer.id] ? 1 : 0.55 }}
+                >
+                  Xóa can thiệp
+                </button>
+                <button onClick={() => setRoleAssignmentPlayer(null)}>Hủy</button>
+              </div>
+            </div>
           </div>
         )}
 
@@ -683,6 +817,12 @@ export default function Room() {
           closeText="Đóng"
           onConfirm={() => setElementalInfoModal(null)}
           onCancel={() => setElementalInfoModal(null)}
+        />
+
+        <ElementalEffectGuideModal
+          open={showElementalEffectGuide}
+          title="Hiệu ứng bất lợi của nguyên tố"
+          onClose={() => setShowElementalEffectGuide(false)}
         />
 
         <GameRulesModal

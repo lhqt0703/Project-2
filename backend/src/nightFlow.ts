@@ -45,7 +45,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     const selected = new Set<NightActionRole>();
 
     if (hasWolfRole) selected.add("Sói");
-    for (const role of ["Bảo vệ", "Phù thủy", "Thợ săn", "Tiên tri"] as NightActionRole[]) {
+    for (const role of ["Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"] as NightActionRole[]) {
       if (sourceRoles.includes(role)) selected.add(role);
     }
 
@@ -108,32 +108,41 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
   }
 
   function getEffectiveNightActionOrder(room: Room) {
-    const order = room.nightTurnOrderSnapshot ? [...room.nightTurnOrderSnapshot] : getBaseNightActionOrder(room);
-
-    if (shouldIncludeSpiritWolfTurn(room)) {
-      const spiritRole: NightActionRole = "Linh sói";
-      if (!order.includes(spiritRole)) {
-        const witchIndex = order.indexOf("Phù thủy");
-        if (witchIndex >= 0) {
-          order.splice(witchIndex + 1, 0, spiritRole);
-        } else {
-          order.push(spiritRole);
-        }
-      }
-    }
-
-    return order;
-  }
-
-  function insertSpiritWolfIntoNightOrder(room: Room) {
-    const spiritRole: NightActionRole = "Linh sói";
     if (!room.nightTurnOrderSnapshot) {
       room.nightTurnOrderSnapshot = getBaseNightActionOrder(room);
     }
-    if (room.nightTurnOrderSnapshot.includes(spiritRole)) return;
 
-    const insertAt = Math.min((room.nightTurnIndex ?? -1) + 1, room.nightTurnOrderSnapshot.length);
-    room.nightTurnOrderSnapshot.splice(insertAt, 0, spiritRole);
+    const order = room.nightTurnOrderSnapshot;
+
+    if (shouldIncludeSpiritWolfTurn(room)) {
+      ensureUpcomingSpiritWolfTurn(room, order);
+    }
+
+    return [...order];
+  }
+
+  function ensureUpcomingSpiritWolfTurn(room: Room, order: NightActionRole[]) {
+    const spiritRole: NightActionRole = "Linh sói";
+    const currentIndex = room.nightTurnIndex ?? -1;
+    const existingIndex = order.indexOf(spiritRole);
+    if (existingIndex >= 0 && existingIndex >= currentIndex) return;
+
+    const insertAt =
+      currentIndex >= 0
+        ? currentIndex + 1
+        : (() => {
+            const witchIndex = order.indexOf("Phù thủy");
+            return witchIndex >= 0 ? witchIndex + 1 : order.length;
+          })();
+
+    order.splice(Math.min(insertAt, order.length), 0, spiritRole);
+  }
+
+  function insertSpiritWolfIntoNightOrder(room: Room) {
+    if (!room.nightTurnOrderSnapshot) {
+      room.nightTurnOrderSnapshot = getBaseNightActionOrder(room);
+    }
+    ensureUpcomingSpiritWolfTurn(room, room.nightTurnOrderSnapshot);
   }
 
   function finishSpiritWolfTurn(roomId: string, timedOut: boolean) {
@@ -143,12 +152,10 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     if (room.nightTurnRole !== "Linh sói") return;
 
     const pendingTargetId = room.spiritWolfPendingPoisonedWolfId;
-    if (timedOut && !room.spiritWolfDecisionMade) {
+    if (timedOut && !room.spiritWolfDecisionMade && pendingTargetId) {
       room.spiritWolfDecisionMade = true;
       room.spiritWolfChoseSave = false;
-      if (pendingTargetId) {
-        appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", saved: false, timedOut: true });
-      }
+      appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", saved: false, timedOut: true });
       const swid = getSpiritWolfId(room);
       if (swid) {
         ctx.io.to(swid).emit("spiritWolfDecisionRecorded", { saved: false });
@@ -242,6 +249,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       room.nightTurnDeadline = null;
       room.nightTurnPaused = false;
       room.nightTurnRemainingMs = null;
+      room.hidePlayerRoleText = true;
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       return;
     }
@@ -254,6 +262,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     room.nightTurnPaused = false;
     room.nightTurnRemainingMs = durationMs;
     room.nightTurnDeadline = Date.now() + durationMs;
+    room.hidePlayerRoleText = false;
 
     if (role === "Sói") {
       startWolfPhase(roomId, {
@@ -299,6 +308,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     room.nightTurnOrderSnapshot = getBaseNightActionOrder(room);
 
     if (rules.allNightActionsSimultaneous) {
+      room.hidePlayerRoleText = false;
       startWolfPhase(roomId, { initializeVotes: true, durationMs: getWolfTurnDurationMs(room) });
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       emitElementalNightStateForAll(roomId);

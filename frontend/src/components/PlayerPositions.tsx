@@ -891,7 +891,7 @@ export default function PlayerPositions({
         style={{
           width: "100%",
           height: frameHeightPx,
-          background: "var(--surface-muted)",
+          background: "var(--player-position-frame-bg, var(--surface-muted))",
           borderRadius: 10,
           position: "relative",
           touchAction: "none",

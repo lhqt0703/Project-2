@@ -14,6 +14,7 @@
   --accent-surface: #ffe9c7;
 
   --danger: #d32f2f;
+  --player-position-frame-translucent-bg: rgba(242, 242, 242, 0.72);
 }
 
 html[data-theme="dark"] {
@@ -32,6 +33,7 @@ html[data-theme="dark"] {
   --accent-surface: #3a2a12;
 
   --danger: #ff6b6b;
+  --player-position-frame-translucent-bg: rgba(31, 36, 48, 0.68);
 }
 
 html, body {
@@ -91,6 +93,12 @@ input {
   min-height: 100vh;
 }
 
+.game-page.has-role-portrait {
+  position: relative;
+  isolation: isolate;
+  --player-position-frame-bg: var(--player-position-frame-translucent-bg);
+}
+
 .room-main-layout {
   display: flex;
   gap: 20px;
@@ -128,6 +136,222 @@ input {
   min-width: 138px;
 }
 
+.elemental-guide-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background:
+    radial-gradient(circle at 20% 12%, rgba(114, 84, 255, 0.2), transparent 32%),
+    radial-gradient(circle at 78% 0%, rgba(255, 185, 84, 0.16), transparent 30%),
+    rgba(3, 6, 16, 0.82);
+  backdrop-filter: blur(9px);
+}
+
+.elemental-guide-modal {
+  width: min(1120px, 100%);
+  max-height: min(92vh, 940px);
+  overflow-y: auto;
+  color: #f8fbff;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.015)) border-box,
+    linear-gradient(180deg, rgba(12, 17, 34, 0.98), rgba(5, 8, 19, 0.99)) padding-box;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.55);
+}
+
+.elemental-guide-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(90deg, rgba(255, 212, 132, 0.1), transparent 45%),
+    rgba(9, 13, 28, 0.92);
+  backdrop-filter: blur(12px);
+}
+
+.elemental-guide-kicker {
+  margin-bottom: 6px;
+  color: rgba(255, 226, 167, 0.78);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.elemental-guide-header h2 {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1.1;
+}
+
+.elemental-guide-close {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.elemental-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 16px;
+  padding: 24px;
+}
+
+.elemental-effect-card {
+  position: relative;
+  isolation: isolate;
+  min-height: 310px;
+  overflow: hidden;
+  padding: 1px;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, var(--element-primary), rgba(255, 255, 255, 0.08) 34%, var(--element-secondary)) border-box;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.38), 0 0 34px var(--element-glow);
+}
+
+.elemental-effect-card::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  border-radius: 7px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.025) 42%, rgba(0, 0, 0, 0.26)),
+    linear-gradient(180deg, rgba(16, 22, 42, 0.98), rgba(7, 10, 22, 0.98));
+}
+
+.elemental-card-glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(circle at 18% 8%, var(--element-glow), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 42%);
+  pointer-events: none;
+}
+
+.elemental-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 14px;
+}
+
+.elemental-card-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.elemental-card-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--element-primary), white 26%);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--element-primary), transparent 70%), rgba(255, 255, 255, 0.055));
+  color: var(--element-ink);
+  font-size: 24px;
+  font-weight: 900;
+  text-shadow: 0 0 18px var(--element-glow);
+  box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.07), 0 0 20px var(--element-glow);
+}
+
+.elemental-card-name {
+  color: #fff;
+  font-size: 21px;
+  font-weight: 900;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.elemental-card-subtitle {
+  margin-top: 4px;
+  color: rgba(238, 244, 255, 0.58);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.elemental-card-id {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--element-primary), transparent 34%);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--element-ink);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 0 18px var(--element-glow);
+}
+
+.elemental-effect-sections {
+  display: grid;
+  gap: 12px;
+  padding: 0 18px 18px;
+}
+
+.elemental-effect-section {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--element-primary), transparent 88%), rgba(255, 255, 255, 0.035)),
+    rgba(255, 255, 255, 0.035);
+}
+
+.elemental-effect-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--element-primary), transparent 82%);
+  color: var(--element-ink);
+  font-size: 17px;
+  font-weight: 900;
+  box-shadow: inset 0 0 14px rgba(255, 255, 255, 0.08);
+}
+
+.elemental-effect-section h3 {
+  margin: 0 0 6px;
+  color: var(--element-ink);
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.elemental-effect-section p {
+  margin: 0;
+  color: rgba(244, 248, 255, 0.76);
+  font-size: 14px;
+  line-height: 1.48;
+}
+
 .player-position-shell {
   position: relative;
   width: 100%;
@@ -137,6 +361,58 @@ input {
 
 .player-position-frame {
   width: 100%;
+}
+
+.role-character-portrait {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100vh;
+  margin: 0;
+  overflow: hidden;
+  isolation: isolate;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(1.015);
+  transition:
+    opacity 320ms ease,
+    transform 520ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.role-character-portrait.is-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.role-character-portrait.is-hiding {
+  opacity: 0;
+  transform: scale(1.008);
+  transition:
+    opacity 280ms ease,
+    transform 280ms ease;
+}
+
+.role-character-portrait.has-dark-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.role-character-portrait__image {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: auto;
+  height: 100vh;
+  max-width: none;
+  object-fit: contain;
+  object-position: center top;
+  transform: translateX(-50%);
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 @media (max-width: 768px) {
@@ -247,5 +523,42 @@ input {
   .theme-toggle {
     top: 8px;
     right: 8px;
+  }
+
+  .elemental-guide-backdrop {
+    padding: 10px;
+  }
+
+  .elemental-guide-header {
+    align-items: flex-start;
+    padding: 18px;
+  }
+
+  .elemental-guide-close {
+    padding: 8px 10px;
+  }
+
+  .elemental-guide-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .elemental-effect-card {
+    min-height: auto;
+  }
+
+  .elemental-card-header {
+    padding: 16px 14px 12px;
+  }
+
+  .elemental-effect-sections {
+    padding: 0 14px 14px;
+  }
+
+  .elemental-effect-section {
+    grid-template-columns: 30px 1fr;
+    gap: 10px;
+    padding: 12px;
   }
 }

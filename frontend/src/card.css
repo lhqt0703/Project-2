@@ -1,0 +1,56 @@
+body{
+    background: #000000;
+}
+.card {
+  position: relative;
+  width: 320px;
+  min-height: 260px;
+  border-radius: 36px;
+  background: #100602;
+  padding: 2px;
+  overflow: hidden;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 4px;
+  background: linear-gradient(
+    135deg,
+    #fff 0%,
+    #ff5a00 28%,
+    transparent 45%,
+    transparent 65%,
+    #ff5a00 82%,
+    #fff 100%
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+}
+
+.card::after {
+  content: "";
+  position: absolute;
+  inset: -45px;
+  background: radial-gradient(circle, #ff5a00 0%, transparent 55%);
+  filter: blur(35px);
+  opacity: 0.55;
+  z-index: -1;
+}
+
+.content {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  border-radius: 34px;
+  padding: 32px;
+  color: white;
+}

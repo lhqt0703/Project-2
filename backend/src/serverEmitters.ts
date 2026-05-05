@@ -40,6 +40,7 @@ export function toPublicRoom(room: Room) {
     trialDefenseTimer: _trialDefenseTimer,
     trialVerdictTimer: _trialVerdictTimer,
     nightTurnTimer: _nightTurnTimer,
+    pendingRoleAssignments: _pendingRoleAssignments,
     wolfDeadline: _wolfDeadline,
     killedTonight: _killedTonight,
     killedTonightExtra: _killedTonightExtra,

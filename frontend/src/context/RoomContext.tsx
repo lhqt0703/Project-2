@@ -61,6 +61,7 @@ export interface RoomData {
   roles?: string[];
   rolesLocked?: boolean;
   lockedPlayerIds?: string[];
+  pendingRoleAssignments?: Record<string, string>;
   positions?: PlayerPosition[];
   positionEditors?: string[];
   autoArrangeUsed?: boolean;

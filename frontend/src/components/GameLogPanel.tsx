@@ -25,7 +25,6 @@ interface GameLogPanelProps {
   rolesByPlayerId: RolesByPlayerId;
   playerNamesById: PlayerNamesById;
   onHighlightPlayer: (payload: HighlightPayload) => void;
-  onRequestRefresh?: () => void;
 }
 
 function getRoleName(playerId: string, rolesByPlayerId: RolesByPlayerId): string {
@@ -616,6 +615,34 @@ function LogEntryLine({
         </li>
       );
 
+    case "saved_by_guardian":
+      return (
+        <li style={lineStyle}>
+          Bảo vệ cứu được:{" "}
+          <RolesListSpan
+            playerIds={entry.targetIds || []}
+            rolesByPlayerId={rolesByPlayerId}
+            playerNamesById={playerNamesById}
+            onEliminationFocusChange={onEliminationFocusChange}
+            onHighlightPlayer={onHighlightPlayer}
+          />
+        </li>
+      );
+
+    case "saved_by_witch":
+      return (
+        <li style={lineStyle}>
+          Phù thủy cứu được:{" "}
+          <RolesListSpan
+            playerIds={entry.targetIds || []}
+            rolesByPlayerId={rolesByPlayerId}
+            playerNamesById={playerNamesById}
+            onEliminationFocusChange={onEliminationFocusChange}
+            onHighlightPlayer={onHighlightPlayer}
+          />
+        </li>
+      );
+
     case "eliminated":
       return (
         <li style={lineStyle}>
@@ -724,7 +751,6 @@ export default function GameLogPanel({
   rolesByPlayerId,
   playerNamesById,
   onHighlightPlayer,
-  onRequestRefresh,
 }: GameLogPanelProps) {
   const [eliminationFocus, setEliminationFocus] = useState<EliminationFocus | null>(null);
 
@@ -732,9 +758,6 @@ export default function GameLogPanel({
     <div style={{ marginTop: 12, padding: 12, border: "1px solid var(--border)", borderRadius: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
         <h3 style={{ margin: 0 }}>Nhật ký ván chơi</h3>
-        {onRequestRefresh && (
-          <button onClick={onRequestRefresh}>Refresh log</button>
-        )}
       </div>
 
       {(nights || []).map((n) => {

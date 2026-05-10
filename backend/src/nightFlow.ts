@@ -170,7 +170,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
   }
 
-  function startWolfPhase(roomId: string, opts?: { durationMs?: number; initializeVotes?: boolean }) {
+  function startWolfPhase(roomId: string, opts?: { durationMs?: number; initializeVotes?: boolean; useTimer?: boolean }) {
     const room = ctx.rooms[roomId];
     if (!room) return;
 
@@ -186,15 +186,17 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
         room.wolfVotes2![w.id] = null;
         room.wolfLocked![w.id] = false;
       });
+      room.wolfVoteResolvedTonight = false;
     } else {
       room.wolfVotes = room.wolfVotes || {};
       room.wolfVotes2 = room.wolfVotes2 || {};
       room.wolfLocked = room.wolfLocked || {};
     }
 
-    const durationMs = Math.max(0, Math.floor(opts?.durationMs ?? getWolfTurnDurationMs(room)));
+    const useTimer = opts?.useTimer !== false;
+    const durationMs = useTimer ? Math.max(0, Math.floor(opts?.durationMs ?? getWolfTurnDurationMs(room))) : null;
 
-    room.wolfDeadline = Date.now() + durationMs;
+    room.wolfDeadline = durationMs === null ? null : Date.now() + durationMs;
     ctx.io.to(`wolves_${roomId}`).emit("wolfPhaseStarted", {
       wolves: wolves.map((w) => w.id),
       activeWolves: getActiveWolves(room),
@@ -208,6 +210,10 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     if (room.wolfTimer) {
       clearTimeout(room.wolfTimer);
       room.wolfTimer = null;
+    }
+
+    if (durationMs === null) {
+      return;
     }
 
     if (durationMs <= 0) {
@@ -309,7 +315,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
 
     if (rules.allNightActionsSimultaneous) {
       room.hidePlayerRoleText = false;
-      startWolfPhase(roomId, { initializeVotes: true, durationMs: getWolfTurnDurationMs(room) });
+      startWolfPhase(roomId, { initializeVotes: true, useTimer: false });
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       emitElementalNightStateForAll(roomId);
       return;
@@ -327,11 +333,14 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
   function finishWolfVoting(roomId: string) {
     const room = ctx.rooms[roomId];
     if (!room) return;
+    if (room.wolfVoteResolvedTonight) return;
 
     if (room.wolfTimer) {
       clearTimeout(room.wolfTimer);
       room.wolfTimer = null;
     }
+    room.wolfDeadline = null;
+    room.wolfVoteResolvedTonight = true;
 
     const votes = room.wolfVotes || {};
     const votes2 = room.wolfVotes2 || {};
@@ -434,7 +443,9 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     }
     appendLogEntry(room, { type: "wolf_result", phase: "night", targetIds: wolfTargets, selectedByByTarget });
 
-    emitWitchPendingDeath(roomId);
+    if (room.phase === "night") {
+      emitWitchPendingDeath(roomId);
+    }
 
     const rules = ensureRoomGameRules(room);
     if (!rules.allNightActionsSimultaneous && room.phase === "night" && room.nightTurnRole === "Sói") {

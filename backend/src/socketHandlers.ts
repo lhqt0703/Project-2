@@ -20,7 +20,6 @@ import {
   getActiveDayVoters,
   getActiveWolves,
   getAlivePlayerIds,
-  getHunters,
   getParticipantCount,
   getParticipantIds,
   getParticipantPlayers,
@@ -92,6 +91,7 @@ import type { createLifecycleFlow } from "./lifecycle.js";
 import type { createDayFlow } from "./dayFlow.js";
 import type { createNightFlow } from "./nightFlow.js";
 import type { createElementalFlow } from "./elementalFlow.js";
+import { resolveHunterShotsForDeaths } from "./hunter.js";
 
 const SPIRIT_WOLF_ROLE = "Linh sói";
 
@@ -340,6 +340,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
     if (eliminatedIds.length) {
       appendLogEntry(room, { type: "eliminated", phase: "night", targetIds: eliminatedIds, causesByTarget });
+      resolveHunterShotsForDeaths(ctx, roomId, room, eliminatedIds, "night");
     } else if (hadDeathThreat || savedByGuardianIds.length || savedByWitchIds.length) {
       appendLogEntry(room, { type: "no_death", phase: "night" });
     }
@@ -772,6 +773,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.deadPlayers = room.deadPlayers || [];
     room.wolfExtraBiteNextNight = room.wolfExtraBiteNextNight || false;
     room.wolfBonusBiteThisNight = false;
+    room.hunterShotPlayerIds = [];
+    room.wolfVoteResolvedTonight = false;
     room.killedTonightExtra = null;
     room.dayVoters = [];
     room.dayVotes = {};
@@ -1089,12 +1092,14 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.lastProtected = null;
     room.seerUsedTonight = {};
     room.hunterTargetTonight = {};
+    room.hunterShotPlayerIds = [];
     room.killedTonight = null;
     room.killedTonightExtra = null;
     room.wolfVotes = {};
     room.wolfVotes2 = {};
     room.wolfLocked = {};
     room.wolfDeadline = null;
+    room.wolfVoteResolvedTonight = false;
     room.wolfExtraBiteNextNight = false;
     room.wolfBonusBiteThisNight = false;
     resetNightTurnState(room);
@@ -1197,6 +1202,8 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     room.deadPlayers = room.deadPlayers || [];
     room.wolfExtraBiteNextNight = room.wolfExtraBiteNextNight || false;
     room.wolfBonusBiteThisNight = false;
+    room.hunterShotPlayerIds = [];
+    room.wolfVoteResolvedTonight = false;
     room.killedTonightExtra = null;
     room.dayVoters = [];
     room.dayVotes = {};
@@ -1273,6 +1280,9 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
         finalizeElementalGuessNight(room);
       }
 
+      if (ensureRoomGameRules(room).allNightActionsSimultaneous && !room.wolfVoteResolvedTonight) {
+        finishWolfVoting(roomId);
+      }
       resolveNightDeaths(roomId, room);
 
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
@@ -1347,6 +1357,8 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       room.wolfVotes = {};
       room.wolfVotes2 = {};
       room.wolfLocked = {};
+      room.wolfDeadline = null;
+      room.wolfVoteResolvedTonight = false;
 
       // Determine which roles will take turns this night.
       const roles = getSelectedNightActionRoles(room);

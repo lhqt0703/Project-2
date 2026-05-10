@@ -1,23 +1,4 @@
 :root {
-  color-scheme: light;
-
-  --bg: #ffffff;
-  --text: #111111;
-
-  --surface: #ffffff;
-  --surface-muted: #f2f2f2;
-
-  --border: #cccccc;
-  --border-strong: #444444;
-
-  --accent: #ff9800;
-  --accent-surface: #ffe9c7;
-
-  --danger: #d32f2f;
-  --player-position-frame-translucent-bg: rgba(242, 242, 242, 0.72);
-}
-
-html[data-theme="dark"] {
   color-scheme: dark;
 
   --bg: #0f1115;
@@ -73,14 +54,6 @@ input {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
-}
-
-/* small, fixed toggle without affecting layout */
-.theme-toggle {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  z-index: 10000;
 }
 
 .page-shell {
@@ -518,11 +491,6 @@ input {
   .role-card {
     width: 100%;
     min-width: 0;
-  }
-
-  .theme-toggle {
-    top: 8px;
-    right: 8px;
   }
 
   .elemental-guide-backdrop {

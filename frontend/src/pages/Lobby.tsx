@@ -4,9 +4,11 @@ import { useState, useEffect } from "react";
 import GameRulesModal from "../components/GameRulesModal";
 import { DEFAULT_ROOM_GAME_RULES, type RoomGameRules } from "../context/RoomContext";
 
+const PLAYER_NAME_STORAGE_KEY = "werewolfPlayerName";
+
 export default function Lobby() {
   const nav = useNavigate();
-  const [name, setName] = useState("");
+  const [name, setName] = useState(() => localStorage.getItem(PLAYER_NAME_STORAGE_KEY) || "");
   const [roomIdInput, setRoomIdInput] = useState("");
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [gameRules, setGameRules] = useState<RoomGameRules>(DEFAULT_ROOM_GAME_RULES);
@@ -35,6 +37,16 @@ export default function Lobby() {
     socket.emit("joinRoom", { roomId: roomIdInput, name });
   };
 
+  const handleNameChange = (nextName: string) => {
+    setName(nextName);
+
+    if (nextName.trim()) {
+      localStorage.setItem(PLAYER_NAME_STORAGE_KEY, nextName);
+    } else {
+      localStorage.removeItem(PLAYER_NAME_STORAGE_KEY);
+    }
+  };
+
   return (
     <div className="page-shell lobby-page" style={{ minHeight: "100vh", padding: 24, background: "radial-gradient(circle at top, rgba(255,190,92,0.18), transparent 30%), linear-gradient(180deg, #09111f, #050813)", color: "#f4f6fb" }}>
       <div style={{ maxWidth: 980, margin: "0 auto", display: "grid", gap: 18 }}>
@@ -51,7 +63,8 @@ export default function Lobby() {
             <div style={{ display: "grid", gap: 12 }}>
               <input
                 placeholder="Tên của bạn"
-                onChange={(e) => setName(e.target.value)}
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
                 style={{ padding: "12px 14px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "inherit" }}
               />
               <input
@@ -70,7 +83,8 @@ export default function Lobby() {
             <div style={{ display: "grid", gap: 12 }}>
               <input
                 placeholder="Tên của bạn"
-                onChange={(e) => setName(e.target.value)}
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
                 style={{ padding: "12px 14px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "inherit" }}
               />
               <button onClick={() => setShowRulesModal(true)} style={{ padding: "12px 14px", cursor: "pointer" }}>

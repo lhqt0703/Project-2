@@ -20,6 +20,14 @@ import { useSpiritWolfRole } from "./gameRoles/useSpiritWolfRole";
 import { useDayVoteRole } from "./gameRoles/useDayVoteRole";
 import { useElementalRole } from "./gameRoles/useElementalRole";
 
+const WOLF_TEAM_REVEAL_ROLES = new Set(["Sói", "Sói con", "Bán sói"]);
+
+function doesRoleMatchNightTurn(roleName: string | null | undefined, nightTurnRole: NightActionRole | null) {
+  if (!roleName || !nightTurnRole) return false;
+  if (nightTurnRole === "Sói") return WOLF_TEAM_REVEAL_ROLES.has(roleName);
+  return roleName === nightTurnRole;
+}
+
 export default function Game() {
   const { role, room, setRoom } = useRoomContext();
   const nav = useNavigate();
@@ -319,6 +327,19 @@ export default function Game() {
       onHighlightPlayer={handleLogHighlightPlayer}
     />
   ) : null;
+
+  const roleBadgesForDisplay = useMemo(() => {
+    if (!canViewRoles) return undefined;
+
+    const allRoleBadges = sync.revealedRolesByPlayerId || {};
+    if (!isSequentialNight || sync.gameEnded) return allRoleBadges;
+
+    return Object.fromEntries(
+      Object.entries(allRoleBadges).filter(([, playerRole]) =>
+        doesRoleMatchNightTurn(playerRole, currentNightTurnRole)
+      )
+    );
+  }, [canViewRoles, currentNightTurnRole, isSequentialNight, sync.gameEnded, sync.revealedRolesByPlayerId]);
 
   const roomForRoles = useMemo(
     () =>
@@ -645,7 +666,59 @@ export default function Game() {
   const rulesRestartTextAnimationName = rulesRestartOverlay
     ? `gameRulesRestartText_${rulesRestartOverlay.key}`
     : "";
-  const shouldShowRolePortrait = !isHost && !!role && (!shouldHidePlayerRoleText || !!sync.gameEnded);
+  const isRoleRevealLimitedToCurrentNightTurn = isSequentialNight && !sync.gameEnded;
+  const shouldRevealMyRole =
+    !isHost &&
+    !!role &&
+    (!!sync.gameEnded ||
+      (isRoleRevealLimitedToCurrentNightTurn ? doesNightTurnMatchMyRole : !shouldHidePlayerRoleText));
+  const shouldShowRolePortrait = shouldRevealMyRole;
+  const visiblePlayerCount = (roomForDisplay?.players || []).filter((p: any) => p.id !== roomForDisplay?.hostId).length;
+  const playerFrameHeightPx = visiblePlayerCount > 18 ? 570 : 470;
+  const rolePortraitImagesForGame = useMemo(
+    () => import.meta.glob<string>("../assets/*.png", { eager: true, import: "default" }),
+    []
+  );
+  const normalizeRoleName = useCallback((value: string) => value.normalize("NFC").trim().toLowerCase(), []);
+  const getAssetNameFromPath = useCallback((path: string) => path.split("/").pop()?.replace(/\.png$/i, "") ?? "", []);
+  const rolePortraitByNameForGame = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(rolePortraitImagesForGame).map(([path, src]) => [normalizeRoleName(getAssetNameFromPath(path)), src])
+      ),
+    [getAssetNameFromPath, normalizeRoleName, rolePortraitImagesForGame]
+  );
+  const roleCompanionAssetMap = useMemo(
+    () =>
+      ({
+        [normalizeRoleName("Gió")]: "C Gió",
+        [normalizeRoleName("Sói")]: "C Sói",
+        [normalizeRoleName("Sói con")]: "C Sói Con",
+        [normalizeRoleName("Phù thủy")]: "C Phù Thủy",
+        [normalizeRoleName("Tiên tri")]: "C Tiên Tri",
+        [normalizeRoleName("Bán sói")]: "C Bán Sói",
+        [normalizeRoleName("Bảo vệ")]: "C Bảo Vệ",
+        [normalizeRoleName("Băng Giá")]: "C Băng",
+        [normalizeRoleName("Thợ săn")]: "C Thợ Săn",
+      }) as Record<string, string>,
+    [normalizeRoleName]
+  );
+  const normalizedRole = shouldShowRolePortrait && role ? normalizeRoleName(role) : null;
+  const companionAssetCandidates = useMemo(() => {
+    if (!normalizedRole || !role) return [] as string[];
+
+    const explicitCompanion = roleCompanionAssetMap[normalizedRole];
+    const inferredCompanion = `C ${role.normalize("NFC").trim()}`;
+    return Array.from(new Set([explicitCompanion, inferredCompanion].filter(Boolean) as string[]));
+  }, [normalizedRole, role, roleCompanionAssetMap]);
+
+  const companionRoleSrc = useMemo(() => {
+    for (const candidate of companionAssetCandidates) {
+      const src = rolePortraitByNameForGame[normalizeRoleName(candidate)] ?? null;
+      if (src) return src;
+    }
+    return null;
+  }, [companionAssetCandidates, normalizeRoleName, rolePortraitByNameForGame]);
 
   return (
     <div className={`page-shell game-page${shouldShowRolePortrait ? " has-role-portrait" : ""}`} style={{ padding: "1.25rem"/* , height: "100dvh", overflow: "hidden" */ }}>
@@ -656,7 +729,7 @@ export default function Game() {
       )}
 
       {!isHost && (
-        <h2>Vai trò của bạn là: {shouldHidePlayerRoleText ? "********" : role}</h2>
+        <h2>Vai trò của bạn là: {shouldRevealMyRole ? role : "********"}</h2>
       )}
       
       {sync.gameEnded && (
@@ -669,9 +742,9 @@ export default function Game() {
           {phase === "dusk" ? (
             <h1>🌥️ Hoàng hôn</h1>
           ) : phase === "day" ? (
-            <h1>🌞 Ban ngày – Thảo luận</h1>
+            <h1>🌞 Ban ngày</h1>
           ) : (
-            <h1>🌙 Ban đêm – Các vai trò thực hiện hành động</h1>
+            <h1>🌙 Ban đêm</h1>
           )}
         </>
       )}
@@ -779,8 +852,8 @@ export default function Game() {
             bulletAnimation={hunterBulletAnim}
             highlightPlayerId={highlightPlayerId}
             secondaryHighlightPlayerIds={secondaryHighlightPlayerIds}
-            showRoleBadges={canViewRoles}
-            roleBadges={canViewRoles ? sync.revealedRolesByPlayerId : undefined}
+            showRoleBadges={!!roleBadgesForDisplay}
+            roleBadges={roleBadgesForDisplay}
             activeNightRole={isHost && isSequentialNight ? currentNightTurnRole : null}
             selectedOutlinePlayerId={
               dayVote.playerPositionsProps.selectedOutlinePlayerId ||
@@ -806,7 +879,29 @@ export default function Game() {
             trialWhitePlayerIds={dayVote.playerPositionsProps.trialWhitePlayerIds}
             trialGreenPlayerId={dayVote.playerPositionsProps.trialGreenPlayerId}
           />
-          <RoleCharacterPortrait role={shouldShowRolePortrait ? role : null} />
+          <RoleCharacterPortrait
+            role={shouldShowRolePortrait ? role : null}
+          />
+          {companionRoleSrc && !(sync.gameEnded && canViewLog) && (
+            <img
+              className="role-companion-overlay"
+              src={companionRoleSrc}
+              alt=""
+              style={{
+                position: "fixed",
+                right: 0,
+                bottom: 0,
+                width: "auto",
+                height: `${playerFrameHeightPx}px`,
+                maxWidth: "min(50vw, 360px)",
+                objectFit: "contain",
+                objectPosition: "right bottom",
+                pointerEvents: "none",
+                userSelect: "none",
+                zIndex: 10,
+              }}
+            />
+          )}
         </div>
       )}
 

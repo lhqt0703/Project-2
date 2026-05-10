@@ -209,12 +209,14 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.lastProtected = null;
     room.seerUsedTonight = {};
     room.hunterTargetTonight = {};
+    room.hunterShotPlayerIds = [];
     room.killedTonight = null;
     room.killedTonightExtra = null;
     room.wolfVotes = {};
     room.wolfVotes2 = {};
     room.wolfLocked = {};
     room.wolfDeadline = null;
+    room.wolfVoteResolvedTonight = false;
     room.wolfExtraBiteNextNight = false;
     room.wolfBonusBiteThisNight = false;
     resetNightTurnState(room);

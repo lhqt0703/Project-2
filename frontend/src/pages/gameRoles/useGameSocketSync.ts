@@ -346,7 +346,7 @@ export function useGameSocketSync({
     const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline, maxTargets, resetVotes }: WolfPhaseStartedPayload) => {
       setWolves(wolves);
       setActiveWolves(activeWolves || []);
-      setWolfDeadline(deadline);
+      setWolfDeadline(typeof deadline === "number" ? deadline : null);
       setWolfMaxTargets(typeof maxTargets === "number" ? maxTargets : 1);
       if (resetVotes !== false) {
         setRoom((prev: any) => (prev ? { ...prev, wolfVotes: undefined } : prev));

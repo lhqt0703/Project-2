@@ -8,7 +8,7 @@ export type WolfLockedUpdatedPayload = Record<string, boolean>;
 export type WolfPhaseStartedPayload = {
   wolves: string[];
   activeWolves: string[];
-  deadline: number;
+  deadline: number | null;
   maxTargets?: number;
   resetVotes?: boolean;
 };

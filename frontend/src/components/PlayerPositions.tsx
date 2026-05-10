@@ -950,8 +950,8 @@ export default function PlayerPositions({
           let boxShadow = "";
           if (seerResult && seerResult.playerId === pos.playerId) {
             boxShadow = seerResult.isWolf
-              ? `0 0 0 ${scalePx(8, 4)}px #d00, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #222`
-              : `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #d00`;
+              ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #d00`
+              : `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #fff`;
           }
 
           const isWitchDanger =

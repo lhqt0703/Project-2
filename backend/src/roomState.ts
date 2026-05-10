@@ -182,6 +182,7 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.wolfVotes2 = {};
   room.wolfLocked = {};
   room.wolfDeadline = null;
+  room.wolfVoteResolvedTonight = false;
   room.killedTonight = null;
   room.killedTonightExtra = null;
   room.wolfBonusBiteThisNight = false;
@@ -200,6 +201,7 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.lastProtected = null;
   room.seerUsedTonight = {};
   room.hunterTargetTonight = {};
+  room.hunterShotPlayerIds = [];
   room.witchHealTargetTonight = {};
   room.witchPoisonTargetTonight = {};
   room.spiritWolfPendingPoisonedWolfId = null;

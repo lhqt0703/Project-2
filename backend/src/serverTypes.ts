@@ -44,6 +44,7 @@ export interface Room {
   wolfLocked?: Record<string, boolean>;
   wolfTimer?: NodeJS.Timeout | null;
   wolfDeadline?: number | null;
+  wolfVoteResolvedTonight?: boolean;
   killedTonight?: string | null;
   killedTonightExtra?: string | null;
   wolfExtraBiteNextNight?: boolean;
@@ -78,6 +79,7 @@ export interface Room {
   witchHealTargetTonight?: Record<string, string | null>;
   witchPoisonTargetTonight?: Record<string, string | null>;
   hunterTargetTonight?: Record<string, string | null>;
+  hunterShotPlayerIds?: string[];
   nightTurnIndex?: number;
   nightTurnRole?: NightActionRole | null;
   nightTurnDeadline?: number | null;

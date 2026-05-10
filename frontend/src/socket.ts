@@ -48,7 +48,7 @@ function getOrCreateClientId() {
 
 const backendUrl =
   import.meta.env.VITE_BACKEND_URL ??
-  `${window.location.protocol}//${window.location.hostname}:3001`;
+  `https://s.gummybears.io.vn`;
 
 export const clientId = getOrCreateClientId();
 

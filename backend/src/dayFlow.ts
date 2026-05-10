@@ -1,5 +1,6 @@
 import type { ServerContext } from "./serverContext.js";
 import { appendLogEntry, buildDayVoteBreakdown } from "./gameLog.js";
+import { resolveHunterShotsForDeaths } from "./hunter.js";
 import { emitGameLogToSocket, toPublicRoom } from "./serverEmitters.js";
 import { clearTrialState, getActiveDayVoters, getAlivePlayerIds, getTrialVoters } from "./roomState.js";
 import { ensureRoomGameRules, type Room } from "./serverTypes.js";
@@ -130,6 +131,8 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
           [targetId]: [{ type: "trial_verdict", voterIds: dieVoterIds }],
         },
       });
+
+      resolveHunterShotsForDeaths(ctx, roomId, room, [targetId], "day");
     }
 
     ctx.io.to(roomId).emit("trialVerdictFinished", {

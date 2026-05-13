@@ -1,6 +1,7 @@
 import { type Room, type NightActionRole } from "./serverTypes.js";
 
 const WOLF_ROLES = new Set(["Sói", "Sói con"]);
+const BAN_SOI_ROLE = "Bán sói";
 const SPIRIT_WOLF_ROLE = "Linh sói";
 
 export function isWolfRole(role: string | undefined) {
@@ -34,6 +35,16 @@ export function getSpiritWolfId(room: Room): string | null {
   return found;
 }
 
+export function getBanSoiId(room: Room): string | null {
+  const cached = room.banSoiId;
+  if (cached && room.players.find((p) => p.id === cached) && room.playerRoles?.[cached] === BAN_SOI_ROLE) {
+    return cached;
+  }
+  const found = room.players.find((p) => room.playerRoles?.[p.id] === BAN_SOI_ROLE)?.id || null;
+  room.banSoiId = found;
+  return found;
+}
+
 export function isSpiritWolfAlive(room: Room) {
   const id = getSpiritWolfId(room);
   if (!id) return false;
@@ -43,6 +54,7 @@ export function isSpiritWolfAlive(room: Room) {
 export function isWolfAlignedPlayer(room: Room, playerId: string) {
   const role = room.playerRoles?.[playerId];
   if (isWolfRole(role)) return true;
+  if (role === BAN_SOI_ROLE) return room.banSoiWolfAligned === true && getBanSoiId(room) === playerId;
   return room.spiritWolfWolfAligned === true && getSpiritWolfId(room) === playerId;
 }
 
@@ -53,7 +65,7 @@ export function isPlayerConnected(room: Room, playerId: string) {
 
 export function getActiveWolves(room: Room) {
   const allWolves = room.players
-    .filter((p) => isWolfRole(room.playerRoles?.[p.id]))
+    .filter((p) => isWolfAlignedPlayer(room, p.id))
     .map((p) => p.id);
   const dead = new Set(room.deadPlayers || []);
   return allWolves.filter((id) => !dead.has(id) && isPlayerConnected(room, id));

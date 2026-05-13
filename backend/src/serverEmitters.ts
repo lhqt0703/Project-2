@@ -7,7 +7,7 @@ import {
   type ElementalBuffId,
   type ElementalRole,
 } from "./elemental.js";
-import { WOLF_TURN_DURATION_MS } from "./gameConfig.js";
+import { clampWolfNightActionDurationSec } from "./gameConfig.js";
 import {
   ensureRoomGameRules,
   type RolesRevealPayload,
@@ -17,6 +17,7 @@ import {
   ensureWitchState,
   getSpiritWolfId,
   getWitches,
+  isWolfAlignedPlayer,
   isWolfRole,
 } from "./roomState.js";
 
@@ -91,7 +92,12 @@ function isElementalBuffActive(room: Room, buffId: ElementalBuffId) {
 }
 
 function getWolfTurnDurationMs(room: Room) {
-  const baseDurationMs = WOLF_TURN_DURATION_MS;
+  const rules = ensureRoomGameRules(room);
+  const baseDurationMs = Math.max(
+    0,
+    Math.floor(clampWolfNightActionDurationSec(rules.wolfNightActionDurationSec) * 1000),
+  );
+  if (baseDurationMs <= 0) return 0;
   if (isElementalBuffActive(room, "reduce-next-night-effect")) {
     return Math.max(1, Math.floor(baseDurationMs / 2));
   }
@@ -205,7 +211,7 @@ export function syncPrivateRoleStateForSocket(
 
   socket.emit("yourRole", role);
 
-  if (isWolfRole(role)) {
+  if (isWolfAlignedPlayer(room, playerId)) {
     socket.join(`wolves_${roomId}`);
   } else {
     socket.leave(`wolves_${roomId}`);

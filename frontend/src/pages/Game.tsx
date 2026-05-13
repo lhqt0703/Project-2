@@ -10,6 +10,7 @@ import ConfirmModal from "../components/ConfirmModal";
 import RoleCharacterPortrait from "../components/RoleCharacterPortrait";
 import type { GamePhase } from "./gameRoles/socketEvents";
 import type { NightActionRole } from "../context/RoomContext";
+import { ELEMENTAL_ROLE_SET } from "../constants/elemental";
 import { useSeerRole } from "./gameRoles/useSeerRole";
 import { useWolfRole } from "./gameRoles/useWolfRole";
 import { useGuardianRole } from "./gameRoles/useGuardianRole";
@@ -21,6 +22,16 @@ import { useDayVoteRole } from "./gameRoles/useDayVoteRole";
 import { useElementalRole } from "./gameRoles/useElementalRole";
 
 const WOLF_TEAM_REVEAL_ROLES = new Set(["Sói", "Sói con", "Bán sói"]);
+const NIGHT_ACTION_ROLE_SET = new Set([
+  "Sói",
+  "Sói con",
+  "Bán sói",
+  "Bảo vệ",
+  "Phù thủy",
+  "Linh sói",
+  "Thợ săn",
+  "Tiên tri",
+]);
 
 function doesRoleMatchNightTurn(roleName: string | null | undefined, nightTurnRole: NightActionRole | null) {
   if (!roleName || !nightTurnRole) return false;
@@ -47,6 +58,7 @@ export default function Game() {
   const isHost = !!room?.hostId && clientId === room.hostId;
   const shouldHidePlayerRoleText = !isHost && !!room?.hidePlayerRoleText;
   const allNightActionsSimultaneous = room?.gameRules?.allNightActionsSimultaneous === true;
+  const isBanSoiAligned = room?.banSoiWolfAligned === true;
   const currentNightTurnRole = (room?.nightTurnRole || null) as NightActionRole | null;
   const nightTurnPaused = !!room?.nightTurnPaused;
   const nightTurnDeadline = room?.nightTurnDeadline ?? null;
@@ -94,9 +106,42 @@ export default function Game() {
     return () => clearInterval(t);
   }, [allNightActionsSimultaneous, currentNightTurnRole, nightTurnDeadline, nightTurnPaused, phase]);
 
-  const isSequentialNight =
-    phase === "night" &&
-    !allNightActionsSimultaneous;
+  const isSimultaneousNight = phase === "night" && allNightActionsSimultaneous;
+
+  const witchBonusApplies = useMemo(() => {
+    const rules = room?.gameRules;
+    if (!rules) return false;
+    const nonWolf = rules.nonWolfNightActionDurationSec || 0;
+    const wolf = rules.wolfNightActionDurationSec || 0;
+    return nonWolf > 0 && wolf === nonWolf;
+  }, [room?.gameRules]);
+
+  const isWolfTeamRole = role === "Sói" || role === "Sói con" || (role === "Bán sói" && isBanSoiAligned);
+
+  const mySimultaneousDeadline = useMemo(() => {
+    if (!isSimultaneousNight) return null;
+    if (!role) return null;
+    if (role === "Bán sói" && !isBanSoiAligned) return null;
+    if (!NIGHT_ACTION_ROLE_SET.has(role) && !ELEMENTAL_ROLE_SET.has(role)) return null;
+
+    if (isWolfTeamRole) return sync.wolfDeadline ?? null;
+
+    const baseDeadline = nightTurnDeadline ?? null;
+    if (!baseDeadline) return null;
+    if (role === "Phù thủy" && witchBonusApplies) return baseDeadline + 10_000;
+    return baseDeadline;
+  }, [isBanSoiAligned, isSimultaneousNight, isWolfTeamRole, nightTurnDeadline, role, sync.wolfDeadline, witchBonusApplies]);
+
+  useEffect(() => {
+    if (!isSimultaneousNight) return;
+    if (!mySimultaneousDeadline) return;
+    if (nightTurnPaused) return;
+    setNightTurnNow(Date.now());
+    const t = setInterval(() => setNightTurnNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [isSimultaneousNight, mySimultaneousDeadline, nightTurnPaused]);
+
+  const isSequentialNight = phase === "night" && !allNightActionsSimultaneous;
 
   const nightTurnRemainingSec = useMemo(() => {
     if (!isSequentialNight || !currentNightTurnRole) return null;
@@ -108,7 +153,12 @@ export default function Game() {
     return Math.max(0, Math.ceil((nightTurnDeadline - nightTurnNow) / 1000));
   }, [currentNightTurnRole, isSequentialNight, nightTurnDeadline, nightTurnNow, nightTurnPaused, nightTurnRemainingMs]);
 
-  const isWolfTeamRole = role === "Sói" || role === "Sói con" || role === "Bán sói";
+  const simultaneousRemainingSec = useMemo(() => {
+    if (!isSimultaneousNight) return null;
+    if (!mySimultaneousDeadline) return null;
+    return Math.max(0, Math.ceil((mySimultaneousDeadline - nightTurnNow) / 1000));
+  }, [isSimultaneousNight, mySimultaneousDeadline, nightTurnNow]);
+
   const isSeerTurnActive = useMemo(() => {
     if (phase !== "night") return false;
     if (allNightActionsSimultaneous) return true;
@@ -118,8 +168,9 @@ export default function Game() {
   const doesNightTurnMatchMyRole = useMemo(() => {
     if (!currentNightTurnRole) return false;
     if (currentNightTurnRole === "Sói") return isWolfTeamRole;
+    if (role === "Bán sói" && !isBanSoiAligned) return false;
     return role === currentNightTurnRole;
-  }, [currentNightTurnRole, isWolfTeamRole, role]);
+  }, [currentNightTurnRole, isBanSoiAligned, isWolfTeamRole, role]);
 
   const hasSecretConditionalRolePrompt =
     !!sync.spiritWolfDecisionTargetId &&
@@ -335,11 +386,12 @@ export default function Game() {
     if (!isSequentialNight || sync.gameEnded) return allRoleBadges;
 
     return Object.fromEntries(
-      Object.entries(allRoleBadges).filter(([, playerRole]) =>
-        doesRoleMatchNightTurn(playerRole, currentNightTurnRole)
-      )
+      Object.entries(allRoleBadges).filter(([, playerRole]) => {
+        if (playerRole === "Bán sói" && !isBanSoiAligned) return false;
+        return doesRoleMatchNightTurn(playerRole, currentNightTurnRole);
+      })
     );
-  }, [canViewRoles, currentNightTurnRole, isSequentialNight, sync.gameEnded, sync.revealedRolesByPlayerId]);
+  }, [canViewRoles, currentNightTurnRole, isBanSoiAligned, isSequentialNight, sync.gameEnded, sync.revealedRolesByPlayerId]);
 
   const roomForRoles = useMemo(
     () =>
@@ -455,6 +507,7 @@ export default function Game() {
     role,
     room: roomForRoles,
     deadPlayers,
+    wolfBadgeRoles: sync.wolfBadgeRolesByPlayerId,
     wolfLocked: sync.wolfLocked,
     wolfDeadline: sync.wolfDeadline,
     wolves: sync.wolves,
@@ -792,6 +845,12 @@ export default function Game() {
         </div>
       )}
 
+      {isSimultaneousNight && !isHost && !isWolfTeamRole && role && mySimultaneousDeadline && simultaneousRemainingSec !== null && (
+        <div style={{ marginTop: 8, fontWeight: 700 }}>
+          Còn {simultaneousRemainingSec}s nữa để thực hiện chức năng
+        </div>
+      )}
+
       {(isHost || !!sync.gameEnded || hostDisconnected) && (
         <div className="game-top-actions" style={{ marginTop: "0.75rem" }}>
           {!hostDisconnected && (
@@ -875,6 +934,7 @@ export default function Game() {
             }
             showWolfBadges={wolf.playerPositionsProps.showWolfBadges}
             wolfBadgePlayerIds={wolf.playerPositionsProps.wolfBadgePlayerIds}
+            wolfBadgeRoles={wolf.playerPositionsProps.wolfBadgeRoles}
             trialOrangePlayerId={dayVote.playerPositionsProps.trialOrangePlayerId}
             trialWhitePlayerIds={dayVote.playerPositionsProps.trialWhitePlayerIds}
             trialGreenPlayerId={dayVote.playerPositionsProps.trialGreenPlayerId}

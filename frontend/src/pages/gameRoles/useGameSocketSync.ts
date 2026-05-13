@@ -66,6 +66,7 @@ export function useGameSocketSync({
   const [wolfDeadline, setWolfDeadline] = useState<number | null>(null);
   const [wolves, setWolves] = useState<string[]>([]);
   const [activeWolves, setActiveWolves] = useState<string[]>([]);
+  const [wolfBadgeRolesByPlayerId, setWolfBadgeRolesByPlayerId] = useState<Record<string, string>>({});
   const [wolfVotes2, setWolfVotes2] = useState<WolfVotes2UpdatedPayload | null>(null);
   const [wolfMaxTargets, setWolfMaxTargets] = useState<number>(1);
 
@@ -343,9 +344,10 @@ export function useGameSocketSync({
       setWolfLocked(locked);
     };
 
-    const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline, maxTargets, resetVotes }: WolfPhaseStartedPayload) => {
+    const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline, maxTargets, resetVotes, wolfBadgeRolesByPlayerId }: WolfPhaseStartedPayload) => {
       setWolves(wolves);
       setActiveWolves(activeWolves || []);
+      setWolfBadgeRolesByPlayerId(wolfBadgeRolesByPlayerId || {});
       setWolfDeadline(typeof deadline === "number" ? deadline : null);
       setWolfMaxTargets(typeof maxTargets === "number" ? maxTargets : 1);
       if (resetVotes !== false) {
@@ -595,6 +597,7 @@ export function useGameSocketSync({
       wolfDeadline,
       wolves,
       activeWolves,
+      wolfBadgeRolesByPlayerId,
       wolfVotes2,
       wolfMaxTargets,
       gameEnded,
@@ -642,6 +645,7 @@ export function useGameSocketSync({
       wolfDeadline,
       wolves,
       activeWolves,
+      wolfBadgeRolesByPlayerId,
       wolfVotes2,
       wolfMaxTargets,
       gameEnded,

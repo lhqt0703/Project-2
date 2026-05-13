@@ -19,8 +19,9 @@ export interface RoomGameRules {
   witchHideProtectedBiteWhenSequential: boolean;
   trialInteractionSelectionLimit: number;
   nonWolfNightActionDurationSec: number;
+  wolfNightActionDurationSec: number;
   nightActionOrder: NightActionOrderRole[];
-  spiritWolfBecomeWolfEvenIfHealed: boolean;
+  banSoiBecomeWolfEvenIfHealed: boolean;
 }
 
 export interface Room {
@@ -100,7 +101,9 @@ export interface Room {
   spiritWolfWolfAligned?: boolean;
   spiritWolfWolfAlignedPending?: boolean;
   spiritWolfPendingPoisonedWolfId?: string | null;
-  spiritWolfBittenThisNight?: boolean;
+  banSoiId?: string | null;
+  banSoiWolfAligned?: boolean;
+  banSoiWolfAlignedPending?: boolean;
   elementalTargetTonight?: Record<string, string | null>;
   elementalCorrectGuessPlayerIdsTonight?: string[];
   elementalCorrectGuessCountForBuff?: number;
@@ -119,9 +122,10 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   witchHideProtectedBiteInSimultaneous: false,
   witchHideProtectedBiteWhenSequential: true,
   trialInteractionSelectionLimit: 2,
-  nonWolfNightActionDurationSec: 10,
+  nonWolfNightActionDurationSec: 20,
+  wolfNightActionDurationSec: 20,
   nightActionOrder: ["Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
-  spiritWolfBecomeWolfEvenIfHealed: false,
+  banSoiBecomeWolfEvenIfHealed: false,
 };
 
 DEFAULT_ROOM_GAME_RULES.nightActionOrder = [
@@ -133,6 +137,10 @@ const NIGHT_ACTION_ROLE_SET = new Set<NightActionOrderRole>([
   ...DEFAULT_ROOM_GAME_RULES.nightActionOrder,
   ELEMENTAL_GROUP_ROLE,
 ]);
+
+const NIGHT_ACTION_DURATION_STEP_SEC = 10;
+const NIGHT_ACTION_DURATION_MIN_SEC = 0;
+const NIGHT_ACTION_DURATION_MAX_SEC = 60;
 
 function normalizeNightActionOrder(input: unknown): NightActionOrderRole[] {
   const raw = Array.isArray(input) ? input : [];
@@ -156,18 +164,39 @@ function clampTrialInteractionSelectionLimit(value: unknown) {
   return Math.max(0, Math.min(10, Math.floor(n)));
 }
 
-function clampNonWolfNightActionDurationSec(value: unknown) {
+function clampNightActionDurationSec(value: unknown, fallback: number) {
   const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n)) return DEFAULT_ROOM_GAME_RULES.nonWolfNightActionDurationSec;
-  return Math.max(10, Math.min(30, Math.floor(n)));
+  if (!Number.isFinite(n)) return fallback;
+  const rounded = Math.round(n / NIGHT_ACTION_DURATION_STEP_SEC) * NIGHT_ACTION_DURATION_STEP_SEC;
+  return Math.max(NIGHT_ACTION_DURATION_MIN_SEC, Math.min(NIGHT_ACTION_DURATION_MAX_SEC, rounded));
+}
+
+function clampNonWolfNightActionDurationSec(value: unknown) {
+  return clampNightActionDurationSec(value, DEFAULT_ROOM_GAME_RULES.nonWolfNightActionDurationSec);
+}
+
+function clampWolfNightActionDurationSec(value: unknown) {
+  return clampNightActionDurationSec(value, DEFAULT_ROOM_GAME_RULES.wolfNightActionDurationSec);
+}
+
+function normalizeNightActionDurations(input?: Partial<RoomGameRules> | null) {
+  const nonWolf = clampNonWolfNightActionDurationSec(input?.nonWolfNightActionDurationSec);
+  let wolf = clampWolfNightActionDurationSec(input?.wolfNightActionDurationSec);
+  if (wolf > nonWolf) wolf = nonWolf;
+  return {
+    nonWolfNightActionDurationSec: nonWolf,
+    wolfNightActionDurationSec: wolf,
+  };
 }
 
 export function buildRoomGameRules(input?: Partial<RoomGameRules> | null): RoomGameRules {
+  const normalizedDurations = normalizeNightActionDurations(input);
   return {
     ...DEFAULT_ROOM_GAME_RULES,
     ...(input || {}),
     trialInteractionSelectionLimit: clampTrialInteractionSelectionLimit(input?.trialInteractionSelectionLimit),
-    nonWolfNightActionDurationSec: clampNonWolfNightActionDurationSec(input?.nonWolfNightActionDurationSec),
+    nonWolfNightActionDurationSec: normalizedDurations.nonWolfNightActionDurationSec,
+    wolfNightActionDurationSec: normalizedDurations.wolfNightActionDurationSec,
     nightActionOrder: normalizeNightActionOrder(input?.nightActionOrder),
   };
 }
@@ -206,6 +235,7 @@ export type GameLogEntry =
   | { type: "hunter_mark"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "hunter_shot"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "spirit_wolf_decision"; phase: GameLogEntryPhase; saved: boolean; timedOut?: boolean }
+  | { type: "ban_soi_aligned"; phase: GameLogEntryPhase; targetId: string }
   | { type: "saved_by_guardian"; phase: GameLogEntryPhase; targetIds: string[] }
   | { type: "saved_by_witch"; phase: GameLogEntryPhase; targetIds: string[] }
   | { type: "eliminated"; phase: GameLogEntryPhase; targetIds: string[]; causesByTarget?: Record<string, EliminationCause[]> }

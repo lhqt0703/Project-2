@@ -238,7 +238,9 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.spiritWolfWolfAligned = false;
     room.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
-    room.spiritWolfBittenThisNight = false;
+    room.banSoiId = null;
+    room.banSoiWolfAligned = false;
+    room.banSoiWolfAlignedPending = false;
     room.elementalTargetTonight = {};
     room.elementalCorrectGuessPlayerIdsTonight = [];
     room.elementalCorrectGuessCountForBuff = 0;

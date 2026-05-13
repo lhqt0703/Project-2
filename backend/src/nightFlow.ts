@@ -7,13 +7,14 @@ import {
   getWolfTurnDurationMs,
   isElementalRoleTurn,
 } from "./serverEmitters.js";
-import { clampNonWolfNightActionDurationSec } from "./gameConfig.js";
+import { clampNonWolfNightActionDurationSec, clampWolfNightActionDurationSec } from "./gameConfig.js";
 import { ELEMENTAL_GROUP_ROLE } from "./elemental.js";
 import {
   clearNightTurnTimer,
   getActiveWolves,
   getSpiritWolfId,
   isSpiritWolfAlive,
+  isWolfAlignedPlayer,
   isWolfRole,
   resetNightTurnState,
 } from "./roomState.js";
@@ -27,12 +28,50 @@ type NightFlowDeps = {
 };
 
 export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
+  const WITCH_BONUS_MS = 10_000;
+
+  function getNonWolfTurnDurationMs(room: Room) {
+    const rules = ensureRoomGameRules(room);
+    const seconds = clampNonWolfNightActionDurationSec(rules.nonWolfNightActionDurationSec);
+    return Math.max(0, Math.floor(seconds * 1000));
+  }
+
+  function shouldGrantWitchBonus(room: Room) {
+    const rules = ensureRoomGameRules(room);
+    const nonWolfSec = clampNonWolfNightActionDurationSec(rules.nonWolfNightActionDurationSec);
+    const wolfSec = clampWolfNightActionDurationSec(rules.wolfNightActionDurationSec);
+    return nonWolfSec > 0 && wolfSec === nonWolfSec;
+  }
+
+  function getWitchTurnDurationMs(room: Room) {
+    const baseMs = getNonWolfTurnDurationMs(room);
+    if (baseMs <= 0) return baseMs;
+    return shouldGrantWitchBonus(room) ? baseMs + WITCH_BONUS_MS : baseMs;
+  }
+
+  function getSimultaneousRoleDeadline(room: Room, role: NightActionRole) {
+    const rules = ensureRoomGameRules(room);
+    if (!rules.allNightActionsSimultaneous) return null;
+    if (role === "Sói") return room.wolfDeadline ?? null;
+
+    const baseDeadline = room.nightTurnDeadline ?? null;
+    if (!baseDeadline) return null;
+    if (role === "Phù thủy" && shouldGrantWitchBonus(room)) return baseDeadline + WITCH_BONUS_MS;
+    return baseDeadline;
+  }
+
   function canPerformNightRoleAction(room: Room, playerId: string, expectedRole: NightActionRole) {
     if (room.phase !== "night") return false;
     if ((room.deadPlayers || []).includes(playerId)) return false;
 
+    if (expectedRole === "Sói" && room.wolfVoteResolvedTonight) return false;
+
     const rules = ensureRoomGameRules(room);
-    if (rules.allNightActionsSimultaneous) return true;
+    if (rules.allNightActionsSimultaneous) {
+      const deadline = getSimultaneousRoleDeadline(room, expectedRole);
+      if (deadline && Date.now() >= deadline) return false;
+      return true;
+    }
     return room.nightTurnRole === expectedRole;
   }
 
@@ -41,7 +80,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       ? Object.values(room.playerRoles)
       : room.roles || [];
 
-    const hasWolfRole = sourceRoles.some((role) => isWolfRole(role));
+    const hasWolfRole = room.players.some((p) => isWolfAlignedPlayer(room, p.id));
     const selected = new Set<NightActionRole>();
 
     if (hasWolfRole) selected.add("Sói");
@@ -175,7 +214,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     if (!room) return;
 
     const initializeVotes = opts?.initializeVotes !== false;
-    const wolves = room.players.filter((p) => isWolfRole(room.playerRoles?.[p.id]));
+    const wolves = room.players.filter((p) => isWolfAlignedPlayer(room, p.id));
 
     if (initializeVotes) {
       room.wolfVotes = {};
@@ -203,6 +242,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       deadline: room.wolfDeadline,
       maxTargets: room.wolfBonusBiteThisNight ? 2 : 1,
       resetVotes: initializeVotes,
+      wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
     });
 
     ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
@@ -228,8 +268,8 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
 
   function getRoleTurnDurationMs(room: Room, role: NightActionRole) {
     if (role === "Sói") return getWolfTurnDurationMs(room);
-    const rules = ensureRoomGameRules(room);
-    return clampNonWolfNightActionDurationSec(rules.nonWolfNightActionDurationSec) * 1000;
+    if (role === "Phù thủy") return getWitchTurnDurationMs(room);
+    return getNonWolfTurnDurationMs(room);
   }
 
   function startNightTurnByIndex(roomId: string, index: number, opts?: { durationMs?: number; initializeWolfVotes?: boolean }) {
@@ -315,7 +355,15 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
 
     if (rules.allNightActionsSimultaneous) {
       room.hidePlayerRoleText = false;
-      startWolfPhase(roomId, { initializeVotes: true, useTimer: false });
+      const nonWolfDurationMs = getNonWolfTurnDurationMs(room);
+      room.nightTurnDeadline = nonWolfDurationMs > 0 ? Date.now() + nonWolfDurationMs : null;
+
+      const wolfDurationMs = getWolfTurnDurationMs(room);
+      startWolfPhase(roomId, {
+        initializeVotes: true,
+        useTimer: wolfDurationMs > 0,
+        durationMs: wolfDurationMs,
+      });
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       emitElementalNightStateForAll(roomId);
       return;

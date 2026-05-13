@@ -8,6 +8,7 @@ type RoomLike = {
   players: Player[];
   wolfVotes?: Record<string, string | null>;
   deadPlayers?: string[];
+  banSoiWolfAligned?: boolean;
 };
 
 export function useWolfRole({
@@ -20,6 +21,7 @@ export function useWolfRole({
   wolfDeadline,
   wolves,
   activeWolves,
+  wolfBadgeRoles,
   wolfMaxTargets,
   allNightActionsSimultaneous,
   currentNightTurnRole,
@@ -34,6 +36,7 @@ export function useWolfRole({
   wolfDeadline: number | null;
   wolves: string[];
   activeWolves: string[];
+  wolfBadgeRoles?: Record<string, string>;
   wolfMaxTargets: number;
   allNightActionsSimultaneous: boolean;
   currentNightTurnRole: string | null;
@@ -44,7 +47,11 @@ export function useWolfRole({
   const [hasSubmittedLock, setHasSubmittedLock] = useState(false);
   const [now, setNow] = useState(Date.now());
 
-  const isWolfTeam = useMemo(() => role === "Sói" || role === "Sói con" || role === "Bán sói", [role]);
+  const isBanSoiAligned = room.banSoiWolfAligned === true;
+  const isWolfTeam = useMemo(() => {
+    if (role === "Sói" || role === "Sói con") return true;
+    return role === "Bán sói" && isBanSoiAligned;
+  }, [isBanSoiAligned, role]);
 
   useEffect(() => {
     // Chỉ tick khi cần hiển thị countdown cho sói
@@ -221,6 +228,7 @@ export function useWolfRole({
       wolfVoteVoterIds: activeWolvesAlive,
       showWolfBadges: isWolfTeam && isWolfTurnActive,
       wolfBadgePlayerIds: wolves,
+      wolfBadgeRoles: wolfBadgeRoles || {},
     },
   };
 }

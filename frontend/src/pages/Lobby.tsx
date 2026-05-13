@@ -68,6 +68,7 @@ export default function Lobby() {
                 style={{ padding: "12px 14px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "inherit" }}
               />
               <input
+                inputMode="numeric"
                 placeholder="Mã phòng"
                 onChange={(e) => setRoomIdInput(e.target.value)}
                 style={{ padding: "12px 14px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "inherit" }}

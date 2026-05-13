@@ -52,7 +52,7 @@ export const ELEMENTAL_EFFECT_GUIDE = [
   },
   {
     role: "Tự Nhiên",
-    wolfBite: "Bảo vệ mất khả năng bảo vệ",
+    wolfBite: "Bảo vệ không thể bảo vệ được ai nữa",
     villagerMistake: "Mỗi khi dùng kỹ năng, Bảo vệ phải chờ thêm 1 đêm mới có thể dùng kỹ năng tiếp",
   },
   {

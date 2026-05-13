@@ -10,6 +10,10 @@ export const RULES_RESTART_FADE_OUT_MS = 500;
 export const RULES_RESTART_TOTAL_MS = RULES_RESTART_FADE_IN_MS + RULES_RESTART_HOLD_MS + RULES_RESTART_FADE_OUT_MS;
 export const RULES_RESTART_RESTART_AT_MS = RULES_RESTART_FADE_IN_MS + RULES_RESTART_HOLD_MS;
 
+const NIGHT_ACTION_DURATION_STEP_SEC = 10;
+const NIGHT_ACTION_DURATION_MIN_SEC = 0;
+const NIGHT_ACTION_DURATION_MAX_SEC = 60;
+
 export function initTwoHeartsForParticipants(room: Room) {
   const hp: Record<string, number> = {};
   for (const p of getParticipantPlayers(room)) {
@@ -30,6 +34,14 @@ export function isTwoHeartsDamageMode(room: Room) {
 
 export function clampNonWolfNightActionDurationSec(value: unknown) {
   const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n)) return 10;
-  return Math.max(10, Math.min(30, Math.floor(n)));
+  if (!Number.isFinite(n)) return 20;
+  const rounded = Math.round(n / NIGHT_ACTION_DURATION_STEP_SEC) * NIGHT_ACTION_DURATION_STEP_SEC;
+  return Math.max(NIGHT_ACTION_DURATION_MIN_SEC, Math.min(NIGHT_ACTION_DURATION_MAX_SEC, rounded));
+}
+
+export function clampWolfNightActionDurationSec(value: unknown) {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return 20;
+  const rounded = Math.round(n / NIGHT_ACTION_DURATION_STEP_SEC) * NIGHT_ACTION_DURATION_STEP_SEC;
+  return Math.max(NIGHT_ACTION_DURATION_MIN_SEC, Math.min(NIGHT_ACTION_DURATION_MAX_SEC, rounded));
 }

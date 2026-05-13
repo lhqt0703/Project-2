@@ -278,6 +278,7 @@ export default function PlayerPositions({
   wolfVoteVoterIds,
   showWolfBadges,
   wolfBadgePlayerIds,
+  wolfBadgeRoles,
   showRoleBadges,
   roleBadges,
   activeNightRole,
@@ -302,6 +303,7 @@ export default function PlayerPositions({
   wolfVoteVoterIds?: string[];
   showWolfBadges?: boolean;
   wolfBadgePlayerIds?: string[];
+  wolfBadgeRoles?: Record<string, string>;
   showRoleBadges?: boolean;
   roleBadges?: Record<string, string>;
   activeNightRole?: string | null;
@@ -979,6 +981,7 @@ export default function PlayerPositions({
             (!!selectedOutlinePlayerId && selectedOutlinePlayerId === pos.playerId) ||
             (!!selectedOutlinePlayerIds && selectedOutlinePlayerIds.includes(pos.playerId));
           const showWolfBadge = !!showWolfBadges && (wolfBadgePlayerIds || []).includes(p.id);
+          const wolfBadgeText = showWolfBadge ? (wolfBadgeRoles?.[p.id] || "Sói") : undefined;
           const roleBadgeText = (showRoleBadges && roleBadges) ? roleBadges[p.id] : undefined;
           const isWolfBadgeRole = roleBadgeText === "Sói" || roleBadgeText === "Sói con" || roleBadgeText === "Bán sói";
           const isActiveNightRoleBadge = !!activeNightRole && (
@@ -1146,7 +1149,7 @@ export default function PlayerPositions({
                   fontWeight: "bold",
                   opacity: 0.9,
                 }}>
-                  Sói
+                  {wolfBadgeText || "Sói"}
                 </div>
               )}
 

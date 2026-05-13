@@ -11,6 +11,7 @@ export type WolfPhaseStartedPayload = {
   deadline: number | null;
   maxTargets?: number;
   resetVotes?: boolean;
+  wolfBadgeRolesByPlayerId?: Record<string, string>;
 };
 
 export type SeerResultPayload = { playerId: string; isWolf: boolean };
@@ -86,6 +87,7 @@ export type GameLogEntry =
   | { type: "hunter_mark"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "hunter_shot"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "spirit_wolf_decision"; phase: GameLogEntryPhase; saved: boolean; timedOut?: boolean }
+  | { type: "ban_soi_aligned"; phase: GameLogEntryPhase; targetId: string }
   | { type: "saved_by_guardian"; phase: GameLogEntryPhase; targetIds: string[] }
   | { type: "saved_by_witch"; phase: GameLogEntryPhase; targetIds: string[] }
   | { type: "eliminated"; phase: GameLogEntryPhase; targetIds: string[]; causesByTarget?: Record<string, EliminationCause[]> }

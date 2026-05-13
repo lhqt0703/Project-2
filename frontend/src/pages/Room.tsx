@@ -508,24 +508,23 @@ export default function Room() {
   const amIHost = clientId === room.hostId;
   const gameInProgress = !!room.phase && !room.gameOver;
   const hasInGamePlayers = room.players.some((p) => p.inGame === true);
-  const hasDisconnectedPlayers = room.players.some((p) => p.connected === false);
   const participantCount = room.players.filter((p) => p.id !== room.hostId).length;
   const selectedRoleCount = room.roles?.length ?? 0;
   const hasEnoughRolesToStart = selectedRoleCount >= participantCount && selectedRoleCount > 0;
-  const startGameDisabled = !gameInProgress && (hasInGamePlayers || hasDisconnectedPlayers);
-  const startGameTooltip = hasInGamePlayers && hasDisconnectedPlayers
-    ? "Trò chơi chỉ có thể bắt đầu ván mới khi tất cả người chơi đã quay về phòng chờ này và những người chơi đang mất kết nối cần kết nối lại hoặc bạn có thể xóa họ khỏi phòng"
-    : hasInGamePlayers
-      ? "Trò chơi chỉ có thể bắt đầu ván mới khi tất cả người chơi đã quay về phòng chờ này"
-      : hasDisconnectedPlayers
-        ? "Bạn cần chờ người chơi đang mất kết nối kết nối lại hoặc xóa họ khỏi phòng"
-        : undefined;
+  const startGameDisabled = !gameInProgress && hasInGamePlayers;
+  const startGameTooltip = hasInGamePlayers
+    ? "Trò chơi chỉ có thể bắt đầu ván mới khi tất cả người chơi đã quay về phòng chờ này"
+    : undefined;
 
   const startButtonText = gameInProgress ? "Trở lại trò chơi" : "Bắt đầu trò chơi";
+  const returnToCurrentGame = () => {
+    socket.emit("returnToCurrentGame", { roomId: room.id });
+    nav(`/game?roomId=${room.id}`);
+  };
+
   const startButtonAction = () => {
     if (gameInProgress) {
-      socket.emit("returnToCurrentGame", { roomId: room.id });
-      nav(`/game?roomId=${room.id}`);
+      returnToCurrentGame();
       return;
     }
     if (!hasEnoughRolesToStart) {
@@ -602,6 +601,14 @@ export default function Room() {
               >
                 Xem hiệu ứng nguyên tố
               </button>
+              {gameInProgress && (
+                <button
+                  onClick={returnToCurrentGame}
+                  title="Trở lại ván đang diễn ra"
+                >
+                  Trở lại trò chơi
+                </button>
+              )}
             </div>
           )}
 

@@ -12,6 +12,10 @@ const NIGHT_ACTION_ROLE_LABELS: Record<NightActionOrderRole, string> = {
   "Tiên tri": "Tiên tri",
 };
 
+const NIGHT_ACTION_DURATION_STEP_SEC = 10;
+const NIGHT_ACTION_DURATION_MIN_SEC = 0;
+const NIGHT_ACTION_DURATION_MAX_SEC = 60;
+
 function normalizeNightActionOrder(order: NightActionOrderRole[], availableRoles: NightActionOrderRole[]) {
   const availableSet = new Set(availableRoles);
   const seen = new Set<NightActionOrderRole>();
@@ -38,9 +42,31 @@ function clampSelectionLimit(value: number) {
   return Math.max(0, Math.min(10, Math.floor(value)));
 }
 
+function normalizeDurationSec(value: number, fallback: number) {
+  if (!Number.isFinite(value)) return fallback;
+  const rounded = Math.round(value / NIGHT_ACTION_DURATION_STEP_SEC) * NIGHT_ACTION_DURATION_STEP_SEC;
+  return Math.max(NIGHT_ACTION_DURATION_MIN_SEC, Math.min(NIGHT_ACTION_DURATION_MAX_SEC, rounded));
+}
+
 function clampNonWolfNightActionDurationSec(value: number) {
-  if (!Number.isFinite(value)) return DEFAULT_ROOM_GAME_RULES.nonWolfNightActionDurationSec;
-  return Math.max(10, Math.min(30, Math.floor(value)));
+  return normalizeDurationSec(value, DEFAULT_ROOM_GAME_RULES.nonWolfNightActionDurationSec);
+}
+
+function clampWolfNightActionDurationSec(value: number) {
+  return normalizeDurationSec(value, DEFAULT_ROOM_GAME_RULES.wolfNightActionDurationSec);
+}
+
+function normalizeNightActionDurations(input: {
+  nonWolfNightActionDurationSec: number;
+  wolfNightActionDurationSec: number;
+}) {
+  const nonWolf = clampNonWolfNightActionDurationSec(input.nonWolfNightActionDurationSec);
+  let wolf = clampWolfNightActionDurationSec(input.wolfNightActionDurationSec);
+  if (wolf > nonWolf) wolf = nonWolf;
+  return {
+    nonWolfNightActionDurationSec: nonWolf,
+    wolfNightActionDurationSec: wolf,
+  };
 }
 
 function rowStyle() {
@@ -86,6 +112,10 @@ export default function GameRulesModal({
 
   useEffect(() => {
     if (!open) return;
+    const normalizedDurations = normalizeNightActionDurations({
+      nonWolfNightActionDurationSec: initialRules.nonWolfNightActionDurationSec,
+      wolfNightActionDurationSec: initialRules.wolfNightActionDurationSec,
+    });
     setDraftRules({
       ...initialRules,
       nightActionOrder: normalizeNightActionOrder(
@@ -93,7 +123,8 @@ export default function GameRulesModal({
         selectableNightActionRoles
       ),
       trialInteractionSelectionLimit: clampSelectionLimit(initialRules.trialInteractionSelectionLimit),
-      nonWolfNightActionDurationSec: clampNonWolfNightActionDurationSec(initialRules.nonWolfNightActionDurationSec),
+      nonWolfNightActionDurationSec: normalizedDurations.nonWolfNightActionDurationSec,
+      wolfNightActionDurationSec: normalizedDurations.wolfNightActionDurationSec,
     });
   }, [initialRules, open, selectableNightActionRoles]);
 
@@ -108,6 +139,22 @@ export default function GameRulesModal({
   const updateRule = <K extends keyof RoomGameRules>(key: K, value: RoomGameRules[K]) => {
     if (readOnly) return;
     setDraftRules((prev) => ({ ...prev, [key]: value } as RoomGameRules));
+  };
+
+  const updateNightActionDuration = (
+    key: "nonWolfNightActionDurationSec" | "wolfNightActionDurationSec",
+    value: number
+  ) => {
+    if (readOnly) return;
+    setDraftRules((prev) => {
+      const normalizedDurations = normalizeNightActionDurations({
+        nonWolfNightActionDurationSec:
+          key === "nonWolfNightActionDurationSec" ? value : prev.nonWolfNightActionDurationSec,
+        wolfNightActionDurationSec:
+          key === "wolfNightActionDurationSec" ? value : prev.wolfNightActionDurationSec,
+      });
+      return { ...prev, ...normalizedDurations } as RoomGameRules;
+    });
   };
 
   const reorderRoles = (fromRole: NightActionOrderRole, toRole: NightActionOrderRole) => {
@@ -127,11 +174,16 @@ export default function GameRulesModal({
 
   const handleSave = () => {
     if (!onSave) return;
+    const normalizedDurations = normalizeNightActionDurations({
+      nonWolfNightActionDurationSec: draftRules.nonWolfNightActionDurationSec,
+      wolfNightActionDurationSec: draftRules.wolfNightActionDurationSec,
+    });
     onSave({
       ...draftRules,
       nightActionOrder: normalizeNightActionOrder(draftRules.nightActionOrder, selectableNightActionRoles),
       trialInteractionSelectionLimit: clampSelectionLimit(draftRules.trialInteractionSelectionLimit),
-      nonWolfNightActionDurationSec: clampNonWolfNightActionDurationSec(draftRules.nonWolfNightActionDurationSec),
+      nonWolfNightActionDurationSec: normalizedDurations.nonWolfNightActionDurationSec,
+      wolfNightActionDurationSec: normalizedDurations.wolfNightActionDurationSec,
     });
   };
 
@@ -212,6 +264,22 @@ export default function GameRulesModal({
               checked={draftRules.allNightActionsSimultaneous}
               disabled={readOnly}
               onChange={(e) => updateRule("allNightActionsSimultaneous", e.target.checked)}
+              style={{ width: 20, height: 20, marginTop: 2 }}
+            />
+          </label>
+
+          <label style={rowStyle()}>
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Bán sói sẽ vẫn bị biến thành phe sói cho dù cứu được vết cắn</div>
+              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                Mặc định tắt. Khi bật, nếu Bán sói bị cắn trong đêm và được cứu hoặc được Bảo vệ trúng, nó vẫn sẽ chuyển phe ở đêm kế tiếp.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={draftRules.banSoiBecomeWolfEvenIfHealed}
+              disabled={readOnly}
+              onChange={(e) => updateRule("banSoiBecomeWolfEvenIfHealed", e.target.checked)}
               style={{ width: 20, height: 20, marginTop: 2 }}
             />
           </label>
@@ -330,15 +398,36 @@ export default function GameRulesModal({
 
           <label style={rowStyle()}>
             <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian mỗi lượt cho vai trò đêm (trừ phe sói)</div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian hành động trong đêm của phe dân</div>
             </div>
             <input
               type="number"
-              min={10}
-              max={30}
+              min={0}
+              max={60}
+              step={10}
               value={draftRules.nonWolfNightActionDurationSec}
               disabled={readOnly}
-              onChange={(e) => updateRule("nonWolfNightActionDurationSec", clampNonWolfNightActionDurationSec(Number(e.target.value)))}
+              onChange={(e) =>
+                updateNightActionDuration("nonWolfNightActionDurationSec", Number(e.target.value))
+              }
+              style={{ width: 96, padding: "10px 12px" }}
+            />
+          </label>
+
+          <label style={rowStyle()}>
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian hành động trong đêm của phe sói</div>
+            </div>
+            <input
+              type="number"
+              min={0}
+              max={60}
+              step={10}
+              value={draftRules.wolfNightActionDurationSec}
+              disabled={readOnly}
+              onChange={(e) =>
+                updateNightActionDuration("wolfNightActionDurationSec", Number(e.target.value))
+              }
               style={{ width: 96, padding: "10px 12px" }}
             />
           </label>

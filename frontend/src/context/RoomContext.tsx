@@ -35,8 +35,9 @@ export interface RoomGameRules {
   witchHideProtectedBiteWhenSequential: boolean;
   trialInteractionSelectionLimit: number;
   nonWolfNightActionDurationSec: number;
+  wolfNightActionDurationSec: number;
   nightActionOrder: NightActionOrderRole[];
-  spiritWolfBecomeWolfEvenIfHealed: boolean;
+  banSoiBecomeWolfEvenIfHealed: boolean;
 }
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -46,9 +47,10 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   witchHideProtectedBiteInSimultaneous: false,
   witchHideProtectedBiteWhenSequential: true,
   trialInteractionSelectionLimit: 2,
-  nonWolfNightActionDurationSec: 10,
+  nonWolfNightActionDurationSec: 20,
+  wolfNightActionDurationSec: 20,
   nightActionOrder: [ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
-  spiritWolfBecomeWolfEvenIfHealed: false,
+  banSoiBecomeWolfEvenIfHealed: false,
 };
 
 export interface RoomData {
@@ -68,6 +70,8 @@ export interface RoomData {
   compactCircles?: boolean;
   gameRules?: RoomGameRules;
   pendingGameRules?: RoomGameRules;
+  banSoiWolfAligned?: boolean;
+  banSoiWolfAlignedPending?: boolean;
   sharedHeartsVisible?: boolean;
   playerHearts?: Record<string, number>;
   wolfVotes?: Record<string, string | null>;

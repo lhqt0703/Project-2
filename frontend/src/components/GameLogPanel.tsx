@@ -615,6 +615,13 @@ function LogEntryLine({
         </li>
       );
 
+    case "ban_soi_aligned":
+      return (
+        <li style={lineStyle}>
+          Bán sói chuyển phe: <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+        </li>
+      );
+
     case "saved_by_guardian":
       return (
         <li style={lineStyle}>

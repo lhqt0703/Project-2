@@ -499,6 +499,8 @@ export default function Game() {
     allNightActionsSimultaneous,
     currentNightTurnRole,
     nightTurnPaused,
+    nightActionDeadline: mySimultaneousDeadline,
+    nightActionNow: nightTurnNow,
     maxChecksTonight: seerMaxChecksTonight,
   });
   const wolf = useWolfRole({
@@ -527,6 +529,8 @@ export default function Game() {
     allNightActionsSimultaneous,
     currentNightTurnRole,
     nightTurnPaused,
+    nightActionDeadline: mySimultaneousDeadline,
+    nightActionNow: nightTurnNow,
   });
 
   const witch = useWitchRole({
@@ -540,6 +544,8 @@ export default function Game() {
     allNightActionsSimultaneous,
     currentNightTurnRole,
     nightTurnPaused,
+    nightActionDeadline: mySimultaneousDeadline,
+    nightActionNow: nightTurnNow,
   });
 
   const hunter = useHunterRole({
@@ -552,6 +558,8 @@ export default function Game() {
     allNightActionsSimultaneous,
     currentNightTurnRole,
     nightTurnPaused,
+    nightActionDeadline: mySimultaneousDeadline,
+    nightActionNow: nightTurnNow,
   });
 
   const spiritWolf = useSpiritWolfRole({
@@ -564,6 +572,8 @@ export default function Game() {
     allNightActionsSimultaneous,
     currentNightTurnRole,
     nightTurnPaused,
+    nightActionDeadline: mySimultaneousDeadline,
+    nightActionNow: nightTurnNow,
   });
 
   const elemental = useElementalRole({
@@ -579,6 +589,8 @@ export default function Game() {
     availableBuffTier: sync.elementalBuffVoteState.availableBuffTier || 0,
     allNightActionsSimultaneous,
     currentNightTurnRole,
+    nightActionDeadline: mySimultaneousDeadline,
+    nightActionNow: nightTurnNow,
   });
 
 

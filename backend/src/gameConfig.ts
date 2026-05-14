@@ -32,6 +32,12 @@ export function isTwoHeartsDamageMode(room: Room) {
   );
 }
 
+export function getTwoHeartsWolfDamage(room: Room) {
+  if (!isTwoHeartsDamageMode(room)) return 0;
+  const nightCount = room.nightCount || 0;
+  return nightCount >= TWO_HEARTS_NIGHT_LIMIT ? 2 : 1;
+}
+
 export function clampNonWolfNightActionDurationSec(value: unknown) {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return 20;

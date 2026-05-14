@@ -19,6 +19,8 @@ export function useSpiritWolfRole({
   allNightActionsSimultaneous,
   currentNightTurnRole,
   nightTurnPaused: _nightTurnPaused,
+  nightActionDeadline,
+  nightActionNow,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -29,6 +31,8 @@ export function useSpiritWolfRole({
   allNightActionsSimultaneous: boolean;
   currentNightTurnRole: string | null;
   nightTurnPaused: boolean;
+  nightActionDeadline: number | null;
+  nightActionNow: number;
 }) {
   const canDecide = useMemo(() => {
     if (!roomId) return false;
@@ -37,9 +41,10 @@ export function useSpiritWolfRole({
     if (!clientId) return false;
     if (deadPlayers.includes(clientId)) return false;
     if (!decisionTargetId) return false;
+    if (allNightActionsSimultaneous && nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
     if (!allNightActionsSimultaneous && currentNightTurnRole !== "Linh sói") return false;
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, decisionTargetId, phase, role, roomId]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, decisionTargetId, nightActionDeadline, nightActionNow, phase, role, roomId]);
 
   const targetName = useMemo(() => {
     if (!decisionTargetId) return "người này";
@@ -48,10 +53,11 @@ export function useSpiritWolfRole({
 
   const decide = useCallback(
     (save: boolean) => {
+      if (!canDecide) return;
       if (!roomId || !decisionTargetId) return;
       socket.emit("spiritWolfDecide", { roomId, save });
     },
-    [decisionTargetId, roomId]
+    [canDecide, decisionTargetId, roomId]
   );
 
   const modal = (

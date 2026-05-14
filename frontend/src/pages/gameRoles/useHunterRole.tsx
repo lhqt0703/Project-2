@@ -13,6 +13,8 @@ export function useHunterRole({
   allNightActionsSimultaneous,
   currentNightTurnRole,
   nightTurnPaused: _nightTurnPaused,
+  nightActionDeadline,
+  nightActionNow,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -23,6 +25,8 @@ export function useHunterRole({
   allNightActionsSimultaneous: boolean;
   currentNightTurnRole: string | null;
   nightTurnPaused: boolean;
+  nightActionDeadline: number | null;
+  nightActionNow: number;
 }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -66,11 +70,12 @@ export function useHunterRole({
     if (phase !== "night") return false;
     if (role !== "Thợ săn") return false;
     if (clientId && deadPlayers.includes(clientId)) return false;
+    if (allNightActionsSimultaneous && nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
     if (!allNightActionsSimultaneous) {
       if (currentNightTurnRole !== "Thợ săn") return false;
     }
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, phase, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, nightActionDeadline, nightActionNow, phase, role]);
 
   const isHunterTurnActive = useMemo(() => {
     if (phase !== "night") return false;
@@ -96,12 +101,13 @@ export function useHunterRole({
   );
 
   const confirm = useCallback(() => {
+    if (!canAct) return;
     if (!roomId || !selectedPlayerId) return;
     // lock ngay khi đã bấm xác nhận
     setLockedTargetId(selectedPlayerId);
     setShowConfirm(false);
     socket.emit("hunterChooseTarget", { roomId, targetId: selectedPlayerId });
-  }, [roomId, selectedPlayerId]);
+  }, [canAct, roomId, selectedPlayerId]);
 
   const cancel = useCallback(() => {
     setShowConfirm(false);

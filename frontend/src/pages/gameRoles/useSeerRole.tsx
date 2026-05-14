@@ -13,6 +13,8 @@ export function useSeerRole({
   allNightActionsSimultaneous,
   currentNightTurnRole,
   nightTurnPaused: _nightTurnPaused,
+  nightActionDeadline,
+  nightActionNow,
   maxChecksTonight,
 }: {
   roomId: string | null;
@@ -23,6 +25,8 @@ export function useSeerRole({
   allNightActionsSimultaneous: boolean;
   currentNightTurnRole: string | null;
   nightTurnPaused: boolean;
+  nightActionDeadline: number | null;
+  nightActionNow: number;
   maxChecksTonight?: number;
 }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -55,11 +59,12 @@ export function useSeerRole({
     const max = maxChecksTonight ?? 1;
     if (checksUsed >= max) return false;
     if (clientId && deadPlayers.includes(clientId)) return false;
+    if (allNightActionsSimultaneous && nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
     if (!allNightActionsSimultaneous) {
       if (currentNightTurnRole !== "Tiên tri") return false;
     }
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, maxChecksTonight, phase, role, checksUsed]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, maxChecksTonight, nightActionDeadline, nightActionNow, phase, role, checksUsed]);
 
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;
@@ -71,10 +76,11 @@ export function useSeerRole({
   }, [canAct]);
 
   const confirm = useCallback(() => {
+    if (!canAct) return;
     if (!roomId || !selectedPlayerId) return;
 
     socket.emit("seerCheck", { roomId, targetId: selectedPlayerId });
-  }, [roomId, selectedPlayerId]);
+  }, [canAct, roomId, selectedPlayerId]);
 
   const resetOnPhaseChange = useCallback((_nextPhase: GamePhase) => {
     setSelectedPlayerId(null);

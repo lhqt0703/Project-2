@@ -245,6 +245,9 @@ export default function GameRulesModal({
           <label style={rowStyle()}>
             <div>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả nhân vật sẽ có 2 máu trong 2 đêm đầu</div>
+              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                Đêm 1 bị sói cắn sẽ mất 1 máu. Đêm 2 bị sói cắn sẽ mất 2 máu và chết ngay cả khi đã mất 1 máu ở đêm 1.
+              </div>
             </div>
             <input
               type="checkbox"

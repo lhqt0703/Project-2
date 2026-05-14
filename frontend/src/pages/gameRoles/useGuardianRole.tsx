@@ -13,6 +13,8 @@ export function useGuardianRole({
   allNightActionsSimultaneous,
   currentNightTurnRole,
   nightTurnPaused: _nightTurnPaused,
+  nightActionDeadline,
+  nightActionNow,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -23,6 +25,8 @@ export function useGuardianRole({
   allNightActionsSimultaneous: boolean;
   currentNightTurnRole: string | null;
   nightTurnPaused: boolean;
+  nightActionDeadline: number | null;
+  nightActionNow: number;
 }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -64,11 +68,12 @@ export function useGuardianRole({
     if (phase !== "night") return false;
     if (role !== "Bảo vệ") return false;
     if (clientId && deadPlayers.includes(clientId)) return false;
+    if (allNightActionsSimultaneous && nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
     if (!allNightActionsSimultaneous) {
       if (currentNightTurnRole !== "Bảo vệ") return false;
     }
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, phase, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, nightActionDeadline, nightActionNow, phase, role]);
 
   const isGuardianTurnActive = useMemo(() => {
     if (phase !== "night") return false;
@@ -97,13 +102,14 @@ export function useGuardianRole({
   }, [canAct, lastProtectedPrevNight, lockedTargetId]);
 
   const confirm = useCallback(() => {
+    if (!canAct) return;
     if (!roomId || !selectedPlayerId) return;
 
     // lock ngay khi đã bấm xác nhận
     setLockedTargetId(selectedPlayerId);
     setShowConfirm(false);
     socket.emit("guardianProtect", { roomId, targetId: selectedPlayerId });
-  }, [roomId, selectedPlayerId]);
+  }, [canAct, roomId, selectedPlayerId]);
 
   const resetOnPhaseChange = useCallback((_nextPhase: GamePhase) => {
     setSelectedPlayerId(null);

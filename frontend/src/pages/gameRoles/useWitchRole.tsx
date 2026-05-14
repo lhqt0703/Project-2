@@ -20,6 +20,8 @@ export function useWitchRole({
   allNightActionsSimultaneous,
   currentNightTurnRole,
   nightTurnPaused: _nightTurnPaused,
+  nightActionDeadline,
+  nightActionNow,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -31,6 +33,8 @@ export function useWitchRole({
   allNightActionsSimultaneous: boolean;
   currentNightTurnRole: string | null;
   nightTurnPaused: boolean;
+  nightActionDeadline: number | null;
+  nightActionNow: number;
 }) {
   const [poisonMode, setPoisonMode] = useState(false);
   const [poisonSelectedTargetId, setPoisonSelectedTargetId] = useState<string | null>(null);
@@ -63,11 +67,12 @@ export function useWitchRole({
     if (phase !== "night") return false;
     if (role !== "Phù thủy") return false;
     if (clientId && deadPlayers.includes(clientId)) return false;
+    if (allNightActionsSimultaneous && nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
     if (!allNightActionsSimultaneous) {
       if (currentNightTurnRole !== "Phù thủy") return false;
     }
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, phase, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, nightActionDeadline, nightActionNow, phase, role]);
 
   const isWitchTurnActive = useMemo(() => {
     if (phase !== "night") return false;
@@ -119,17 +124,19 @@ export function useWitchRole({
   );
 
   const confirmHeal = useCallback(() => {
+    if (!canAct) return;
     if (!roomId || !healSelectedTargetId) return;
     socket.emit("witchHeal", { roomId, targetId: healSelectedTargetId });
     setShowHealConfirm(false);
     setHealMode(false);
-  }, [healSelectedTargetId, roomId]);
+  }, [canAct, healSelectedTargetId, roomId]);
 
   const confirmPoison = useCallback(() => {
+    if (!canAct) return;
     if (!roomId || !poisonSelectedTargetId) return;
     socket.emit("witchPoison", { roomId, targetId: poisonSelectedTargetId });
     setShowPoisonConfirm(false);
-  }, [poisonSelectedTargetId, roomId]);
+  }, [canAct, poisonSelectedTargetId, roomId]);
 
   const panel =
     role === "Phù thủy" && phase === "night" && clientId && !deadPlayers.includes(clientId) ? (
@@ -154,7 +161,9 @@ export function useWitchRole({
             setHealSelectedTargetId(null);
             setHealMode(m => !m);
           }}
-          style={{ padding: "8px 12px", cursor: healDisabled ? "not-allowed" : "pointer" }}
+          style={{ padding: "8px 12px", cursor: healDisabled ? "not-allowed" : "pointer",
+              opacity: healDisabled ? 0.7 : 1
+           }}
         >
           🧪 {healMode ? "Chọn người để cứu" : "Bình cứu"}
         </button>
@@ -166,7 +175,9 @@ export function useWitchRole({
             setPoisonSelectedTargetId(null);
             setPoisonMode(m => !m);
           }}
-          style={{ padding: "8px 12px", cursor: poisonDisabled ? "not-allowed" : "pointer" }}
+          style={{ padding: "8px 12px", cursor: poisonDisabled ? "not-allowed" : "pointer",
+              opacity: poisonDisabled ? 0.7 : 1
+           }}
         >
           ☠️ {poisonMode ? "Đang chọn mục tiêu" : "Bình giết"}
         </button>

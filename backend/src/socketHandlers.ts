@@ -78,7 +78,7 @@ import {
   TWO_HEARTS_MAX_HP,
   TWO_HEARTS_NIGHT_LIMIT,
   initTwoHeartsForParticipants,
-  isTwoHeartsDamageMode,
+  getTwoHeartsWolfDamage,
 } from "./gameConfig.js";
 import {
   dealRolesWithPendingAssignments,
@@ -309,10 +309,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       if (targetId === banSoiId) {
         const biteCounted = (!wasHealed && !isProtected) || rules.banSoiBecomeWolfEvenIfHealed;
         if (biteCounted) {
-          if (isTwoHeartsDamageMode(room)) {
+          const twoHeartsDamage = getTwoHeartsWolfDamage(room);
+          if (twoHeartsDamage > 0 && twoHeartsDamage < TWO_HEARTS_MAX_HP) {
             room.playerHearts = room.playerHearts || {};
             const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.playerHearts[targetId] ?? TWO_HEARTS_MAX_HP));
-            room.playerHearts[targetId] = Math.max(0, currentHp - 1);
+            room.playerHearts[targetId] = Math.max(0, currentHp - twoHeartsDamage);
           }
           room.banSoiWolfAlignedPending = true;
         }
@@ -326,10 +327,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         attackerIds: wolfAttackersForTarget(targetId),
       };
 
-      if (isTwoHeartsDamageMode(room)) {
+      const twoHeartsDamage = getTwoHeartsWolfDamage(room);
+      if (twoHeartsDamage > 0) {
         room.playerHearts = room.playerHearts || {};
         const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.playerHearts[targetId] ?? TWO_HEARTS_MAX_HP));
-        const nextHp = Math.max(0, currentHp - 1);
+        const nextHp = Math.max(0, currentHp - twoHeartsDamage);
         room.playerHearts[targetId] = nextHp;
         if (nextHp <= 0) {
           markEliminated(targetId, wolfCause);

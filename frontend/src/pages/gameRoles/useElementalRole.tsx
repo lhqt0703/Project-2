@@ -20,6 +20,8 @@ export function useElementalRole({
   availableBuffTier,
   allNightActionsSimultaneous,
   currentNightTurnRole,
+  nightActionDeadline,
+  nightActionNow,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -33,6 +35,8 @@ export function useElementalRole({
   availableBuffTier: number;
   allNightActionsSimultaneous: boolean;
   currentNightTurnRole: string | null;
+  nightActionDeadline: number | null;
+  nightActionNow: number;
 }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [selectedBuffId, setSelectedBuffId] = useState<ElementalBuffId | null>(null);
@@ -64,9 +68,10 @@ export function useElementalRole({
     if (phase !== "night") return false;
     if (!isElementalRole) return false;
     if (clientId && deadPlayers.includes(clientId)) return false;
+    if (allNightActionsSimultaneous && nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
     if (!allNightActionsSimultaneous && currentNightTurnRole !== role) return false;
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, isElementalRole, phase, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, isElementalRole, nightActionDeadline, nightActionNow, phase, role]);
 
   const isElementalTurnActive = useMemo(() => {
     if (phase !== "night" || !isElementalRole) return false;
@@ -96,6 +101,7 @@ export function useElementalRole({
   }, [canAct, elementalActionMode, lockedBuffId]);
 
   const confirm = useCallback(() => {
+    if (!canAct) return;
     if (!roomId) return;
     if (elementalActionMode === "guess") {
       if (!selectedPlayerId) return;
@@ -104,7 +110,7 @@ export function useElementalRole({
     }
     if (!selectedBuffId) return;
     socket.emit("elementalChooseBuff", { roomId, buffId: selectedBuffId });
-  }, [elementalActionMode, roomId, selectedBuffId, selectedPlayerId]);
+  }, [canAct, elementalActionMode, roomId, selectedBuffId, selectedPlayerId]);
 
   const selectedTargetName = selectedPlayerId
     ? room.players.find((player) => player.id === selectedPlayerId)?.name || "người này"

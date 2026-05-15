@@ -7,7 +7,7 @@ export interface Player {
   inGame?: boolean;
 }
 
-export type NightActionRole = "Sói" | "Bảo vệ" | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | ElementalRole;
+export type NightActionRole = "Sói" | "Bảo vệ" | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | ElementalRole;
 
 export type NightActionOrderRole = NightActionRole | typeof ELEMENTAL_GROUP_ROLE;
 
@@ -33,6 +33,7 @@ export interface Room {
   rolesLocked?: boolean;
   lockedPlayerIds?: string[];
   pendingRoleAssignments?: Record<string, string>;
+  pendingRoleBlocks?: Record<string, string[]>;
   phase?: string;
   positions?: { playerId: string; x: number; y: number }[];
   positionEditors?: string[];
@@ -81,6 +82,19 @@ export interface Room {
   witchPoisonTargetTonight?: Record<string, string | null>;
   hunterTargetTonight?: Record<string, string | null>;
   hunterShotPlayerIds?: string[];
+  loveCupidId?: string | null;
+  loveTargetId?: string | null;
+  loveTargetWolfAligned?: boolean;
+  lovePairCreatedNight?: number | null;
+  loveEscapeUsed?: boolean;
+  loveEscapeVotesTonight?: Record<string, boolean>;
+  loveEscapeVoteAt?: Record<string, number>;
+  loveEscapeActiveTonight?: boolean;
+  loveEscapeActivatedAt?: number | null;
+  wolfAttackResolvedAt?: number | null;
+  protectedTonightAt?: number | null;
+  witchHealTargetAt?: Record<string, number>;
+  witchPoisonTargetAt?: Record<string, number>;
   nightTurnIndex?: number;
   nightTurnRole?: NightActionRole | null;
   nightTurnDeadline?: number | null;
@@ -92,7 +106,7 @@ export interface Room {
   compactCircles?: boolean;
   layoutHeightPx?: number;
   gameOver?: boolean;
-  winner?: "wolves" | "villagers" | "nobody" | undefined;
+  winner?: "wolves" | "villagers" | "lovers" | "nobody" | undefined;
   gameRules?: RoomGameRules;
   pendingGameRules?: RoomGameRules;
   spiritWolfId?: string | null;
@@ -124,7 +138,7 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 20,
   wolfNightActionDurationSec: 20,
-  nightActionOrder: ["Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
+  nightActionOrder: ["Thần tình yêu", "Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
   banSoiBecomeWolfEvenIfHealed: false,
 };
 
@@ -217,6 +231,7 @@ export type EliminationCause =
   | { type: "wolf"; attackerIds: string[] }
   | { type: "witch_poison" }
   | { type: "hunter_shot" }
+  | { type: "love_link"; sourceId: string }
   | { type: "day_vote"; voterIds: string[] }
   | { type: "trial_verdict"; voterIds: string[] };
 
@@ -234,6 +249,10 @@ export type GameLogEntry =
   | { type: "seer_check"; phase: GameLogEntryPhase; actorId: string; targetId: string; isWolf: boolean }
   | { type: "hunter_mark"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "hunter_shot"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "love_pair"; phase: GameLogEntryPhase; actorId: string; targetId: string; targetWolfAligned: boolean }
+  | { type: "love_escape_vote"; phase: GameLogEntryPhase; actorId: string; partnerId: string }
+  | { type: "love_escape_missed"; phase: GameLogEntryPhase; actorId: string; partnerId: string }
+  | { type: "love_escape"; phase: GameLogEntryPhase; targetIds: string[] }
   | { type: "spirit_wolf_decision"; phase: GameLogEntryPhase; saved: boolean; timedOut?: boolean }
   | { type: "ban_soi_aligned"; phase: GameLogEntryPhase; targetId: string }
   | { type: "saved_by_guardian"; phase: GameLogEntryPhase; targetIds: string[] }

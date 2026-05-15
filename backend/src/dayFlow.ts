@@ -3,7 +3,8 @@ import { appendLogEntry, buildDayVoteBreakdown } from "./gameLog.js";
 import { resolveHunterShotsForDeaths } from "./hunter.js";
 import { emitGameLogToSocket, toPublicRoom } from "./serverEmitters.js";
 import { clearTrialState, getActiveDayVoters, getAlivePlayerIds, getTrialVoters } from "./roomState.js";
-import { ensureRoomGameRules, type Room } from "./serverTypes.js";
+import { ensureRoomGameRules, type EliminationCause, type Room } from "./serverTypes.js";
+import { markEliminatedWithLoveChain } from "./love.js";
 
 type DayFlowDeps = {
   checkAndEndGame: (roomId: string, reason?: string) => void;
@@ -119,20 +120,21 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     });
 
     if (executed && !((room.deadPlayers || []).includes(targetId))) {
-      room.deadPlayers = room.deadPlayers || [];
-      room.deadPlayers.push(targetId);
-      ctx.io.to(roomId).emit("playerKilled", targetId);
+      const eliminatedIds: string[] = [];
+      const causesByTarget: Record<string, EliminationCause[]> = {};
+      markEliminatedWithLoveChain(ctx, roomId, room, targetId, { type: "trial_verdict", voterIds: dieVoterIds }, "day", {
+        eliminatedIds,
+        causesByTarget,
+      });
 
       appendLogEntry(room, {
         type: "eliminated",
         phase: "day",
-        targetIds: [targetId],
-        causesByTarget: {
-          [targetId]: [{ type: "trial_verdict", voterIds: dieVoterIds }],
-        },
+        targetIds: eliminatedIds,
+        causesByTarget,
       });
 
-      resolveHunterShotsForDeaths(ctx, roomId, room, [targetId], "day");
+      resolveHunterShotsForDeaths(ctx, roomId, room, eliminatedIds, "day");
     }
 
     ctx.io.to(roomId).emit("trialVerdictFinished", {

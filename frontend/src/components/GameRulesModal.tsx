@@ -10,6 +10,7 @@ const NIGHT_ACTION_ROLE_LABELS: Record<NightActionOrderRole, string> = {
   "Linh sói": "Linh sói",
   "Thợ săn": "Thợ săn",
   "Tiên tri": "Tiên tri",
+  "Thần tình yêu": "Thần tình yêu",
 };
 
 const NIGHT_ACTION_DURATION_STEP_SEC = 10;

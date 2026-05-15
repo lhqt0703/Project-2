@@ -4,6 +4,7 @@ import { clearGameTimers, clearTrialState, ensureWitchState, getParticipantCount
 import { RULES_RESTART_FADE_IN_MS, RULES_RESTART_FADE_OUT_MS, RULES_RESTART_HOLD_MS, RULES_RESTART_RESTART_AT_MS, TWO_HEARTS_NIGHT_LIMIT, initTwoHeartsForParticipants } from "./gameConfig.js";
 import { emitRolesRevealToSocket, toPublicRoom } from "./serverEmitters.js";
 import { dealRolesWithPendingAssignments } from "./roleAssignment.js";
+import { clearLoveStateForPlayers, getLovePairIds } from "./love.js";
 
 const SPIRIT_WOLF_ROLE = "Linh sói";
 
@@ -165,6 +166,7 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
       participants,
       roles,
       room.pendingRoleAssignments,
+      room.pendingRoleBlocks,
       (remainingRoles, remainingPlayerCount) =>
         remainingRoles.length > remainingPlayerCount
           ? pickRolesForParticipants(remainingRoles, remainingPlayerCount)
@@ -175,7 +177,9 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
 
     room.playerRoles = deal.playerRoles;
     delete room.pendingRoleAssignments;
+    delete room.pendingRoleBlocks;
     ctx.io.to(room.hostId).emit("pendingRoleAssignmentsUpdated", {});
+    ctx.io.to(room.hostId).emit("pendingRoleBlocksUpdated", {});
 
     participants.forEach((player) => {
       const role: string = room.playerRoles![player.id] || "";
@@ -192,6 +196,8 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.witchPotions = {};
     room.witchHealTargetTonight = {};
     room.witchPoisonTargetTonight = {};
+    room.witchHealTargetAt = {};
+    room.witchPoisonTargetAt = {};
     for (const wid of getWitches(room)) {
       ctx.io.in(wid).socketsJoin(`witches_${roomId}`);
       ensureWitchState(room, wid);
@@ -206,12 +212,23 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.sharedHeartsVisible = false;
     room.playerHearts = {};
     room.protectedTonight = null;
+    room.protectedTonightAt = null;
     room.lastProtected = null;
     room.seerUsedTonight = {};
     room.hunterTargetTonight = {};
     room.hunterShotPlayerIds = [];
+    room.loveCupidId = null;
+    room.loveTargetId = null;
+    room.loveTargetWolfAligned = false;
+    room.lovePairCreatedNight = null;
+    room.loveEscapeUsed = false;
+    room.loveEscapeVotesTonight = {};
+    room.loveEscapeVoteAt = {};
+    room.loveEscapeActiveTonight = false;
+    room.loveEscapeActivatedAt = null;
     room.killedTonight = null;
     room.killedTonightExtra = null;
+    room.wolfAttackResolvedAt = null;
     room.wolfVotes = {};
     room.wolfVotes2 = {};
     room.wolfLocked = {};
@@ -252,6 +269,7 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.elementalBuffQuickMode = true;
 
     ctx.io.to(roomId).emit("phaseChanged", "dusk");
+    clearLoveStateForPlayers(ctx, room, roomId);
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     ctx.io.to(roomId).emit("gameStarted");
     emitRolesRevealToSocket(roomId, room.hostId);
@@ -280,6 +298,28 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     const wolfAligned = aliveIds.filter((id) =>
       isWolfAlignedPlayer(room, id)
     );
+
+    const lovePair = getLovePairIds(room);
+    if (
+      lovePair &&
+      room.loveTargetWolfAligned === true &&
+      aliveIds.length === 2 &&
+      lovePair.every((id) => aliveIds.includes(id))
+    ) {
+      room.gameOver = true;
+      room.winner = "lovers";
+      ctx.io.to(roomId).emit("gameEnded", {
+        winner: room.winner,
+        reason: reason || "love_pair_last_survivors",
+      });
+      ctx.io.to(roomId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
+      ctx.io.to(roomId).emit(
+        "rolesRevealUpdated",
+        { roomId, rolesByPlayerId: room.playerRoles || {} }
+      );
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      return;
+    }
 
     if (wolfAligned.length === 0) {
       room.gameOver = true;

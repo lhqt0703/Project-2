@@ -23,6 +23,18 @@ export type WitchPotionsPayload = { healUsed: boolean; poisonUsed: boolean };
 export type HunterTargetUpdatedPayload = { targetId: string | null };
 
 export type HunterShotPayload = { hunterId: string; targetId: string };
+export type LoveArrowShotPayload = { cupidId: string; targetId: string };
+export type LoveStatePayload = {
+  cupidId: string | null;
+  targetId: string | null;
+  partnerId: string | null;
+  pairIds: string[];
+  rolesByPlayerId: Record<string, string>;
+  targetWolfAligned: boolean;
+  escapeUsed: boolean;
+  escapeActiveTonight: boolean;
+  escapeVotes: string[];
+};
 
 export type DayVotesUpdatedPayload = Record<string, string | null>;
 export type DayLockedUpdatedPayload = Record<string, boolean>;
@@ -56,7 +68,7 @@ export type TrialVerdictFinishedPayload = {
   dieVotes: number;
 };
 
-export type GameEndedPayload = { winner: "wolves" | "villagers"; reason?: string };
+export type GameEndedPayload = { winner: "wolves" | "villagers" | "lovers" | "nobody"; reason?: string };
 
 export type GameLogEntryPhase = "night" | "day";
 
@@ -69,6 +81,7 @@ export type EliminationCause =
   | { type: "wolf"; attackerIds: string[] }
   | { type: "witch_poison" }
   | { type: "hunter_shot" }
+  | { type: "love_link"; sourceId: string }
   | { type: "day_vote"; voterIds: string[] }
   | { type: "trial_verdict"; voterIds: string[] };
 
@@ -86,6 +99,10 @@ export type GameLogEntry =
   | { type: "seer_check"; phase: GameLogEntryPhase; actorId: string; targetId: string; isWolf: boolean }
   | { type: "hunter_mark"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "hunter_shot"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "love_pair"; phase: GameLogEntryPhase; actorId: string; targetId: string; targetWolfAligned: boolean }
+  | { type: "love_escape_vote"; phase: GameLogEntryPhase; actorId: string; partnerId: string }
+  | { type: "love_escape_missed"; phase: GameLogEntryPhase; actorId: string; partnerId: string }
+  | { type: "love_escape"; phase: GameLogEntryPhase; targetIds: string[] }
   | { type: "spirit_wolf_decision"; phase: GameLogEntryPhase; saved: boolean; timedOut?: boolean }
   | { type: "ban_soi_aligned"; phase: GameLogEntryPhase; targetId: string }
   | { type: "saved_by_guardian"; phase: GameLogEntryPhase; targetIds: string[] }

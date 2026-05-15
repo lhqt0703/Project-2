@@ -18,6 +18,8 @@ import type {
   GuardianProtectedPayload,
   HunterShotPayload,
   HunterTargetUpdatedPayload,
+  LoveArrowShotPayload,
+  LoveStatePayload,
   SeerResultPayload,
   RolesRevealUpdatedPayload,
   SpiritWolfDecisionNeededPayload,
@@ -33,6 +35,18 @@ import type {
   ElementalBuffSelectedPayload,
 } from "./socketEvents";
 import { ELEMENTAL_BUFF_LABELS, ELEMENTAL_BUFFS } from "../../constants/elemental";
+
+const EMPTY_LOVE_STATE: LoveStatePayload = {
+  cupidId: null,
+  targetId: null,
+  partnerId: null,
+  pairIds: [],
+  rolesByPlayerId: {},
+  targetWolfAligned: false,
+  escapeUsed: false,
+  escapeActiveTonight: false,
+  escapeVotes: [],
+};
 
 export function useGameSocketSync({
   roomId,
@@ -61,6 +75,9 @@ export function useGameSocketSync({
 
   const [hunterShotSeq, setHunterShotSeq] = useState(0);
   const [hunterShot, setHunterShot] = useState<HunterShotPayload | null>(null);
+  const [loveArrowShotSeq, setLoveArrowShotSeq] = useState(0);
+  const [loveArrowShot, setLoveArrowShot] = useState<LoveArrowShotPayload | null>(null);
+  const [loveState, setLoveState] = useState<LoveStatePayload>(EMPTY_LOVE_STATE);
 
   const [wolfLocked, setWolfLocked] = useState<WolfLockedUpdatedPayload | null>(null);
   const [wolfDeadline, setWolfDeadline] = useState<number | null>(null);
@@ -270,6 +287,9 @@ export function useGameSocketSync({
       setTrialVotes(null);
       setTrialVerdictFinished(null);
       setTrialVerdictFinishedSeq(0);
+      setLoveArrowShot(null);
+      setLoveArrowShotSeq(0);
+      setLoveState(EMPTY_LOVE_STATE);
       setElementalBuffResult(null);
     };
 
@@ -387,6 +407,26 @@ export function useGameSocketSync({
       if (!payload?.hunterId || !payload?.targetId) return;
       setHunterShot(payload);
       setHunterShotSeq(s => s + 1);
+    };
+
+    const handleLoveArrowShot = (payload: LoveArrowShotPayload) => {
+      if (!payload?.cupidId || !payload?.targetId) return;
+      setLoveArrowShot(payload);
+      setLoveArrowShotSeq((s) => s + 1);
+    };
+
+    const handleLoveStateUpdated = (payload: LoveStatePayload) => {
+      setLoveState({
+        cupidId: payload?.cupidId ?? null,
+        targetId: payload?.targetId ?? null,
+        partnerId: payload?.partnerId ?? null,
+        pairIds: Array.isArray(payload?.pairIds) ? payload.pairIds.filter(Boolean) : [],
+        rolesByPlayerId: payload?.rolesByPlayerId || {},
+        targetWolfAligned: payload?.targetWolfAligned === true,
+        escapeUsed: payload?.escapeUsed === true,
+        escapeActiveTonight: payload?.escapeActiveTonight === true,
+        escapeVotes: Array.isArray(payload?.escapeVotes) ? payload.escapeVotes.filter(Boolean) : [],
+      });
     };
 
     const handleDayVotesUpdated = (votes: DayVotesUpdatedPayload) => {
@@ -512,6 +552,8 @@ export function useGameSocketSync({
 
     socket.on("hunterTargetUpdated", handleHunterTargetUpdated);
     socket.on("hunterShot", handleHunterShot);
+    socket.on("loveArrowShot", handleLoveArrowShot);
+    socket.on("loveStateUpdated", handleLoveStateUpdated);
 
     socket.on("dayVotesUpdated", handleDayVotesUpdated);
     socket.on("dayLockedUpdated", handleDayLockedUpdated);
@@ -554,6 +596,8 @@ export function useGameSocketSync({
 
       socket.off("hunterTargetUpdated", handleHunterTargetUpdated);
       socket.off("hunterShot", handleHunterShot);
+      socket.off("loveArrowShot", handleLoveArrowShot);
+      socket.off("loveStateUpdated", handleLoveStateUpdated);
 
       socket.off("dayVotesUpdated", handleDayVotesUpdated);
       socket.off("dayLockedUpdated", handleDayLockedUpdated);
@@ -593,6 +637,9 @@ export function useGameSocketSync({
       hunterTargetId,
       hunterShotSeq,
       hunterShot,
+      loveArrowShotSeq,
+      loveArrowShot,
+      loveState,
       wolfLocked,
       wolfDeadline,
       wolves,
@@ -641,6 +688,9 @@ export function useGameSocketSync({
       hunterTargetId,
       hunterShotSeq,
       hunterShot,
+      loveArrowShotSeq,
+      loveArrowShot,
+      loveState,
       wolfLocked,
       wolfDeadline,
       wolves,

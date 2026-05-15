@@ -2,6 +2,7 @@ import type { ServerContext } from "./serverContext.js";
 import type { EliminationCause, GameLogEntryPhase, Room } from "./serverTypes.js";
 import { appendLogEntry } from "./gameLog.js";
 import { getHunters } from "./roomState.js";
+import { markEliminatedWithLoveChain } from "./love.js";
 
 type HunterShotResolution = {
   killedIds: string[];
@@ -53,24 +54,21 @@ export function resolveHunterShotsForDeaths(
     ctx.io.to(roomId).emit("hunterShot", { hunterId, targetId });
 
     const cause: EliminationCause = { type: "hunter_shot" };
-    killedIds.push(targetId);
-    causesByTarget[targetId] = [cause];
-    room.deadPlayers = room.deadPlayers || [];
-    room.deadPlayers.push(targetId);
-    ctx.io.to(roomId).emit("playerKilled", targetId);
+    const newlyDead = markEliminatedWithLoveChain(ctx, roomId, room, targetId, cause, phase, {
+      eliminatedIds: killedIds,
+      causesByTarget,
+    });
 
-    if (appendEliminationLog) {
+    if (appendEliminationLog && newlyDead.length) {
       appendLogEntry(room, {
         type: "eliminated",
         phase,
-        targetIds: [targetId],
-        causesByTarget: {
-          [targetId]: [cause],
-        },
+        targetIds: newlyDead,
+        causesByTarget: Object.fromEntries(newlyDead.map((id) => [id, causesByTarget[id] || []])),
       });
     }
 
-    queue.push(targetId);
+    queue.push(...newlyDead);
   }
 
   return { killedIds, causesByTarget };

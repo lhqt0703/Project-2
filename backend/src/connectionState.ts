@@ -50,10 +50,17 @@ export function createConnectionState(ctx: ServerContext, state: ConnectionState
       room.positionEditors = (room.positionEditors || []).filter((id) => id !== playerId);
       if (wasHost) {
         delete room.pendingRoleAssignments;
+        delete room.pendingRoleBlocks;
       } else if (room.pendingRoleAssignments) {
         delete room.pendingRoleAssignments[playerId];
         if (Object.keys(room.pendingRoleAssignments).length === 0) {
           delete room.pendingRoleAssignments;
+        }
+      }
+      if (!wasHost && room.pendingRoleBlocks) {
+        delete room.pendingRoleBlocks[playerId];
+        if (Object.keys(room.pendingRoleBlocks).length === 0) {
+          delete room.pendingRoleBlocks;
         }
       }
 
@@ -73,6 +80,7 @@ export function createConnectionState(ctx: ServerContext, state: ConnectionState
       room.positions = ensureNonOverlappingPositions(getParticipantIds(room), room.positions, layoutOptsForRoom(room));
       ctx.io.to(roomId).emit("positionsUpdated", room.positions || []);
       ctx.io.to(room.hostId).emit("pendingRoleAssignmentsUpdated", room.pendingRoleAssignments || {});
+      ctx.io.to(room.hostId).emit("pendingRoleBlocksUpdated", room.pendingRoleBlocks || {});
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     }, 5 * 60 * 1000);
   }

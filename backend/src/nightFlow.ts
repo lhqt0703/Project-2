@@ -20,6 +20,7 @@ import {
 } from "./roomState.js";
 import { ensureRoomGameRules, type NightActionRole, type Room } from "./serverTypes.js";
 import { toPublicRoom } from "./serverEmitters.js";
+import { LOVE_ROLE } from "./love.js";
 
 type NightFlowDeps = {
   checkAndEndGame: (roomId: string, reason?: string) => void;
@@ -84,6 +85,10 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     const selected = new Set<NightActionRole>();
 
     if (hasWolfRole) selected.add("Sói");
+    if (sourceRoles.includes(LOVE_ROLE) && (room.nightCount || 0) === 1 && !room.loveTargetId) {
+      selected.add(LOVE_ROLE as NightActionRole);
+    }
+
     for (const role of ["Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"] as NightActionRole[]) {
       if (sourceRoles.includes(role)) selected.add(role);
     }
@@ -389,6 +394,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     }
     room.wolfDeadline = null;
     room.wolfVoteResolvedTonight = true;
+    room.wolfAttackResolvedAt = Date.now();
 
     const votes = room.wolfVotes || {};
     const votes2 = room.wolfVotes2 || {};

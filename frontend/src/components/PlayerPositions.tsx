@@ -31,6 +31,9 @@ type BulletAnimation = {
   toPlayerId: string;
   startedAt: number;
   durationMs: number;
+  assetSrc?: string;
+  alt?: string;
+  rotationOffsetDeg?: number;
 };
 
 const DEFAULT_CIRCLE_SIZE_PX = 72; // Match Game.tsx size
@@ -272,6 +275,8 @@ export default function PlayerPositions({
   selectedOutlinePlayerIds,
   highlightPlayerId,
   secondaryHighlightPlayerIds,
+  verdictLivePlayerIds,
+  verdictDiePlayerIds,
   dangerPlayerId,
   dangerPlayerIds,
   showWolfVoteBadges,
@@ -297,6 +302,8 @@ export default function PlayerPositions({
   selectedOutlinePlayerIds?: string[];
   highlightPlayerId?: string | null;
   secondaryHighlightPlayerIds?: string[];
+  verdictLivePlayerIds?: string[];
+  verdictDiePlayerIds?: string[];
   dangerPlayerId?: string | null;
   dangerPlayerIds?: string[];
   showWolfVoteBadges?: boolean;
@@ -914,14 +921,14 @@ export default function PlayerPositions({
             }}
           >
             <img
-              src={encodeURI("/Đạn.svg")}
-              alt="Đạn"
+              src={bulletAnimation.assetSrc || encodeURI("/Đạn.svg")}
+              alt={bulletAnimation.alt || "Đạn"}
               style={{
                 position: "absolute",
                 left: `${bulletFrame.x * 100}%`,
                 top: `${bulletFrame.y * 100}%`,
                 // The SVG's default facing is up-right; +45deg makes it face right.
-                transform: `translate(-50%, -50%) rotate(${(bulletRecoil?.angleDeg ?? 0) + 45}deg)`,
+                transform: `translate(-50%, -50%) rotate(${(bulletRecoil?.angleDeg ?? 0) + (bulletAnimation.rotationOffsetDeg ?? 45)}deg)`,
                 transformOrigin: "center",
                 width: scalePx(22, 14),
                 height: scalePx(22, 14),
@@ -962,11 +969,18 @@ export default function PlayerPositions({
           const dangerShadow = isWitchDanger ? `0 0 0 ${scalePx(6, 3)}px rgba(220,0,0,0.95), 0 0 ${scalePx(14, 7)}px rgba(220,0,0,0.55)` : "";
           const isHighlighted = !!highlightPlayerId && highlightPlayerId === pos.playerId;
           const isSecondaryHighlighted = !!secondaryHighlightPlayerIds && secondaryHighlightPlayerIds.includes(pos.playerId);
+          const isVerdictLiveHighlighted = !!verdictLivePlayerIds && verdictLivePlayerIds.includes(pos.playerId);
+          const isVerdictDieHighlighted = !!verdictDiePlayerIds && verdictDiePlayerIds.includes(pos.playerId);
           const highlightShadow = isHighlighted
-            ? `0 0 0 ${scalePx(6, 3)}px rgba(108,92,231,0.55), 0 0 ${scalePx(16, 8)}px ${scalePx(6, 3)}px rgba(108,92,231,0.45)`
-            : isSecondaryHighlighted
-              ? `0 0 0 ${scalePx(5, 3)}px rgba(46,204,113,0.38), 0 0 ${scalePx(12, 7)}px ${scalePx(4, 2)}px rgba(46,204,113,0.24)`
-              : "";
+            ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #ffa500e6`
+            : isVerdictLiveHighlighted
+              ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #79cd77`
+              : isSecondaryHighlighted
+                ? `0 0 0 ${scalePx(5, 3)}px rgba(46,204,113,0.38), 0 0 ${scalePx(12, 7)}px ${scalePx(4, 2)}px rgba(46,204,113,0.24)`
+                : "";
+          const verdictDieShadow = isVerdictDieHighlighted
+            ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #d00`
+            : "";
           const trialOrangeShadow = trialOrangePlayerId === pos.playerId
             ? `0 0 0 ${scalePx(7, 4)}px rgba(255,165,0,0.9), 0 0 ${scalePx(16, 8)}px ${scalePx(6, 3)}px rgba(255,165,0,0.55)`
             : "";
@@ -991,7 +1005,7 @@ export default function PlayerPositions({
           const activeRoleShadow = isActiveNightRoleBadge
             ? `0 0 0 ${scalePx(7, 4)}px rgba(255,215,120,0.38), 0 0 ${scalePx(18, 9)}px ${scalePx(8, 4)}px rgba(255,215,120,0.22)`
             : "";
-          const mergedBoxShadow = [boxShadow, dangerShadow, highlightShadow, activeRoleShadow, trialOrangeShadow, trialWhiteShadow, trialGreenShadow].filter(Boolean).join(", ");
+          const mergedBoxShadow = [boxShadow, dangerShadow, highlightShadow, verdictDieShadow, activeRoleShadow, trialOrangeShadow, trialWhiteShadow, trialGreenShadow].filter(Boolean).join(", ");
           // Only show disconnected badge to host by default. Host can broadcast visibility to all clients
           const showDisconnectedBadge =
             p.connected === false && (isHost || (revealDisconnectedToAll && !isDead));

@@ -53,6 +53,9 @@ function getEliminationCauseText(causes: EliminationCause[] | undefined, rolesBy
       return `Bị ${attackersText} cắn`;
     }
     if (cause.type === "witch_poison") return "Phù thủy quăng bình giết";
+    if (cause.type === "love_link") {
+      return `Chết theo cặp đôi với ${getRoleName(cause.sourceId, rolesByPlayerId)}`;
+    }
     if (cause.type === "day_vote") {
       const votersText = getRolesText(cause.voterIds, rolesByPlayerId);
       return `Bị biểu quyết bởi: ${votersText}`;
@@ -605,6 +608,45 @@ function LogEntryLine({
         </li>
       );
 
+    case "love_pair":
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> ghép đôi với{" "}
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+          {entry.targetWolfAligned ? <span style={{ opacity: 0.75 }}> - tình yêu trái phe</span> : null}
+        </li>
+      );
+
+    case "love_escape_vote":
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={[entry.partnerId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> muốn ra khỏi làng, đang chờ{" "}
+          <RoleSpan playerId={entry.partnerId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+        </li>
+      );
+
+    case "love_escape_missed":
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={[entry.partnerId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã muốn ra khỏi làng nhưng{" "}
+          <RoleSpan playerId={entry.partnerId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> không xác nhận
+        </li>
+      );
+
+    case "love_escape":
+      return (
+        <li style={lineStyle}>
+          Cặp đôi cùng ra khỏi làng:{" "}
+          <RolesListSpan
+            playerIds={entry.targetIds || []}
+            rolesByPlayerId={rolesByPlayerId}
+            playerNamesById={playerNamesById}
+            onEliminationFocusChange={onEliminationFocusChange}
+            onHighlightPlayer={onHighlightPlayer}
+          />
+        </li>
+      );
+
     case "spirit_wolf_decision":
       return (
         <li style={lineStyle}>
@@ -663,7 +705,9 @@ function LogEntryLine({
               getSecondaryHighlightIds={(pid) => {
                 const causes = entry.causesByTarget?.[pid] || [];
                 const wolfCause = causes.find((c) => c.type === "wolf");
-                return wolfCause && wolfCause.type === "wolf" ? wolfCause.attackerIds : [];
+                if (wolfCause && wolfCause.type === "wolf") return wolfCause.attackerIds;
+                const loveCause = causes.find((c) => c.type === "love_link");
+                return loveCause && loveCause.type === "love_link" ? [loveCause.sourceId] : [];
               }}
               getEliminationFocus={(pid) => ({
                 night,

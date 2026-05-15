@@ -21,7 +21,7 @@ interface PlayerPosition {
   y: number;
 }
 
-const NIGHT_ACTION_ROLE_ORDER: NightActionRole[] = ["Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"];
+const NIGHT_ACTION_ROLE_ORDER: NightActionRole[] = ["Thần tình yêu", "Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"];
 const WOLF_ROLES = new Set(["Sói", "Sói con", "Bán sói"]);
 
 function getAvailableNightActionRoles(selectedRoles?: string[]) {
@@ -36,7 +36,7 @@ function getAvailableNightActionRoles(selectedRoles?: string[]) {
     available.add("Sói");
   }
 
-  for (const role of NIGHT_ACTION_ROLE_ORDER.slice(1)) {
+  for (const role of NIGHT_ACTION_ROLE_ORDER) {
     if (roles.includes(role)) {
       available.add(role);
     }
@@ -125,10 +125,15 @@ export default function Room() {
         const pendingRoleAssignments = shouldKeepHostOnlyAssignments
           ? data.pendingRoleAssignments ?? prev?.pendingRoleAssignments
           : undefined;
+        const pendingRoleBlocks = shouldKeepHostOnlyAssignments
+          ? data.pendingRoleBlocks ?? prev?.pendingRoleBlocks
+          : undefined;
 
-        return pendingRoleAssignments
-          ? { ...data, pendingRoleAssignments }
-          : data;
+        return {
+          ...data,
+          ...(pendingRoleAssignments ? { pendingRoleAssignments } : {}),
+          ...(pendingRoleBlocks ? { pendingRoleBlocks } : {}),
+        };
       });
     };
     const handlePositionsUpdated = (positions: PlayerPosition[]) => {
@@ -142,6 +147,9 @@ export default function Room() {
     const handlePendingRoleAssignmentsUpdated = (assignments: Record<string, string>) => {
       setRoom(prev => prev ? { ...prev, pendingRoleAssignments: assignments || {} } : prev);
     };
+    const handlePendingRoleBlocksUpdated = (blocks: Record<string, string[]>) => {
+      setRoom(prev => prev ? { ...prev, pendingRoleBlocks: blocks || {} } : prev);
+    };
 
     socket.on("roomCreated", handleRoom);
     socket.on("roomJoined", handleRoom);
@@ -149,6 +157,7 @@ export default function Room() {
     socket.on("positionsUpdated", handlePositionsUpdated);
     socket.on("positionEditorsUpdated", handlePositionEditorsUpdated);
     socket.on("pendingRoleAssignmentsUpdated", handlePendingRoleAssignmentsUpdated);
+    socket.on("pendingRoleBlocksUpdated", handlePendingRoleBlocksUpdated);
 
 
     // Lắng nghe hostChanged để cập nhật hostId realtime
@@ -165,6 +174,7 @@ export default function Room() {
       socket.off("positionsUpdated", handlePositionsUpdated);
       socket.off("positionEditorsUpdated", handlePositionEditorsUpdated);
       socket.off("pendingRoleAssignmentsUpdated", handlePendingRoleAssignmentsUpdated);
+      socket.off("pendingRoleBlocksUpdated", handlePendingRoleBlocksUpdated);
     };
   }, [roomId, setRoom]); // giữ listener ổn định và lọc đúng room theo URL
 
@@ -382,6 +392,16 @@ export default function Room() {
     setRoleAssignmentPlayer(null);
   };
 
+  const handleTogglePendingRoleBlock = (role: string, blocked: boolean) => {
+    if (!room || !roleAssignmentPlayer) return;
+    socket.emit("setPendingRoleBlock", {
+      roomId: room.id,
+      targetId: roleAssignmentPlayer.id,
+      role,
+      blocked,
+    });
+  };
+
   const handlePlayerDoubleClickKick = (playerId: string) => {
     if (!room) return;
     if (!amIHost) return;
@@ -493,12 +513,15 @@ export default function Room() {
     return Array.from(roleCounts.entries()).map(([role, total]) => {
       const remaining = total - (usedByOthers.get(role) || 0);
       const selected = room.pendingRoleAssignments?.[roleAssignmentPlayer.id] === role;
+      const blocked = room.pendingRoleBlocks?.[roleAssignmentPlayer.id]?.includes(role) === true;
       return {
         role,
         total,
         remaining,
         selected,
-        disabled: remaining <= 0 && !selected,
+        blocked,
+        disabled: blocked || (remaining <= 0 && !selected),
+        blockDisabled: selected,
       };
     });
   }, [room, roleAssignmentPlayer]);
@@ -655,6 +678,7 @@ export default function Room() {
           <ul>
             {room.players.map((p) => {
               const pendingRole = amIHost ? room.pendingRoleAssignments?.[p.id] : undefined;
+              const blockedRoles = amIHost ? room.pendingRoleBlocks?.[p.id] || [] : [];
               return (
                 <li
                   key={p.id}
@@ -665,6 +689,11 @@ export default function Room() {
                   {pendingRole && (
                     <span style={{ color: "var(--accent)", fontWeight: 700 }}>
                       {" • "}(Phát trước: {pendingRole})
+                    </span>
+                  )}
+                  {blockedRoles.length > 0 && (
+                    <span style={{ color: "var(--danger)", fontWeight: 700 }}>
+                      {" • "}(Chặn: {blockedRoles.join(", ")})
                     </span>
                   )}
                 </li>
@@ -699,6 +728,9 @@ export default function Room() {
             </button>
             <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleOpenRoleAssignment}>
               Phát trước role
+            </button>
+            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleOpenRoleAssignment}>
+              Chặn trước role
             </button>
             <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleGrantPosition}>
               Trao quyền sắp xếp vị trí
@@ -737,39 +769,74 @@ export default function Room() {
                 boxShadow: "0 12px 32px rgba(0,0,0,0.25)",
               }}
             >
-              <h2 style={{ marginTop: 0 }}>Phát trước role cho {roleAssignmentPlayer.name}</h2>
+              <h2 style={{ marginTop: 0 }}>Can thiệp role cho {roleAssignmentPlayer.name}</h2>
 
               {roleAssignmentOptions.length > 0 ? (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
-                  {roleAssignmentOptions.map((option) => (
-                    <button
-                      key={option.role}
-                      onClick={() => handleSetPendingRoleAssignment(option.role)}
-                      disabled={option.disabled}
-                      title={option.disabled ? "Đã hết số lượng role này" : undefined}
-                      style={{
-                        minHeight: 46,
-                        borderColor: option.selected ? "var(--accent)" : "var(--border)",
-                        background: option.selected ? "var(--accent-surface)" : "var(--surface-muted)",
-                        cursor: option.disabled ? "not-allowed" : "pointer",
-                        opacity: option.disabled ? 0.5 : 1,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 8,
-                      }}
-                    >
-                      <span>{option.role}</span>
-                      {option.total > 1 && (
-                        <span style={{ fontSize: 12, opacity: 0.72 }}>
-                          {option.remaining}/{option.total}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
+                <>
+                  <h3 style={{ margin: "16px 0 10px" }}>Phát trước role</h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+                    {roleAssignmentOptions.map((option) => (
+                      <button
+                        key={option.role}
+                        onClick={() => handleSetPendingRoleAssignment(option.role)}
+                        disabled={option.disabled}
+                        title={
+                          option.blocked
+                            ? "Role này đang bị chặn trước cho người chơi này"
+                            : option.disabled
+                              ? "Đã hết số lượng role này"
+                              : undefined
+                        }
+                        style={{
+                          minHeight: 46,
+                          borderColor: option.selected ? "var(--accent)" : "var(--border)",
+                          background: option.selected ? "var(--accent-surface)" : "var(--surface-muted)",
+                          cursor: option.disabled ? "not-allowed" : "pointer",
+                          opacity: option.disabled ? 0.5 : 1,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 8,
+                        }}
+                      >
+                        <span>{option.role}</span>
+                        {option.total > 1 && (
+                          <span style={{ fontSize: 12, opacity: 0.72 }}>
+                            {option.remaining}/{option.total}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  <h3 style={{ margin: "22px 0 10px" }}>Chặn trước role</h3>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+                    {roleAssignmentOptions.map((option) => (
+                      <button
+                        key={option.role}
+                        onClick={() => handleTogglePendingRoleBlock(option.role, !option.blocked)}
+                        disabled={option.blockDisabled}
+                        title={option.blockDisabled ? "Role này đang được phát trước cho người chơi này" : undefined}
+                        style={{
+                          minHeight: 46,
+                          borderColor: option.blocked ? "var(--danger)" : "var(--border)",
+                          background: option.blocked ? "rgba(211,47,47,0.16)" : "var(--surface-muted)",
+                          cursor: option.blockDisabled ? "not-allowed" : "pointer",
+                          opacity: option.blockDisabled ? 0.5 : 1,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 8,
+                        }}
+                      >
+                        <span>{option.role}</span>
+                        {option.blocked && <span style={{ fontSize: 12, opacity: 0.78 }}>Đang chặn</span>}
+                      </button>
+                    ))}
+                  </div>
+                </>
               ) : (
-                <p>Chưa có vai trò để phát trước.</p>
+                <p>Chưa có vai trò để can thiệp.</p>
               )}
 
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap", marginTop: 20 }}>
@@ -778,7 +845,7 @@ export default function Room() {
                   disabled={!room.pendingRoleAssignments?.[roleAssignmentPlayer.id]}
                   style={{ opacity: room.pendingRoleAssignments?.[roleAssignmentPlayer.id] ? 1 : 0.55 }}
                 >
-                  Xóa can thiệp
+                  Xóa phát trước
                 </button>
                 <button onClick={() => setRoleAssignmentPlayer(null)}>Hủy</button>
               </div>

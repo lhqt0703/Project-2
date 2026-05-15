@@ -16,6 +16,7 @@ export type NightActionRole =
   | "Linh sói"
   | "Thợ săn"
   | "Tiên tri"
+  | "Thần tình yêu"
   | ElementalRole;
 
 export type NightActionOrderRole =
@@ -25,6 +26,7 @@ export type NightActionOrderRole =
   | "Linh sói"
   | "Thợ săn"
   | "Tiên tri"
+  | "Thần tình yêu"
   | typeof ELEMENTAL_GROUP_ROLE;
 
 export interface RoomGameRules {
@@ -49,7 +51,7 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 20,
   wolfNightActionDurationSec: 20,
-  nightActionOrder: [ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
+  nightActionOrder: [ELEMENTAL_GROUP_ROLE, "Thần tình yêu", "Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
   banSoiBecomeWolfEvenIfHealed: false,
 };
 
@@ -64,6 +66,7 @@ export interface RoomData {
   rolesLocked?: boolean;
   lockedPlayerIds?: string[];
   pendingRoleAssignments?: Record<string, string>;
+  pendingRoleBlocks?: Record<string, string[]>;
   positions?: PlayerPosition[];
   positionEditors?: string[];
   autoArrangeUsed?: boolean;

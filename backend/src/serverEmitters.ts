@@ -20,6 +20,7 @@ import {
   isWolfAlignedPlayer,
   isWolfRole,
 } from "./roomState.js";
+import { emitLoveStateToPlayer, isLovePairMemberAwayAt } from "./love.js";
 
 export function toPublicRoom(room: Room) {
   ensureRoomGameRules(room);
@@ -30,6 +31,19 @@ export function toPublicRoom(room: Room) {
     witchHealTargetTonight: _witchHealTargetTonight,
     witchPoisonTargetTonight: _witchPoisonTargetTonight,
     hunterTargetTonight: _hunterTargetTonight,
+    loveCupidId: _loveCupidId,
+    loveTargetId: _loveTargetId,
+    loveTargetWolfAligned: _loveTargetWolfAligned,
+    lovePairCreatedNight: _lovePairCreatedNight,
+    loveEscapeUsed: _loveEscapeUsed,
+    loveEscapeVotesTonight: _loveEscapeVotesTonight,
+    loveEscapeVoteAt: _loveEscapeVoteAt,
+    loveEscapeActiveTonight: _loveEscapeActiveTonight,
+    loveEscapeActivatedAt: _loveEscapeActivatedAt,
+    wolfAttackResolvedAt: _wolfAttackResolvedAt,
+    protectedTonightAt: _protectedTonightAt,
+    witchHealTargetAt: _witchHealTargetAt,
+    witchPoisonTargetAt: _witchPoisonTargetAt,
     gameLog: _gameLog,
     playerRoles: _playerRoles,
     wolves: _wolves,
@@ -43,6 +57,7 @@ export function toPublicRoom(room: Room) {
     trialVerdictTimer: _trialVerdictTimer,
     nightTurnTimer: _nightTurnTimer,
     pendingRoleAssignments: _pendingRoleAssignments,
+    pendingRoleBlocks: _pendingRoleBlocks,
     wolfDeadline: _wolfDeadline,
     killedTonight: _killedTonight,
     killedTonightExtra: _killedTonightExtra,
@@ -116,6 +131,7 @@ export function getWitchPendingDeaths(room: Room): string[] {
 
   const candidates = [room.killedTonight, room.killedTonightExtra]
     .filter(Boolean)
+    .filter((pid) => !isLovePairMemberAwayAt(room, pid as string, room.wolfAttackResolvedAt || Date.now()))
     .filter((pid) => (hideProtectedBite ? pid !== guardianTarget : true)) as string[];
 
   const unique: string[] = [];
@@ -210,6 +226,7 @@ export function syncPrivateRoleStateForSocket(
   if (!role) return;
 
   socket.emit("yourRole", role);
+  emitLoveStateToPlayer(ctx, roomId, room, playerId);
 
   if (isWolfAlignedPlayer(room, playerId)) {
     socket.join(`wolves_${roomId}`);

@@ -7,7 +7,7 @@ import {
   type ElementalBuffId,
   type ElementalRole,
 } from "./elemental.js";
-import { clampWolfNightActionDurationSec } from "./gameConfig.js";
+import { clampNonWolfNightActionDurationSec, clampWolfNightActionDurationSec } from "./gameConfig.js";
 import {
   ensureRoomGameRules,
   type RolesRevealPayload,
@@ -20,7 +20,7 @@ import {
   isWolfAlignedPlayer,
   isWolfRole,
 } from "./roomState.js";
-import { emitLoveStateToPlayer, isLovePairMemberAwayAt } from "./love.js";
+import { LOVE_ROLE, emitLoveStateToPlayer, isLovePairMemberAwayAt } from "./love.js";
 
 export function toPublicRoom(room: Room) {
   ensureRoomGameRules(room);
@@ -117,6 +117,105 @@ function getWolfTurnDurationMs(room: Room) {
     return Math.max(1, Math.floor(baseDurationMs / 2));
   }
   return baseDurationMs;
+}
+
+export function getHostNightActionProgressByPlayerId(room: Room): Record<string, "pending" | "done"> {
+  const rules = ensureRoomGameRules(room);
+  if (!rules.allNightActionsSimultaneous) return {};
+  if (room.phase !== "night") return {};
+  if (room.gameOver) return {};
+
+  const dead = new Set(room.deadPlayers || []);
+  const progress: Record<string, "pending" | "done"> = {};
+  const currentNight = room.nightCount || 0;
+  const now = Date.now();
+  const isElementalBuffVoteNight = shouldElementalsVoteBuffTonight(room);
+  const seerRequiredChecks =
+    room.elementalSelectedBuffId === "seer-check-two" && room.elementalSelectedBuffAppliesNight === currentNight
+      ? 2
+      : 1;
+  const nonWolfDurationSec = clampNonWolfNightActionDurationSec(rules.nonWolfNightActionDurationSec);
+  const wolfDurationSec = clampWolfNightActionDurationSec(rules.wolfNightActionDurationSec);
+  const witchBonusApplies =
+    nonWolfDurationSec > 0
+    && wolfDurationSec === nonWolfDurationSec;
+
+  const nonWolfPendingStillActive = (role: string | null | undefined) => {
+    const baseDeadline = room.nightTurnDeadline ?? null;
+    if (!baseDeadline) return true;
+    const deadline = role === "Phù thủy" && witchBonusApplies ? baseDeadline + 10_000 : baseDeadline;
+    return now < deadline;
+  };
+
+  const setProgress = (playerId: string, status: "pending" | "done", role: string | null | undefined) => {
+    if (status === "pending" && !nonWolfPendingStillActive(role)) return;
+    progress[playerId] = status;
+  };
+
+  for (const player of room.players) {
+    const playerId = player.id;
+    if (playerId === room.hostId) continue;
+    if (dead.has(playerId)) continue;
+
+    const role = room.playerRoles?.[playerId];
+    if (!role) continue;
+
+    if (isWolfAlignedPlayer(room, playerId)) {
+      const status = room.wolfLocked?.[playerId] === true ? "done" : "pending";
+      if (status === "pending" && room.wolfVoteResolvedTonight) continue;
+      if (status === "pending" && room.wolfDeadline && now >= room.wolfDeadline) continue;
+      progress[playerId] = status;
+      continue;
+    }
+
+    if (role === LOVE_ROLE) {
+      if (currentNight !== 1) continue;
+      setProgress(playerId, room.loveTargetId ? "done" : "pending", role);
+      continue;
+    }
+
+    if (role === "Bảo vệ") {
+      setProgress(playerId, room.protectedTonightAt ? "done" : "pending", role);
+      continue;
+    }
+
+    if (role === "Phù thủy") {
+      const healDone = !!room.witchHealTargetAt?.[playerId];
+      const poisonDone = !!room.witchPoisonTargetAt?.[playerId];
+      const noPotionLeft =
+        room.witchPotions?.[playerId]?.healUsed === true
+        && room.witchPotions?.[playerId]?.poisonUsed === true;
+      setProgress(playerId, healDone || poisonDone || noPotionLeft ? "done" : "pending", role);
+      continue;
+    }
+
+    if (role === "Linh sói") {
+      if (!room.spiritWolfPendingPoisonedWolfId && !room.spiritWolfDecisionMade) continue;
+      setProgress(playerId, room.spiritWolfDecisionMade ? "done" : "pending", role);
+      continue;
+    }
+
+    if (role === "Thợ săn") {
+      setProgress(playerId, room.hunterTargetTonight?.[playerId] ? "done" : "pending", role);
+      continue;
+    }
+
+    if (role === "Tiên tri") {
+      const usedChecks = room.seerUsedTonight?.[playerId] || 0;
+      setProgress(playerId, usedChecks >= seerRequiredChecks ? "done" : "pending", role);
+      continue;
+    }
+
+    if (isElementalRoleTurn(role)) {
+      if (isElementalBuffVoteNight) {
+        setProgress(playerId, room.elementalBuffVotesTonight?.[playerId] ? "done" : "pending", role);
+      } else {
+        setProgress(playerId, room.elementalTargetTonight?.[playerId] ? "done" : "pending", role);
+      }
+    }
+  }
+
+  return progress;
 }
 
 export function getWitchPendingDeaths(room: Room): string[] {

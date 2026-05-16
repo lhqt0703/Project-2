@@ -73,7 +73,14 @@ export default function Lobby() {
                 onChange={(e) => setRoomIdInput(e.target.value)}
                 style={{ padding: "12px 14px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.14)", background: "rgba(255,255,255,0.05)", color: "inherit" }}
               />
-              <button onClick={joinRoom} style={{ padding: "13px 14px", cursor: "pointer" }}>
+              <button onClick={joinRoom} style={{
+                  padding: "13px 14px",
+                  cursor: "pointer",
+                  background: "linear-gradient(135deg, #f6c85f, #ff8f42)",
+                  color: "#111",
+                  border: "none",
+                  fontWeight: 800,
+                  }}>
                 Tham gia phòng
               </button>
             </div>
@@ -96,10 +103,10 @@ export default function Lobby() {
                 style={{
                   padding: "13px 14px",
                   cursor: "pointer",
-                  background: "linear-gradient(135deg, #f6c85f, #ff8f42)",
-                  color: "#111",
-                  border: "none",
-                  fontWeight: 800,
+                  //background: "linear-gradient(135deg, #f6c85f, #ff8f42)",
+                  //color: "#111",
+                  //border: "none",
+                  //fontWeight: 800,
                 }}
               >
                 Tạo phòng

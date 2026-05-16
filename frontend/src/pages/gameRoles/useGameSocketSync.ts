@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { socket } from "../../socket";
+import { clientId, socket } from "../../socket";
 import type {
   GamePhase,
   GameEndedPayload,
@@ -33,6 +33,7 @@ import type {
   ElementalTargetUpdatedPayload,
   ElementalBuffVoteStatePayload,
   ElementalBuffSelectedPayload,
+  HostNightActionProgressUpdatedPayload,
 } from "./socketEvents";
 import { ELEMENTAL_BUFF_LABELS, ELEMENTAL_BUFFS } from "../../constants/elemental";
 
@@ -180,6 +181,7 @@ export function useGameSocketSync({
       setElementalTargetId(null);
       setElementalTargetSeq(0);
       setElementalActionMode("guess");
+      setRoom((prev: any) => (prev ? { ...prev, nightActionProgressByPlayerId: {} } : prev));
     };
 
     const handleRoomUpdated = (data: any) => {
@@ -204,6 +206,9 @@ export function useGameSocketSync({
       }
       if (Array.isArray(data?.deadPlayers)) {
         setDeadPlayers(data.deadPlayers);
+      }
+      if (data?.hostId && data.hostId === clientId && roomId) {
+        socket.emit("requestHostNightActionProgress", { roomId });
       }
       if (data?.elementalSelectedBuffId && data?.elementalSelectedBuffAppliesNight) {
         const buffId = data.elementalSelectedBuffId as string;
@@ -339,6 +344,11 @@ export function useGameSocketSync({
 
     const handleElementalBuffSelected = (payload: ElementalBuffSelectedPayload) => {
       setElementalBuffResult(payload);
+    };
+
+    const handleHostNightActionProgressUpdated = (payload: HostNightActionProgressUpdatedPayload) => {
+      const progressByPlayerId = payload?.progressByPlayerId || {};
+      setRoom((prev: any) => (prev ? { ...prev, nightActionProgressByPlayerId: progressByPlayerId } : prev));
     };
 
     const handlePlayerKilled = (playerId: string) => {
@@ -576,6 +586,7 @@ export function useGameSocketSync({
     socket.on("elementalTargetUpdated", handleElementalTargetUpdated);
     socket.on("elementalBuffVoteStateUpdated", handleElementalBuffVoteStateUpdated);
     socket.on("elementalBuffSelected", handleElementalBuffSelected);
+    socket.on("hostNightActionProgressUpdated", handleHostNightActionProgressUpdated);
 
     return () => {
       socket.off("roomUpdated", handleRoomUpdated);
@@ -620,6 +631,7 @@ export function useGameSocketSync({
       socket.off("elementalTargetUpdated", handleElementalTargetUpdated);
       socket.off("elementalBuffVoteStateUpdated", handleElementalBuffVoteStateUpdated);
       socket.off("elementalBuffSelected", handleElementalBuffSelected);
+      socket.off("hostNightActionProgressUpdated", handleHostNightActionProgressUpdated);
       socket.off("connect", syncGameRoom);
     };
   }, [roomId, setRoom]);

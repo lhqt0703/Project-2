@@ -142,3 +142,7 @@ export type ElementalBuffSelectedPayload = {
   appliesNight: number | null;
   randomTieBreak: boolean;
 };
+
+export type HostNightActionProgressUpdatedPayload = {
+  progressByPlayerId?: Record<string, "pending" | "done">;
+};

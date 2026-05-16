@@ -24,6 +24,13 @@ interface RoomLike {
   deadPlayers?: string[];
   sharedHeartsVisible?: boolean;
   playerHearts?: Record<string, number>;
+  nightActionProgressByPlayerId?: Record<string, "pending" | "done">;
+  nightTurnDeadline?: number | null;
+  gameRules?: {
+    allNightActionsSimultaneous?: boolean;
+    nonWolfNightActionDurationSec?: number;
+    wolfNightActionDurationSec?: number;
+  };
 }
 
 type BulletAnimation = {
@@ -327,6 +334,7 @@ export default function PlayerPositions({
   const [swapSource, setSwapSource] = useState<string | null>(null);
   const [compactCircles, setCompactCircles] = useState<boolean>(() => room?.compactCircles ?? false);
   const [frameScale, setFrameScale] = useState(1);
+  const [nightActionNow, setNightActionNow] = useState(() => Date.now());
 
   if (!room) return null;
 
@@ -360,6 +368,39 @@ export default function PlayerPositions({
 
   const isHost = room.hostId === clientId;
   const isEditor = mode === "edit" && (room.positionEditors?.includes(clientId!) || isHost);
+  const isSimultaneousNight =
+    room.phase === "night" && room.gameRules?.allNightActionsSimultaneous === true;
+  const hasPendingNightActionProgress = Object.values(room.nightActionProgressByPlayerId || {}).includes("pending");
+
+  useEffect(() => {
+    if (!isHost) return;
+    if (!isSimultaneousNight) return;
+    if (!room.nightTurnDeadline) return;
+    if (!hasPendingNightActionProgress) return;
+
+    setNightActionNow(Date.now());
+    const t = window.setInterval(() => setNightActionNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [hasPendingNightActionProgress, isHost, isSimultaneousNight, room.nightTurnDeadline]);
+
+  const witchBonusApplies =
+    (room.gameRules?.nonWolfNightActionDurationSec || 0) > 0
+    && room.gameRules?.nonWolfNightActionDurationSec === room.gameRules?.wolfNightActionDurationSec;
+  const getVisibleNightActionProgress = (playerId: string) => {
+    if (!isHost) return undefined;
+    const progress = room.nightActionProgressByPlayerId?.[playerId];
+    if (progress !== "pending") return progress;
+    if (!isSimultaneousNight) return progress;
+
+    const roleName = roleBadges?.[playerId] || wolfBadgeRoles?.[playerId] || "";
+    const isWolfProgress = roleName === "Sói" || roleName === "Sói con" || roleName === "Bán sói";
+    if (isWolfProgress) return progress;
+
+    const baseDeadline = room.nightTurnDeadline ?? null;
+    if (!baseDeadline) return progress;
+    const deadline = roleName === "Phù thủy" && witchBonusApplies ? baseDeadline + 10_000 : baseDeadline;
+    return nightActionNow >= deadline ? undefined : progress;
+  };
 
   const isExpandedFrame = visiblePlayers.length > AUTO_TOP_LIMIT;
   const frameHeightPx = isExpandedFrame ? EXPANDED_FRAME_HEIGHT_PX : FRAME_HEIGHT_PX;
@@ -965,7 +1006,8 @@ export default function PlayerPositions({
 
           const isWitchDanger =
             (!!dangerPlayerId && dangerPlayerId === pos.playerId) ||
-            (!!dangerPlayerIds && dangerPlayerIds.includes(pos.playerId));
+            (!!dangerPlayerIds && dangerPlayerIds.includes(pos.playerId))
+            && !verdictDiePlayerIds?.includes(pos.playerId);
           const dangerShadow = isWitchDanger ? `0 0 0 ${scalePx(6, 3)}px rgba(220,0,0,0.95), 0 0 ${scalePx(14, 7)}px rgba(220,0,0,0.55)` : "";
           const isHighlighted = !!highlightPlayerId && highlightPlayerId === pos.playerId;
           const isSecondaryHighlighted = !!secondaryHighlightPlayerIds && secondaryHighlightPlayerIds.includes(pos.playerId);
@@ -978,7 +1020,7 @@ export default function PlayerPositions({
               : isSecondaryHighlighted
                 ? `0 0 0 ${scalePx(5, 3)}px rgba(46,204,113,0.38), 0 0 ${scalePx(12, 7)}px ${scalePx(4, 2)}px rgba(46,204,113,0.24)`
                 : "";
-          const verdictDieShadow = isVerdictDieHighlighted
+          const verdictDieShadow = isVerdictDieHighlighted 
             ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #d00`
             : "";
           const trialOrangeShadow = trialOrangePlayerId === pos.playerId
@@ -990,6 +1032,13 @@ export default function PlayerPositions({
           const trialGreenShadow = trialGreenPlayerId === pos.playerId
             ? `0 0 0 ${scalePx(7, 4)}px rgba(46,204,113,0.95), 0 0 ${scalePx(16, 8)}px ${scalePx(6, 3)}px rgba(46,204,113,0.45)`
             : "";
+          const nightActionProgress = getVisibleNightActionProgress(pos.playerId);
+          const nightActionShadow =
+            nightActionProgress === "pending"
+              ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #ffa500e6`
+              : nightActionProgress === "done"
+                ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #79cd77`
+                : "";
 
           const showSelectedOutline =
             (!!selectedOutlinePlayerId && selectedOutlinePlayerId === pos.playerId) ||
@@ -1002,10 +1051,10 @@ export default function PlayerPositions({
             (activeNightRole === "Sói" && isWolfBadgeRole) ||
             (activeNightRole !== "Sói" && roleBadgeText === activeNightRole)
           );
-          const activeRoleShadow = isActiveNightRoleBadge
+          const activeRoleShadow = isActiveNightRoleBadge 
             ? `0 0 0 ${scalePx(7, 4)}px rgba(255,215,120,0.38), 0 0 ${scalePx(18, 9)}px ${scalePx(8, 4)}px rgba(255,215,120,0.22)`
             : "";
-          const mergedBoxShadow = [boxShadow, dangerShadow, highlightShadow, verdictDieShadow, activeRoleShadow, trialOrangeShadow, trialWhiteShadow, trialGreenShadow].filter(Boolean).join(", ");
+          const mergedBoxShadow = [boxShadow, dangerShadow, highlightShadow, verdictDieShadow, activeRoleShadow, trialOrangeShadow, trialWhiteShadow, trialGreenShadow, nightActionShadow].filter(Boolean).join(", ");
           // Only show disconnected badge to host by default. Host can broadcast visibility to all clients
           const showDisconnectedBadge =
             p.connected === false && (isHost || (revealDisconnectedToAll && !isDead));
@@ -1109,7 +1158,7 @@ export default function PlayerPositions({
               onDoubleClick={() => {
                 if (!dragging) onPlayerDoubleClick?.(p.id);
               }}
-              className={isWitchDanger ? "witch-danger" : undefined}
+              className={isWitchDanger && !isVerdictDieHighlighted ? "witch-danger" : undefined}
               style={{
                 position: "absolute",
                 left,
@@ -1145,8 +1194,24 @@ export default function PlayerPositions({
                   padding: badgePadding,
                   fontSize: badgeFontSizePx,
                   fontWeight: "bold",
+                  zIndex: 2,
                 }}>
                   {voteCountForThis}/{effectiveWolfCount}
+                </div>
+              )}
+              {nightActionProgress === "pending" && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: -badgeOffsetPx,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    fontSize: scalePx(16, 11),
+                    lineHeight: 1,
+                    filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.55))",
+                  }}
+                >
+                  ⌛
                 </div>
               )}
 
@@ -1211,7 +1276,7 @@ export default function PlayerPositions({
                   position: "absolute",
                   top: -hpBadgeTopPx,
                   right: -scalePx(6, 3),
-                  background: "rgba(170,20,35,0.95)",
+                  //background: "rgba(170,20,35,0.95)",
                   color: "#fff",
                   padding: hpBadgePadding,
                   borderRadius: 999,

@@ -89,6 +89,7 @@ export interface RoomData {
   elementalPendingBuffVote?: boolean;
   elementalBuffQuickMode?: boolean;
   elementalSelectedBuffId?: ElementalBuffId | null;
+  nightActionProgressByPlayerId?: Record<string, "pending" | "done">;
 }
 
 interface PlayerPosition {

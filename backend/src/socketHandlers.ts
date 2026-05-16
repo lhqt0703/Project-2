@@ -52,6 +52,7 @@ import {
   emitHunterTarget,
   emitRolesRevealToSocket,
   emitSpiritWolfDecisionNeeded,
+  getHostNightActionProgressByPlayerId,
   emitWitchPendingDeath,
   emitWitchPotions,
   getWitchPendingDeaths,
@@ -243,6 +244,14 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     pruneRoomPendingRoleBlocks(room);
     emitPendingRoleAssignmentsToHost(roomId);
     emitPendingRoleBlocksToHost(roomId);
+  }
+
+  function emitHostNightActionProgress(roomId: string) {
+    const room = rooms[roomId];
+    if (!room) return;
+    ctx.io.to(room.hostId).emit("hostNightActionProgressUpdated", {
+      progressByPlayerId: getHostNightActionProgressByPlayerId(room),
+    });
   }
 
   function finalizeElementalGuessNight(room: Room) {
@@ -1126,6 +1135,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
             ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes || {});
             ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2 || {});
             ctx.io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked || {});
+            emitHostNightActionProgress(roomId);
 
             const activeWolves = getActiveWolves(room);
             const allLocked = activeWolves.length > 0 && activeWolves.every(id => room.wolfLocked?.[id] === true);
@@ -1457,6 +1467,13 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     ctx.io.to(roomId).emit("revealDisconnectedBadge", { show: !!show });
   });
 
+  socket.on("requestHostNightActionProgress", ({ roomId }: { roomId: string }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+    emitHostNightActionProgress(roomId);
+  });
+
   socket.on("loveChoosePartner", ({ roomId, targetId }) => {
     const room = rooms[roomId];
     if (!room || !room.playerRoles) return;
@@ -1499,6 +1516,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       ctx.io.to(socketId).emit("loveArrowShot", { cupidId: clientId, targetId });
     }
     emitLoveStateToPair(ctx, roomId, room);
+    emitHostNightActionProgress(roomId);
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
@@ -2059,6 +2077,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (!targetId) {
       room.hunterTargetTonight[clientId] = null;
       emitHunterTarget(roomId, clientId);
+      emitHostNightActionProgress(roomId);
       return;
     }
 
@@ -2068,11 +2087,13 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (isLovePairMemberAwayAt(room, targetId, Date.now())) {
       room.hunterTargetTonight[clientId] = null;
       emitHunterTarget(roomId, clientId);
+      emitHostNightActionProgress(roomId);
       return;
     }
 
     room.hunterTargetTonight[clientId] = targetId;
     emitHunterTarget(roomId, clientId);
+    emitHostNightActionProgress(roomId);
 
     if (prev !== targetId) {
       appendLogEntry(room, { type: "hunter_mark", phase: "night", actorId: clientId, targetId });
@@ -2094,6 +2115,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (!targetId) {
       room.elementalTargetTonight[clientId] = null;
       emitElementalTarget(roomId, clientId);
+      emitHostNightActionProgress(roomId);
       return;
     }
 
@@ -2107,6 +2129,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (isLovePairMemberAwayAt(room, targetId, Date.now())) {
       room.elementalTargetTonight[clientId] = null;
       emitElementalTarget(roomId, clientId);
+      emitHostNightActionProgress(roomId);
       return;
     }
 
@@ -2126,6 +2149,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       isCorrect,
     });
     emitElementalTarget(roomId, clientId);
+    emitHostNightActionProgress(roomId);
   });
 
   socket.on("elementalChooseBuff", ({ roomId, buffId }) => {
@@ -2144,6 +2168,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     room.elementalBuffVotesTonight = room.elementalBuffVotesTonight || {};
     room.elementalBuffVotesTonight[clientId] = buffId;
     emitElementalBuffVoteState(roomId, clientId);
+    emitHostNightActionProgress(roomId);
   });
 
   socket.on("transferHost", ({ roomId, targetId }) => {
@@ -2265,6 +2290,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     ctx.io.to(clientId).emit("seerResult", { playerId: targetId, isWolf });
 
     appendLogEntry(room, { type: "seer_check", phase: "night", actorId: clientId, targetId, isWolf });
+    emitHostNightActionProgress(roomId);
   });
 
   socket.on("guardianProtect", ({ roomId, targetId }) => {
@@ -2300,6 +2326,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     appendLogEntry(room, { type: "guardian_protect", phase: "night", actorId: clientId, targetId });
 
     emitWitchPendingDeath(roomId);
+    emitHostNightActionProgress(roomId);
   });
 
   socket.on("witchHeal", ({ roomId, targetId }) => {
@@ -2341,6 +2368,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     appendLogEntry(room, { type: "witch_heal", phase: "night", actorId: clientId, targetId });
 
     emitWitchPendingDeath(roomId);
+    emitHostNightActionProgress(roomId);
   });
 
   socket.on("witchPoison", ({ roomId, targetId }) => {
@@ -2377,6 +2405,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     emitWitchPotions(roomId, clientId);
 
     appendLogEntry(room, { type: "witch_poison", phase: "night", actorId: clientId, targetId });
+    emitHostNightActionProgress(roomId);
 
     const targetRole = room.playerRoles?.[targetId];
     if (
@@ -2424,6 +2453,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     room.spiritWolfPendingPoisonedWolfId = null;
     ctx.io.to(clientId).emit("spiritWolfDecisionRecorded", { saved: !!save });
+    emitHostNightActionProgress(roomId);
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
 
     appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", saved: !!save });
@@ -2512,6 +2542,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     room.wolfLocked![clientId] = true;
 
     ctx.io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked);
+    emitHostNightActionProgress(roomId);
 
     const activeWolves = getActiveWolves(room);
     const allLocked = activeWolves.length > 0 && activeWolves.every(id => room.wolfLocked?.[id] === true);

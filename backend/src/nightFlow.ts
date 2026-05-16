@@ -3,6 +3,7 @@ import { appendLogEntry, buildWolfVoteBreakdown } from "./gameLog.js";
 import {
   emitSpiritWolfDecisionNeeded,
   emitWitchPendingDeath,
+  getHostNightActionProgressByPlayerId,
   getSelectedElementalRoles,
   getWolfTurnDurationMs,
   isElementalRoleTurn,
@@ -48,6 +49,14 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     const baseMs = getNonWolfTurnDurationMs(room);
     if (baseMs <= 0) return baseMs;
     return shouldGrantWitchBonus(room) ? baseMs + WITCH_BONUS_MS : baseMs;
+  }
+
+  function emitHostNightActionProgress(roomId: string) {
+    const room = ctx.rooms[roomId];
+    if (!room) return;
+    ctx.io.to(room.hostId).emit("hostNightActionProgressUpdated", {
+      progressByPlayerId: getHostNightActionProgressByPlayerId(room),
+    });
   }
 
   function getSimultaneousRoleDeadline(room: Room, role: NightActionRole) {
@@ -362,6 +371,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       room.hidePlayerRoleText = false;
       const nonWolfDurationMs = getNonWolfTurnDurationMs(room);
       room.nightTurnDeadline = nonWolfDurationMs > 0 ? Date.now() + nonWolfDurationMs : null;
+      const baseDeadline = room.nightTurnDeadline;
 
       const wolfDurationMs = getWolfTurnDurationMs(room);
       startWolfPhase(roomId, {
@@ -371,6 +381,26 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       });
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       emitElementalNightStateForAll(roomId);
+      if (baseDeadline) {
+        setTimeout(() => {
+          const latest = ctx.rooms[roomId];
+          if (!latest) return;
+          if (latest.phase !== "night") return;
+          if (latest.nightTurnDeadline !== baseDeadline) return;
+          emitHostNightActionProgress(roomId);
+        }, Math.max(0, baseDeadline - Date.now()));
+
+        if (shouldGrantWitchBonus(room)) {
+          const witchDeadline = baseDeadline + WITCH_BONUS_MS;
+          setTimeout(() => {
+            const latest = ctx.rooms[roomId];
+            if (!latest) return;
+            if (latest.phase !== "night") return;
+            if (latest.nightTurnDeadline !== baseDeadline) return;
+            emitHostNightActionProgress(roomId);
+          }, Math.max(0, witchDeadline - Date.now()));
+        }
+      }
       return;
     }
 
@@ -500,6 +530,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     if (room.phase === "night") {
       emitWitchPendingDeath(roomId);
     }
+    emitHostNightActionProgress(roomId);
 
     const rules = ensureRoomGameRules(room);
     if (!rules.allNightActionsSimultaneous && room.phase === "night" && room.nightTurnRole === "Sói") {

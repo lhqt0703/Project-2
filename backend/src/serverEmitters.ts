@@ -15,12 +15,14 @@ import {
 } from "./serverTypes.js";
 import {
   ensureWitchState,
+  getAlivePlayerIds,
   getSpiritWolfId,
   getWitches,
   isWolfAlignedPlayer,
   isWolfRole,
 } from "./roomState.js";
 import { LOVE_ROLE, emitLoveStateToPlayer, isLovePairMemberAwayAt } from "./love.js";
+import { PROTECTOR_ROLE } from "./specialRoles.js";
 
 export function toPublicRoom(room: Room) {
   ensureRoomGameRules(room);
@@ -31,6 +33,10 @@ export function toPublicRoom(room: Room) {
     witchHealTargetTonight: _witchHealTargetTonight,
     witchPoisonTargetTonight: _witchPoisonTargetTonight,
     hunterTargetTonight: _hunterTargetTonight,
+    protectorActorId: _protectorActorId,
+    protectorTargetId: _protectorTargetId,
+    protectorTargetSetNight: _protectorTargetSetNight,
+    villageChiefPendingWolfDeath: _villageChiefPendingWolfDeath,
     loveCupidId: _loveCupidId,
     loveTargetId: _loveTargetId,
     loveTargetWolfAligned: _loveTargetWolfAligned,
@@ -85,6 +91,15 @@ export function toPublicRoom(room: Room) {
 function getSelectedElementalRoles(room: Room): ElementalRole[] {
   const sourceRoles = room.playerRoles ? Object.values(room.playerRoles) : room.roles || [];
   return ELEMENTAL_ROLE_ORDER.filter((role) => sourceRoles.includes(role));
+}
+
+export function emitProtectorTarget(roomId: string, protectorId: string) {
+  const ctx = getServerContext();
+  if (!ctx) return;
+  const room = ctx.rooms[roomId];
+  if (!room) return;
+  const targetId = room.protectorActorId === protectorId ? room.protectorTargetId ?? null : null;
+  ctx.io.to(protectorId).emit("protectorTargetUpdated", { targetId });
 }
 
 function isElementalRoleTurn(role: string | null | undefined): role is ElementalRole {
@@ -179,6 +194,11 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
       continue;
     }
 
+    if (role === PROTECTOR_ROLE) {
+      setProgress(playerId, room.protectorTargetId ? "done" : "pending", role);
+      continue;
+    }
+
     if (role === "Phù thủy") {
       const healDone = !!room.witchHealTargetAt?.[playerId];
       const poisonDone = !!room.witchPoisonTargetAt?.[playerId];
@@ -237,6 +257,13 @@ export function getWitchPendingDeaths(room: Room): string[] {
   for (const pid of candidates) {
     if (!pid) continue;
     if (dead.has(pid)) continue;
+    if (
+      !rules.witchSeeProtectorImmortalBite &&
+      room.protectorTargetId === pid &&
+      getAlivePlayerIds(room).includes(pid)
+    ) {
+      continue;
+    }
     if (!room.players.find((p) => p.id === pid)) continue;
     if (!unique.includes(pid)) unique.push(pid);
   }
@@ -339,6 +366,10 @@ export function syncPrivateRoleStateForSocket(
     emitWitchPotions(roomId, playerId);
   } else {
     socket.leave(`witches_${roomId}`);
+  }
+
+  if (role === PROTECTOR_ROLE) {
+    emitProtectorTarget(roomId, playerId);
   }
 }
 

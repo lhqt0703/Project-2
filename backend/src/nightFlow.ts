@@ -22,6 +22,7 @@ import {
 import { ensureRoomGameRules, type NightActionRole, type Room } from "./serverTypes.js";
 import { toPublicRoom } from "./serverEmitters.js";
 import { LOVE_ROLE } from "./love.js";
+import { PROTECTOR_ROLE, isVillageChief } from "./specialRoles.js";
 
 type NightFlowDeps = {
   checkAndEndGame: (roomId: string, reason?: string) => void;
@@ -98,7 +99,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       selected.add(LOVE_ROLE as NightActionRole);
     }
 
-    for (const role of ["Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"] as NightActionRole[]) {
+    for (const role of ["Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"] as NightActionRole[]) {
       if (sourceRoles.includes(role)) selected.add(role);
     }
 
@@ -527,12 +528,30 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     }
     appendLogEntry(room, { type: "wolf_result", phase: "night", targetIds: wolfTargets, selectedByByTarget });
 
+    const rules = ensureRoomGameRules(room);
+    if (rules.villageChiefKnowsWolfBite) {
+      for (const targetId of wolfTargets) {
+        if (!isVillageChief(room, targetId)) continue;
+        if ((room.deadPlayers || []).includes(targetId)) continue;
+        room.privatePlayerHearts = room.privatePlayerHearts || {};
+        room.privatePlayerHearts[targetId] = 1;
+        room.privateHeartVisiblePlayerIds = Array.from(new Set([...(room.privateHeartVisiblePlayerIds || []), targetId]));
+        room.playerHeartShakeIds = (room.playerHeartShakeIds || []).filter((id) => id !== targetId);
+        appendLogEntry(room, {
+          type: "village_chief_bitten_warning",
+          phase: "night",
+          targetId,
+          attackerIds: selectedByByTarget[targetId] || [],
+        });
+      }
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    }
+
     if (room.phase === "night") {
       emitWitchPendingDeath(roomId);
     }
     emitHostNightActionProgress(roomId);
 
-    const rules = ensureRoomGameRules(room);
     if (!rules.allNightActionsSimultaneous && room.phase === "night" && room.nightTurnRole === "Sói") {
       startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
     }

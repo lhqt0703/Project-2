@@ -557,6 +557,71 @@ function LogEntryLine({
         </li>
       );
 
+    case "protector_bless":
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> trao bất tử cho{" "}
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+          {entry.permanent ? <span style={{ opacity: 0.75 }}> đến cuối game</span> : null}
+        </li>
+      );
+
+    case "protector_save":
+      return (
+        <li style={lineStyle}>
+          Bất tử của Hộ nhân chặn một lần chết lên{" "}
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={entry.actorId ? [entry.actorId] : []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+          {entry.permanent ? <span style={{ opacity: 0.75 }}> (vẫn còn hiệu lực)</span> : null}
+        </li>
+      );
+
+    case "village_chief_revealed":
+      return (
+        <li style={lineStyle}>
+          Trưởng làng lộ diện và sống sót sau biểu quyết:{" "}
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+        </li>
+      );
+
+    case "village_chief_bitten_warning":
+      return (
+        <li style={lineStyle}>
+          Trưởng làng bị sói cắn và còn 1 tim:{" "}
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={entry.attackerIds || []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+        </li>
+      );
+
+    case "village_chief_delayed_death_pending":
+      return (
+        <li style={lineStyle}>
+          Vết cắn lên Trưởng làng sẽ kết toán sau đêm {entry.deathNight}:{" "}
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+        </li>
+      );
+
+    case "village_chief_delayed_death":
+      return (
+        <li style={lineStyle}>
+          Vết cắn trễ của Trưởng làng kết toán:{" "}
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+        </li>
+      );
+
+    case "village_chief_extra_vote_unlocked":
+      return (
+        <li style={lineStyle}>
+          Hộ nhân bị sói cắn chết, Trưởng làng được mở thêm một lượt biểu quyết
+        </li>
+      );
+
+    case "village_chief_extra_vote_started":
+      return (
+        <li style={lineStyle}>
+          {" "} đã kích hoạt lượt biểu quyết phụ
+          <RoleSpan playerId={entry.chiefId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+        </li>
+      );
+
     case "witch_heal":
       if (entry.actorId && entry.targetId && entry.actorId === entry.targetId) {
         return (

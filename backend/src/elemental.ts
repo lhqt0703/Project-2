@@ -24,6 +24,7 @@ export const ELEMENTAL_BUFFS = [
   { id: "cancel-pending-element-effect", label: "Hủy hoàn toàn hiệu ứng nguyên tố bất lợi", tier: 4 },
   { id: "seer-check-two", label: "Tiên tri soi 2 người", tier: 4 },
   { id: "hunter-double-shot", label: "Thợ săn bắn 2 phát (không cần chết)", tier: 4 },
+  { id: "protector-immortality-permanent", label: "Bất tử của Hộ nhân tồn tại đến cuối game", tier: 4 },
 ] as const;
 
 export type ElementalBuffId = (typeof ELEMENTAL_BUFFS)[number]["id"];

@@ -16,6 +16,7 @@ export type WolfPhaseStartedPayload = {
 
 export type SeerResultPayload = { playerId: string; isWolf: boolean };
 export type GuardianProtectedPayload = string; // targetId
+export type ProtectorTargetUpdatedPayload = { targetId: string | null };
 
 export type WitchPendingDeathPayload = { targetId: string | null; targetIds?: string[] };
 export type WitchPotionsPayload = { healUsed: boolean; poisonUsed: boolean };
@@ -94,6 +95,14 @@ export type GameLogEntry =
   | { type: "trial_verdict"; phase: GameLogEntryPhase; targetId: string; liveVotes: number; dieVotes: number; liveVoterIds?: string[]; dieVoterIds?: string[]; executed: boolean }
   | { type: "bonus_bite"; phase: GameLogEntryPhase }
   | { type: "guardian_protect"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "protector_bless"; phase: GameLogEntryPhase; actorId: string; targetId: string; permanent: boolean }
+  | { type: "protector_save"; phase: GameLogEntryPhase; actorId: string | null; targetId: string; cause: EliminationCause; permanent: boolean }
+  | { type: "village_chief_revealed"; phase: GameLogEntryPhase; targetId: string; reason: "day_vote" }
+  | { type: "village_chief_bitten_warning"; phase: GameLogEntryPhase; targetId: string; attackerIds: string[] }
+  | { type: "village_chief_delayed_death_pending"; phase: GameLogEntryPhase; targetId: string; deathNight: number }
+  | { type: "village_chief_delayed_death"; phase: GameLogEntryPhase; targetId: string }
+  | { type: "village_chief_extra_vote_unlocked"; phase: GameLogEntryPhase; chiefId: string | null; protectorId: string }
+  | { type: "village_chief_extra_vote_started"; phase: GameLogEntryPhase; chiefId: string }
   | { type: "witch_heal"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "witch_poison"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "seer_check"; phase: GameLogEntryPhase; actorId: string; targetId: string; isWolf: boolean }
@@ -123,6 +132,7 @@ export type GameLogNight = {
 export type GameLogUpdatedPayload = { roomId: string; nights: GameLogNight[] };
 
 export type RolesRevealUpdatedPayload = { roomId: string; rolesByPlayerId: Record<string, string> };
+export type PublicRolesRevealUpdatedPayload = { roomId: string; rolesByPlayerId: Record<string, string> };
 
 export type SpiritWolfDecisionNeededPayload = { targetId: string };
 export type SpiritWolfDecisionRecordedPayload = { saved: boolean };

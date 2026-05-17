@@ -24,6 +24,9 @@ interface RoomLike {
   deadPlayers?: string[];
   sharedHeartsVisible?: boolean;
   playerHearts?: Record<string, number>;
+  privatePlayerHearts?: Record<string, number>;
+  privateHeartVisiblePlayerIds?: string[];
+  playerHeartShakeIds?: string[];
   nightActionProgressByPlayerId?: Record<string, "pending" | "done">;
   nightTurnDeadline?: number | null;
   gameRules?: {
@@ -288,6 +291,7 @@ export default function PlayerPositions({
   dangerPlayerIds,
   showWolfVoteBadges,
   wolfVoteVoterIds,
+  voteWeightsByVoterId,
   showWolfBadges,
   wolfBadgePlayerIds,
   wolfBadgeRoles,
@@ -315,6 +319,7 @@ export default function PlayerPositions({
   dangerPlayerIds?: string[];
   showWolfVoteBadges?: boolean;
   wolfVoteVoterIds?: string[];
+  voteWeightsByVoterId?: Record<string, number>;
   showWolfBadges?: boolean;
   wolfBadgePlayerIds?: string[];
   wolfBadgeRoles?: Record<string, string>;
@@ -909,6 +914,14 @@ export default function PlayerPositions({
         .witch-danger {
           animation: witchDangerShake 500ms infinite;
         }
+        @keyframes playerHeartShake {
+          0% { transform: translateX(0); }
+          20% { transform: translateX(-1px); }
+          40% { transform: translateX(1px); }
+          60% { transform: translateX(-1px); }
+          80% { transform: translateX(1px); }
+          100% { transform: translateX(0); }
+        }
       `}</style>
       {isEditor && (
         <div className="player-position-toolbar" style={{ marginBottom: 8, justifyContent: "center" }}>
@@ -988,7 +1001,11 @@ export default function PlayerPositions({
           const effectiveWolfCount = effectiveVoterIds ? effectiveVoterIds.length : wolfCount;
           const voteCountForThis = (wolfVotes || wolfVotes2)
             ? (effectiveVoterIds
-                ? effectiveVoterIds.filter(wid => (wolfVotes?.[wid] === pos.playerId) || (wolfVotes2?.[wid] === pos.playerId)).length
+                ? effectiveVoterIds.reduce((total, wid) => {
+                    const votedThis = (wolfVotes?.[wid] === pos.playerId) || (wolfVotes2?.[wid] === pos.playerId);
+                    if (!votedThis) return total;
+                    return total + (voteWeightsByVoterId?.[wid] || 1);
+                  }, 0)
                 : (() => {
                     const ids = Object.keys({ ...(wolfVotes || {}), ...(wolfVotes2 || {}) });
                     return ids.filter(wid => (wolfVotes?.[wid] === pos.playerId) || (wolfVotes2?.[wid] === pos.playerId)).length;
@@ -1059,8 +1076,19 @@ export default function PlayerPositions({
           const showDisconnectedBadge =
             p.connected === false && (isHost || (revealDisconnectedToAll && !isDead));
           const showInGameBadge = mode === "edit" && p.inGame === true;
-          const playerHp = room.sharedHeartsVisible ? room.playerHearts?.[pos.playerId] : undefined;
-          const showHpBadge = room.sharedHeartsVisible && !isDead && typeof playerHp === "number";
+          const privateHeartVisible =
+            (room.privateHeartVisiblePlayerIds || []).includes(pos.playerId) &&
+            (isHost || pos.playerId === clientId);
+          const heartVisible = room.sharedHeartsVisible || privateHeartVisible;
+          const privatePlayerHp = privateHeartVisible ? room.privatePlayerHearts?.[pos.playerId] : undefined;
+          const playerHp =
+            privateHeartVisible && typeof privatePlayerHp === "number"
+              ? privatePlayerHp
+              : heartVisible
+                ? room.playerHearts?.[pos.playerId]
+                : undefined;
+          const showHpBadge = heartVisible && !isDead && typeof playerHp === "number";
+          const heartShaking = privateHeartVisible && (room.playerHeartShakeIds || []).includes(pos.playerId);
           const hpSafe = Math.max(0, Math.min(2, playerHp ?? 0));
           const hpText = `${"♥️".repeat(hpSafe)}${"♡".repeat(2 - hpSafe)}`;
 
@@ -1284,6 +1312,7 @@ export default function PlayerPositions({
                   fontWeight: "bold",
                   letterSpacing: scaleNum(0.5, 0.25),
                   boxShadow: "0 0 0 1px rgba(255,255,255,0.35)",
+                  animation: heartShaking ? "playerHeartShake 850ms ease-in-out infinite" : undefined,
                 }}>
                   {hpText}
                 </div>

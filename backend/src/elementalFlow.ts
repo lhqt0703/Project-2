@@ -10,6 +10,7 @@ import {
   shouldElementalsVoteBuffTonight,
   toPublicRoom,
 } from "./serverEmitters.js";
+import { PROTECTOR_PERMANENT_BUFF_ID } from "./specialRoles.js";
 
 export function createElementalFlow(ctx: ServerContext) {
   function emitElementalTarget(roomId: string, playerId: string) {
@@ -82,9 +83,13 @@ export function createElementalFlow(ctx: ServerContext) {
     }
 
     room.elementalSelectedBuffId = chosen;
-    room.elementalSelectedBuffAppliesNight = chosen
+    const appliesNight = chosen
       ? (room.elementalBuffQuickMode !== false ? (room.nightCount || 0) : (room.nightCount || 0) + 1)
       : null;
+    room.elementalSelectedBuffAppliesNight = appliesNight;
+    if (chosen === PROTECTOR_PERMANENT_BUFF_ID && appliesNight !== null && appliesNight <= (room.nightCount || 0)) {
+      room.protectorImmortalityPermanent = true;
+    }
     room.elementalBuffVotesResolvedNight = room.nightCount || 0;
     room.elementalPendingBuffVoteNight = null;
     room.elementalBuffVotesTonight = {};

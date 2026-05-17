@@ -203,12 +203,16 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.dayVoters = [];
   room.dayVotes = {};
   room.dayLocked = {};
+  room.dayVoteKind = "main";
   room.dayDiscussionDeadline = null;
   room.dayDeadline = null;
 
   room.deadPlayers = [];
   room.sharedHeartsVisible = false;
   room.playerHearts = {};
+  room.privatePlayerHearts = {};
+  room.privateHeartVisiblePlayerIds = [];
+  room.playerHeartShakeIds = [];
   room.protectedTonight = null;
   room.protectedTonightAt = null;
   room.lastProtected = null;
@@ -230,6 +234,15 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.witchHealTargetAt = {};
   room.witchPoisonTargetAt = {};
   room.spiritWolfPendingPoisonedWolfId = null;
+  room.publicRevealedRolesByPlayerId = {};
+  room.villageChiefPendingWolfDeath = null;
+  room.villageChiefExtraVoteAvailable = false;
+  room.villageChiefExtraVoteReady = false;
+  room.villageChiefExtraVoteUsed = false;
+  room.protectorActorId = null;
+  room.protectorTargetId = null;
+  room.protectorTargetSetNight = null;
+  room.protectorImmortalityPermanent = false;
   room.elementalTargetTonight = {};
   room.elementalCorrectGuessPlayerIdsTonight = [];
   room.elementalCorrectGuessCountForBuff = 0;

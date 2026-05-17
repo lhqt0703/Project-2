@@ -12,6 +12,7 @@ export interface Player {
 export type NightActionRole =
   | "Sói"
   | "Bảo vệ"
+  | "Hộ nhân"
   | "Phù thủy"
   | "Linh sói"
   | "Thợ săn"
@@ -22,6 +23,7 @@ export type NightActionRole =
 export type NightActionOrderRole =
   | "Sói"
   | "Bảo vệ"
+  | "Hộ nhân"
   | "Phù thủy"
   | "Linh sói"
   | "Thợ săn"
@@ -40,6 +42,8 @@ export interface RoomGameRules {
   wolfNightActionDurationSec: number;
   nightActionOrder: NightActionOrderRole[];
   banSoiBecomeWolfEvenIfHealed: boolean;
+  villageChiefKnowsWolfBite: boolean;
+  witchSeeProtectorImmortalBite: boolean;
 }
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -51,8 +55,10 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 20,
   wolfNightActionDurationSec: 20,
-  nightActionOrder: [ELEMENTAL_GROUP_ROLE, "Thần tình yêu", "Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
+  nightActionOrder: [ELEMENTAL_GROUP_ROLE, "Thần tình yêu", "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
   banSoiBecomeWolfEvenIfHealed: false,
+  villageChiefKnowsWolfBite: true,
+  witchSeeProtectorImmortalBite: true,
 };
 
 export interface RoomData {
@@ -75,8 +81,14 @@ export interface RoomData {
   pendingGameRules?: RoomGameRules;
   banSoiWolfAligned?: boolean;
   banSoiWolfAlignedPending?: boolean;
+  publicRevealedRolesByPlayerId?: Record<string, string>;
+  privateHeartVisiblePlayerIds?: string[];
+  playerHeartShakeIds?: string[];
+  villageChiefExtraVoteReady?: boolean;
+  villageChiefExtraVoteUsed?: boolean;
   sharedHeartsVisible?: boolean;
   playerHearts?: Record<string, number>;
+  privatePlayerHearts?: Record<string, number>;
   wolfVotes?: Record<string, string | null>;
   wolfVotes2?: Record<string, string | null>;
   deadPlayers?: string[];

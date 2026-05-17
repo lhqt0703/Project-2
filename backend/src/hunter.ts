@@ -3,6 +3,8 @@ import type { EliminationCause, GameLogEntryPhase, Room } from "./serverTypes.js
 import { appendLogEntry } from "./gameLog.js";
 import { getHunters } from "./roomState.js";
 import { markEliminatedWithLoveChain } from "./love.js";
+import { type ProtectorSaveRecord } from "./specialRoles.js";
+import { emitProtectorTarget } from "./serverEmitters.js";
 
 type HunterShotResolution = {
   killedIds: string[];
@@ -27,6 +29,7 @@ export function resolveHunterShotsForDeaths(
   const queue = Array.from(new Set(newlyDeadIds));
   const processed = new Set<string>();
   const hunterIds = new Set(getHunters(room));
+  const protectorSaves: ProtectorSaveRecord[] = [];
 
   room.hunterShotPlayerIds = room.hunterShotPlayerIds || [];
   const firedHunterIds = new Set(room.hunterShotPlayerIds);
@@ -57,7 +60,23 @@ export function resolveHunterShotsForDeaths(
     const newlyDead = markEliminatedWithLoveChain(ctx, roomId, room, targetId, cause, phase, {
       eliminatedIds: killedIds,
       causesByTarget,
+      protectorSaves,
     });
+
+    while (protectorSaves.length) {
+      const save = protectorSaves.shift()!;
+      appendLogEntry(room, {
+        type: "protector_save",
+        phase,
+        actorId: save.actorId,
+        targetId: save.targetId,
+        cause: save.cause,
+        permanent: save.permanent,
+      });
+      if (save.actorId) {
+        emitProtectorTarget(roomId, save.actorId);
+      }
+    }
 
     if (appendEliminationLog && newlyDead.length) {
       appendLogEntry(room, {

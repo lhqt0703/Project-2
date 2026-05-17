@@ -5,12 +5,43 @@ import { emitGameLogToSocket, toPublicRoom } from "./serverEmitters.js";
 import { clearTrialState, getActiveDayVoters, getAlivePlayerIds, getTrialVoters } from "./roomState.js";
 import { ensureRoomGameRules, type EliminationCause, type Room } from "./serverTypes.js";
 import { markEliminatedWithLoveChain } from "./love.js";
+import {
+  getDayVoteWeight,
+  getVillageChiefId,
+  isVillageChief,
+  isVillageChiefRevealed,
+  revealRolePublicly,
+} from "./specialRoles.js";
 
 type DayFlowDeps = {
   checkAndEndGame: (roomId: string, reason?: string) => void;
 };
 
 export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
+  function emitPublicRoleReveal(roomId: string, room: Room) {
+    ctx.io.to(roomId).emit("publicRolesRevealUpdated", {
+      roomId,
+      rolesByPlayerId: room.publicRevealedRolesByPlayerId || {},
+    });
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  }
+
+  function markVillageChiefExtraVoteReady(room: Room) {
+    if (!room.villageChiefExtraVoteAvailable || room.villageChiefExtraVoteUsed) return;
+    room.villageChiefExtraVoteReady = true;
+  }
+
+  function clearFinishedDayVoteKind(room: Room) {
+    if (room.dayVoteKind === "village_chief_extra") {
+      room.villageChiefExtraVoteAvailable = false;
+      room.villageChiefExtraVoteReady = false;
+      room.villageChiefExtraVoteUsed = true;
+      room.dayVoteKind = "main";
+      return;
+    }
+    markVillageChiefExtraVoteReady(room);
+  }
+
   function buildTrialInteractionUpdatedPayload(room: Room) {
     const selectedIds = room.trialSelectedInteractorIds || [];
     const selectionLimit = Math.max(0, room.trialInteractionSelectionLimit || 0);
@@ -98,15 +129,20 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     for (const vid of voters) {
       const v = votes[vid];
       if (v === "live") {
-        liveVotes += 1;
+        liveVotes += getDayVoteWeight(room, vid);
         liveVoterIds.push(vid);
       } else if (v === "die") {
-        dieVotes += 1;
+        dieVotes += getDayVoteWeight(room, vid);
         dieVoterIds.push(vid);
       }
     }
 
-    const executed = dieVotes > liveVotes;
+    const votedToExecute = dieVotes > liveVotes;
+    const chiefSurvivesByReveal =
+      votedToExecute &&
+      isVillageChief(room, targetId) &&
+      !isVillageChiefRevealed(room, targetId);
+    const executed = votedToExecute && !chiefSurvivesByReveal;
 
     appendLogEntry(room, {
       type: "trial_verdict",
@@ -118,6 +154,17 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
       dieVoterIds,
       executed,
     });
+
+    if (chiefSurvivesByReveal) {
+      revealRolePublicly(room, targetId);
+      appendLogEntry(room, {
+        type: "village_chief_revealed",
+        phase: "day",
+        targetId,
+        reason: "day_vote",
+      });
+      emitPublicRoleReveal(roomId, room);
+    }
 
     if (executed && !((room.deadPlayers || []).includes(targetId))) {
       const eliminatedIds: string[] = [];
@@ -145,6 +192,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     });
 
     clearTrialState(room);
+    clearFinishedDayVoteKind(room);
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
 
     deps.checkAndEndGame(roomId, "after_trial_verdict");
@@ -190,7 +238,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     }, 120_000);
   }
 
-  function startDayVoting(roomId: string) {
+  function startDayVoting(roomId: string, opts?: { kind?: "main" | "village_chief_extra" }) {
     const room = ctx.rooms[roomId];
     if (!room) return;
     if (room.gameOver) return;
@@ -213,6 +261,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     room.dayVoters = voters;
     room.dayVotes = {};
     room.dayLocked = {};
+    room.dayVoteKind = opts?.kind || "main";
     voters.forEach((id) => {
       room.dayVotes![id] = null;
       room.dayLocked![id] = false;
@@ -223,6 +272,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     ctx.io.to(roomId).emit("dayPhaseStarted", {
       voters: getActiveDayVoters(room),
       deadline: room.dayDeadline,
+      kind: room.dayVoteKind,
     });
     ctx.io.to(roomId).emit("dayVotesUpdated", room.dayVotes);
     ctx.io.to(roomId).emit("dayLockedUpdated", room.dayLocked);
@@ -290,7 +340,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     for (const voterId of activeVoters) {
       const target = votes[voterId];
       if (!target) continue;
-      counts[target] = (counts[target] || 0) + 1;
+      counts[target] = (counts[target] || 0) + getDayVoteWeight(room, voterId);
     }
 
     const entries = Object.entries(counts);
@@ -322,6 +372,8 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     if (executedId) {
       startTrialDefense(roomId, executedId);
     } else {
+      clearFinishedDayVoteKind(room);
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       deps.checkAndEndGame(roomId, "after_day_vote_no_nominee");
     }
 
@@ -338,5 +390,28 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     startDayVoting,
     startDayDiscussion,
     finishDayVoting,
+    startVillageChiefExtraVoting(roomId: string, chiefId: string) {
+      const room = ctx.rooms[roomId];
+      if (!room) return;
+      if (room.gameOver) return;
+      if (room.phase !== "day") return;
+      if (room.dayDeadline || room.dayDiscussionDeadline) return;
+      if (room.trialStage && room.trialStage !== "none") return;
+      if (!room.villageChiefExtraVoteReady || room.villageChiefExtraVoteUsed) return;
+      if ((room.deadPlayers || []).includes(chiefId)) return;
+      if (getVillageChiefId(room) !== chiefId) return;
+
+      room.villageChiefExtraVoteReady = false;
+      room.villageChiefExtraVoteAvailable = false;
+      room.villageChiefExtraVoteUsed = true;
+
+      appendLogEntry(room, {
+        type: "village_chief_extra_vote_started",
+        phase: "day",
+        chiefId,
+      });
+
+      startDayVoting(roomId, { kind: "village_chief_extra" });
+    },
   };
 }

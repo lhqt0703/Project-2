@@ -14,6 +14,7 @@ import { ELEMENTAL_ROLE_SET } from "../constants/elemental";
 import { useSeerRole } from "./gameRoles/useSeerRole";
 import { useWolfRole } from "./gameRoles/useWolfRole";
 import { useGuardianRole } from "./gameRoles/useGuardianRole";
+import { useProtectorRole } from "./gameRoles/useProtectorRole";
 import { useGameSocketSync } from "./gameRoles/useGameSocketSync";
 import { useWitchRole } from "./gameRoles/useWitchRole";
 import { useHunterRole } from "./gameRoles/useHunterRole";
@@ -28,6 +29,7 @@ const NIGHT_ACTION_ROLE_SET = new Set([
   "Sói con",
   "Bán sói",
   "Bảo vệ",
+  "Hộ nhân",
   "Phù thủy",
   "Linh sói",
   "Thợ săn",
@@ -483,11 +485,16 @@ export default function Game() {
 
   const roleBadgesForDisplay = useMemo(() => {
     const loveRoleBadges = sync.loveState.rolesByPlayerId || {};
+    const publicRoleBadges = roomForDisplay?.publicRevealedRolesByPlayerId || {};
     const hasLoveRoleBadges = Object.keys(loveRoleBadges).length > 0;
-    if (!canViewRoles) return hasLoveRoleBadges ? loveRoleBadges : undefined;
+    const hasPublicRoleBadges = Object.keys(publicRoleBadges).length > 0;
+    if (!canViewRoles) {
+      const mergedPublic = { ...publicRoleBadges, ...loveRoleBadges };
+      return hasPublicRoleBadges || hasLoveRoleBadges ? mergedPublic : undefined;
+    }
 
     const allRoleBadges = sync.revealedRolesByPlayerId || {};
-    if (!isSequentialNight || sync.gameEnded) return { ...allRoleBadges, ...loveRoleBadges };
+    if (!isSequentialNight || sync.gameEnded) return { ...allRoleBadges, ...publicRoleBadges, ...loveRoleBadges };
 
     const filteredBadges = Object.fromEntries(
       Object.entries(allRoleBadges).filter(([, playerRole]) => {
@@ -495,8 +502,15 @@ export default function Game() {
         return doesRoleMatchNightTurn(playerRole, currentNightTurnRole);
       })
     );
-    return { ...filteredBadges, ...loveRoleBadges };
-  }, [canViewRoles, currentNightTurnRole, isBanSoiAligned, isSequentialNight, sync.gameEnded, sync.loveState.rolesByPlayerId, sync.revealedRolesByPlayerId]);
+    return { ...filteredBadges, ...publicRoleBadges, ...loveRoleBadges };
+  }, [canViewRoles, currentNightTurnRole, isBanSoiAligned, isSequentialNight, roomForDisplay?.publicRevealedRolesByPlayerId, sync.gameEnded, sync.loveState.rolesByPlayerId, sync.revealedRolesByPlayerId]);
+
+  const dayVoteWeightsByVoterId = useMemo(() => {
+    const publicRoles = roomForDisplay?.publicRevealedRolesByPlayerId || {};
+    const entries = Object.entries(publicRoles).filter(([, publicRole]) => publicRole === "Trưởng làng");
+    if (!entries.length) return undefined;
+    return Object.fromEntries(entries.map(([playerId]) => [playerId, 2]));
+  }, [roomForDisplay?.publicRevealedRolesByPlayerId]);
 
   const roomForRoles = useMemo(
     () =>
@@ -664,6 +678,19 @@ export default function Game() {
     nightActionNow: nightTurnNow,
   });
 
+  const protector = useProtectorRole({
+    roomId,
+    phase,
+    role,
+    room: roomForRoles,
+    deadPlayers,
+    protectorTargetId: sync.protectorTargetId,
+    allNightActionsSimultaneous,
+    currentNightTurnRole,
+    nightActionDeadline: mySimultaneousDeadline,
+    nightActionNow: nightTurnNow,
+  });
+
   const witch = useWitchRole({
     roomId,
     phase,
@@ -767,6 +794,29 @@ export default function Game() {
     trialVotes: sync.trialVotes,
   });
 
+  const canStartVillageChiefExtraVote =
+    role === "Trưởng làng" &&
+    phase === "day" &&
+    !!room?.villageChiefExtraVoteReady &&
+    !room?.villageChiefExtraVoteUsed &&
+    !!clientId &&
+    !deadPlayers.includes(clientId) &&
+    !sync.dayDeadline &&
+    !sync.dayDiscussionDeadline &&
+    sync.trialStage === "none" &&
+    !sync.gameEnded;
+
+  const villageChiefExtraVotePanel = canStartVillageChiefExtraVote ? (
+    <div style={{ marginTop: 12 }}>
+      <button
+        onClick={() => socket.emit("villageChiefStartExtraVote", { roomId })}
+        style={{ padding: "8px 12px", cursor: "pointer" }}
+      >
+        Mở thêm một lượt biểu quyết
+      </button>
+    </div>
+  ) : null;
+
   // Note: all socket subscriptions are centralized in useGameSocketSync.
 
   useEffect(() => {
@@ -864,6 +914,7 @@ export default function Game() {
     if (seer.onPlayerClick(playerId)) return;
     if (wolf.onPlayerClick(playerId)) return;
     if (guardian.onPlayerClick(playerId)) return;
+    if (protector.onPlayerClick(playerId)) return;
     if (witch.onPlayerClick(playerId)) return;
     if (hunter.onPlayerClick(playerId)) return;
     if (elemental.onPlayerClick(playerId)) return;
@@ -927,6 +978,8 @@ export default function Game() {
         [normalizeRoleName("Tiên tri")]: "C Tiên Tri",
         [normalizeRoleName("Bán sói")]: "C Bán Sói",
         [normalizeRoleName("Bảo vệ")]: "C Bảo Vệ",
+        [normalizeRoleName("Trưởng làng")]: "C Trưởng Làng",
+        [normalizeRoleName("Hộ nhân")]: "C Hộ Nhân",
         [normalizeRoleName("Băng Giá")]: "C Băng",
         [normalizeRoleName("Thợ săn")]: "C Thợ Săn",
         [normalizeRoleName("Thần tình yêu")]: "C Thần Tình Yêu",
@@ -1104,6 +1157,7 @@ export default function Game() {
             selectedOutlinePlayerId={
               dayVote.playerPositionsProps.selectedOutlinePlayerId ||
               guardian.playerPositionsProps.selectedOutlinePlayerId ||
+              protector.playerPositionsProps.selectedOutlinePlayerId ||
               witch.playerPositionsProps.selectedOutlinePlayerId ||
               elemental.playerPositionsProps.selectedOutlinePlayerId ||
               hunter.playerPositionsProps.selectedOutlinePlayerId ||
@@ -1123,6 +1177,7 @@ export default function Game() {
                 ? dayVote.playerPositionsProps.wolfVoteVoterIds
                 : wolf.playerPositionsProps.wolfVoteVoterIds
             }
+            voteWeightsByVoterId={dayVote.playerPositionsProps.showWolfVoteBadges ? dayVoteWeightsByVoterId : undefined}
             showWolfBadges={wolf.playerPositionsProps.showWolfBadges}
             wolfBadgePlayerIds={wolf.playerPositionsProps.wolfBadgePlayerIds}
             wolfBadgeRoles={wolf.playerPositionsProps.wolfBadgeRoles}
@@ -1160,6 +1215,7 @@ export default function Game() {
       {!isHost && logPanel}
       {seer.modal}
       {guardian.modal}
+      {protector.modal}
       {love.modals}
       {loveActionPlacement === "general" ? love.actionButton : null}
 
@@ -1170,6 +1226,7 @@ export default function Game() {
 
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
         {witch.panel}
+        {protector.panel}
         {elemental.panel}
         {loveActionPlacement === "role-actions" ? love.actionButton : null}
       </div>
@@ -1260,6 +1317,7 @@ export default function Game() {
       {loveActionPlacement === "wolf" ? love.actionButton : null}
     </div>
     {!isHost && dayVote.panel}
+    {!isHost && villageChiefExtraVotePanel}
 
     {rulesRestartOverlay && (
       <>

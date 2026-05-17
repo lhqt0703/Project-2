@@ -209,8 +209,12 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.nightCount = 0;
     room.gameLog = [];
     room.deadPlayers = [];
+    room.publicRevealedRolesByPlayerId = {};
     room.sharedHeartsVisible = false;
     room.playerHearts = {};
+    room.privatePlayerHearts = {};
+    room.privateHeartVisiblePlayerIds = [];
+    room.playerHeartShakeIds = [];
     room.protectedTonight = null;
     room.protectedTonightAt = null;
     room.lastProtected = null;
@@ -240,6 +244,7 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.dayVoters = [];
     room.dayVotes = {};
     room.dayLocked = {};
+    room.dayVoteKind = "main";
     room.dayDiscussionDeadline = null;
     room.dayDeadline = null;
     room.hidePlayerRoleText = true;
@@ -258,6 +263,14 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.banSoiId = null;
     room.banSoiWolfAligned = false;
     room.banSoiWolfAlignedPending = false;
+    room.villageChiefPendingWolfDeath = null;
+    room.villageChiefExtraVoteAvailable = false;
+    room.villageChiefExtraVoteReady = false;
+    room.villageChiefExtraVoteUsed = false;
+    room.protectorActorId = null;
+    room.protectorTargetId = null;
+    room.protectorTargetSetNight = null;
+    room.protectorImmortalityPermanent = false;
     room.elementalTargetTonight = {};
     room.elementalCorrectGuessPlayerIdsTonight = [];
     room.elementalCorrectGuessCountForBuff = 0;

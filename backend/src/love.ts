@@ -1,5 +1,6 @@
 import type { ServerContext } from "./serverContext.js";
 import type { EliminationCause, GameLogEntryPhase, Room } from "./serverTypes.js";
+import { clearProtectorTargetIfDead, tryUseProtectorImmortality, type ProtectorSaveRecord } from "./specialRoles.js";
 
 export const LOVE_ROLE = "Thần tình yêu";
 
@@ -100,6 +101,7 @@ type MarkEliminatedOptions = {
   initialDead?: Set<string>;
   eliminatedIds?: string[];
   causesByTarget?: Record<string, EliminationCause[]>;
+  protectorSaves?: ProtectorSaveRecord[];
 };
 
 function addCause(causesByTarget: Record<string, EliminationCause[]> | undefined, targetId: string, cause: EliminationCause) {
@@ -128,6 +130,12 @@ export function markEliminatedWithLoveChain(
     if (initialDead.has(id)) return [];
     if (!playerIds.has(id)) return [];
 
+    const protectorSave = tryUseProtectorImmortality(room, id, nextCause);
+    if (protectorSave) {
+      options.protectorSaves?.push(protectorSave);
+      return [];
+    }
+
     addCause(causesByTarget, id, nextCause);
     if (dead.has(id)) return [];
 
@@ -141,6 +149,7 @@ export function markEliminatedWithLoveChain(
     if (!room.deadPlayers.includes(id)) {
       room.deadPlayers.push(id);
     }
+    clearProtectorTargetIfDead(room, id);
     ctx.io.to(roomId).emit("playerKilled", id);
 
     const partnerId = getLovePartnerId(room, id);

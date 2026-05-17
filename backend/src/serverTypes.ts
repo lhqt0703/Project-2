@@ -1,4 +1,5 @@
 import { ELEMENTAL_GROUP_ROLE, type ElementalBuffId, type ElementalRole } from "./elemental.js";
+import { PROTECTOR_ROLE } from "./specialRoles.js";
 
 export interface Player {
   id: string;
@@ -7,7 +8,7 @@ export interface Player {
   inGame?: boolean;
 }
 
-export type NightActionRole = "Sói" | "Bảo vệ" | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | ElementalRole;
+export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | ElementalRole;
 
 export type NightActionOrderRole = NightActionRole | typeof ELEMENTAL_GROUP_ROLE;
 
@@ -22,6 +23,8 @@ export interface RoomGameRules {
   wolfNightActionDurationSec: number;
   nightActionOrder: NightActionOrderRole[];
   banSoiBecomeWolfEvenIfHealed: boolean;
+  villageChiefKnowsWolfBite: boolean;
+  witchSeeProtectorImmortalBite: boolean;
 }
 
 export interface Room {
@@ -38,6 +41,7 @@ export interface Room {
   positions?: { playerId: string; x: number; y: number }[];
   positionEditors?: string[];
   playerRoles?: Record<string, string>;
+  publicRevealedRolesByPlayerId?: Record<string, string>;
   nightCount?: number;
   gameLog?: GameLogNight[];
   wolves?: string[];
@@ -54,9 +58,13 @@ export interface Room {
   deadPlayers?: string[];
   sharedHeartsVisible?: boolean;
   playerHearts?: Record<string, number>;
+  privatePlayerHearts?: Record<string, number>;
+  privateHeartVisiblePlayerIds?: string[];
+  playerHeartShakeIds?: string[];
   dayVoters?: string[];
   dayVotes?: Record<string, string | null>;
   dayLocked?: Record<string, boolean>;
+  dayVoteKind?: "main" | "village_chief_extra";
   dayDiscussionTimer?: NodeJS.Timeout | null;
   dayDiscussionDeadline?: number | null;
   dayTimer?: NodeJS.Timeout | null;
@@ -118,6 +126,14 @@ export interface Room {
   banSoiId?: string | null;
   banSoiWolfAligned?: boolean;
   banSoiWolfAlignedPending?: boolean;
+  villageChiefPendingWolfDeath?: { playerId: string; bittenNight: number; attackerIds: string[] } | null;
+  villageChiefExtraVoteAvailable?: boolean;
+  villageChiefExtraVoteReady?: boolean;
+  villageChiefExtraVoteUsed?: boolean;
+  protectorActorId?: string | null;
+  protectorTargetId?: string | null;
+  protectorTargetSetNight?: number | null;
+  protectorImmortalityPermanent?: boolean;
   elementalTargetTonight?: Record<string, string | null>;
   elementalCorrectGuessPlayerIdsTonight?: string[];
   elementalCorrectGuessCountForBuff?: number;
@@ -138,8 +154,10 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 20,
   wolfNightActionDurationSec: 20,
-  nightActionOrder: ["Thần tình yêu", "Sói", "Bảo vệ", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
+  nightActionOrder: ["Thần tình yêu", "Sói", "Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
   banSoiBecomeWolfEvenIfHealed: false,
+  villageChiefKnowsWolfBite: true,
+  witchSeeProtectorImmortalBite: true,
 };
 
 DEFAULT_ROOM_GAME_RULES.nightActionOrder = [
@@ -244,6 +262,14 @@ export type GameLogEntry =
   | { type: "trial_verdict"; phase: GameLogEntryPhase; targetId: string; liveVotes: number; dieVotes: number; liveVoterIds?: string[]; dieVoterIds?: string[]; executed: boolean }
   | { type: "bonus_bite"; phase: GameLogEntryPhase }
   | { type: "guardian_protect"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "protector_bless"; phase: GameLogEntryPhase; actorId: string; targetId: string; permanent: boolean }
+  | { type: "protector_save"; phase: GameLogEntryPhase; actorId: string | null; targetId: string; cause: EliminationCause; permanent: boolean }
+  | { type: "village_chief_revealed"; phase: GameLogEntryPhase; targetId: string; reason: "day_vote" }
+  | { type: "village_chief_bitten_warning"; phase: GameLogEntryPhase; targetId: string; attackerIds: string[] }
+  | { type: "village_chief_delayed_death_pending"; phase: GameLogEntryPhase; targetId: string; deathNight: number }
+  | { type: "village_chief_delayed_death"; phase: GameLogEntryPhase; targetId: string }
+  | { type: "village_chief_extra_vote_unlocked"; phase: GameLogEntryPhase; chiefId: string | null; protectorId: string }
+  | { type: "village_chief_extra_vote_started"; phase: GameLogEntryPhase; chiefId: string }
   | { type: "witch_heal"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "witch_poison"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "seer_check"; phase: GameLogEntryPhase; actorId: string; targetId: string; isWolf: boolean }

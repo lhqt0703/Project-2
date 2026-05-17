@@ -6,6 +6,7 @@ const NIGHT_ACTION_ROLE_LABELS: Record<NightActionOrderRole, string> = {
   [ELEMENTAL_GROUP_ROLE]: "Dân làng nguyên tố",
   "Sói": "Phe sói",
   "Bảo vệ": "Bảo vệ",
+  "Hộ nhân": "Hộ nhân",
   "Phù thủy": "Phù thủy",
   "Linh sói": "Linh sói",
   "Thợ săn": "Thợ săn",
@@ -118,6 +119,7 @@ export default function GameRulesModal({
       wolfNightActionDurationSec: initialRules.wolfNightActionDurationSec,
     });
     setDraftRules({
+      ...DEFAULT_ROOM_GAME_RULES,
       ...initialRules,
       nightActionOrder: normalizeNightActionOrder(
         initialRules.nightActionOrder || DEFAULT_ROOM_GAME_RULES.nightActionOrder,
@@ -284,6 +286,38 @@ export default function GameRulesModal({
               checked={draftRules.banSoiBecomeWolfEvenIfHealed}
               disabled={readOnly}
               onChange={(e) => updateRule("banSoiBecomeWolfEvenIfHealed", e.target.checked)}
+              style={{ width: 20, height: 20, marginTop: 2 }}
+            />
+          </label>
+
+          <label style={rowStyle()}>
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Trưởng làng biết mình đã bị sói cắn</div>
+              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                Khi bật, Trưởng làng và quản trò sẽ thấy máu còn 1 tim trong đêm bị cắn, rồi tim rung vào đêm kế tiếp trước khi hiệu ứng cắn trễ kết toán.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={draftRules.villageChiefKnowsWolfBite}
+              disabled={readOnly}
+              onChange={(e) => updateRule("villageChiefKnowsWolfBite", e.target.checked)}
+              style={{ width: 20, height: 20, marginTop: 2 }}
+            />
+          </label>
+
+          <label style={rowStyle()}>
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Phù thủy vẫn thấy vết cắn vào người đang được Hộ nhân cho bất tử</div>
+              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                Khi tắt, nếu mục tiêu đang có bất tử của Hộ nhân thì vết cắn sẽ bị ẩn khỏi Phù thủy.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={draftRules.witchSeeProtectorImmortalBite}
+              disabled={readOnly}
+              onChange={(e) => updateRule("witchSeeProtectorImmortalBite", e.target.checked)}
               style={{ width: 20, height: 20, marginTop: 2 }}
             />
           </label>

@@ -22,6 +22,8 @@ import type {
   LoveStatePayload,
   SeerResultPayload,
   RolesRevealUpdatedPayload,
+  PublicRolesRevealUpdatedPayload,
+  ProtectorTargetUpdatedPayload,
   SpiritWolfDecisionNeededPayload,
   SpiritWolfDecisionRecordedPayload,
   WitchPendingDeathPayload,
@@ -70,6 +72,8 @@ export function useGameSocketSync({
 
   const [guardianProtectedSeq, setGuardianProtectedSeq] = useState(0);
   const [guardianProtectedTargetId, setGuardianProtectedTargetId] = useState<string | null>(null);
+  const [protectorTargetSeq, setProtectorTargetSeq] = useState(0);
+  const [protectorTargetId, setProtectorTargetId] = useState<string | null>(null);
 
   const [hunterTargetSeq, setHunterTargetSeq] = useState(0);
   const [hunterTargetId, setHunterTargetId] = useState<string | null>(null);
@@ -210,6 +214,9 @@ export function useGameSocketSync({
       if (data?.hostId && data.hostId === clientId && roomId) {
         socket.emit("requestHostNightActionProgress", { roomId });
       }
+      if (data?.publicRevealedRolesByPlayerId && typeof data.publicRevealedRolesByPlayerId === "object") {
+        setRoom((prev: any) => (prev ? { ...prev, publicRevealedRolesByPlayerId: data.publicRevealedRolesByPlayerId } : prev));
+      }
       if (data?.elementalSelectedBuffId && data?.elementalSelectedBuffAppliesNight) {
         const buffId = data.elementalSelectedBuffId as string;
         setElementalBuffResult({
@@ -273,6 +280,8 @@ export function useGameSocketSync({
       setDeadPlayers([]);
       setGameLogNights([]);
       setRevealedRolesByPlayerId({});
+      setProtectorTargetId(null);
+      setProtectorTargetSeq(0);
       setDayVotes(null);
       setDayLocked(null);
       setDayDiscussionDeadline(null);
@@ -317,6 +326,17 @@ export function useGameSocketSync({
       if (!payload?.roomId) return;
       if (roomId && payload.roomId !== roomId) return;
       setRevealedRolesByPlayerId(payload.rolesByPlayerId || {});
+    };
+
+    const handlePublicRolesRevealUpdated = (payload: PublicRolesRevealUpdatedPayload) => {
+      if (!payload?.roomId) return;
+      if (roomId && payload.roomId !== roomId) return;
+      setRoom((prev: any) => prev ? { ...prev, publicRevealedRolesByPlayerId: payload.rolesByPlayerId || {} } : prev);
+    };
+
+    const handleProtectorTargetUpdated = (payload: ProtectorTargetUpdatedPayload) => {
+      setProtectorTargetId(payload?.targetId ?? null);
+      setProtectorTargetSeq((s) => s + 1);
     };
 
     const handleSpiritWolfDecisionNeeded = (payload: SpiritWolfDecisionNeededPayload) => {
@@ -556,6 +576,7 @@ export function useGameSocketSync({
 
     socket.on("seerResult", handleSeerResult);
     socket.on("guardianProtected", handleGuardianProtected);
+    socket.on("protectorTargetUpdated", handleProtectorTargetUpdated);
 
     socket.on("witchPendingDeath", handleWitchPendingDeath);
     socket.on("witchPotionsUpdated", handleWitchPotionsUpdated);
@@ -581,6 +602,7 @@ export function useGameSocketSync({
     socket.on("gameEnded", handleGameEnded);
     socket.on("gameLogUpdated", handleGameLogUpdated);
     socket.on("rolesRevealUpdated", handleRolesRevealUpdated);
+    socket.on("publicRolesRevealUpdated", handlePublicRolesRevealUpdated);
     socket.on("spiritWolfDecisionNeeded", handleSpiritWolfDecisionNeeded);
     socket.on("spiritWolfDecisionRecorded", handleSpiritWolfDecisionRecorded);
     socket.on("elementalTargetUpdated", handleElementalTargetUpdated);
@@ -601,6 +623,7 @@ export function useGameSocketSync({
 
       socket.off("seerResult", handleSeerResult);
       socket.off("guardianProtected", handleGuardianProtected);
+      socket.off("protectorTargetUpdated", handleProtectorTargetUpdated);
 
       socket.off("witchPendingDeath", handleWitchPendingDeath);
       socket.off("witchPotionsUpdated", handleWitchPotionsUpdated);
@@ -626,6 +649,7 @@ export function useGameSocketSync({
       socket.off("gameEnded", handleGameEnded);
       socket.off("gameLogUpdated", handleGameLogUpdated);
       socket.off("rolesRevealUpdated", handleRolesRevealUpdated);
+      socket.off("publicRolesRevealUpdated", handlePublicRolesRevealUpdated);
       socket.off("spiritWolfDecisionNeeded", handleSpiritWolfDecisionNeeded);
       socket.off("spiritWolfDecisionRecorded", handleSpiritWolfDecisionRecorded);
       socket.off("elementalTargetUpdated", handleElementalTargetUpdated);
@@ -645,6 +669,8 @@ export function useGameSocketSync({
       witchPotions,
       guardianProtectedSeq,
       guardianProtectedTargetId,
+      protectorTargetSeq,
+      protectorTargetId,
       hunterTargetSeq,
       hunterTargetId,
       hunterShotSeq,
@@ -696,6 +722,8 @@ export function useGameSocketSync({
       witchPotions,
       guardianProtectedSeq,
       guardianProtectedTargetId,
+      protectorTargetSeq,
+      protectorTargetId,
       hunterTargetSeq,
       hunterTargetId,
       hunterShotSeq,

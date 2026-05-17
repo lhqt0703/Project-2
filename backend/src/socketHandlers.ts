@@ -50,6 +50,7 @@ import {
 import {
   emitGameLogToSocket,
   emitHunterTarget,
+  emitProtectorTarget,
   emitRolesRevealToSocket,
   emitSpiritWolfDecisionNeeded,
   getHostNightActionProgressByPlayerId,
@@ -103,6 +104,16 @@ import {
   getLovePairIds,
   getLovePartnerId,
 } from "./love.js";
+import {
+  PROTECTOR_ROLE,
+  PROTECTOR_PERMANENT_BUFF_ID,
+  VILLAGE_CHIEF_ROLE,
+  getVillageChiefId,
+  isProtectorImmortalityPermanent,
+  isVillageChief,
+  tryUseProtectorImmortality,
+  type ProtectorSaveRecord,
+} from "./specialRoles.js";
 
 const SPIRIT_WOLF_ROLE = "Linh sói";
 
@@ -158,6 +169,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     startDayVoting,
     startDayDiscussion,
     finishDayVoting,
+    startVillageChiefExtraVoting,
   } = dayFlow;
 
   const {
@@ -285,12 +297,35 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const playerIds = new Set(room.players.map((player) => player.id));
     const eliminatedIds: string[] = [];
     const causesByTarget: Record<string, EliminationCause[]> = {};
+    const protectorSaves: ProtectorSaveRecord[] = [];
     const savedByGuardianIds: string[] = [];
     const savedByWitchIds: string[] = [];
     let hadDeathThreat = false;
 
     const addUnique = (ids: string[], id: string) => {
       if (!ids.includes(id)) ids.push(id);
+    };
+
+    const unlockVillageChiefExtraVoteIfProtectorDiedByWolf = () => {
+      const protectorId = eliminatedIds.find((id) => {
+        if (room.playerRoles?.[id] !== PROTECTOR_ROLE) return false;
+        const causes = causesByTarget[id] || [];
+        return causes.some((cause) => cause.type === "wolf");
+      });
+      if (!protectorId) return;
+      if (room.villageChiefExtraVoteUsed || room.villageChiefExtraVoteAvailable) return;
+
+      const chiefId = getVillageChiefId(room);
+      if (!chiefId || (room.deadPlayers || []).includes(chiefId)) return;
+
+      room.villageChiefExtraVoteAvailable = true;
+      room.villageChiefExtraVoteReady = false;
+      appendLogEntry(room, {
+        type: "village_chief_extra_vote_unlocked",
+        phase: "night",
+        chiefId,
+        protectorId,
+      });
     };
 
     const getUniqueTargets = (targets: Array<string | null | undefined>) => {
@@ -308,7 +343,25 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         initialDead,
         eliminatedIds,
         causesByTarget,
+        protectorSaves,
       });
+    };
+
+    const flushProtectorSaves = () => {
+      while (protectorSaves.length) {
+        const save = protectorSaves.shift()!;
+        appendLogEntry(room, {
+          type: "protector_save",
+          phase: "night",
+          actorId: save.actorId,
+          targetId: save.targetId,
+          cause: save.cause,
+          permanent: save.permanent,
+        });
+        if (save.actorId) {
+          emitProtectorTarget(roomId, save.actorId);
+        }
+      }
     };
 
     const wolfAttackersForTarget = (targetId: string) => {
@@ -383,6 +436,27 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         attackerIds: wolfAttackersForTarget(targetId),
       };
 
+      const protectorSave = tryUseProtectorImmortality(room, targetId, wolfCause);
+      if (protectorSave) {
+        protectorSaves.push(protectorSave);
+        continue;
+      }
+
+      if (isVillageChief(room, targetId)) {
+        room.villageChiefPendingWolfDeath = {
+          playerId: targetId,
+          bittenNight: room.nightCount || 0,
+          attackerIds: wolfCause.attackerIds,
+        };
+        appendLogEntry(room, {
+          type: "village_chief_delayed_death_pending",
+          phase: "night",
+          targetId,
+          deathNight: (room.nightCount || 0) + 1,
+        });
+        continue;
+      }
+
       const twoHeartsDamage = getTwoHeartsWolfDamage(room);
       if (twoHeartsDamage > 0) {
         room.playerHearts = room.playerHearts || {};
@@ -398,6 +472,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       markEliminated(targetId, wolfCause);
     }
 
+    flushProtectorSaves();
+
     const poisonEntries = Object.entries(room.witchPoisonTargetTonight || {});
     const poisonTargets = getUniqueTargets(poisonEntries.map(([, targetId]) => targetId));
     for (const targetId of poisonTargets) {
@@ -411,6 +487,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       markEliminated(targetId, { type: "witch_poison" });
     }
 
+    flushProtectorSaves();
+
     if (savedByGuardianIds.length) {
       appendLogEntry(room, { type: "saved_by_guardian", phase: "night", targetIds: savedByGuardianIds });
     }
@@ -418,6 +496,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       appendLogEntry(room, { type: "saved_by_witch", phase: "night", targetIds: savedByWitchIds });
     }
     if (eliminatedIds.length) {
+      unlockVillageChiefExtraVoteIfProtectorDiedByWolf();
       const rules = ensureRoomGameRules(room);
       if (rules.allNightActionsSimultaneous) {
         const hunterShots = resolveHunterShotsForDeaths(ctx, roomId, room, eliminatedIds, "day", {
@@ -447,6 +526,72 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.loveEscapeVotesTonight = {};
       room.loveEscapeVoteAt = {};
       emitLoveStateToPair(ctx, roomId, room);
+    }
+  }
+
+  function resolveVillageChiefDelayedWolfDeath(roomId: string, room: Room) {
+    const pending = room.villageChiefPendingWolfDeath || null;
+    if (!pending) return;
+    if ((room.nightCount || 0) <= pending.bittenNight) return;
+
+    room.villageChiefPendingWolfDeath = null;
+    if (room.privatePlayerHearts) {
+      delete room.privatePlayerHearts[pending.playerId];
+    }
+    room.privateHeartVisiblePlayerIds = (room.privateHeartVisiblePlayerIds || []).filter((id) => id !== pending.playerId);
+    room.playerHeartShakeIds = (room.playerHeartShakeIds || []).filter((id) => id !== pending.playerId);
+
+    if ((room.deadPlayers || []).includes(pending.playerId)) return;
+    if (!room.players.find((player) => player.id === pending.playerId)) return;
+
+    const eliminatedIds: string[] = [];
+    const causesByTarget: Record<string, EliminationCause[]> = {};
+    const protectorSaves: ProtectorSaveRecord[] = [];
+    const cause: EliminationCause = { type: "wolf", attackerIds: pending.attackerIds || [] };
+
+    appendLogEntry(room, {
+      type: "village_chief_delayed_death",
+      phase: "day",
+      targetId: pending.playerId,
+    });
+
+    markEliminatedWithLoveChain(ctx, roomId, room, pending.playerId, cause, "day", {
+      eliminatedIds,
+      causesByTarget,
+      protectorSaves,
+    });
+
+    const hadProtectorSave = protectorSaves.length > 0;
+    while (protectorSaves.length) {
+      const save = protectorSaves.shift()!;
+      appendLogEntry(room, {
+        type: "protector_save",
+        phase: "day",
+        actorId: save.actorId,
+        targetId: save.targetId,
+        cause: save.cause,
+        permanent: save.permanent,
+      });
+      if (save.actorId) {
+        emitProtectorTarget(roomId, save.actorId);
+      }
+    }
+
+    if (eliminatedIds.length) {
+      const hunterShots = resolveHunterShotsForDeaths(ctx, roomId, room, eliminatedIds, "day", {
+        appendEliminationLog: false,
+      });
+      appendLogEntry(room, {
+        type: "eliminated",
+        phase: "day",
+        targetIds: Array.from(new Set([...eliminatedIds, ...hunterShots.killedIds])),
+        causesByTarget: {
+          ...causesByTarget,
+          ...hunterShots.causesByTarget,
+        },
+      });
+    } else if (hadProtectorSave) {
+      appendLogEntry(room, { type: "no_death", phase: "day" });
     }
   }
 
@@ -591,6 +736,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
       if (room.playerRoles?.[clientId] === "Thợ săn") {
         emitHunterTarget(roomId, clientId);
+      }
+
+      if (room.playerRoles?.[clientId] === PROTECTOR_ROLE) {
+        emitProtectorTarget(roomId, clientId);
       }
 
       if (isElementalRoleTurn(room.playerRoles?.[clientId] || null)) {
@@ -961,6 +1110,18 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     });
 
     room.deadPlayers = room.deadPlayers || [];
+    room.publicRevealedRolesByPlayerId = {};
+    room.privatePlayerHearts = {};
+    room.privateHeartVisiblePlayerIds = [];
+    room.playerHeartShakeIds = [];
+    room.villageChiefPendingWolfDeath = null;
+    room.villageChiefExtraVoteAvailable = false;
+    room.villageChiefExtraVoteReady = false;
+    room.villageChiefExtraVoteUsed = false;
+    room.protectorActorId = null;
+    room.protectorTargetId = null;
+    room.protectorTargetSetNight = null;
+    room.protectorImmortalityPermanent = false;
     room.wolfExtraBiteNextNight = room.wolfExtraBiteNextNight || false;
     room.wolfBonusBiteThisNight = false;
     room.hunterShotPlayerIds = [];
@@ -979,6 +1140,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.dayVoters = [];
     room.dayVotes = {};
     room.dayLocked = {};
+    room.dayVoteKind = "main";
     room.dayDiscussionDeadline = null;
     room.dayDeadline = null;
     if (room.dayDiscussionTimer) {
@@ -1288,8 +1450,12 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.nightCount = 0;
     room.gameLog = [];
     room.deadPlayers = [];
+    room.publicRevealedRolesByPlayerId = {};
     room.sharedHeartsVisible = false;
     room.playerHearts = {};
+    room.privatePlayerHearts = {};
+    room.privateHeartVisiblePlayerIds = [];
+    room.playerHeartShakeIds = [];
     room.protectedTonight = null;
     room.protectedTonightAt = null;
     room.lastProtected = null;
@@ -1319,6 +1485,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.dayVoters = [];
     room.dayVotes = {};
     room.dayLocked = {};
+    room.dayVoteKind = "main";
     room.dayDiscussionDeadline = null;
     room.dayDeadline = null;
     room.hidePlayerRoleText = true;
@@ -1327,6 +1494,14 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.spiritWolfWolfAligned = false;
     room.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
+    room.villageChiefPendingWolfDeath = null;
+    room.villageChiefExtraVoteAvailable = false;
+    room.villageChiefExtraVoteReady = false;
+    room.villageChiefExtraVoteUsed = false;
+    room.protectorActorId = null;
+    room.protectorTargetId = null;
+    room.protectorTargetSetNight = null;
+    room.protectorImmortalityPermanent = false;
     room.elementalTargetTonight = {};
     room.elementalCorrectGuessPlayerIdsTonight = [];
     room.elementalCorrectGuessCountForBuff = 0;
@@ -1598,6 +1773,10 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
         finishWolfVoting(roomId);
       }
       finalizeUnmatchedLoveEscapeVote(roomId, room);
+      room.privatePlayerHearts = {};
+      room.privateHeartVisiblePlayerIds = [];
+      room.playerHeartShakeIds = [];
+      resolveVillageChiefDelayedWolfDeath(roomId, room);
       resolveNightDeaths(roomId, room);
 
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
@@ -1639,6 +1818,31 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       }
 
       ensureNightLog(room);
+
+      const rulesForChief = ensureRoomGameRules(room);
+      if (
+        room.elementalSelectedBuffId === PROTECTOR_PERMANENT_BUFF_ID &&
+        room.elementalSelectedBuffAppliesNight !== null &&
+        typeof room.elementalSelectedBuffAppliesNight !== "undefined" &&
+        room.elementalSelectedBuffAppliesNight <= (room.nightCount || 0)
+      ) {
+        room.protectorImmortalityPermanent = true;
+      }
+      room.privatePlayerHearts = {};
+      room.privateHeartVisiblePlayerIds = [];
+      room.playerHeartShakeIds = [];
+      if (
+        rulesForChief.villageChiefKnowsWolfBite &&
+        room.villageChiefPendingWolfDeath &&
+        room.villageChiefPendingWolfDeath.bittenNight < (room.nightCount || 0) &&
+        !(room.deadPlayers || []).includes(room.villageChiefPendingWolfDeath.playerId)
+      ) {
+        const targetId = room.villageChiefPendingWolfDeath.playerId;
+        room.privatePlayerHearts = room.privatePlayerHearts || {};
+        room.privatePlayerHearts[targetId] = 1;
+        room.privateHeartVisiblePlayerIds = [targetId];
+        room.playerHeartShakeIds = [targetId];
+      }
 
       if (room.spiritWolfWolfAlignedPending && !room.spiritWolfWolfAligned) {
         room.spiritWolfWolfAligned = true;
@@ -1770,6 +1974,17 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (room.dayDeadline) return;
 
     startDayVoting(roomId);
+  });
+
+  socket.on("villageChiefStartExtraVote", ({ roomId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.playerRoles?.[clientId] !== VILLAGE_CHIEF_ROLE) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+
+    startVillageChiefExtraVoting(roomId, clientId);
   });
 
   socket.on("hostTogglePlayerRoleText", ({ roomId }) => {
@@ -2205,6 +2420,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     room.positions = (room.positions || []).filter((pos) => pos.playerId !== targetId);
     room.positionEditors = (room.positionEditors || []).filter((id) => id !== targetId);
     room.lockedPlayerIds = (room.lockedPlayerIds || []).filter((id) => id !== targetId);
+    const removedRole = room.playerRoles?.[targetId] || null;
 
     if (room.playerRoles) {
       delete room.playerRoles[targetId];
@@ -2230,6 +2446,26 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     room.dayVoters = (room.dayVoters || []).filter((id) => id !== targetId);
     room.deadPlayers = (room.deadPlayers || []).filter((id) => id !== targetId);
     room.wolves = (room.wolves || []).filter((id) => id !== targetId);
+    if (room.publicRevealedRolesByPlayerId) {
+      delete room.publicRevealedRolesByPlayerId[targetId];
+    }
+    if (room.privatePlayerHearts) {
+      delete room.privatePlayerHearts[targetId];
+    }
+    room.privateHeartVisiblePlayerIds = (room.privateHeartVisiblePlayerIds || []).filter((id) => id !== targetId);
+    room.playerHeartShakeIds = (room.playerHeartShakeIds || []).filter((id) => id !== targetId);
+    if (room.villageChiefPendingWolfDeath?.playerId === targetId) {
+      room.villageChiefPendingWolfDeath = null;
+    }
+    if (room.protectorActorId === targetId || room.protectorTargetId === targetId) {
+      room.protectorActorId = null;
+      room.protectorTargetId = null;
+      room.protectorTargetSetNight = null;
+    }
+    if (removedRole === VILLAGE_CHIEF_ROLE) {
+      room.villageChiefExtraVoteAvailable = false;
+      room.villageChiefExtraVoteReady = false;
+    }
 
     if (room.hostId === targetId && room.players.length > 0) {
       const firstPlayer = room.players[0];
@@ -2327,6 +2563,42 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     emitWitchPendingDeath(roomId);
     emitHostNightActionProgress(roomId);
+  });
+
+  socket.on("protectorChooseTarget", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, clientId, PROTECTOR_ROLE)) return;
+    if (room.playerRoles?.[clientId] !== PROTECTOR_ROLE) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+
+    if (room.protectorTargetId) {
+      socket.emit("errorMessage", "Hộ nhân đã chọn người được bất tử. Chỉ có thể chọn lại sau khi bất tử bị kích hoạt.");
+      return;
+    }
+
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    room.protectorActorId = clientId;
+    room.protectorTargetId = targetId;
+    room.protectorTargetSetNight = room.nightCount || 0;
+    const permanent = isProtectorImmortalityPermanent(room);
+
+    appendLogEntry(room, {
+      type: "protector_bless",
+      phase: "night",
+      actorId: clientId,
+      targetId,
+      permanent,
+    });
+
+    emitProtectorTarget(roomId, clientId);
+    emitWitchPendingDeath(roomId);
+    emitHostNightActionProgress(roomId);
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
   socket.on("witchHeal", ({ roomId, targetId }) => {

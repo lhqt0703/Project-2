@@ -62,6 +62,7 @@ export function toPublicRoom(room: Room) {
     trialDefenseTimer: _trialDefenseTimer,
     trialVerdictTimer: _trialVerdictTimer,
     nightTurnTimer: _nightTurnTimer,
+    spiritWolfDecisionTimer: _spiritWolfDecisionTimer,
     pendingRoleAssignments: _pendingRoleAssignments,
     pendingRoleBlocks: _pendingRoleBlocks,
     wolfDeadline: _wolfDeadline,
@@ -210,7 +211,7 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
     }
 
     if (role === "Linh sói") {
-      if (!room.spiritWolfPendingPoisonedWolfId && !room.spiritWolfDecisionMade) continue;
+      if (!room.spiritWolfPendingPoisonedWolfId && !room.spiritWolfDecisionDeadline) continue;
       setProgress(playerId, room.spiritWolfDecisionMade ? "done" : "pending", role);
       continue;
     }
@@ -328,7 +329,11 @@ export function emitSpiritWolfDecisionNeeded(roomId: string) {
   const targetId = room.spiritWolfPendingPoisonedWolfId;
   if (!targetId) return;
   if ((room.deadPlayers || []).includes(targetId)) return;
-  ctx.io.to(swid).emit("spiritWolfDecisionNeeded", { targetId });
+  const deadline = room.nightTurnPaused ? null : room.spiritWolfDecisionDeadline ?? room.nightTurnDeadline ?? null;
+  ctx.io.to(swid).emit("spiritWolfDecisionNeeded", {
+    targetId,
+    deadline,
+  });
 }
 
 export function emitHunterTarget(roomId: string, hunterId: string) {

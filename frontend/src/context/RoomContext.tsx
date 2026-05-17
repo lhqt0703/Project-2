@@ -33,6 +33,7 @@ export type NightActionOrderRole =
 
 export interface RoomGameRules {
   twoHeartsFirstTwoNights: boolean;
+  forceWolfBiteFirstNight: boolean;
   allNightActionsSimultaneous: boolean;
   witchSeeBiteOnlyIfHasHealPotion: boolean;
   witchHideProtectedBiteInSimultaneous: boolean;
@@ -48,6 +49,7 @@ export interface RoomGameRules {
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   twoHeartsFirstTwoNights: true,
+  forceWolfBiteFirstNight: false,
   allNightActionsSimultaneous: false,
   witchSeeBiteOnlyIfHasHealPotion: true,
   witchHideProtectedBiteInSimultaneous: false,
@@ -96,6 +98,7 @@ export interface RoomData {
   nightTurnIndex?: number;
   nightTurnRole?: NightActionRole | null;
   nightTurnDeadline?: number | null;
+  spiritWolfDecisionDeadline?: number | null;
   nightTurnPaused?: boolean;
   nightTurnRemainingMs?: number | null;
   elementalPendingBuffVote?: boolean;

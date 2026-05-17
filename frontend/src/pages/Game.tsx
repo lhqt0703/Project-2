@@ -97,11 +97,14 @@ export default function Game() {
     secondaryIds: string[];
     dangerIds: string[];
   } | null>(null);
+  const [autoTrialHighlightSuppressed, setAutoTrialHighlightSuppressed] = useState(false);
   const lastDayDeadlineRef = useRef<number | null>(null);
   const lastGameLogCountRef = useRef<number>(0);
   const lastTrialVotesRef = useRef<Record<string, "live" | "die" | null> | null>(null);
+  const lastTrialVerdictHighlightSeqRef = useRef<number>(0);
   const clearVerdictHighlight = useCallback(() => {
     setAutoTrialHighlight(null);
+    setAutoTrialHighlightSuppressed(false);
     setHighlightPlayerId(null);
     setSecondaryHighlightPlayerIds([]);
     setDangerHighlightPlayerIds([]);
@@ -110,6 +113,9 @@ export default function Game() {
     const secondaryIds = payload.secondaryIds || [];
     const dangerIds = payload.dangerIds || [];
     const isClear = !payload.primaryId && secondaryIds.length === 0 && dangerIds.length === 0;
+    if (!isClear) {
+      setAutoTrialHighlightSuppressed(true);
+    }
     if (!isClear && dangerIds.length > 0) {
       setAutoTrialHighlight({
         primaryId: payload.primaryId,
@@ -118,10 +124,14 @@ export default function Game() {
       });
     }
     if (isClear && autoTrialHighlight) {
+      setAutoTrialHighlightSuppressed(false);
       setHighlightPlayerId(autoTrialHighlight.primaryId);
       setSecondaryHighlightPlayerIds(autoTrialHighlight.secondaryIds);
       setDangerHighlightPlayerIds(autoTrialHighlight.dangerIds);
       return;
+    }
+    if (isClear) {
+      setAutoTrialHighlightSuppressed(false);
     }
     setHighlightPlayerId(payload.primaryId);
     setSecondaryHighlightPlayerIds(secondaryIds);
@@ -141,6 +151,8 @@ export default function Game() {
 
   useEffect(() => {
     if (!sync.trialVerdictFinished || !sync.trialVerdictFinishedSeq) return;
+    if (lastTrialVerdictHighlightSeqRef.current === sync.trialVerdictFinishedSeq) return;
+    lastTrialVerdictHighlightSeqRef.current = sync.trialVerdictFinishedSeq;
     const targetId = sync.trialVerdictFinished.targetId;
     if (!targetId) return;
     const votes = (lastTrialVotesRef.current || {}) as Record<string, "live" | "die" | null>;
@@ -168,6 +180,7 @@ export default function Game() {
       dangerIds: dieVoterIds,
     };
     setAutoTrialHighlight(highlightPayload);
+    setAutoTrialHighlightSuppressed(false);
     setHighlightPlayerId(highlightPayload.primaryId);
     setSecondaryHighlightPlayerIds(highlightPayload.secondaryIds);
     setDangerHighlightPlayerIds(highlightPayload.dangerIds);
@@ -188,8 +201,15 @@ export default function Game() {
   }, [clearVerdictHighlight, sync.dayDeadline]);
 
   useEffect(() => {
+    if (!sync.dayPhaseSeq) return;
+    const id = window.setTimeout(clearVerdictHighlight, 0);
+    return () => window.clearTimeout(id);
+  }, [clearVerdictHighlight, sync.dayPhaseSeq]);
+
+  useEffect(() => {
     const count = (sync.gameLogNights || []).length;
     if (count === 0 && lastGameLogCountRef.current > 0) {
+      lastTrialVerdictHighlightSeqRef.current = 0;
       clearVerdictHighlight();
     }
     lastGameLogCountRef.current = count;
@@ -229,12 +249,15 @@ export default function Game() {
     if (!NIGHT_ACTION_ROLE_SET.has(role) && !ELEMENTAL_ROLE_SET.has(role)) return null;
 
     if (isWolfTeamRole) return sync.wolfDeadline ?? null;
+    if (role === "Linh sói") {
+      return sync.spiritWolfDecisionTargetId ? sync.spiritWolfDecisionDeadline ?? null : null;
+    }
 
     const baseDeadline = nightTurnDeadline ?? null;
     if (!baseDeadline) return null;
     if (role === "Phù thủy" && witchBonusApplies) return baseDeadline + 10_000;
     return baseDeadline;
-  }, [isBanSoiAligned, isSimultaneousNight, isWolfTeamRole, nightTurnDeadline, role, sync.wolfDeadline, witchBonusApplies]);
+  }, [isBanSoiAligned, isSimultaneousNight, isWolfTeamRole, nightTurnDeadline, role, sync.spiritWolfDecisionDeadline, sync.spiritWolfDecisionTargetId, sync.wolfDeadline, witchBonusApplies]);
 
   useEffect(() => {
     if (!isSimultaneousNight) return;
@@ -278,7 +301,7 @@ export default function Game() {
 
   const hasSecretConditionalRolePrompt =
     !!sync.spiritWolfDecisionTargetId &&
-    currentNightTurnRole === "Linh sói";
+    (allNightActionsSimultaneous || currentNightTurnRole === "Linh sói");
 
   useEffect(() => {
     if (!roomId) return;
@@ -425,6 +448,18 @@ export default function Game() {
   }, [roomId, sync.gameEnded]);
 
   useEffect(() => {
+    const handleGameStarted = () => {
+      setNoticeModal(null);
+      lastTrialVerdictHighlightSeqRef.current = 0;
+      clearVerdictHighlight();
+    };
+    socket.on("gameStarted", handleGameStarted);
+    return () => {
+      socket.off("gameStarted", handleGameStarted);
+    };
+  }, [clearVerdictHighlight]);
+
+  useEffect(() => {
     if (!roomId) return;
     if (!isHost) return;
     socket.emit("requestRolesReveal", { roomId });
@@ -483,17 +518,42 @@ export default function Game() {
     />
   ) : null;
 
+  const visibleLoveRoleBadges = useMemo(() => {
+    if (!clientId) return {};
+    const partnerId = sync.loveState.partnerId;
+    if (!partnerId || !sync.loveState.pairIds.includes(clientId)) return {};
+    if (!sync.gameEnded) {
+      if (phase !== "night") return {};
+      if (!allNightActionsSimultaneous && !doesNightTurnMatchMyRole) return {};
+    }
+    const partnerRole = sync.loveState.rolesByPlayerId?.[partnerId];
+    return partnerRole ? { [partnerId]: partnerRole } : {};
+  }, [
+    allNightActionsSimultaneous,
+    doesNightTurnMatchMyRole,
+    phase,
+    sync.gameEnded,
+    sync.loveState.pairIds,
+    sync.loveState.partnerId,
+    sync.loveState.rolesByPlayerId,
+  ]);
+
   const roleBadgesForDisplay = useMemo(() => {
-    const loveRoleBadges = sync.loveState.rolesByPlayerId || {};
+    const loveRoleBadges = visibleLoveRoleBadges;
     const publicRoleBadges = roomForDisplay?.publicRevealedRolesByPlayerId || {};
     const hasLoveRoleBadges = Object.keys(loveRoleBadges).length > 0;
     const hasPublicRoleBadges = Object.keys(publicRoleBadges).length > 0;
+    const allRoleBadges = sync.revealedRolesByPlayerId || {};
+
+    if (isHost) {
+      return { ...allRoleBadges, ...publicRoleBadges };
+    }
+
     if (!canViewRoles) {
       const mergedPublic = { ...publicRoleBadges, ...loveRoleBadges };
       return hasPublicRoleBadges || hasLoveRoleBadges ? mergedPublic : undefined;
     }
 
-    const allRoleBadges = sync.revealedRolesByPlayerId || {};
     if (!isSequentialNight || sync.gameEnded) return { ...allRoleBadges, ...publicRoleBadges, ...loveRoleBadges };
 
     const filteredBadges = Object.fromEntries(
@@ -503,7 +563,7 @@ export default function Game() {
       })
     );
     return { ...filteredBadges, ...publicRoleBadges, ...loveRoleBadges };
-  }, [canViewRoles, currentNightTurnRole, isBanSoiAligned, isSequentialNight, roomForDisplay?.publicRevealedRolesByPlayerId, sync.gameEnded, sync.loveState.rolesByPlayerId, sync.revealedRolesByPlayerId]);
+  }, [canViewRoles, currentNightTurnRole, isBanSoiAligned, isHost, isSequentialNight, roomForDisplay?.publicRevealedRolesByPlayerId, sync.gameEnded, sync.revealedRolesByPlayerId, visibleLoveRoleBadges]);
 
   const dayVoteWeightsByVoterId = useMemo(() => {
     const publicRoles = roomForDisplay?.publicRevealedRolesByPlayerId || {};
@@ -729,8 +789,9 @@ export default function Game() {
     loveState: sync.loveState,
     allNightActionsSimultaneous,
     currentNightTurnRole,
-    nightActionDeadline: mySimultaneousDeadline,
+    nightActionDeadline: allNightActionsSimultaneous ? mySimultaneousDeadline : nightTurnDeadline,
     nightActionNow: nightTurnNow,
+    doesNightTurnMatchMyRole,
   });
 
   const spiritWolf = useSpiritWolfRole({
@@ -743,7 +804,7 @@ export default function Game() {
     allNightActionsSimultaneous,
     currentNightTurnRole,
     nightTurnPaused,
-    nightActionDeadline: mySimultaneousDeadline,
+    nightActionDeadline: allNightActionsSimultaneous ? mySimultaneousDeadline : nightTurnDeadline,
     nightActionNow: nightTurnNow,
   });
 
@@ -886,6 +947,13 @@ export default function Game() {
     lastTrialVerdictNoticeSeqRef.current = seq;
 
     const targetName = room?.players.find((p) => p.id === sync.trialVerdictFinished?.targetId)?.name || "người bị biểu quyết";
+    if (sync.trialVerdictFinished.chiefRevealed) {
+      showNotice(
+        "Kết quả cuối",
+        `${targetName} hiện lên và nói:\n"Rồi rồi mày không thoát được đâu con trai, tu bi cân tì niu"`
+      );
+      return;
+    }
     if (sync.trialVerdictFinished.executed) {
       const executedNotices = [
         `${targetName} bị bắn xử tử`,
@@ -1149,11 +1217,12 @@ export default function Game() {
             bulletAnimation={hunterBulletAnim}
             highlightPlayerId={highlightPlayerId}
             secondaryHighlightPlayerIds={secondaryHighlightPlayerIds}
-            verdictLivePlayerIds={autoTrialHighlight?.secondaryIds}
-            verdictDiePlayerIds={autoTrialHighlight?.dangerIds}
+            verdictLivePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.secondaryIds}
+            verdictDiePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.dangerIds}
             showRoleBadges={!!roleBadgesForDisplay}
             roleBadges={roleBadgesForDisplay}
             activeNightRole={isHost && isSequentialNight ? currentNightTurnRole : null}
+            suppressNightActionProgress={autoTrialHighlightSuppressed}
             selectedOutlinePlayerId={
               dayVote.playerPositionsProps.selectedOutlinePlayerId ||
               guardian.playerPositionsProps.selectedOutlinePlayerId ||

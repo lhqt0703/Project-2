@@ -209,6 +209,7 @@ function RoleSpan({
   dangerHighlightIds,
   eliminationFocus,
   dimmed,
+  displayMode = "role",
   onEliminationFocusChange,
   onHighlightPlayer,
 }: {
@@ -220,6 +221,7 @@ function RoleSpan({
   dangerHighlightIds?: string[];
   eliminationFocus?: EliminationFocus;
   dimmed?: boolean;
+  displayMode?: "role" | "player";
   onEliminationFocusChange?: (focus: EliminationFocus | null) => void;
   onHighlightPlayer: (payload: HighlightPayload) => void;
 }) {
@@ -229,6 +231,7 @@ function RoleSpan({
 
   const roleName = getRoleName(playerId, rolesByPlayerId);
   const playerName = getPlayerName(playerId, playerNamesById);
+  const displayText = displayMode === "player" ? playerName : roleName;
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -268,7 +271,7 @@ function RoleSpan({
           transition: "opacity 180ms ease",
         }}
       >
-        {roleName}
+        {displayText}
       </span>
       {showPopup && (
         <div
@@ -367,6 +370,7 @@ function LogEntryLine({
     if (causeTypes.has("trial_verdict") && entry.type === "trial_verdict" && entry.targetId === f.targetId) return true;
     if (causeTypes.has("witch_poison") && entry.type === "witch_poison" && entry.targetId === f.targetId) return true;
     if (causeTypes.has("hunter_shot") && entry.type === "hunter_shot" && entry.targetId === f.targetId) return true;
+    if (causeTypes.has("love_link") && entry.type === "love_link_death" && entry.targetId === f.targetId) return true;
     return false;
   };
 
@@ -560,7 +564,15 @@ function LogEntryLine({
     case "protector_bless":
       return (
         <li style={lineStyle}>
-          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> trao bất tử cho{" "}
+          <RoleSpan
+            playerId={entry.actorId}
+            rolesByPlayerId={rolesByPlayerId}
+            playerNamesById={playerNamesById}
+            displayMode="player"
+            secondaryHighlightIds={[entry.targetId]}
+            onEliminationFocusChange={onEliminationFocusChange}
+            onHighlightPlayer={onHighlightPlayer}
+          />{" "} trao bất tử cho{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
           {entry.permanent ? <span style={{ opacity: 0.75 }}> đến cuối game</span> : null}
         </li>
@@ -591,34 +603,17 @@ function LogEntryLine({
         </li>
       );
 
-    case "village_chief_delayed_death_pending":
-      return (
-        <li style={lineStyle}>
-          Vết cắn lên Trưởng làng sẽ kết toán sau đêm {entry.deathNight}:{" "}
-          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
-        </li>
-      );
-
     case "village_chief_delayed_death":
       return (
         <li style={lineStyle}>
-          Vết cắn trễ của Trưởng làng kết toán:{" "}
-          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
-        </li>
-      );
-
-    case "village_chief_extra_vote_unlocked":
-      return (
-        <li style={lineStyle}>
-          Hộ nhân bị sói cắn chết, Trưởng làng được mở thêm một lượt biểu quyết
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã hết máu
         </li>
       );
 
     case "village_chief_extra_vote_started":
       return (
         <li style={lineStyle}>
-          {" "} đã kích hoạt lượt biểu quyết phụ
-          <RoleSpan playerId={entry.chiefId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+          <RoleSpan playerId={entry.chiefId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã kích hoạt lượt biểu quyết phụ
         </li>
       );
 
@@ -676,7 +671,15 @@ function LogEntryLine({
     case "love_pair":
       return (
         <li style={lineStyle}>
-          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> ghép đôi với{" "}
+          <RoleSpan
+            playerId={entry.actorId}
+            rolesByPlayerId={rolesByPlayerId}
+            playerNamesById={playerNamesById}
+            displayMode="player"
+            secondaryHighlightIds={[entry.targetId]}
+            onEliminationFocusChange={onEliminationFocusChange}
+            onHighlightPlayer={onHighlightPlayer}
+          />{" "}ghép đôi với{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
           {entry.targetWolfAligned ? <span style={{ opacity: 0.75 }}> - tình yêu trái phe</span> : null}
         </li>
@@ -701,7 +704,7 @@ function LogEntryLine({
     case "love_escape":
       return (
         <li style={lineStyle}>
-          Cặp đôi cùng ra khỏi làng:{" "}
+          Cặp đôi đã cùng nhau ra khỏi làng:{" "}
           <RolesListSpan
             playerIds={entry.targetIds || []}
             rolesByPlayerId={rolesByPlayerId}
@@ -709,6 +712,14 @@ function LogEntryLine({
             onEliminationFocusChange={onEliminationFocusChange}
             onHighlightPlayer={onHighlightPlayer}
           />
+        </li>
+      );
+
+    case "love_link_death":
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={[entry.sourceId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> chết theo vì{" "}
+          <RoleSpan playerId={entry.sourceId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã chết
         </li>
       );
 
@@ -796,11 +807,34 @@ function LogEntryLine({
       return <li style={{ ...lineStyle, opacity: dimmed ? 0.28 : 0.75 }}>Đêm qua không ai bị loại</li>;
 
     case "elemental_guess": {
-      const actorName = getRoleName(entry.actorId, rolesByPlayerId);
-      const targetName = getRoleName(entry.targetId, rolesByPlayerId);
       return (
         <li style={lineStyle}>
-          {actorName} chọn {targetName} - {entry.isCorrect ? "✅" : "❌"}
+          <RoleSpan
+            playerId={entry.actorId}
+            rolesByPlayerId={rolesByPlayerId}
+            playerNamesById={playerNamesById}
+            displayMode="player"
+            secondaryHighlightIds={[entry.targetId]}
+            onEliminationFocusChange={onEliminationFocusChange}
+            onHighlightPlayer={onHighlightPlayer}
+          />{" "}chọn{" "}
+          <RoleSpan
+            playerId={entry.targetId}
+            rolesByPlayerId={rolesByPlayerId}
+            playerNamesById={playerNamesById}
+            displayMode="player"
+            secondaryHighlightIds={[entry.actorId]}
+            onEliminationFocusChange={onEliminationFocusChange}
+            onHighlightPlayer={onHighlightPlayer}
+          />{" "}
+          <RoleSpan
+            playerId={entry.targetId}
+            rolesByPlayerId={rolesByPlayerId}
+            playerNamesById={playerNamesById}
+            secondaryHighlightIds={[entry.actorId]}
+            onEliminationFocusChange={onEliminationFocusChange}
+            onHighlightPlayer={onHighlightPlayer}
+          />{" "} - {entry.isCorrect ? "✅" : "❌"}
         </li>
       );
     }

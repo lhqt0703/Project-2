@@ -23,6 +23,7 @@ export function useLoveRole({
   currentNightTurnRole,
   nightActionDeadline,
   nightActionNow,
+  doesNightTurnMatchMyRole,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -34,6 +35,7 @@ export function useLoveRole({
   currentNightTurnRole: string | null;
   nightActionDeadline: number | null;
   nightActionNow: number;
+  doesNightTurnMatchMyRole: boolean;
 }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [showPairConfirm, setShowPairConfirm] = useState(false);
@@ -71,8 +73,27 @@ export function useLoveRole({
     if (phase !== "night") return false;
     if (!isPaired || !isMeAlive) return false;
     if (loveState.escapeUsed || loveState.escapeActiveTonight) return false;
+    if (allNightActionsSimultaneous && nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
+    if (
+      !allNightActionsSimultaneous &&
+      doesNightTurnMatchMyRole &&
+      nightActionDeadline &&
+      nightActionNow >= nightActionDeadline
+    ) {
+      return false;
+    }
     return true;
-  }, [isMeAlive, isPaired, loveState.escapeActiveTonight, loveState.escapeUsed, phase]);
+  }, [
+    allNightActionsSimultaneous,
+    doesNightTurnMatchMyRole,
+    isMeAlive,
+    isPaired,
+    loveState.escapeActiveTonight,
+    loveState.escapeUsed,
+    nightActionDeadline,
+    nightActionNow,
+    phase,
+  ]);
 
   const onPlayerClick = useCallback(
     (playerId: string) => {

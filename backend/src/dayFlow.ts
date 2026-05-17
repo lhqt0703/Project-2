@@ -169,10 +169,22 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     if (executed && !((room.deadPlayers || []).includes(targetId))) {
       const eliminatedIds: string[] = [];
       const causesByTarget: Record<string, EliminationCause[]> = {};
+      const loveLinkDeaths: { sourceId: string; targetId: string }[] = [];
       markEliminatedWithLoveChain(ctx, roomId, room, targetId, { type: "trial_verdict", voterIds: dieVoterIds }, "day", {
         eliminatedIds,
         causesByTarget,
+        loveLinkDeaths,
       });
+
+      while (loveLinkDeaths.length) {
+        const death = loveLinkDeaths.shift()!;
+        appendLogEntry(room, {
+          type: "love_link_death",
+          phase: "day",
+          sourceId: death.sourceId,
+          targetId: death.targetId,
+        });
+      }
 
       appendLogEntry(room, {
         type: "eliminated",
@@ -189,6 +201,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
       executed,
       liveVotes,
       dieVotes,
+      chiefRevealed: chiefSurvivesByReveal,
     });
 
     clearTrialState(room);

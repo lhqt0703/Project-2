@@ -187,6 +187,7 @@ export default function GameRulesModal({
       trialInteractionSelectionLimit: clampSelectionLimit(draftRules.trialInteractionSelectionLimit),
       nonWolfNightActionDurationSec: normalizedDurations.nonWolfNightActionDurationSec,
       wolfNightActionDurationSec: normalizedDurations.wolfNightActionDurationSec,
+      forceWolfBiteFirstNight: draftRules.twoHeartsFirstTwoNights && draftRules.forceWolfBiteFirstNight,
     });
   };
 
@@ -256,10 +257,36 @@ export default function GameRulesModal({
               type="checkbox"
               checked={draftRules.twoHeartsFirstTwoNights}
               disabled={readOnly}
-              onChange={(e) => updateRule("twoHeartsFirstTwoNights", e.target.checked)}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                if (readOnly) return;
+                setDraftRules((prev) => ({
+                  ...prev,
+                  twoHeartsFirstTwoNights: checked,
+                  forceWolfBiteFirstNight: checked ? prev.forceWolfBiteFirstNight : false,
+                }));
+              }}
               style={{ width: 20, height: 20, marginTop: 2 }}
             />
           </label>
+
+          {draftRules.twoHeartsFirstTwoNights && (
+            <label style={rowStyle()}>
+              <div>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>Bắt buộc phe sói cắn trong đêm đầu</div>
+                <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                  Nếu Sói không chọn ai, hệ thống sẽ chọn ngẫu nhiên một mục tiêu hợp lệ. Nếu hòa phiếu, hệ thống chọn ngẫu nhiên trong các mục tiêu đang hòa.
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={draftRules.forceWolfBiteFirstNight}
+                disabled={readOnly}
+                onChange={(e) => updateRule("forceWolfBiteFirstNight", e.target.checked)}
+                style={{ width: 20, height: 20, marginTop: 2 }}
+              />
+            </label>
+          )}
 
           <label style={rowStyle()}>
             <div>

@@ -260,6 +260,7 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.spiritWolfWolfAligned = false;
     room.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
+    room.spiritWolfDecisionDeadline = null;
     room.banSoiId = null;
     room.banSoiWolfAligned = false;
     room.banSoiWolfAlignedPending = false;

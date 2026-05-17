@@ -30,6 +30,7 @@ export function resolveHunterShotsForDeaths(
   const processed = new Set<string>();
   const hunterIds = new Set(getHunters(room));
   const protectorSaves: ProtectorSaveRecord[] = [];
+  const loveLinkDeaths: { sourceId: string; targetId: string }[] = [];
 
   room.hunterShotPlayerIds = room.hunterShotPlayerIds || [];
   const firedHunterIds = new Set(room.hunterShotPlayerIds);
@@ -61,6 +62,7 @@ export function resolveHunterShotsForDeaths(
       eliminatedIds: killedIds,
       causesByTarget,
       protectorSaves,
+      loveLinkDeaths,
     });
 
     while (protectorSaves.length) {
@@ -75,6 +77,18 @@ export function resolveHunterShotsForDeaths(
       });
       if (save.actorId) {
         emitProtectorTarget(roomId, save.actorId);
+      }
+    }
+
+    if (newlyDead.length) {
+      while (loveLinkDeaths.length) {
+        const death = loveLinkDeaths.shift()!;
+        appendLogEntry(room, {
+          type: "love_link_death",
+          phase,
+          sourceId: death.sourceId,
+          targetId: death.targetId,
+        });
       }
     }
 

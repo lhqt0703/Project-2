@@ -94,6 +94,7 @@ export function useGameSocketSync({
 
   const [gameEnded, setGameEnded] = useState<GameEndedPayload | null>(null);
   const [spiritWolfDecisionTargetId, setSpiritWolfDecisionTargetId] = useState<string | null>(null);
+  const [spiritWolfDecisionDeadline, setSpiritWolfDecisionDeadline] = useState<number | null>(null);
   const [elementalTargetSeq, setElementalTargetSeq] = useState(0);
   const [elementalTargetId, setElementalTargetId] = useState<string | null>(null);
   const [elementalActionMode, setElementalActionMode] = useState<"guess" | "buff">("guess");
@@ -110,6 +111,7 @@ export function useGameSocketSync({
   const [dayDiscussionDeadline, setDayDiscussionDeadline] = useState<number | null>(null);
   const [dayDeadline, setDayDeadline] = useState<number | null>(null);
   const [dayVoters, setDayVoters] = useState<string[]>([]);
+  const [dayPhaseSeq, setDayPhaseSeq] = useState(0);
   const [dayVoteFinishedSeq, setDayVoteFinishedSeq] = useState(0);
   const [dayVoteFinished, setDayVoteFinished] = useState<DayVoteFinishedPayload | null>(null);
 
@@ -144,6 +146,7 @@ export function useGameSocketSync({
       if (newPhase === "day") {
         setWitchPendingDeathTargetIds([]);
         setSpiritWolfDecisionTargetId(null);
+        setSpiritWolfDecisionDeadline(null);
       } else {
         setDayVotes(null);
         setDayLocked(null);
@@ -166,6 +169,7 @@ export function useGameSocketSync({
       if (newPhase !== "night") {
         setWitchPendingDeathTargetIds([]);
         setSpiritWolfDecisionTargetId(null);
+        setSpiritWolfDecisionDeadline(null);
       }
       // hunter selection is per-night; server will also emit reset, but clear locally on phase rotate
       if (newPhase !== "night") {
@@ -275,6 +279,7 @@ export function useGameSocketSync({
     const handleGameStarted = () => {
       setGameEnded(null);
       setSpiritWolfDecisionTargetId(null);
+      setSpiritWolfDecisionDeadline(null);
       setSeerResult(null);
       setWitchPendingDeathTargetIds([]);
       setDeadPlayers([]);
@@ -287,6 +292,7 @@ export function useGameSocketSync({
       setDayDiscussionDeadline(null);
       setDayDeadline(null);
       setDayVoters([]);
+      setDayPhaseSeq(0);
       setDayVoteFinished(null);
       setDayVoteFinishedSeq(0);
       setTrialTargetId(null);
@@ -312,6 +318,7 @@ export function useGameSocketSync({
       setGameEnded(payload);
       // Clear any pending per-role prompts.
       setSpiritWolfDecisionTargetId(null);
+      setSpiritWolfDecisionDeadline(null);
     };
 
     const handleGameLogUpdated = (payload: GameLogUpdatedPayload) => {
@@ -340,11 +347,14 @@ export function useGameSocketSync({
     };
 
     const handleSpiritWolfDecisionNeeded = (payload: SpiritWolfDecisionNeededPayload) => {
-      setSpiritWolfDecisionTargetId(payload?.targetId ?? null);
+      const targetId = payload?.targetId ?? null;
+      setSpiritWolfDecisionTargetId(targetId);
+      setSpiritWolfDecisionDeadline(targetId && typeof payload?.deadline === "number" ? payload.deadline : null);
     };
 
     const handleSpiritWolfDecisionRecorded = (_payload: SpiritWolfDecisionRecordedPayload) => {
       setSpiritWolfDecisionTargetId(null);
+      setSpiritWolfDecisionDeadline(null);
     };
 
     const handleElementalTargetUpdated = (payload: ElementalTargetUpdatedPayload) => {
@@ -475,6 +485,7 @@ export function useGameSocketSync({
       setDayLocked({});
       setDayDeadline(null);
       setDayVoteFinished(null);
+      setTrialVerdictFinished(null);
       setTrialTargetId(null);
       setTrialStage("none");
       setTrialDefenseDeadline(null);
@@ -490,9 +501,11 @@ export function useGameSocketSync({
 
     const handleDayPhaseStarted = ({ voters, deadline }: DayPhaseStartedPayload) => {
       setDayVoters(voters || []);
+      setDayPhaseSeq((s) => s + 1);
       setDayDiscussionDeadline(null);
       setDayDeadline(typeof deadline === "number" ? deadline : null);
       setDayVoteFinished(null);
+      setTrialVerdictFinished(null);
       setTrialTargetId(null);
       setTrialStage("none");
       setTrialDefenseDeadline(null);
@@ -687,6 +700,7 @@ export function useGameSocketSync({
       wolfMaxTargets,
       gameEnded,
       spiritWolfDecisionTargetId,
+      spiritWolfDecisionDeadline,
       elementalTargetSeq,
       elementalTargetId,
       elementalActionMode,
@@ -697,6 +711,7 @@ export function useGameSocketSync({
       dayDiscussionDeadline,
       dayDeadline,
       dayVoters,
+      dayPhaseSeq,
       dayVoteFinished,
       dayVoteFinishedSeq,
       trialTargetId,
@@ -740,6 +755,7 @@ export function useGameSocketSync({
       wolfMaxTargets,
       gameEnded,
       spiritWolfDecisionTargetId,
+      spiritWolfDecisionDeadline,
       elementalTargetSeq,
       elementalTargetId,
       elementalActionMode,
@@ -750,6 +766,7 @@ export function useGameSocketSync({
       dayDiscussionDeadline,
       dayDeadline,
       dayVoters,
+      dayPhaseSeq,
       dayVoteFinished,
       dayVoteFinishedSeq,
       trialTargetId,

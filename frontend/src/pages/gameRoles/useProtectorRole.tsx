@@ -67,7 +67,7 @@ export function useProtectorRole({
     ? room.players.find((player) => player.id === selectedPlayerId)?.name || "người này"
     : "người này";
 
-  const panel = role === "Hộ nhân" && protectorTargetId ? (
+  const panel = role === "Hộ nhân" && phase === "night" && protectorTargetId ? (
     <div style={{ marginTop: 12, opacity: 0.85 }}>
       Người đang được bất tử: <b>{room.players.find((player) => player.id === protectorTargetId)?.name || "người đã chọn"}</b>
     </div>

@@ -298,6 +298,7 @@ export default function PlayerPositions({
   showRoleBadges,
   roleBadges,
   activeNightRole,
+  suppressNightActionProgress,
   trialOrangePlayerId,
   trialWhitePlayerIds,
   trialGreenPlayerId,
@@ -326,6 +327,7 @@ export default function PlayerPositions({
   showRoleBadges?: boolean;
   roleBadges?: Record<string, string>;
   activeNightRole?: string | null;
+  suppressNightActionProgress?: boolean;
   trialOrangePlayerId?: string | null;
   trialWhitePlayerIds?: string[];
   trialGreenPlayerId?: string | null;
@@ -393,6 +395,7 @@ export default function PlayerPositions({
     && room.gameRules?.nonWolfNightActionDurationSec === room.gameRules?.wolfNightActionDurationSec;
   const getVisibleNightActionProgress = (playerId: string) => {
     if (!isHost) return undefined;
+    if (suppressNightActionProgress) return undefined;
     const progress = room.nightActionProgressByPlayerId?.[playerId];
     if (progress !== "pending") return progress;
     if (!isSimultaneousNight) return progress;
@@ -1090,7 +1093,8 @@ export default function PlayerPositions({
           const showHpBadge = heartVisible && !isDead && typeof playerHp === "number";
           const heartShaking = privateHeartVisible && (room.playerHeartShakeIds || []).includes(pos.playerId);
           const hpSafe = Math.max(0, Math.min(2, playerHp ?? 0));
-          const hpText = `${"♥️".repeat(hpSafe)}${"♡".repeat(2 - hpSafe)}`;
+          const filledHearts = Array.from({ length: hpSafe });
+          const emptyHearts = Array.from({ length: 2 - hpSafe });
 
           const isBulletView = mode === "view" && !!bulletRecoil;
 
@@ -1312,9 +1316,21 @@ export default function PlayerPositions({
                   fontWeight: "bold",
                   letterSpacing: scaleNum(0.5, 0.25),
                   boxShadow: "0 0 0 1px rgba(255,255,255,0.35)",
-                  animation: heartShaking ? "playerHeartShake 850ms ease-in-out infinite" : undefined,
                 }}>
-                  {hpText}
+                  {filledHearts.map((_, idx) => (
+                    <span
+                      key={`filled-${idx}`}
+                      style={{
+                        display: "inline-block",
+                        animation: heartShaking ? "playerHeartShake 850ms ease-in-out infinite" : undefined,
+                      }}
+                    >
+                      ♥️
+                    </span>
+                  ))}
+                  {emptyHearts.map((_, idx) => (
+                    <span key={`empty-${idx}`}>♡</span>
+                  ))}
                 </div>
               )}
 

@@ -102,6 +102,7 @@ type MarkEliminatedOptions = {
   eliminatedIds?: string[];
   causesByTarget?: Record<string, EliminationCause[]>;
   protectorSaves?: ProtectorSaveRecord[];
+  loveLinkDeaths?: { sourceId: string; targetId: string }[];
 };
 
 function addCause(causesByTarget: Record<string, EliminationCause[]> | undefined, targetId: string, cause: EliminationCause) {
@@ -154,7 +155,11 @@ export function markEliminatedWithLoveChain(
 
     const partnerId = getLovePartnerId(room, id);
     if (partnerId && !dead.has(partnerId) && !initialDead.has(partnerId)) {
+      const beforeCount = newlyDead.length;
       mark(partnerId, { type: "love_link", sourceId: id });
+      if (newlyDead.length > beforeCount && newlyDead.includes(partnerId)) {
+        options.loveLinkDeaths?.push({ sourceId: id, targetId: partnerId });
+      }
     }
 
     return newlyDead;

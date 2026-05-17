@@ -15,6 +15,7 @@ import {
 import {
   clearGameTimers,
   clearNightTurnTimer,
+  clearSpiritWolfDecisionTimer,
   clearTrialState,
   ensureWitchState,
   getActiveDayVoters,
@@ -175,14 +176,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
   const {
     canPerformNightRoleAction,
     getSelectedNightActionRoles,
-    shouldIncludeSpiritWolfTurn,
-    getBaseNightActionOrder,
-    getEffectiveNightActionOrder,
-    insertSpiritWolfIntoNightOrder,
+    startSpiritWolfDecisionWindow,
     finishSpiritWolfTurn,
     getWolfTurnDurationMs,
     startWolfPhase,
-    getRoleTurnDurationMs,
     startNightTurnByIndex,
     startNightTurnFlow,
     finishWolfVoting,
@@ -298,6 +295,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const eliminatedIds: string[] = [];
     const causesByTarget: Record<string, EliminationCause[]> = {};
     const protectorSaves: ProtectorSaveRecord[] = [];
+    const loveLinkDeaths: { sourceId: string; targetId: string }[] = [];
     const savedByGuardianIds: string[] = [];
     const savedByWitchIds: string[] = [];
     let hadDeathThreat = false;
@@ -320,12 +318,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
       room.villageChiefExtraVoteAvailable = true;
       room.villageChiefExtraVoteReady = false;
-      appendLogEntry(room, {
-        type: "village_chief_extra_vote_unlocked",
-        phase: "night",
-        chiefId,
-        protectorId,
-      });
     };
 
     const getUniqueTargets = (targets: Array<string | null | undefined>) => {
@@ -344,6 +336,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         eliminatedIds,
         causesByTarget,
         protectorSaves,
+        loveLinkDeaths,
       });
     };
 
@@ -361,6 +354,18 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         if (save.actorId) {
           emitProtectorTarget(roomId, save.actorId);
         }
+      }
+    };
+
+    const flushLoveLinkDeathLogs = (phase: "night" | "day") => {
+      while (loveLinkDeaths.length) {
+        const death = loveLinkDeaths.shift()!;
+        appendLogEntry(room, {
+          type: "love_link_death",
+          phase,
+          sourceId: death.sourceId,
+          targetId: death.targetId,
+        });
       }
     };
 
@@ -436,24 +441,18 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         attackerIds: wolfAttackersForTarget(targetId),
       };
 
-      const protectorSave = tryUseProtectorImmortality(room, targetId, wolfCause);
-      if (protectorSave) {
-        protectorSaves.push(protectorSave);
-        continue;
-      }
-
       if (isVillageChief(room, targetId)) {
         room.villageChiefPendingWolfDeath = {
           playerId: targetId,
           bittenNight: room.nightCount || 0,
           attackerIds: wolfCause.attackerIds,
         };
-        appendLogEntry(room, {
-          type: "village_chief_delayed_death_pending",
-          phase: "night",
-          targetId,
-          deathNight: (room.nightCount || 0) + 1,
-        });
+        continue;
+      }
+
+      const protectorSave = tryUseProtectorImmortality(room, targetId, wolfCause);
+      if (protectorSave) {
+        protectorSaves.push(protectorSave);
         continue;
       }
 
@@ -503,6 +502,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
           appendEliminationLog: false,
         });
         const dayEliminatedIds = Array.from(new Set([...hunterShots.killedIds, ...eliminatedIds]));
+        flushLoveLinkDeathLogs("day");
         appendLogEntry(room, {
           type: "eliminated",
           phase: "day",
@@ -513,6 +513,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
           },
         });
       } else {
+        flushLoveLinkDeathLogs("night");
         appendLogEntry(room, { type: "eliminated", phase: "night", targetIds: eliminatedIds, causesByTarget });
         resolveHunterShotsForDeaths(ctx, roomId, room, eliminatedIds, "night");
       }
@@ -547,6 +548,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const eliminatedIds: string[] = [];
     const causesByTarget: Record<string, EliminationCause[]> = {};
     const protectorSaves: ProtectorSaveRecord[] = [];
+    const loveLinkDeaths: { sourceId: string; targetId: string }[] = [];
     const cause: EliminationCause = { type: "wolf", attackerIds: pending.attackerIds || [] };
 
     appendLogEntry(room, {
@@ -559,6 +561,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       eliminatedIds,
       causesByTarget,
       protectorSaves,
+      loveLinkDeaths,
     });
 
     const hadProtectorSave = protectorSaves.length > 0;
@@ -581,6 +584,15 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       const hunterShots = resolveHunterShotsForDeaths(ctx, roomId, room, eliminatedIds, "day", {
         appendEliminationLog: false,
       });
+      while (loveLinkDeaths.length) {
+        const death = loveLinkDeaths.shift()!;
+        appendLogEntry(room, {
+          type: "love_link_death",
+          phase: "day",
+          sourceId: death.sourceId,
+          targetId: death.targetId,
+        });
+      }
       appendLogEntry(room, {
         type: "eliminated",
         phase: "day",
@@ -688,6 +700,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       socket.emit("roomUpdated", toPublicRoom(room));
       if (clientId === room.hostId) {
         syncPendingRoleInterventionsToHost(roomId);
+        emitGameLogToSocket(roomId, clientId);
       }
       ctx.io.to(roomId).emit("positionsUpdated", room.positions);
       ctx.io.to(roomId).emit("positionEditorsUpdated", room.positionEditors || []);
@@ -748,8 +761,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       }
 
       if (room.playerRoles?.[clientId] === SPIRIT_WOLF_ROLE) {
+        const rules = ensureRoomGameRules(room);
         if (
-          room.nightTurnRole === SPIRIT_WOLF_ROLE &&
+          (rules.allNightActionsSimultaneous || room.nightTurnRole === SPIRIT_WOLF_ROLE) &&
           !room.spiritWolfDecisionMade &&
           room.spiritWolfPendingPoisonedWolfId
         ) {
@@ -774,6 +788,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     room.players[idx] = { ...current, inGame: nextInGame };
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    if (clientId === room.hostId && nextInGame) {
+      emitGameLogToSocket(roomId, clientId);
+    }
   });
 
   socket.on("updateRoomGameRules", ({ roomId, rules, applyMode }: { roomId: string; rules: Partial<RoomGameRules>; applyMode?: "next-round" | "restart-now" }) => {
@@ -1161,6 +1178,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.spiritWolfWolfAligned = false;
     room.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
+    room.spiritWolfDecisionDeadline = null;
 
     room.hidePlayerRoleText = true;
     room.phase = "dusk";
@@ -1494,6 +1512,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.spiritWolfWolfAligned = false;
     room.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
+    room.spiritWolfDecisionDeadline = null;
     room.villageChiefPendingWolfDeath = null;
     room.villageChiefExtraVoteAvailable = false;
     room.villageChiefExtraVoteReady = false;
@@ -1702,6 +1721,13 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (room.phase !== "night") return;
     if ((room.deadPlayers || []).includes(clientId)) return;
     if (room.loveEscapeUsed || room.loveEscapeActiveTonight) return;
+    const rules = ensureRoomGameRules(room);
+    if (rules.allNightActionsSimultaneous) {
+      const deadline = isWolfAlignedPlayer(room, clientId) ? room.wolfDeadline : room.nightTurnDeadline;
+      if (deadline && Date.now() >= deadline) return;
+    } else if (!room.nightTurnPaused && room.nightTurnDeadline && Date.now() >= room.nightTurnDeadline) {
+      return;
+    }
 
     const partnerId = getLovePartnerId(room, clientId);
     if (!partnerId) return;
@@ -1710,16 +1736,19 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     room.loveEscapeVotesTonight = room.loveEscapeVotesTonight || {};
     room.loveEscapeVoteAt = room.loveEscapeVoteAt || {};
     if (room.loveEscapeVotesTonight[clientId]) return;
+    const partnerAlreadyVoted = room.loveEscapeVotesTonight[partnerId] === true;
 
     room.loveEscapeVotesTonight[clientId] = true;
     room.loveEscapeVoteAt[clientId] = Date.now();
 
-    appendLogEntry(room, {
-      type: "love_escape_vote",
-      phase: "night",
-      actorId: clientId,
-      partnerId,
-    });
+    if (!partnerAlreadyVoted) {
+      appendLogEntry(room, {
+        type: "love_escape_vote",
+        phase: "night",
+        actorId: clientId,
+        partnerId,
+      });
+    }
 
     const pair = getLovePairIds(room);
     if (pair && pair.every((id) => room.loveEscapeVotesTonight?.[id] === true)) {
@@ -1772,6 +1801,18 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       if (ensureRoomGameRules(room).allNightActionsSimultaneous && !room.wolfVoteResolvedTonight) {
         finishWolfVoting(roomId);
       }
+      clearSpiritWolfDecisionTimer(room);
+      room.spiritWolfDecisionDeadline = null;
+      if (room.spiritWolfPendingPoisonedWolfId && !room.spiritWolfDecisionMade) {
+        room.spiritWolfDecisionMade = true;
+        room.spiritWolfChoseSave = false;
+        appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", saved: false, timedOut: true });
+        const spiritWolfId = getSpiritWolfId(room);
+        if (spiritWolfId) {
+          ctx.io.to(spiritWolfId).emit("spiritWolfDecisionRecorded", { saved: false });
+        }
+      }
+      room.spiritWolfPendingPoisonedWolfId = null;
       finalizeUnmatchedLoveEscapeVote(roomId, room);
       room.privatePlayerHearts = {};
       room.privateHeartVisiblePlayerIds = [];
@@ -1857,6 +1898,10 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
         if (room.banSoiId) {
           appendLogEntry(room, { type: "ban_soi_aligned", phase: "night", targetId: room.banSoiId });
           ctx.io.in(room.banSoiId).socketsJoin(`wolves_${roomId}`);
+          if (room.loveTargetId === room.banSoiId) {
+            room.loveTargetWolfAligned = true;
+            emitLoveStateToPair(ctx, roomId, room);
+          }
         }
         checkAndEndGame(roomId, "ban_soi_aligned_next_night");
         if (room.gameOver) return;
@@ -2067,6 +2112,10 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
           clearTimeout(room.wolfTimer);
           room.wolfTimer = null;
         }
+      } else if (room.nightTurnRole === SPIRIT_WOLF_ROLE) {
+        clearSpiritWolfDecisionTimer(room);
+        clearNightTurnTimer(room);
+        room.spiritWolfDecisionDeadline = null;
       } else {
         clearNightTurnTimer(room);
       }
@@ -2090,6 +2139,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
         return;
       }
       clearNightTurnTimer(room);
+      room.spiritWolfDecisionDeadline = room.nightTurnDeadline;
       room.nightTurnTimer = setTimeout(() => {
         finishSpiritWolfTurn(roomId, true);
       }, remainingMs);
@@ -2687,8 +2737,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       !room.spiritWolfPendingPoisonedWolfId
     ) {
       room.spiritWolfPendingPoisonedWolfId = targetId;
-      insertSpiritWolfIntoNightOrder(room);
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      startSpiritWolfDecisionWindow(roomId);
     }
   });
 
@@ -2723,14 +2772,11 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       }
     }
 
-    room.spiritWolfPendingPoisonedWolfId = null;
     ctx.io.to(clientId).emit("spiritWolfDecisionRecorded", { saved: !!save });
-    emitHostNightActionProgress(roomId);
-    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
 
     appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", saved: !!save });
 
-    checkAndEndGame(roomId, "after_spirit_wolf_decision");
+    finishSpiritWolfTurn(roomId, false);
   });
 
   socket.on("wolfChooseTarget", ({ roomId, targetId }) => {

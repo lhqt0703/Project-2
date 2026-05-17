@@ -13,6 +13,7 @@ import { ELEMENTAL_GROUP_ROLE } from "./elemental.js";
 import {
   clearNightTurnTimer,
   getActiveWolves,
+  getParticipantIds,
   getSpiritWolfId,
   isSpiritWolfAlive,
   isWolfAlignedPlayer,
@@ -21,7 +22,7 @@ import {
 } from "./roomState.js";
 import { ensureRoomGameRules, type NightActionRole, type Room } from "./serverTypes.js";
 import { toPublicRoom } from "./serverEmitters.js";
-import { LOVE_ROLE } from "./love.js";
+import { LOVE_ROLE, isLovePairMemberAwayAt } from "./love.js";
 import { PROTECTOR_ROLE, isVillageChief } from "./specialRoles.js";
 
 type NightFlowDeps = {
@@ -32,6 +33,7 @@ type NightFlowDeps = {
 
 export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
   const WITCH_BONUS_MS = 10_000;
+  const SPIRIT_WOLF_DECISION_MS = 10_000;
 
   function getNonWolfTurnDurationMs(room: Room) {
     const rules = ensureRoomGameRules(room);
@@ -64,6 +66,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     const rules = ensureRoomGameRules(room);
     if (!rules.allNightActionsSimultaneous) return null;
     if (role === "Sói") return room.wolfDeadline ?? null;
+    if (role === "Linh sói") return room.spiritWolfDecisionDeadline ?? null;
 
     const baseDeadline = room.nightTurnDeadline ?? null;
     if (!baseDeadline) return null;
@@ -79,7 +82,12 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
 
     const rules = ensureRoomGameRules(room);
     if (rules.allNightActionsSimultaneous) {
+      if (expectedRole === "Linh sói") {
+        if (room.playerRoles?.[playerId] !== "Linh sói") return false;
+        if (!room.spiritWolfPendingPoisonedWolfId || room.spiritWolfDecisionMade) return false;
+      }
       const deadline = getSimultaneousRoleDeadline(room, expectedRole);
+      if (expectedRole === "Linh sói" && !deadline) return false;
       if (deadline && Date.now() >= deadline) return false;
       return true;
     }
@@ -99,7 +107,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       selected.add(LOVE_ROLE as NightActionRole);
     }
 
-    for (const role of ["Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"] as NightActionRole[]) {
+    for (const role of ["Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Thợ săn", "Tiên tri"] as NightActionRole[]) {
       if (sourceRoles.includes(role)) selected.add(role);
     }
 
@@ -203,7 +211,16 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     const room = ctx.rooms[roomId];
     if (!room) return;
     if (room.phase !== "night") return;
-    if (room.nightTurnRole !== "Linh sói") return;
+    const rules = ensureRoomGameRules(room);
+    const isSequentialNight = !rules.allNightActionsSimultaneous;
+    if (isSequentialNight && room.nightTurnRole !== "Linh sói") return;
+
+    clearNightTurnTimer(room);
+    if (room.spiritWolfDecisionTimer) {
+      clearTimeout(room.spiritWolfDecisionTimer);
+      room.spiritWolfDecisionTimer = null;
+    }
+    room.spiritWolfDecisionDeadline = null;
 
     const pendingTargetId = room.spiritWolfPendingPoisonedWolfId;
     if (timedOut && !room.spiritWolfDecisionMade && pendingTargetId) {
@@ -219,9 +236,51 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     room.spiritWolfPendingPoisonedWolfId = null;
 
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    emitHostNightActionProgress(roomId);
     deps.checkAndEndGame(roomId, timedOut ? "spirit_wolf_timeout" : "spirit_wolf_decision");
 
-    startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
+    if (isSequentialNight && !room.gameOver) {
+      startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
+    }
+  }
+
+  function startSpiritWolfDecisionWindow(roomId: string) {
+    const room = ctx.rooms[roomId];
+    if (!room) return;
+    if (room.phase !== "night") return;
+    if (!shouldIncludeSpiritWolfTurn(room)) return;
+
+    const rules = ensureRoomGameRules(room);
+    const durationMs = SPIRIT_WOLF_DECISION_MS;
+
+    if (rules.allNightActionsSimultaneous) {
+      if (room.spiritWolfDecisionTimer) {
+        clearTimeout(room.spiritWolfDecisionTimer);
+        room.spiritWolfDecisionTimer = null;
+      }
+      room.spiritWolfDecisionDeadline = Date.now() + durationMs;
+      emitSpiritWolfDecisionNeeded(roomId);
+      room.spiritWolfDecisionTimer = setTimeout(() => {
+        finishSpiritWolfTurn(roomId, true);
+      }, durationMs);
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      emitHostNightActionProgress(roomId);
+      return;
+    }
+
+    if (!room.nightTurnOrderSnapshot) {
+      room.nightTurnOrderSnapshot = getBaseNightActionOrder(room);
+    }
+    insertSpiritWolfIntoNightOrder(room);
+    const currentIndex = room.nightTurnIndex ?? -1;
+    const searchFrom = Math.max(0, currentIndex);
+    let spiritIndex = room.nightTurnOrderSnapshot.indexOf("Linh sói", searchFrom);
+    if (spiritIndex < 0) {
+      spiritIndex = room.nightTurnOrderSnapshot.indexOf("Linh sói");
+    }
+    if (spiritIndex < 0) return;
+
+    startNightTurnByIndex(roomId, spiritIndex, { durationMs });
   }
 
   function startWolfPhase(roomId: string, opts?: { durationMs?: number; initializeVotes?: boolean; useTimer?: boolean }) {
@@ -284,6 +343,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
   function getRoleTurnDurationMs(room: Room, role: NightActionRole) {
     if (role === "Sói") return getWolfTurnDurationMs(room);
     if (role === "Phù thủy") return getWitchTurnDurationMs(room);
+    if (role === "Linh sói") return SPIRIT_WOLF_DECISION_MS;
     return getNonWolfTurnDurationMs(room);
   }
 
@@ -323,6 +383,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     room.nightTurnPaused = false;
     room.nightTurnRemainingMs = durationMs;
     room.nightTurnDeadline = Date.now() + durationMs;
+    room.spiritWolfDecisionDeadline = role === "Linh sói" ? room.nightTurnDeadline : room.spiritWolfDecisionDeadline ?? null;
     room.hidePlayerRoleText = false;
 
     if (role === "Sói") {
@@ -430,11 +491,32 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     const votes = room.wolfVotes || {};
     const votes2 = room.wolfVotes2 || {};
     const activeWolves = getActiveWolves(room);
+    const rules = ensureRoomGameRules(room);
+    const forceWolfBiteFirstNight =
+      rules.twoHeartsFirstTwoNights &&
+      rules.forceWolfBiteFirstNight &&
+      (room.nightCount || 0) === 1 &&
+      activeWolves.length > 0;
 
     appendLogEntry(room, buildWolfVoteBreakdown(room, votes));
     if (room.wolfBonusBiteThisNight) {
       appendLogEntry(room, buildWolfVoteBreakdown(room, votes2));
     }
+
+    const randomFrom = <T,>(items: T[]): T | null => {
+      if (!items.length) return null;
+      return items[Math.floor(Math.random() * items.length)] ?? null;
+    };
+
+    const getRandomEligibleWolfTarget = () => {
+      const dead = new Set(room.deadPlayers || []);
+      const attackAt = room.wolfAttackResolvedAt || Date.now();
+      const candidates = getParticipantIds(room)
+        .filter((playerId) => !dead.has(playerId))
+        .filter((playerId) => !isWolfAlignedPlayer(room, playerId))
+        .filter((playerId) => !isLovePairMemberAwayAt(room, playerId, attackAt));
+      return randomFrom(candidates);
+    };
 
     const counts: Record<string, number> = {};
     activeWolves.forEach((wolfId) => {
@@ -445,11 +527,13 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
 
     const entries = Object.entries(counts);
     if (entries.length === 0) {
-      room.killedTonight = null;
+      room.killedTonight = forceWolfBiteFirstNight ? getRandomEligibleWolfTarget() : null;
     } else {
       entries.sort((a, b) => b[1] - a[1]);
       if (entries.length > 1 && entries[0]![1] === entries[1]![1]) {
-        room.killedTonight = null;
+        const topCount = entries[0]![1];
+        const tiedTargets = entries.filter(([, count]) => count === topCount).map(([targetId]) => targetId);
+        room.killedTonight = forceWolfBiteFirstNight ? randomFrom(tiedTargets) : null;
       } else {
         room.killedTonight = entries[0]![0];
       }
@@ -515,6 +599,16 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       }
     }
 
+    if (forceWolfBiteFirstNight && !room.killedTonight) {
+      const selectedTargets = Object.keys(counts);
+      room.killedTonight = selectedTargets.length
+        ? randomFrom(selectedTargets)
+        : getRandomEligibleWolfTarget();
+      if (room.killedTonightExtra === room.killedTonight) {
+        room.killedTonightExtra = null;
+      }
+    }
+
     ctx.io.to(roomId).emit("wolfVoteFinished", {
       target: room.killedTonight,
       extraTarget: room.killedTonightExtra,
@@ -528,7 +622,6 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     }
     appendLogEntry(room, { type: "wolf_result", phase: "night", targetIds: wolfTargets, selectedByByTarget });
 
-    const rules = ensureRoomGameRules(room);
     if (rules.villageChiefKnowsWolfBite) {
       for (const targetId of wolfTargets) {
         if (!isVillageChief(room, targetId)) continue;
@@ -564,6 +657,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     getBaseNightActionOrder,
     getEffectiveNightActionOrder,
     insertSpiritWolfIntoNightOrder,
+    startSpiritWolfDecisionWindow,
     finishSpiritWolfTurn,
     getWolfTurnDurationMs,
     startWolfPhase,

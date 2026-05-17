@@ -18,7 +18,7 @@ export function useSpiritWolfRole({
   decisionTargetId,
   allNightActionsSimultaneous,
   currentNightTurnRole,
-  nightTurnPaused: _nightTurnPaused,
+  nightTurnPaused,
   nightActionDeadline,
   nightActionNow,
 }: {
@@ -41,10 +41,11 @@ export function useSpiritWolfRole({
     if (!clientId) return false;
     if (deadPlayers.includes(clientId)) return false;
     if (!decisionTargetId) return false;
-    if (allNightActionsSimultaneous && nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
     if (!allNightActionsSimultaneous && currentNightTurnRole !== "Linh sói") return false;
+    if (!allNightActionsSimultaneous && nightTurnPaused) return false;
+    if (nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, decisionTargetId, nightActionDeadline, nightActionNow, phase, role, roomId]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, decisionTargetId, nightActionDeadline, nightActionNow, nightTurnPaused, phase, role, roomId]);
 
   const targetName = useMemo(() => {
     if (!decisionTargetId) return "người này";

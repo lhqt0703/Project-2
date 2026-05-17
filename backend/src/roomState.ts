@@ -130,13 +130,22 @@ export function clearNightTurnTimer(room: Room) {
   }
 }
 
+export function clearSpiritWolfDecisionTimer(room: Room) {
+  if (room.spiritWolfDecisionTimer) {
+    clearTimeout(room.spiritWolfDecisionTimer);
+    room.spiritWolfDecisionTimer = null;
+  }
+}
+
 export function resetNightTurnState(room: Room) {
   clearNightTurnTimer(room);
+  clearSpiritWolfDecisionTimer(room);
   room.nightTurnIndex = -1;
   room.nightTurnRole = null;
   room.nightTurnDeadline = null;
   room.nightTurnPaused = false;
   room.nightTurnRemainingMs = null;
+  room.spiritWolfDecisionDeadline = null;
   delete room.nightTurnOrderSnapshot;
 }
 
@@ -178,6 +187,7 @@ export function clearGameTimers(room: Room) {
     clearTimeout(room.trialVerdictTimer);
     room.trialVerdictTimer = null;
   }
+  clearSpiritWolfDecisionTimer(room);
 }
 
 export function resetRoomFromGameToLobby(room: Room) {
@@ -234,6 +244,7 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.witchHealTargetAt = {};
   room.witchPoisonTargetAt = {};
   room.spiritWolfPendingPoisonedWolfId = null;
+  room.spiritWolfDecisionDeadline = null;
   room.publicRevealedRolesByPlayerId = {};
   room.villageChiefPendingWolfDeath = null;
   room.villageChiefExtraVoteAvailable = false;

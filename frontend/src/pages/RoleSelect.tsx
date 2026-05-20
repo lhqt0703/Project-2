@@ -4,7 +4,7 @@ import { socket } from "../socket";
 import ConfirmModal from "../components/ConfirmModal";
 import { ELEMENTAL_ROLE_ORDER } from "../constants/elemental";
 
-const NON_VILLAGER_ROLES = ["Dân làng", "Sói", "Bán sói", "Sói con", "Sói Dại", "Linh sói", "Kẻ bị nguyền", "Trưởng làng", "Hộ nhân", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Thần tình yêu"] as const;
+const NON_VILLAGER_ROLES = ["Dân làng", "Sói", "Bán sói", "Sói con", "Sói Dại", "Linh sói", "Kẻ bị nguyền", "Tay Buôn", "Trưởng làng", "Hộ nhân", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Thần tình yêu"] as const;
 type NonVillagerRole = (typeof NON_VILLAGER_ROLES)[number];
 
 export default function RoleSelect() {
@@ -270,7 +270,7 @@ export default function RoleSelect() {
           );
         })}
 
-        {(["Bán sói", "Sói con", "Sói Dại", "Linh sói", "Kẻ bị nguyền", "Trưởng làng", "Hộ nhân", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Thần tình yêu"] as const).map((role) => {
+        {(["Bán sói", "Sói con", "Sói Dại", "Linh sói", "Kẻ bị nguyền", "Tay Buôn", "Trưởng làng", "Hộ nhân", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Thần tình yêu"] as const).map((role) => {
           const selected = selectedRoles.includes(role);
           return (
             <div

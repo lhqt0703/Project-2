@@ -18,6 +18,8 @@ export type NightActionRole =
   | "Thợ săn"
   | "Tiên tri"
   | "Thần tình yêu"
+  | "Kẻ bị nguyền"
+  | "Tay Buôn"
   | ElementalRole;
 
 export type NightActionOrderRole =
@@ -29,6 +31,8 @@ export type NightActionOrderRole =
   | "Thợ săn"
   | "Tiên tri"
   | "Thần tình yêu"
+  | "Kẻ bị nguyền"
+  | "Tay Buôn"
   | typeof ELEMENTAL_GROUP_ROLE;
 
 export interface RoomGameRules {
@@ -45,6 +49,7 @@ export interface RoomGameRules {
   banSoiBecomeWolfEvenIfHealed: boolean;
   villageChiefKnowsWolfBite: boolean;
   witchSeeProtectorImmortalBite: boolean;
+  merchantSingleUseItems: boolean;
 }
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -57,10 +62,11 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 20,
   wolfNightActionDurationSec: 20,
-  nightActionOrder: [ELEMENTAL_GROUP_ROLE, "Thần tình yêu", "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
+  nightActionOrder: ["Thần tình yêu", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền"],
   banSoiBecomeWolfEvenIfHealed: false,
   villageChiefKnowsWolfBite: true,
   witchSeeProtectorImmortalBite: true,
+  merchantSingleUseItems: false,
 };
 
 export interface RoomData {

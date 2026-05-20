@@ -285,6 +285,8 @@ export default function PlayerPositions({
   selectedOutlinePlayerIds,
   highlightPlayerId,
   secondaryHighlightPlayerIds,
+  cursedHighlightPlayerIds,
+  cursedHighlightIsDanger,
   verdictLivePlayerIds,
   verdictDiePlayerIds,
   dangerPlayerId,
@@ -295,6 +297,7 @@ export default function PlayerPositions({
   showWolfBadges,
   wolfBadgePlayerIds,
   wolfBadgeRoles,
+  cheesePlayerIds,
   showRoleBadges,
   roleBadges,
   activeNightRole,
@@ -314,6 +317,8 @@ export default function PlayerPositions({
   selectedOutlinePlayerIds?: string[];
   highlightPlayerId?: string | null;
   secondaryHighlightPlayerIds?: string[];
+  cursedHighlightPlayerIds?: string[];
+  cursedHighlightIsDanger?: boolean;
   verdictLivePlayerIds?: string[];
   verdictDiePlayerIds?: string[];
   dangerPlayerId?: string | null;
@@ -324,6 +329,7 @@ export default function PlayerPositions({
   showWolfBadges?: boolean;
   wolfBadgePlayerIds?: string[];
   wolfBadgeRoles?: Record<string, string>;
+  cheesePlayerIds?: string[];
   showRoleBadges?: boolean;
   roleBadges?: Record<string, string>;
   activeNightRole?: string | null;
@@ -1031,6 +1037,7 @@ export default function PlayerPositions({
           const dangerShadow = isWitchDanger ? `0 0 0 ${scalePx(6, 3)}px rgba(220,0,0,0.95), 0 0 ${scalePx(14, 7)}px rgba(220,0,0,0.55)` : "";
           const isHighlighted = !!highlightPlayerId && highlightPlayerId === pos.playerId;
           const isSecondaryHighlighted = !!secondaryHighlightPlayerIds && secondaryHighlightPlayerIds.includes(pos.playerId);
+          const isCursedHighlighted = !!cursedHighlightPlayerIds && cursedHighlightPlayerIds.includes(pos.playerId);
           const isVerdictLiveHighlighted = !!verdictLivePlayerIds && verdictLivePlayerIds.includes(pos.playerId);
           const isVerdictDieHighlighted = !!verdictDiePlayerIds && verdictDiePlayerIds.includes(pos.playerId);
           const highlightShadow = isHighlighted
@@ -1042,6 +1049,11 @@ export default function PlayerPositions({
                 : "";
           const verdictDieShadow = isVerdictDieHighlighted 
             ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #d00`
+            : "";
+          const cursedShadow = isCursedHighlighted
+            ? cursedHighlightIsDanger
+              ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #d00`
+              : `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #fff`
             : "";
           const trialOrangeShadow = trialOrangePlayerId === pos.playerId
             ? `0 0 0 ${scalePx(7, 4)}px rgba(255,165,0,0.9), 0 0 ${scalePx(16, 8)}px ${scalePx(6, 3)}px rgba(255,165,0,0.55)`
@@ -1064,6 +1076,7 @@ export default function PlayerPositions({
             (!!selectedOutlinePlayerId && selectedOutlinePlayerId === pos.playerId) ||
             (!!selectedOutlinePlayerIds && selectedOutlinePlayerIds.includes(pos.playerId));
           const showWolfBadge = !!showWolfBadges && (wolfBadgePlayerIds || []).includes(p.id);
+          const showCheeseBadge = !!cheesePlayerIds && cheesePlayerIds.includes(p.id);
           const wolfBadgeText = showWolfBadge ? (wolfBadgeRoles?.[p.id] || "Sói") : undefined;
           const roleBadgeText = (showRoleBadges && roleBadges) ? roleBadges[p.id] : undefined;
           const isWolfBadgeRole = roleBadgeText === "Sói" || roleBadgeText === "Sói con" || roleBadgeText === "Sói Dại" || roleBadgeText === "Bán sói";
@@ -1074,7 +1087,7 @@ export default function PlayerPositions({
           const activeRoleShadow = isActiveNightRoleBadge 
             ? `0 0 0 ${scalePx(7, 4)}px rgba(255,215,120,0.38), 0 0 ${scalePx(18, 9)}px ${scalePx(8, 4)}px rgba(255,215,120,0.22)`
             : "";
-          const mergedBoxShadow = [boxShadow, dangerShadow, highlightShadow, verdictDieShadow, activeRoleShadow, trialOrangeShadow, trialWhiteShadow, trialGreenShadow, nightActionShadow].filter(Boolean).join(", ");
+          const mergedBoxShadow = [boxShadow, dangerShadow, highlightShadow, verdictDieShadow, cursedShadow, activeRoleShadow, trialOrangeShadow, trialWhiteShadow, trialGreenShadow, nightActionShadow].filter(Boolean).join(", ");
           // Only show disconnected badge to host by default. Host can broadcast visibility to all clients
           const showDisconnectedBadge =
             p.connected === false && (isHost || (revealDisconnectedToAll && !isDead));
@@ -1261,6 +1274,20 @@ export default function PlayerPositions({
                   opacity: 0.9,
                 }}>
                   {wolfBadgeText || "Sói"}
+                </div>
+              )}
+
+              {showCheeseBadge && (
+                <div style={{
+                  position: "absolute",
+                  top: -badgeOffsetPx,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  fontSize: scalePx(18, 12),
+                  lineHeight: 1,
+                  filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.65))",
+                }}>
+                  🧀
                 </div>
               )}
 

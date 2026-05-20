@@ -1,4 +1,5 @@
 import { type Room, type NightActionRole } from "./serverTypes.js";
+import { resetMerchantRoundState } from "./merchant.js";
 
 const WOLF_ROLES = new Set(["Sói", "Sói con", "Sói Dại"]);
 const BAN_SOI_ROLE = "Bán sói";
@@ -313,6 +314,7 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.elementalBuffVotesResolvedNight = null;
   room.elementalSelectedBuffId = null;
   room.elementalSelectedBuffAppliesNight = null;
+  resetMerchantRoundState(room);
 
   room.players = room.players.map((p) => ({ ...p, inGame: false }));
 }

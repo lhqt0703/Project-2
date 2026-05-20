@@ -22,6 +22,14 @@ import {
   isWolfAlignedPlayer,
 } from "./roomState.js";
 import { LOVE_ROLE, emitLoveStateToPlayer, isLovePairMemberAwayAt } from "./love.js";
+import {
+  CURSED_ROLE,
+  MERCHANT_ROLE,
+  getActiveGuardianProtectedTargetIds,
+  getActiveMerchantItems,
+  getMerchantAvailableItemIds,
+  getVisibleGuardianProtectionTargetId,
+} from "./merchant.js";
 import { PROTECTOR_ROLE } from "./specialRoles.js";
 
 export function toPublicRoom(room: Room) {
@@ -84,6 +92,20 @@ export function toPublicRoom(room: Room) {
     elementalTargetTonight: _elementalTargetTonight,
     elementalCorrectGuessPlayerIdsTonight: _elementalCorrectGuessPlayerIdsTonight,
     elementalBuffVotesTonight: _elementalBuffVotesTonight,
+    cursedTargetTonight: _cursedTargetTonight,
+    cursedLastTargetByPlayerId: _cursedLastTargetByPlayerId,
+    merchantTradeOffersTonight: _merchantTradeOffersTonight,
+    merchantLastTargetByPlayerId: _merchantLastTargetByPlayerId,
+    merchantItemsByPlayerId: _merchantItemsByPlayerId,
+    merchantUsedItemIds: _merchantUsedItemIds,
+    merchantWolfBiteDisabledTonight: _merchantWolfBiteDisabledTonight,
+    merchantWolfBiteDisabledNextNight: _merchantWolfBiteDisabledNextNight,
+    merchantCheeseMarkedPlayerIds: _merchantCheeseMarkedPlayerIds,
+    merchantCheeseMarkedPlayerIdsNextNight: _merchantCheeseMarkedPlayerIdsNextNight,
+    merchantGuardianCarryoverTargetId: _merchantGuardianCarryoverTargetId,
+    merchantGuardianCarryoverBy: _merchantGuardianCarryoverBy,
+    merchantGuardianCarryoverNight: _merchantGuardianCarryoverNight,
+    merchantGunpowderExplodedPlayerIdsTonight: _merchantGunpowderExplodedPlayerIdsTonight,
     ...rest
   } = room;
 
@@ -123,7 +145,10 @@ function shouldElementalsVoteBuffTonight(room: Room) {
 function isElementalQuickMode(room: Room) {
   const rules = ensureRoomGameRules(room);
   if (rules.allNightActionsSimultaneous) return false;
-  return rules.nightActionOrder[0] === ELEMENTAL_GROUP_ROLE;
+  const firstEffectiveRole = rules.nightActionOrder.find(
+    (role) => role !== LOVE_ROLE && role !== MERCHANT_ROLE,
+  );
+  return firstEffectiveRole === ELEMENTAL_GROUP_ROLE;
 }
 
 function isElementalBuffActive(room: Room, buffId: ElementalBuffId) {
@@ -236,6 +261,18 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
       continue;
     }
 
+    if (role === CURSED_ROLE) {
+      setProgress(playerId, room.cursedTargetTonight?.[playerId] ? "done" : "pending", role);
+      continue;
+    }
+
+    if (role === MERCHANT_ROLE) {
+      if (getMerchantAvailableItemIds(room).length <= 0) continue;
+      const offer = room.merchantTradeOffersTonight?.[playerId] || null;
+      setProgress(playerId, offer?.resolved ? "done" : "pending", role);
+      continue;
+    }
+
     if (isElementalRoleTurn(role)) {
       if (isElementalBuffVoteNight) {
         setProgress(playerId, room.elementalBuffVotesTonight?.[playerId] ? "done" : "pending", role);
@@ -250,7 +287,7 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
 
 export function getWitchPendingDeaths(room: Room): string[] {
   const rules = ensureRoomGameRules(room);
-  const guardianTarget = room.protectedTonight;
+  const guardianTargets = new Set(getActiveGuardianProtectedTargetIds(room));
   const dead = new Set(room.deadPlayers || []);
 
   const hideProtectedBite =
@@ -261,7 +298,7 @@ export function getWitchPendingDeaths(room: Room): string[] {
   const candidates = [room.killedTonight, room.killedTonightExtra]
     .filter(Boolean)
     .filter((pid) => !isLovePairMemberAwayAt(room, pid as string, room.wolfAttackResolvedAt || Date.now()))
-    .filter((pid) => (hideProtectedBite ? pid !== guardianTarget : true)) as string[];
+    .filter((pid) => (hideProtectedBite ? !guardianTargets.has(pid as string) : true)) as string[];
 
   const unique: string[] = [];
   for (const pid of candidates) {
@@ -345,6 +382,79 @@ export function emitSpiritWolfDecisionNeeded(roomId: string) {
   });
 }
 
+function sanitizeMerchantTradeForPlayer(room: Room, playerId: string) {
+  const offers = Object.values(room.merchantTradeOffersTonight || {});
+  const offer = offers.find((item) => item.actorId === playerId || item.targetId === playerId) || null;
+  if (!offer) return null;
+
+  const isActor = offer.actorId === playerId;
+  const canSeeResolvedDetails = offer.resolved === true;
+  return {
+    actorId: offer.actorId,
+    targetId: offer.targetId,
+    itemId: isActor || canSeeResolvedDetails ? offer.itemId : null,
+    merchantChoice: isActor || canSeeResolvedDetails ? offer.merchantChoice : null,
+    targetChoice: offer.targetChoice ?? null,
+    resolved: offer.resolved === true,
+    result: offer.result ?? null,
+    appliesNight: offer.appliesNight,
+  };
+}
+
+export function buildMerchantPrivateState(room: Room, playerId: string) {
+  const hasPoppyGlasses = getActiveMerchantItems(room, playerId).some((item) => item.id === "poppy-glasses");
+  return {
+    items: room.merchantItemsByPlayerId?.[playerId] || [],
+    activeItemIds: getActiveMerchantItems(room, playerId).map((item) => item.id),
+    availableStockIds: room.playerRoles?.[playerId] === MERCHANT_ROLE ? getMerchantAvailableItemIds(room) : [],
+    trade: sanitizeMerchantTradeForPlayer(room, playerId),
+    lastTargetId:
+      room.playerRoles?.[playerId] === MERCHANT_ROLE
+        ? room.merchantLastTargetByPlayerId?.[playerId] ?? null
+        : null,
+    poppyGlassesProtectedTargetId: hasPoppyGlasses ? getVisibleGuardianProtectionTargetId(room) : null,
+  };
+}
+
+export function emitMerchantPrivateState(roomId: string, playerId: string) {
+  const ctx = getServerContext();
+  if (!ctx) return;
+  const room = ctx.rooms[roomId];
+  if (!room) return;
+  ctx.io.to(playerId).emit("merchantPrivateStateUpdated", buildMerchantPrivateState(room, playerId));
+}
+
+export function emitMerchantPrivateStateForAll(roomId: string) {
+  const ctx = getServerContext();
+  if (!ctx) return;
+  const room = ctx.rooms[roomId];
+  if (!room) return;
+  for (const player of room.players) {
+    emitMerchantPrivateState(roomId, player.id);
+  }
+}
+
+export function emitCursedState(roomId: string, playerId: string) {
+  const ctx = getServerContext();
+  if (!ctx) return;
+  const room = ctx.rooms[roomId];
+  if (!room) return;
+  ctx.io.to(playerId).emit("cursedTargetUpdated", {
+    targetId: room.cursedTargetTonight?.[playerId] ?? null,
+    lastTargetId: room.cursedLastTargetByPlayerId?.[playerId] ?? null,
+  });
+}
+
+export function emitMerchantCheeseMarks(roomId: string) {
+  const ctx = getServerContext();
+  if (!ctx) return;
+  const room = ctx.rooms[roomId];
+  if (!room) return;
+  ctx.io.to(`wolves_${roomId}`).emit("merchantCheeseMarksUpdated", {
+    playerIds: room.merchantCheeseMarkedPlayerIds || [],
+  });
+}
+
 export function emitHunterTarget(roomId: string, hunterId: string) {
   const ctx = getServerContext();
   if (!ctx) return;
@@ -374,12 +484,25 @@ export function syncPrivateRoleStateForSocket(
   if (isWolfAlignedPlayer(room, playerId)) {
     socket.join(`wolves_${roomId}`);
     const rules = ensureRoomGameRules(room);
+    const wolves = room.players.filter((p) => isWolfAlignedPlayer(room, p.id));
+    if (room.phase === "night" && room.merchantWolfBiteDisabledTonight) {
+      socket.emit("wolfPhaseStarted", {
+        wolves: wolves.map((w) => w.id),
+        activeWolves: [],
+        deadline: null,
+        maxTargets: 0,
+        resetVotes: false,
+        biteDisabled: true,
+        wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
+        wildWolfConvertAvailable: false,
+        wildWolfConvertRequested: false,
+      });
+    }
     const wolfPhaseActive =
       room.phase === "night" &&
       !room.wolfVoteResolvedTonight &&
       (rules.allNightActionsSimultaneous || room.nightTurnRole === "Sói");
     if (wolfPhaseActive) {
-      const wolves = room.players.filter((p) => isWolfAlignedPlayer(room, p.id));
       socket.emit("wolfPhaseStarted", {
         wolves: wolves.map((w) => w.id),
         activeWolves: getActiveWolves(room),
@@ -409,6 +532,15 @@ export function syncPrivateRoleStateForSocket(
   if (role === PROTECTOR_ROLE) {
     emitProtectorTarget(roomId, playerId);
   }
+
+  if (role === CURSED_ROLE) {
+    emitCursedState(roomId, playerId);
+  }
+
+  emitMerchantPrivateState(roomId, playerId);
+  socket.emit("merchantCheeseMarksUpdated", {
+    playerIds: isWolfAlignedPlayer(room, playerId) ? room.merchantCheeseMarkedPlayerIds || [] : [],
+  });
 }
 
 export function broadcastElementalBuffSelection(

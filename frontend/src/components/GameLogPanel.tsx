@@ -91,6 +91,9 @@ function getEliminationCauseText(causes: EliminationCause[] | undefined, rolesBy
       return `Bị ${attackersText} cắn`;
     }
     if (cause.type === "witch_poison") return "Phù thủy quăng bình giết";
+    if (cause.type === "merchant_gunpowder") {
+      return `Nổ thuốc súng từ ${getRolePlayerText(cause.sourceId, rolesByPlayerId, playerNamesById)}`;
+    }
     if (cause.type === "love_link") {
       return `Chết theo cặp đôi với ${getRolePlayerText(cause.sourceId, rolesByPlayerId, playerNamesById)}`;
     }
@@ -875,23 +878,7 @@ function LogEntryLine({
       );
 
     case "saved_by_guardian":
-      return (
-        <li style={lineStyle}>
-          {entry.actorId ? (
-            <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={entry.targetIds || []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
-          ) : "Bảo vệ"} đã bảo vệ được cho{" "}
-          <RolesListSpan
-            playerIds={entry.targetIds || []}
-            rolesByPlayerId={rolesByPlayerId}
-            playerNamesById={playerNamesById}
-            getSecondaryHighlightIds={() => entry.actorId ? [entry.actorId] : []}
-            displayMode="role-player"
-            popupMode="none"
-            onEliminationFocusChange={onEliminationFocusChange}
-            onHighlightPlayer={onHighlightPlayer}
-          />
-        </li>
-      );
+      return null;
 
     case "saved_by_witch":
       return null;
@@ -1039,7 +1026,7 @@ export default function GameLogPanel({
       {(nights || []).map((n) => {
         const nightEntries = (n.entries || []).filter((e) => e.phase !== "day");
         const displayNightEntries = nightEntries.filter((e) => {
-          if (e.type === "saved_by_witch" || e.type === "elemental_buff") return false;
+          if (e.type === "saved_by_witch" || e.type === "saved_by_guardian" || e.type === "elemental_buff") return false;
           if (e.type === "wolf_vote" && (e.voteBreakdown?.length || 0) <= 1) return false;
           return true;
         });

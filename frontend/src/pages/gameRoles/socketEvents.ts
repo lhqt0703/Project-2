@@ -11,12 +11,15 @@ export type WolfPhaseStartedPayload = {
   deadline: number | null;
   maxTargets?: number;
   resetVotes?: boolean;
+  biteDisabled?: boolean;
   wolfBadgeRolesByPlayerId?: Record<string, string>;
   wildWolfConvertAvailable?: boolean;
   wildWolfConvertRequested?: boolean;
 };
 
 export type SeerResultPayload = { playerId: string; isWolf: boolean };
+export type CursedResultPayload = { targetId: string; areaIds: string[]; hasWolf: boolean };
+export type CursedTargetUpdatedPayload = { targetId: string | null; lastTargetId: string | null };
 export type GuardianProtectedPayload = string; // targetId
 export type ProtectorTargetUpdatedPayload = { targetId: string | null };
 
@@ -85,6 +88,7 @@ export type EliminationCause =
   | { type: "wolf"; attackerIds: string[] }
   | { type: "witch_poison" }
   | { type: "hunter_shot" }
+  | { type: "merchant_gunpowder"; sourceId: string }
   | { type: "love_link"; sourceId: string }
   | { type: "day_vote"; voterIds: string[] }
   | { type: "trial_verdict"; voterIds: string[] };
@@ -161,3 +165,6 @@ export type ElementalBuffSelectedPayload = {
 export type HostNightActionProgressUpdatedPayload = {
   progressByPlayerId?: Record<string, "pending" | "done">;
 };
+
+export type MerchantPrivateStateUpdatedPayload = import("../../constants/merchant").MerchantPrivateState;
+export type MerchantCheeseMarksUpdatedPayload = { playerIds: string[] };

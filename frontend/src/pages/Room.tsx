@@ -21,28 +21,33 @@ interface PlayerPosition {
   y: number;
 }
 
-const NIGHT_ACTION_ROLE_ORDER: NightActionRole[] = ["Thần tình yêu", "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"];
+const NIGHT_ACTION_ROLE_ORDER: NightActionRole[] = ["Thần tình yêu", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền"];
 const WOLF_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
 
 function getAvailableNightActionRoles(selectedRoles?: string[]) {
   const roles = selectedRoles || [];
   const available = new Set<NightActionRole>();
 
-  if (roles.some((role) => ELEMENTAL_ROLE_SET.has(role))) {
-    available.add(ELEMENTAL_GROUP_ROLE);
-  }
-
   if (roles.some((role) => WOLF_ROLES.has(role))) {
     available.add("Sói");
   }
 
   for (const role of NIGHT_ACTION_ROLE_ORDER) {
-    if (roles.includes(role)) {
+    if (role === ELEMENTAL_GROUP_ROLE && roles.some((item) => ELEMENTAL_ROLE_SET.has(item))) {
+      available.add(role);
+      continue;
+    }
+    if (role !== ELEMENTAL_GROUP_ROLE && roles.includes(role)) {
       available.add(role);
     }
   }
 
-  return [ELEMENTAL_GROUP_ROLE, ...NIGHT_ACTION_ROLE_ORDER].filter((role, index, arr) => arr.indexOf(role) === index && available.has(role));
+  return NIGHT_ACTION_ROLE_ORDER.filter((role) => available.has(role));
+}
+
+function isElementalQuickOrder(order: NightActionRole[]) {
+  const firstEffectiveRole = order.find((role) => role !== "Thần tình yêu" && role !== "Tay Buôn");
+  return firstEffectiveRole === ELEMENTAL_GROUP_ROLE;
 }
 
 function formatElementalBuffGuide() {
@@ -576,11 +581,11 @@ export default function Room() {
         <h1>Phòng: {room.id}</h1>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
           {(() => {
-            const isQuick = (room.gameRules?.nightActionOrder || DEFAULT_ROOM_GAME_RULES.nightActionOrder)[0] === ELEMENTAL_GROUP_ROLE;
+            const isQuick = isElementalQuickOrder(room.gameRules?.nightActionOrder || DEFAULT_ROOM_GAME_RULES.nightActionOrder);
             const label = isQuick ? "Buff nhanh 🛼" : "Buff chậm 🕑";
             const tooltip = isQuick
-              ? "Khi Dân làng nguyên tố thức đầu tiên trước các vai trò khác, buff sẽ có hiệu lực từ ngay trong đêm chọn buff"
-              : "Khi Dân làng nguyên tố thức sau các vai trò khác, buff sẽ chỉ có hiệu lực từ đêm tiếp theo thay vì áp dụng ngay trong đêm chọn buff";
+              ? "Khi Dân làng nguyên tố thức đầu tiên trước các vai trò khác (không tính Thần tình yêu/Tay Buôn), buff sẽ có hiệu lực ngay trong đêm chọn buff"
+              : "Khi Dân làng nguyên tố thức sau các vai trò khác (không tính Thần tình yêu/Tay Buôn), buff sẽ chỉ có hiệu lực từ đêm tiếp theo";
             return (
               <div
                 title={tooltip}

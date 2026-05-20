@@ -3,6 +3,8 @@ import type { EliminationCause, GameLogEntryPhase, Room } from "./serverTypes.js
 import { appendLogEntry } from "./gameLog.js";
 import { getHunters } from "./roomState.js";
 import { markEliminatedWithLoveChain } from "./love.js";
+import { triggerMerchantGunpowderExplosion } from "./merchantEffects.js";
+import { hasActiveMerchantItem } from "./merchant.js";
 import { type ProtectorSaveRecord } from "./specialRoles.js";
 import { emitProtectorTarget } from "./serverEmitters.js";
 
@@ -57,6 +59,8 @@ export function resolveHunterShotsForDeaths(
     appendLogEntry(room, { type: "hunter_shot", phase, actorId: hunterId, targetId });
     ctx.io.to(roomId).emit("hunterShot", { hunterId, targetId });
 
+    if (hasActiveMerchantItem(room, targetId, "iron-armor")) continue;
+
     const cause: EliminationCause = { type: "hunter_shot" };
     const newlyDead = markEliminatedWithLoveChain(ctx, roomId, room, targetId, cause, phase, {
       eliminatedIds: killedIds,
@@ -92,16 +96,54 @@ export function resolveHunterShotsForDeaths(
       }
     }
 
+    const gunpowderDeaths = newlyDead.includes(targetId)
+      ? triggerMerchantGunpowderExplosion(ctx, roomId, room, targetId, phase, {
+          eliminatedIds: killedIds,
+          causesByTarget,
+          protectorSaves,
+          loveLinkDeaths,
+        })
+      : [];
+
+    while (protectorSaves.length) {
+      const save = protectorSaves.shift()!;
+      appendLogEntry(room, {
+        type: "protector_save",
+        phase,
+        actorId: save.actorId,
+        targetId: save.targetId,
+        cause: save.cause,
+        permanent: save.permanent,
+      });
+      if (save.actorId) {
+        emitProtectorTarget(roomId, save.actorId);
+      }
+    }
+
+    if (gunpowderDeaths.length) {
+      while (loveLinkDeaths.length) {
+        const death = loveLinkDeaths.shift()!;
+        appendLogEntry(room, {
+          type: "love_link_death",
+          phase,
+          sourceId: death.sourceId,
+          targetId: death.targetId,
+        });
+      }
+    }
+
     if (appendEliminationLog && newlyDead.length) {
       appendLogEntry(room, {
         type: "eliminated",
         phase,
-        targetIds: newlyDead,
-        causesByTarget: Object.fromEntries(newlyDead.map((id) => [id, causesByTarget[id] || []])),
+        targetIds: Array.from(new Set([...newlyDead, ...gunpowderDeaths])),
+        causesByTarget: Object.fromEntries(
+          Array.from(new Set([...newlyDead, ...gunpowderDeaths])).map((id) => [id, causesByTarget[id] || []]),
+        ),
       });
     }
 
-    queue.push(...newlyDead);
+    queue.push(...newlyDead, ...gunpowderDeaths);
   }
 
   return { killedIds, causesByTarget };

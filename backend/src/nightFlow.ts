@@ -22,6 +22,7 @@ import {
 import { ensureRoomGameRules, type NightActionRole, type Room } from "./serverTypes.js";
 import { toPublicRoom } from "./serverEmitters.js";
 import { LOVE_ROLE, isLovePairMemberAwayAt } from "./love.js";
+import { CURSED_ROLE, MERCHANT_ROLE, getMerchantAvailableItemIds } from "./merchant.js";
 import { PROTECTOR_ROLE, isVillageChief } from "./specialRoles.js";
 
 type NightFlowDeps = {
@@ -101,13 +102,17 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     const hasWolfRole = room.players.some((p) => isWolfAlignedPlayer(room, p.id));
     const selected = new Set<NightActionRole>();
 
-    if (hasWolfRole) selected.add("Sói");
+    if (hasWolfRole && !room.merchantWolfBiteDisabledTonight) selected.add("Sói");
     if (sourceRoles.includes(LOVE_ROLE) && (room.nightCount || 0) === 1 && !room.loveTargetId) {
       selected.add(LOVE_ROLE as NightActionRole);
     }
 
-    for (const role of ["Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Thợ săn", "Tiên tri"] as NightActionRole[]) {
+    for (const role of ["Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Thợ săn", "Tiên tri", CURSED_ROLE] as NightActionRole[]) {
       if (sourceRoles.includes(role)) selected.add(role);
+    }
+
+    if (sourceRoles.includes(MERCHANT_ROLE) && getMerchantAvailableItemIds(room).length > 0) {
+      selected.add(MERCHANT_ROLE as NightActionRole);
     }
 
     for (const role of getSelectedElementalRoles(room)) {
@@ -341,6 +346,23 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     }, durationMs);
   }
 
+  function emitWolfBiteDisabled(roomId: string) {
+    const room = ctx.rooms[roomId];
+    if (!room) return;
+    const wolves = room.players.filter((p) => isWolfAlignedPlayer(room, p.id));
+    ctx.io.to(`wolves_${roomId}`).emit("wolfPhaseStarted", {
+      wolves: wolves.map((w) => w.id),
+      activeWolves: [],
+      deadline: null,
+      maxTargets: 0,
+      resetVotes: true,
+      biteDisabled: true,
+      wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
+      wildWolfConvertAvailable: false,
+      wildWolfConvertRequested: false,
+    });
+  }
+
   function getRoleTurnDurationMs(room: Room, role: NightActionRole) {
     if (role === "Sói") return getWolfTurnDurationMs(room);
     if (role === "Phù thủy") return getWitchTurnDurationMs(room);
@@ -377,6 +399,12 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     }
 
     const role = order[index]!;
+    if (role === "Sói" && room.merchantWolfBiteDisabledTonight) {
+      room.wolfDeadline = null;
+      room.wolfVoteResolvedTonight = true;
+      startNightTurnByIndex(roomId, index + 1);
+      return;
+    }
     const durationMs = Math.max(0, Math.floor(opts?.durationMs ?? getRoleTurnDurationMs(room, role)));
 
     room.nightTurnIndex = index;
@@ -436,12 +464,18 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       room.nightTurnDeadline = nonWolfDurationMs > 0 ? Date.now() + nonWolfDurationMs : null;
       const baseDeadline = room.nightTurnDeadline;
 
-      const wolfDurationMs = getWolfTurnDurationMs(room);
-      startWolfPhase(roomId, {
-        initializeVotes: true,
-        useTimer: wolfDurationMs > 0,
-        durationMs: wolfDurationMs,
-      });
+      if (room.merchantWolfBiteDisabledTonight) {
+        room.wolfDeadline = null;
+        room.wolfVoteResolvedTonight = true;
+        emitWolfBiteDisabled(roomId);
+      } else {
+        const wolfDurationMs = getWolfTurnDurationMs(room);
+        startWolfPhase(roomId, {
+          initializeVotes: true,
+          useTimer: wolfDurationMs > 0,
+          durationMs: wolfDurationMs,
+        });
+      }
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       emitElementalNightStateForAll(roomId);
       if (baseDeadline) {
@@ -480,6 +514,17 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     const room = ctx.rooms[roomId];
     if (!room) return;
     if (room.wolfVoteResolvedTonight) return;
+    const rules = ensureRoomGameRules(room);
+    if (room.merchantWolfBiteDisabledTonight) {
+      room.wolfDeadline = null;
+      room.wolfVoteResolvedTonight = true;
+      emitWolfBiteDisabled(roomId);
+      emitHostNightActionProgress(roomId);
+      if (!rules.allNightActionsSimultaneous && room.phase === "night" && room.nightTurnRole === "Sói") {
+        startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
+      }
+      return;
+    }
 
     if (room.wolfTimer) {
       clearTimeout(room.wolfTimer);
@@ -492,7 +537,6 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     const votes = room.wolfVotes || {};
     const votes2 = room.wolfVotes2 || {};
     const activeWolves = getActiveWolves(room);
-    const rules = ensureRoomGameRules(room);
     const forceWolfBiteFirstNight =
       rules.twoHeartsFirstTwoNights &&
       rules.forceWolfBiteFirstNight &&

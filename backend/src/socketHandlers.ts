@@ -51,7 +51,11 @@ import {
 } from "./gameLog.js";
 import {
   emitGameLogToSocket,
+  emitCursedState,
   emitHunterTarget,
+  emitMerchantCheeseMarks,
+  emitMerchantPrivateState,
+  emitMerchantPrivateStateForAll,
   emitProtectorTarget,
   emitRolesRevealToSocket,
   emitSpiritWolfDecisionNeeded,
@@ -98,6 +102,21 @@ import type { createDayFlow } from "./dayFlow.js";
 import type { createNightFlow } from "./nightFlow.js";
 import type { createElementalFlow } from "./elementalFlow.js";
 import { resolveHunterShotsForDeaths } from "./hunter.js";
+import { triggerMerchantGunpowderExplosion } from "./merchantEffects.js";
+import {
+  CURSED_ROLE,
+  MERCHANT_ROLE,
+  addMerchantItemToPlayer,
+  getCursedSniffAreaIds,
+  getMerchantAvailableItemIds,
+  hasActiveMerchantItem,
+  isMerchantDecision,
+  isMerchantItemId,
+  isProtectedByGuardian,
+  prepareMerchantNightState,
+  resetMerchantRoundState,
+  type MerchantTradeOffer,
+} from "./merchant.js";
 import {
   LOVE_ROLE,
   clearLoveStateForPlayers,
@@ -179,7 +198,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
   const {
     canPerformNightRoleAction,
-    getSelectedNightActionRoles,
     startSpiritWolfDecisionWindow,
     finishSpiritWolfTurn,
     getWolfTurnDurationMs,
@@ -350,6 +368,83 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
   }
 
+  function isMerchantEffectImmediate(room: Room) {
+    const rules = ensureRoomGameRules(room);
+    if (rules.allNightActionsSimultaneous) return false;
+    const order = room.nightTurnOrderSnapshot?.length
+      ? room.nightTurnOrderSnapshot
+      : rules.nightActionOrder;
+    const merchantIndex = order.indexOf(MERCHANT_ROLE);
+    if (merchantIndex < 0) return false;
+    const beforeMerchant = order.slice(0, merchantIndex);
+    return beforeMerchant.every((role) => role === LOVE_ROLE);
+  }
+
+  function getMerchantEffectAppliesNight(room: Room) {
+    const currentNight = room.nightCount || 0;
+    return isMerchantEffectImmediate(room) ? currentNight : currentNight + 1;
+  }
+
+  function isMerchantTradeWindowOpen(room: Room, offer: MerchantTradeOffer) {
+    if (room.gameOver) return false;
+    if (room.phase !== "night") return false;
+    if ((room.deadPlayers || []).includes(offer.actorId)) return false;
+    if ((room.deadPlayers || []).includes(offer.targetId)) return false;
+    if (room.playerRoles?.[offer.actorId] !== MERCHANT_ROLE) return false;
+    return canPerformNightRoleAction(room, offer.actorId, MERCHANT_ROLE);
+  }
+
+  function isMerchantTargetWolfTeam(room: Room, targetId: string) {
+    const role = room.playerRoles?.[targetId];
+    return isWolfAlignedPlayer(room, targetId) || isWolfRole(role);
+  }
+
+  function applyMerchantWolfBiteBlock(room: Room, appliesNight: number) {
+    if (appliesNight <= (room.nightCount || 0)) {
+      room.merchantWolfBiteDisabledTonight = true;
+      return;
+    }
+    room.merchantWolfBiteDisabledNextNight = true;
+  }
+
+  function applyMerchantCheeseMark(room: Room, targetId: string, appliesNight: number) {
+    if (appliesNight <= (room.nightCount || 0)) {
+      room.merchantCheeseMarkedPlayerIds = Array.from(
+        new Set([...(room.merchantCheeseMarkedPlayerIds || []), targetId]),
+      );
+      return;
+    }
+    room.merchantCheeseMarkedPlayerIdsNextNight = Array.from(
+      new Set([...(room.merchantCheeseMarkedPlayerIdsNextNight || []), targetId]),
+    );
+  }
+
+  function resolveMerchantOffer(roomId: string, room: Room, offer: MerchantTradeOffer, targetChoice: "up" | "down") {
+    if (offer.resolved) return;
+    offer.targetChoice = targetChoice;
+    offer.resolved = true;
+    offer.appliesNight = getMerchantEffectAppliesNight(room);
+
+    if (offer.merchantChoice === targetChoice) {
+      addMerchantItemToPlayer(room, offer.targetId, offer.itemId, offer.appliesNight);
+      if (ensureRoomGameRules(room).merchantSingleUseItems) {
+        room.merchantUsedItemIds = Array.from(new Set([...(room.merchantUsedItemIds || []), offer.itemId]));
+      }
+      offer.result = "success";
+      return;
+    }
+
+    if (isMerchantTargetWolfTeam(room, offer.targetId)) {
+      applyMerchantWolfBiteBlock(room, offer.appliesNight);
+      offer.result = "failed_wolf";
+      return;
+    }
+
+    applyMerchantCheeseMark(room, offer.targetId, offer.appliesNight);
+    offer.result = "failed_villager";
+    emitMerchantCheeseMarks(roomId);
+  }
+
   function resolveNightDeaths(roomId: string, room: Room) {
     const initialDead = new Set(room.deadPlayers || []);
     const playerIds = new Set(room.players.map((player) => player.id));
@@ -392,7 +487,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     };
 
     const markEliminated = (targetId: string, cause: EliminationCause) => {
-      markEliminatedWithLoveChain(ctx, roomId, room, targetId, cause, "night", {
+      return markEliminatedWithLoveChain(ctx, roomId, room, targetId, cause, "night", {
         initialDead,
         eliminatedIds,
         causesByTarget,
@@ -450,9 +545,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         : null;
 
     const isGuardianEffective = (targetId: string, saveCutoffAt: number | null) => {
-      if (room.protectedTonight !== targetId) return false;
-      if (!saveCutoffAt) return true;
-      return !!room.protectedTonightAt && room.protectedTonightAt <= saveCutoffAt;
+      return isProtectedByGuardian(room, targetId, saveCutoffAt);
     };
 
     const isWitchHealEffective = (targetId: string, saveCutoffAt: number | null) => {
@@ -581,7 +674,16 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       if (poisonAts.length > 0 && poisonAts.every((poisonAt) => isLovePairMemberAwayAt(room, targetId, poisonAt))) {
         continue;
       }
-      markEliminated(targetId, { type: "witch_poison" });
+      const newlyDead = markEliminated(targetId, { type: "witch_poison" });
+      if (newlyDead.includes(targetId)) {
+        triggerMerchantGunpowderExplosion(ctx, roomId, room, targetId, "night", {
+          initialDead,
+          eliminatedIds,
+          causesByTarget,
+          protectorSaves,
+          loveLinkDeaths,
+        });
+      }
     }
 
     flushProtectorSaves();
@@ -1288,6 +1390,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.wildWolfConvertActorId = null;
     room.wildWolfConvertTargetId = null;
     room.wildWolfConvertUsed = false;
+    resetMerchantRoundState(room);
 
     room.hidePlayerRoleText = true;
     room.phase = "dusk";
@@ -1652,6 +1755,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.elementalSelectedBuffId = null;
     room.elementalSelectedBuffAppliesNight = null;
     room.elementalBuffQuickMode = true;
+    resetMerchantRoundState(room);
     room.witchPotions = {};
     room.witchHealTargetTonight = {};
     room.witchPoisonTargetTonight = {};
@@ -1925,7 +2029,11 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
         finalizeElementalGuessNight(room);
       }
 
-      if (ensureRoomGameRules(room).allNightActionsSimultaneous && !room.wolfVoteResolvedTonight) {
+      if (
+        ensureRoomGameRules(room).allNightActionsSimultaneous &&
+        !room.wolfVoteResolvedTonight &&
+        !room.merchantWolfBiteDisabledTonight
+      ) {
         finishWolfVoting(roomId);
       }
       clearSpiritWolfDecisionTimer(room);
@@ -1947,6 +2055,8 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       room.villageChiefDyingFramePlayerIds = [];
       resolveVillageChiefDelayedWolfDeath(roomId, room);
       resolveNightDeaths(roomId, room);
+      room.merchantCheeseMarkedPlayerIds = [];
+      emitMerchantCheeseMarks(roomId);
 
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       checkAndEndGame(roomId, "after_night_kills");
@@ -2067,6 +2177,8 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       room.wildWolfConvertActorId = null;
       room.wildWolfConvertTargetId = null;
 
+      prepareMerchantNightState(room);
+      emitMerchantCheeseMarks(roomId);
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
 
       room.wolfBonusBiteThisNight = !!room.wolfExtraBiteNextNight;
@@ -2078,6 +2190,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       }
 
       // Reset night action state.
+      room.lastProtected = room.protectedTonight;
       room.protectedTonight = null;
       room.protectedTonightBy = null;
       room.protectedTonightAt = null;
@@ -2101,10 +2214,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       room.loveEscapeActiveTonight = false;
       room.loveEscapeActivatedAt = null;
       emitLoveStateToPair(ctx, roomId, room);
-
-      // Determine which roles will take turns this night.
-      const roles = getSelectedNightActionRoles(room);
-      room.nightTurnOrderSnapshot = roles;
+      emitMerchantPrivateStateForAll(roomId);
 
       // Create a time-ordered action sequence.
       startNightTurnFlow(roomId);
@@ -2726,9 +2836,10 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     const actionAt = Date.now();
     const roleOfTarget = room.playerRoles[targetId];
+    const seerBlockedByCloak = hasActiveMerchantItem(room, targetId, "invisibility-cloak");
 
     const isWolf =
-      isLovePairMemberAwayAt(room, targetId, actionAt)
+      seerBlockedByCloak || isLovePairMemberAwayAt(room, targetId, actionAt)
         ? false
         : roleOfTarget === "Kẻ bị nguyền"
           ? true
@@ -2739,6 +2850,129 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     appendLogEntry(room, { type: "seer_check", phase: "night", actorId: clientId, targetId, isWolf });
     emitHostNightActionProgress(roomId);
+  });
+
+  socket.on("cursedSniff", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room || !room.playerRoles) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, clientId, CURSED_ROLE)) return;
+    if (room.playerRoles?.[clientId] !== CURSED_ROLE) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+
+    if (targetId === room.hostId) return;
+    if (!room.players.find((player) => player.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    room.cursedTargetTonight = room.cursedTargetTonight || {};
+    if (room.cursedTargetTonight[clientId]) {
+      socket.emit("errorMessage", "Bạn đã chọn trong đêm này rồi.");
+      return;
+    }
+
+    const lastTargetId = room.cursedLastTargetByPlayerId?.[clientId] || null;
+    if (lastTargetId && lastTargetId === targetId) {
+      socket.emit("errorMessage", "Không thể chọn cùng một người hai đêm liên tiếp.");
+      return;
+    }
+
+    const actionAt = Date.now();
+    const areaIds = getCursedSniffAreaIds(room, targetId);
+    const hasWolf = areaIds.some((playerId) => {
+      if ((room.deadPlayers || []).includes(playerId)) return false;
+      if (isLovePairMemberAwayAt(room, playerId, actionAt)) return false;
+      if (hasActiveMerchantItem(room, playerId, "mint")) return false;
+      const targetRole = room.playerRoles?.[playerId];
+      return isWolfAlignedPlayer(room, playerId) || isWolfRole(targetRole);
+    });
+
+    room.cursedTargetTonight[clientId] = targetId;
+    room.cursedLastTargetByPlayerId = room.cursedLastTargetByPlayerId || {};
+    room.cursedLastTargetByPlayerId[clientId] = targetId;
+
+    ctx.io.to(clientId).emit("cursedResult", { targetId, areaIds, hasWolf });
+    emitCursedState(roomId, clientId);
+    emitHostNightActionProgress(roomId);
+  });
+
+  socket.on("merchantOfferTrade", ({ roomId, targetId, itemId, choice }) => {
+    const room = rooms[roomId];
+    if (!room || !room.playerRoles) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+    if (!canPerformNightRoleAction(room, clientId, MERCHANT_ROLE)) return;
+    if (room.playerRoles?.[clientId] !== MERCHANT_ROLE) return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+
+    if (!isMerchantItemId(itemId) || !isMerchantDecision(choice)) return;
+    if (!targetId || targetId === clientId) {
+      socket.emit("errorMessage", "Tay Buôn không thể tự giao dịch với chính mình.");
+      return;
+    }
+    if (targetId === room.hostId) return;
+    if (!room.players.find((player) => player.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    room.merchantTradeOffersTonight = room.merchantTradeOffersTonight || {};
+    if (room.merchantTradeOffersTonight[clientId]) {
+      socket.emit("errorMessage", "Bạn đã tạo giao dịch trong đêm này rồi.");
+      return;
+    }
+
+    const lastTargetId = room.merchantLastTargetByPlayerId?.[clientId] || null;
+    if (lastTargetId && lastTargetId === targetId) {
+      socket.emit("errorMessage", "Không thể chọn cùng một người hai đêm liên tiếp.");
+      return;
+    }
+
+    const availableItemIds = getMerchantAvailableItemIds(room);
+    if (!availableItemIds.includes(itemId)) {
+      socket.emit("errorMessage", "Món đồ này không còn trong kho hàng.");
+      return;
+    }
+
+    const offer: MerchantTradeOffer = {
+      actorId: clientId,
+      targetId,
+      itemId,
+      merchantChoice: choice,
+      targetChoice: null,
+      resolved: false,
+      result: null,
+      night: room.nightCount || 0,
+      appliesNight: getMerchantEffectAppliesNight(room),
+      createdAt: Date.now(),
+    };
+
+    room.merchantTradeOffersTonight[clientId] = offer;
+    room.merchantLastTargetByPlayerId = room.merchantLastTargetByPlayerId || {};
+    room.merchantLastTargetByPlayerId[clientId] = targetId;
+
+    emitMerchantPrivateState(roomId, clientId);
+    emitMerchantPrivateState(roomId, targetId);
+    emitHostNightActionProgress(roomId);
+  });
+
+  socket.on("merchantRespondTrade", ({ roomId, choice }) => {
+    const room = rooms[roomId];
+    if (!room || !room.playerRoles) return;
+    if (!isMerchantDecision(choice)) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+    if ((room.deadPlayers || []).includes(clientId)) return;
+
+    const offers = Object.values(room.merchantTradeOffersTonight || {});
+    const offer = offers.find((item) => item.targetId === clientId && item.resolved !== true) || null;
+    if (!offer) return;
+    if (!isMerchantTradeWindowOpen(room, offer)) return;
+
+    resolveMerchantOffer(roomId, room, offer, choice);
+
+    emitMerchantPrivateState(roomId, offer.actorId);
+    emitMerchantPrivateState(roomId, offer.targetId);
+    emitHostNightActionProgress(roomId);
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
   socket.on("guardianProtect", ({ roomId, targetId }) => {
@@ -2770,11 +3004,17 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     room.protectedTonight = targetId;
     room.protectedTonightBy = clientId;
     room.protectedTonightAt = Date.now();
+    if (hasActiveMerchantItem(room, targetId, "moth-cocoon")) {
+      room.merchantGuardianCarryoverTargetId = targetId;
+      room.merchantGuardianCarryoverBy = clientId;
+      room.merchantGuardianCarryoverNight = (room.nightCount || 0) + 1;
+    }
     ctx.io.to(clientId).emit("guardianProtected", targetId);
 
     appendLogEntry(room, { type: "guardian_protect", phase: "night", actorId: clientId, targetId });
 
     emitWitchPendingDeath(roomId);
+    emitMerchantPrivateStateForAll(roomId);
     emitHostNightActionProgress(roomId);
   });
 

@@ -26,6 +26,7 @@ export function useWolfRole({
   activeWolves,
   wolfBadgeRoles,
   wolfMaxTargets,
+  wolfBiteDisabled,
   allNightActionsSimultaneous,
   currentNightTurnRole,
   nightTurnPaused,
@@ -41,6 +42,7 @@ export function useWolfRole({
   activeWolves: string[];
   wolfBadgeRoles?: Record<string, string>;
   wolfMaxTargets: number;
+  wolfBiteDisabled: boolean;
   allNightActionsSimultaneous: boolean;
   currentNightTurnRole: string | null;
   nightTurnPaused: boolean;
@@ -78,9 +80,10 @@ export function useWolfRole({
 
   const isWolfTurnActive = useMemo(() => {
     if (phase !== "night") return false;
+    if (wolfBiteDisabled) return false;
     if (allNightActionsSimultaneous) return true;
     return currentNightTurnRole === "Sói";
-  }, [allNightActionsSimultaneous, currentNightTurnRole, phase]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, phase, wolfBiteDisabled]);
 
   useEffect(() => {
     // Reset local selection only when wolf turn actually starts, not when deadline is adjusted on pause/resume.
@@ -99,13 +102,14 @@ export function useWolfRole({
 
   const canAct = useMemo(() => {
     if (phase !== "night") return false;
+    if (wolfBiteDisabled) return false;
     if (!isWolfTeam) return false;
     if (clientId && deadPlayers.includes(clientId)) return false;
     if (!allNightActionsSimultaneous) {
       if (currentNightTurnRole !== "Sói") return false;
     }
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, isWolfTeam, phase]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, isWolfTeam, phase, wolfBiteDisabled]);
 
   const deadlineReached = !!(wolfDeadline && Date.now() >= wolfDeadline && !nightTurnPaused);
 

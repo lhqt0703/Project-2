@@ -16,6 +16,8 @@ import type {
   TrialVerdictStartedPayload,
   TrialVotesUpdatedPayload,
   GuardianProtectedPayload,
+  CursedResultPayload,
+  CursedTargetUpdatedPayload,
   HunterShotPayload,
   HunterTargetUpdatedPayload,
   LoveArrowShotPayload,
@@ -38,8 +40,11 @@ import type {
   ElementalBuffVoteStatePayload,
   ElementalBuffSelectedPayload,
   HostNightActionProgressUpdatedPayload,
+  MerchantCheeseMarksUpdatedPayload,
+  MerchantPrivateStateUpdatedPayload,
 } from "./socketEvents";
 import { ELEMENTAL_BUFF_LABELS, ELEMENTAL_BUFFS } from "../../constants/elemental";
+import { EMPTY_MERCHANT_PRIVATE_STATE } from "../../constants/merchant";
 
 const EMPTY_LOVE_STATE: LoveStatePayload = {
   cupidId: null,
@@ -70,6 +75,12 @@ export function useGameSocketSync({
 
   const [deadPlayers, setDeadPlayers] = useState<string[]>([]);
   const [seerResult, setSeerResult] = useState<SeerResultPayload | null>(null);
+  const [cursedResult, setCursedResult] = useState<CursedResultPayload | null>(null);
+  const [cursedTargetId, setCursedTargetId] = useState<string | null>(null);
+  const [cursedLastTargetId, setCursedLastTargetId] = useState<string | null>(null);
+  const [cursedTargetSeq, setCursedTargetSeq] = useState(0);
+  const [merchantPrivateState, setMerchantPrivateState] = useState(EMPTY_MERCHANT_PRIVATE_STATE);
+  const [merchantCheeseMarkPlayerIds, setMerchantCheeseMarkPlayerIds] = useState<string[]>([]);
 
   const [witchPendingDeathTargetIds, setWitchPendingDeathTargetIds] = useState<string[]>([]);
   const [witchPotions, setWitchPotions] = useState<WitchPotionsPayload | null>(null);
@@ -95,6 +106,7 @@ export function useGameSocketSync({
   const [wolfBadgeRolesByPlayerId, setWolfBadgeRolesByPlayerId] = useState<Record<string, string>>({});
   const [wolfVotes2, setWolfVotes2] = useState<WolfVotes2UpdatedPayload | null>(null);
   const [wolfMaxTargets, setWolfMaxTargets] = useState<number>(1);
+  const [wolfBiteDisabled, setWolfBiteDisabled] = useState(false);
 
   const [gameEnded, setGameEnded] = useState<GameEndedPayload | null>(null);
   const [spiritWolfDecisionTargetId, setSpiritWolfDecisionTargetId] = useState<string | null>(null);
@@ -147,6 +159,7 @@ export function useGameSocketSync({
     const applyPhaseTransition = (newPhase: GamePhase) => {
       setPhase(newPhase);
       setSeerResult(null);
+      setCursedResult(null);
       if (newPhase === "day") {
         setWitchPendingDeathTargetIds([]);
         setSpiritWolfDecisionTargetId(null);
@@ -190,6 +203,7 @@ export function useGameSocketSync({
       setWolves([]);
       setWolfVotes2(null);
       setWolfMaxTargets(1);
+      setWolfBiteDisabled(false);
       wildWolfConversionRef.current = { available: false, requested: false };
       setRoom((prev: any) => (prev ? {
         ...prev,
@@ -199,6 +213,8 @@ export function useGameSocketSync({
       setElementalTargetId(null);
       setElementalTargetSeq(0);
       setElementalActionMode("guess");
+      setCursedTargetId(null);
+      setMerchantCheeseMarkPlayerIds([]);
       setRoom((prev: any) => (prev ? { ...prev, nightActionProgressByPlayerId: {} } : prev));
     };
 
@@ -302,6 +318,12 @@ export function useGameSocketSync({
       setSpiritWolfDecisionTargetId(null);
       setSpiritWolfDecisionDeadline(null);
       setSeerResult(null);
+      setCursedResult(null);
+      setCursedTargetId(null);
+      setCursedLastTargetId(null);
+      setCursedTargetSeq(0);
+      setMerchantPrivateState(EMPTY_MERCHANT_PRIVATE_STATE);
+      setMerchantCheeseMarkPlayerIds([]);
       setWitchPendingDeathTargetIds([]);
       setDeadPlayers([]);
       setGameLogNights([]);
@@ -332,6 +354,7 @@ export function useGameSocketSync({
       setLoveArrowShotSeq(0);
       setLoveState(EMPTY_LOVE_STATE);
       setElementalBuffResult(null);
+      setWolfBiteDisabled(false);
       wildWolfConvertedSelfRef.current = false;
       wildWolfConversionRef.current = { available: false, requested: false };
       setRoom((prev: any) => (prev ? {
@@ -450,12 +473,13 @@ export function useGameSocketSync({
       setWolfLocked(locked);
     };
 
-    const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline, maxTargets, resetVotes, wolfBadgeRolesByPlayerId, wildWolfConvertAvailable, wildWolfConvertRequested }: WolfPhaseStartedPayload) => {
+    const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline, maxTargets, resetVotes, biteDisabled, wolfBadgeRolesByPlayerId, wildWolfConvertAvailable, wildWolfConvertRequested }: WolfPhaseStartedPayload) => {
       setWolves(wolves);
       setActiveWolves(activeWolves || []);
       setWolfBadgeRolesByPlayerId(wolfBadgeRolesByPlayerId || {});
       setWolfDeadline(typeof deadline === "number" ? deadline : null);
       setWolfMaxTargets(typeof maxTargets === "number" ? maxTargets : 1);
+      setWolfBiteDisabled(biteDisabled === true);
       wildWolfConversionRef.current = {
         available: wildWolfConvertAvailable === true,
         requested: wildWolfConvertRequested === true,
@@ -475,6 +499,33 @@ export function useGameSocketSync({
 
     const handleSeerResult = (payload: SeerResultPayload) => {
       setSeerResult(payload);
+    };
+
+    const handleCursedResult = (payload: CursedResultPayload) => {
+      setCursedResult(payload);
+    };
+
+    const handleCursedTargetUpdated = (payload: CursedTargetUpdatedPayload) => {
+      setCursedTargetId(payload?.targetId ?? null);
+      setCursedLastTargetId(payload?.lastTargetId ?? null);
+      setCursedTargetSeq((s) => s + 1);
+    };
+
+    const handleMerchantPrivateStateUpdated = (payload: MerchantPrivateStateUpdatedPayload) => {
+      setMerchantPrivateState({
+        ...EMPTY_MERCHANT_PRIVATE_STATE,
+        ...(payload || {}),
+        items: Array.isArray(payload?.items) ? payload.items : [],
+        activeItemIds: Array.isArray(payload?.activeItemIds) ? payload.activeItemIds : [],
+        availableStockIds: Array.isArray(payload?.availableStockIds) ? payload.availableStockIds : [],
+        trade: payload?.trade ?? null,
+        lastTargetId: payload?.lastTargetId ?? null,
+        poppyGlassesProtectedTargetId: payload?.poppyGlassesProtectedTargetId ?? null,
+      });
+    };
+
+    const handleMerchantCheeseMarksUpdated = (payload: MerchantCheeseMarksUpdatedPayload) => {
+      setMerchantCheeseMarkPlayerIds(Array.isArray(payload?.playerIds) ? payload.playerIds.filter(Boolean) : []);
     };
 
     const handleGuardianProtected = (targetId: GuardianProtectedPayload) => {
@@ -644,6 +695,10 @@ export function useGameSocketSync({
     socket.on("wildWolfConversionUpdated", handleWildWolfConversionUpdated);
 
     socket.on("seerResult", handleSeerResult);
+    socket.on("cursedResult", handleCursedResult);
+    socket.on("cursedTargetUpdated", handleCursedTargetUpdated);
+    socket.on("merchantPrivateStateUpdated", handleMerchantPrivateStateUpdated);
+    socket.on("merchantCheeseMarksUpdated", handleMerchantCheeseMarksUpdated);
     socket.on("guardianProtected", handleGuardianProtected);
     socket.on("protectorTargetUpdated", handleProtectorTargetUpdated);
 
@@ -693,6 +748,10 @@ export function useGameSocketSync({
       socket.off("wildWolfConversionUpdated", handleWildWolfConversionUpdated);
 
       socket.off("seerResult", handleSeerResult);
+      socket.off("cursedResult", handleCursedResult);
+      socket.off("cursedTargetUpdated", handleCursedTargetUpdated);
+      socket.off("merchantPrivateStateUpdated", handleMerchantPrivateStateUpdated);
+      socket.off("merchantCheeseMarksUpdated", handleMerchantCheeseMarksUpdated);
       socket.off("guardianProtected", handleGuardianProtected);
       socket.off("protectorTargetUpdated", handleProtectorTargetUpdated);
 
@@ -737,6 +796,12 @@ export function useGameSocketSync({
       phase,
       deadPlayers,
       seerResult,
+      cursedResult,
+      cursedTargetId,
+      cursedLastTargetId,
+      cursedTargetSeq,
+      merchantPrivateState,
+      merchantCheeseMarkPlayerIds,
       witchPendingDeathTargetIds,
       witchPotions,
       guardianProtectedSeq,
@@ -757,6 +822,7 @@ export function useGameSocketSync({
       wolfBadgeRolesByPlayerId,
       wolfVotes2,
       wolfMaxTargets,
+      wolfBiteDisabled,
       gameEnded,
       spiritWolfDecisionTargetId,
       spiritWolfDecisionDeadline,
@@ -792,6 +858,12 @@ export function useGameSocketSync({
       phase,
       deadPlayers,
       seerResult,
+      cursedResult,
+      cursedTargetId,
+      cursedLastTargetId,
+      cursedTargetSeq,
+      merchantPrivateState,
+      merchantCheeseMarkPlayerIds,
       witchPendingDeathTargetIds,
       witchPotions,
       guardianProtectedSeq,
@@ -812,6 +884,7 @@ export function useGameSocketSync({
       wolfBadgeRolesByPlayerId,
       wolfVotes2,
       wolfMaxTargets,
+      wolfBiteDisabled,
       gameEnded,
       spiritWolfDecisionTargetId,
       spiritWolfDecisionDeadline,

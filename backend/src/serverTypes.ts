@@ -1,4 +1,5 @@
 import { ELEMENTAL_GROUP_ROLE, type ElementalBuffId, type ElementalRole } from "./elemental.js";
+import type { MerchantItemId, MerchantItemRecord, MerchantTradeOffer } from "./merchant.js";
 import { PROTECTOR_ROLE } from "./specialRoles.js";
 
 export interface Player {
@@ -8,7 +9,7 @@ export interface Player {
   inGame?: boolean;
 }
 
-export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | ElementalRole;
+export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | "Kẻ bị nguyền" | "Tay Buôn" | ElementalRole;
 
 export type NightActionOrderRole = NightActionRole | typeof ELEMENTAL_GROUP_ROLE;
 
@@ -26,6 +27,7 @@ export interface RoomGameRules {
   banSoiBecomeWolfEvenIfHealed: boolean;
   villageChiefKnowsWolfBite: boolean;
   witchSeeProtectorImmortalBite: boolean;
+  merchantSingleUseItems: boolean;
 }
 
 export interface Room {
@@ -156,6 +158,20 @@ export interface Room {
   elementalSelectedBuffId?: ElementalBuffId | null;
   elementalSelectedBuffAppliesNight?: number | null;
   elementalBuffQuickMode?: boolean;
+  cursedTargetTonight?: Record<string, string | null>;
+  cursedLastTargetByPlayerId?: Record<string, string | null>;
+  merchantTradeOffersTonight?: Record<string, MerchantTradeOffer>;
+  merchantLastTargetByPlayerId?: Record<string, string | null>;
+  merchantItemsByPlayerId?: Record<string, MerchantItemRecord[]>;
+  merchantUsedItemIds?: MerchantItemId[];
+  merchantWolfBiteDisabledTonight?: boolean;
+  merchantWolfBiteDisabledNextNight?: boolean;
+  merchantCheeseMarkedPlayerIds?: string[];
+  merchantCheeseMarkedPlayerIdsNextNight?: string[];
+  merchantGuardianCarryoverTargetId?: string | null;
+  merchantGuardianCarryoverBy?: string | null;
+  merchantGuardianCarryoverNight?: number | null;
+  merchantGunpowderExplodedPlayerIdsTonight?: string[];
 }
 
 const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -168,16 +184,12 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 20,
   wolfNightActionDurationSec: 20,
-  nightActionOrder: ["Thần tình yêu", "Sói", "Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"],
+  nightActionOrder: ["Thần tình yêu", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền"],
   banSoiBecomeWolfEvenIfHealed: false,
   villageChiefKnowsWolfBite: true,
   witchSeeProtectorImmortalBite: true,
+  merchantSingleUseItems: false,
 };
-
-DEFAULT_ROOM_GAME_RULES.nightActionOrder = [
-  ELEMENTAL_GROUP_ROLE,
-  ...DEFAULT_ROOM_GAME_RULES.nightActionOrder.filter((role) => role !== ELEMENTAL_GROUP_ROLE),
-];
 
 const NIGHT_ACTION_ROLE_SET = new Set<NightActionOrderRole>([
   ...DEFAULT_ROOM_GAME_RULES.nightActionOrder,
@@ -191,17 +203,26 @@ const NIGHT_ACTION_DURATION_MAX_SEC = 60;
 function normalizeNightActionOrder(input: unknown): NightActionOrderRole[] {
   const raw = Array.isArray(input) ? input : [];
   const unique: NightActionOrderRole[] = [];
+  const merchantRole = "Tay Buôn" as NightActionOrderRole;
+  let hadMerchantInInput = false;
   for (const role of raw) {
     if (typeof role !== "string") continue;
     if (!NIGHT_ACTION_ROLE_SET.has(role as NightActionOrderRole)) continue;
     if (unique.includes(role as NightActionOrderRole)) continue;
+    if (role === merchantRole) hadMerchantInInput = true;
     unique.push(role as NightActionOrderRole);
   }
 
   for (const role of DEFAULT_ROOM_GAME_RULES.nightActionOrder) {
     if (!unique.includes(role)) unique.push(role);
   }
-  return unique;
+  const loveRole = "Thần tình yêu" as NightActionOrderRole;
+  let next = unique;
+  if (!hadMerchantInInput && next.includes(merchantRole)) {
+    next = [merchantRole, ...next.filter((role) => role !== merchantRole)];
+  }
+  if (!next.includes(loveRole)) return next;
+  return [loveRole, ...next.filter((role) => role !== loveRole)];
 }
 
 function clampTrialInteractionSelectionLimit(value: unknown) {
@@ -267,6 +288,7 @@ export type EliminationCause =
   | { type: "wolf"; attackerIds: string[] }
   | { type: "witch_poison" }
   | { type: "hunter_shot" }
+  | { type: "merchant_gunpowder"; sourceId: string }
   | { type: "love_link"; sourceId: string }
   | { type: "day_vote"; voterIds: string[] }
   | { type: "trial_verdict"; voterIds: string[] };

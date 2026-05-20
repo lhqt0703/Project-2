@@ -5,6 +5,7 @@ import { RULES_RESTART_FADE_IN_MS, RULES_RESTART_FADE_OUT_MS, RULES_RESTART_HOLD
 import { emitRolesRevealToSocket, toPublicRoom } from "./serverEmitters.js";
 import { dealRolesWithPendingAssignments } from "./roleAssignment.js";
 import { clearLoveStateForPlayers, getLovePairIds } from "./love.js";
+import { resetMerchantRoundState } from "./merchant.js";
 
 const SPIRIT_WOLF_ROLE = "Linh sói";
 
@@ -292,6 +293,7 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.elementalSelectedBuffId = null;
     room.elementalSelectedBuffAppliesNight = null;
     room.elementalBuffQuickMode = true;
+    resetMerchantRoundState(room);
 
     ctx.io.to(roomId).emit("phaseChanged", "dusk");
     clearLoveStateForPlayers(ctx, room, roomId);

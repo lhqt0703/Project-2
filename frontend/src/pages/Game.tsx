@@ -22,6 +22,8 @@ import { useSpiritWolfRole } from "./gameRoles/useSpiritWolfRole";
 import { useDayVoteRole } from "./gameRoles/useDayVoteRole";
 import { useElementalRole } from "./gameRoles/useElementalRole";
 import { useLoveRole } from "./gameRoles/useLoveRole";
+import { useCursedRole } from "./gameRoles/useCursedRole";
+import { useMerchantRole } from "./gameRoles/useMerchantRole";
 
 const WOLF_TEAM_REVEAL_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
 const NIGHT_ACTION_ROLE_SET = new Set([
@@ -36,6 +38,8 @@ const NIGHT_ACTION_ROLE_SET = new Set([
   "Thợ săn",
   "Tiên tri",
   "Thần tình yêu",
+  "Kẻ bị nguyền",
+  "Tay Buôn",
 ]);
 const HUNTER_BULLET_ANIM_MS = 1000;
 
@@ -715,6 +719,32 @@ export default function Game() {
     nightActionNow: nightTurnNow,
     maxChecksTonight: seerMaxChecksTonight,
   });
+  const cursed = useCursedRole({
+    roomId,
+    phase,
+    role,
+    nightCount: room?.nightCount,
+    deadPlayers,
+    cursedResult: sync.cursedResult,
+    cursedTargetId: sync.cursedTargetId,
+    cursedLastTargetId: sync.cursedLastTargetId,
+    allNightActionsSimultaneous,
+    currentNightTurnRole,
+    nightActionDeadline: mySimultaneousDeadline,
+    nightActionNow: nightTurnNow,
+  });
+  const merchant = useMerchantRole({
+    roomId,
+    phase,
+    role,
+    room: roomForRoles,
+    deadPlayers,
+    merchantState: sync.merchantPrivateState,
+    allNightActionsSimultaneous,
+    currentNightTurnRole,
+    nightActionDeadline: allNightActionsSimultaneous ? nightTurnDeadline : mySimultaneousDeadline,
+    nightActionNow: nightTurnNow,
+  });
   const wolf = useWolfRole({
     roomId,
     phase,
@@ -727,6 +757,7 @@ export default function Game() {
     wolves: sync.wolves,
     activeWolves: sync.activeWolves,
     wolfMaxTargets: sync.wolfMaxTargets,
+    wolfBiteDisabled: sync.wolfBiteDisabled,
     allNightActionsSimultaneous,
     currentNightTurnRole,
     nightTurnPaused,
@@ -986,6 +1017,8 @@ export default function Game() {
     if (dayVote.onPlayerClick(playerId)) return;
 
     if (love.onPlayerClick(playerId)) return;
+    if (merchant.onPlayerClick(playerId)) return;
+    if (cursed.onPlayerClick(playerId)) return;
     if (seer.onPlayerClick(playerId)) return;
     if (wolf.onPlayerClick(playerId)) return;
     if (guardian.onPlayerClick(playerId)) return;
@@ -1059,6 +1092,7 @@ export default function Game() {
         [normalizeRoleName("Băng Giá")]: "C Băng",
         [normalizeRoleName("Thợ săn")]: "C Thợ Săn",
         [normalizeRoleName("Thần tình yêu")]: "C Thần Tình Yêu",
+        [normalizeRoleName("Tay Buôn")]: "C Tay Buôn",
       }) as Record<string, string>,
     [normalizeRoleName]
   );
@@ -1263,6 +1297,8 @@ export default function Game() {
             bulletAnimation={hunterBulletAnim}
             highlightPlayerId={highlightPlayerId}
             secondaryHighlightPlayerIds={secondaryHighlightPlayerIds}
+            cursedHighlightPlayerIds={cursed.playerPositionsProps.cursedHighlightPlayerIds}
+            cursedHighlightIsDanger={cursed.playerPositionsProps.cursedHighlightIsDanger}
             verdictLivePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.secondaryIds}
             verdictDiePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.dangerIds}
             showRoleBadges={!!roleBadgesForDisplay}
@@ -1273,6 +1309,8 @@ export default function Game() {
               dayVote.playerPositionsProps.selectedOutlinePlayerId ||
               guardian.playerPositionsProps.selectedOutlinePlayerId ||
               protector.playerPositionsProps.selectedOutlinePlayerId ||
+              merchant.playerPositionsProps.selectedOutlinePlayerId ||
+              cursed.playerPositionsProps.selectedOutlinePlayerId ||
               witch.playerPositionsProps.selectedOutlinePlayerId ||
               elemental.playerPositionsProps.selectedOutlinePlayerId ||
               hunter.playerPositionsProps.selectedOutlinePlayerId ||
@@ -1296,6 +1334,7 @@ export default function Game() {
             showWolfBadges={wolf.playerPositionsProps.showWolfBadges}
             wolfBadgePlayerIds={wolf.playerPositionsProps.wolfBadgePlayerIds}
             wolfBadgeRoles={wolf.playerPositionsProps.wolfBadgeRoles}
+            cheesePlayerIds={sync.merchantCheeseMarkPlayerIds}
             trialOrangePlayerId={dayVote.playerPositionsProps.trialOrangePlayerId}
             trialWhitePlayerIds={dayVote.playerPositionsProps.trialWhitePlayerIds}
             trialGreenPlayerId={dayVote.playerPositionsProps.trialGreenPlayerId}
@@ -1329,6 +1368,8 @@ export default function Game() {
 
       {!isHost && logPanel}
       {seer.modal}
+      {cursed.modal}
+      {merchant.modal}
       {guardian.modal}
       {protector.modal}
       {love.modals}
@@ -1343,6 +1384,7 @@ export default function Game() {
         {witch.panel}
         {protector.panel}
         {elemental.panel}
+        {merchant.panel}
         {loveActionPlacement === "role-actions" ? love.actionButton : null}
       </div>
 

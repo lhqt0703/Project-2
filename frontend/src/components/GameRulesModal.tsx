@@ -12,6 +12,8 @@ const NIGHT_ACTION_ROLE_LABELS: Record<NightActionOrderRole, string> = {
   "Thợ săn": "Thợ săn",
   "Tiên tri": "Tiên tri",
   "Thần tình yêu": "Thần tình yêu",
+  "Kẻ bị nguyền": "Kẻ bị nguyền",
+  "Tay Buôn": "Tay Buôn",
 };
 
 const NIGHT_ACTION_DURATION_STEP_SEC = 10;
@@ -22,11 +24,14 @@ function normalizeNightActionOrder(order: NightActionOrderRole[], availableRoles
   const availableSet = new Set(availableRoles);
   const seen = new Set<NightActionOrderRole>();
   const next: NightActionOrderRole[] = [];
+  const merchantRole = "Tay Buôn" as NightActionOrderRole;
+  let hadMerchantInInput = false;
 
   for (const role of order) {
     if (!availableSet.has(role)) continue;
     if (seen.has(role)) continue;
     seen.add(role);
+    if (role === merchantRole) hadMerchantInInput = true;
     next.push(role);
   }
 
@@ -36,7 +41,16 @@ function normalizeNightActionOrder(order: NightActionOrderRole[], availableRoles
     next.push(role);
   }
 
-  return next;
+  let normalized = next;
+  if (!hadMerchantInInput && availableSet.has(merchantRole)) {
+    normalized = [merchantRole, ...normalized.filter((role) => role !== merchantRole)];
+  }
+
+  if (!seen.has("Thần tình yêu" as NightActionOrderRole)) return normalized;
+  return [
+    "Thần tình yêu" as NightActionOrderRole,
+    ...normalized.filter((role) => role !== "Thần tình yêu"),
+  ];
 }
 
 function clampSelectionLimit(value: number) {
@@ -163,6 +177,7 @@ export default function GameRulesModal({
   const reorderRoles = (fromRole: NightActionOrderRole, toRole: NightActionOrderRole) => {
     if (readOnly) return;
     if (fromRole === toRole) return;
+    if (fromRole === "Thần tình yêu" || toRole === "Thần tình yêu") return;
     setDraftRules((prev) => {
       const nextOrder = [...prev.nightActionOrder];
       const fromIndex = nextOrder.indexOf(fromRole);
@@ -354,27 +369,29 @@ export default function GameRulesModal({
               <div style={{ width: "100%" }}>
                 <div style={{ fontWeight: 700, marginBottom: 4 }}>Thứ tự hành động ban đêm</div>
                 <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5, marginBottom: 12 }}>
-                  Riêng Dân làng nguyên tố sẽ được kéo thả bằng 1 mục đại diện, nhưng khi vào đêm hệ thống vẫn tách thành từng lượt theo thứ tự cố định.
+                  Riêng Dân làng nguyên tố sẽ được kéo thả bằng 1 mục đại diện. Thần tình yêu luôn đứng đầu nếu có, còn Thần tình yêu/Tay Buôn không làm thay đổi cách tính buff nhanh/chậm.
                 </div>
               </div>
 
               <div style={{ display: "grid", gap: 10, width: "100%" }}>
-                {draftRules.nightActionOrder.map((role, index) => (
+                {draftRules.nightActionOrder.map((role, index) => {
+                  const pinned = role === "Thần tình yêu";
+                  return (
                   <div
                     key={role}
-                    draggable={!readOnly}
+                    draggable={!readOnly && !pinned}
                     onDragStart={() => {
-                      if (readOnly) return;
+                      if (readOnly || pinned) return;
                       setDraggedRole(role);
                       setDragOverRole(role);
                     }}
                     onDragOver={(e) => {
-                      if (readOnly) return;
+                      if (readOnly || pinned) return;
                       e.preventDefault();
                       if (dragOverRole !== role) setDragOverRole(role);
                     }}
                     onDrop={(e) => {
-                      if (readOnly) return;
+                      if (readOnly || pinned) return;
                       e.preventDefault();
                       if (!draggedRole) return;
                       reorderRoles(draggedRole, role);
@@ -394,7 +411,7 @@ export default function GameRulesModal({
                       borderRadius: 12,
                       background: draggedRole === role ? "rgba(246,200,95,0.16)" : "rgba(255,255,255,0.05)",
                       border: dragOverRole === role ? "1px solid rgba(246,200,95,0.9)" : "1px solid rgba(255,255,255,0.08)",
-                      cursor: readOnly ? "default" : "grab",
+                      cursor: readOnly || pinned ? "default" : "grab",
                     }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -419,12 +436,29 @@ export default function GameRulesModal({
                       </div>
                     </div>
 
-                    {!readOnly && <div style={{ fontSize: 18, opacity: 0.6, userSelect: "none" }}>⋮⋮</div>}
+                    {!readOnly && !pinned && <div style={{ fontSize: 18, opacity: 0.6, userSelect: "none" }}>⋮⋮</div>}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
+
+          <label style={rowStyle()}>
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Mỗi món đồ của Tay Buôn chỉ giao dịch thành công một lần</div>
+              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                Khi bật, món đồ đã giao dịch thành công sẽ biến khỏi kho hàng cho những đêm sau.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={draftRules.merchantSingleUseItems}
+              disabled={readOnly}
+              onChange={(e) => updateRule("merchantSingleUseItems", e.target.checked)}
+              style={{ width: 20, height: 20, marginTop: 2 }}
+            />
+          </label>
 
           <label style={rowStyle()}>
             <div>

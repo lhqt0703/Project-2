@@ -49,8 +49,8 @@ export interface RoomGameRules {
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   twoHeartsFirstTwoNights: true,
-  forceWolfBiteFirstNight: false,
-  allNightActionsSimultaneous: false,
+  forceWolfBiteFirstNight: true,
+  allNightActionsSimultaneous: true,
   witchSeeBiteOnlyIfHasHealPotion: true,
   witchHideProtectedBiteInSimultaneous: false,
   witchHideProtectedBiteWhenSequential: true,
@@ -83,6 +83,9 @@ export interface RoomData {
   pendingGameRules?: RoomGameRules;
   banSoiWolfAligned?: boolean;
   banSoiWolfAlignedPending?: boolean;
+  wildWolfConvertAvailableTonight?: boolean;
+  wildWolfConvertRequestedTonight?: boolean;
+  wildWolfConvertedSelf?: boolean;
   publicRevealedRolesByPlayerId?: Record<string, string>;
   privateHeartVisiblePlayerIds?: string[];
   playerHeartShakeIds?: string[];

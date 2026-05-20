@@ -23,10 +23,11 @@ import { useDayVoteRole } from "./gameRoles/useDayVoteRole";
 import { useElementalRole } from "./gameRoles/useElementalRole";
 import { useLoveRole } from "./gameRoles/useLoveRole";
 
-const WOLF_TEAM_REVEAL_ROLES = new Set(["Sói", "Sói con", "Bán sói"]);
+const WOLF_TEAM_REVEAL_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
 const NIGHT_ACTION_ROLE_SET = new Set([
   "Sói",
   "Sói con",
+  "Sói Dại",
   "Bán sói",
   "Bảo vệ",
   "Hộ nhân",
@@ -66,6 +67,8 @@ export default function Game() {
   const shouldHidePlayerRoleText = !isHost && (!!room?.hidePlayerRoleText || shouldBlockDeadNightRoleReveal);
   const allNightActionsSimultaneous = room?.gameRules?.allNightActionsSimultaneous === true;
   const isBanSoiAligned = room?.banSoiWolfAligned === true;
+  const isWildWolfConverted = room?.wildWolfConvertedSelf === true;
+  const isBanSoiOrWildConverted = isBanSoiAligned || isWildWolfConverted;
   const currentNightTurnRole = (room?.nightTurnRole || null) as NightActionRole | null;
   const nightTurnPaused = !!room?.nightTurnPaused;
   const nightTurnDeadline = room?.nightTurnDeadline ?? null;
@@ -240,12 +243,16 @@ export default function Game() {
     return nonWolf > 0 && wolf === nonWolf;
   }, [room?.gameRules]);
 
-  const isWolfTeamRole = role === "Sói" || role === "Sói con" || (role === "Bán sói" && isBanSoiAligned);
+  const isWolfTeamRole =
+    role === "Sói" ||
+    role === "Sói con" ||
+    role === "Sói Dại" ||
+    (role === "Bán sói" && isBanSoiOrWildConverted);
 
   const mySimultaneousDeadline = useMemo(() => {
     if (!isSimultaneousNight) return null;
     if (!role) return null;
-    if (role === "Bán sói" && !isBanSoiAligned) return null;
+    if (role === "Bán sói" && !isBanSoiOrWildConverted) return null;
     if (!NIGHT_ACTION_ROLE_SET.has(role) && !ELEMENTAL_ROLE_SET.has(role)) return null;
 
     if (isWolfTeamRole) return sync.wolfDeadline ?? null;
@@ -257,7 +264,7 @@ export default function Game() {
     if (!baseDeadline) return null;
     if (role === "Phù thủy" && witchBonusApplies) return baseDeadline + 10_000;
     return baseDeadline;
-  }, [isBanSoiAligned, isSimultaneousNight, isWolfTeamRole, nightTurnDeadline, role, sync.spiritWolfDecisionDeadline, sync.spiritWolfDecisionTargetId, sync.wolfDeadline, witchBonusApplies]);
+  }, [isBanSoiOrWildConverted, isSimultaneousNight, isWolfTeamRole, nightTurnDeadline, role, sync.spiritWolfDecisionDeadline, sync.spiritWolfDecisionTargetId, sync.wolfDeadline, witchBonusApplies]);
 
   useEffect(() => {
     if (!isSimultaneousNight) return;
@@ -295,9 +302,9 @@ export default function Game() {
   const doesNightTurnMatchMyRole = useMemo(() => {
     if (!currentNightTurnRole) return false;
     if (currentNightTurnRole === "Sói") return isWolfTeamRole;
-    if (role === "Bán sói" && !isBanSoiAligned) return false;
+    if (role === "Bán sói" && !isBanSoiOrWildConverted) return false;
     return role === currentNightTurnRole;
-  }, [currentNightTurnRole, isBanSoiAligned, isWolfTeamRole, role]);
+  }, [currentNightTurnRole, isBanSoiOrWildConverted, isWolfTeamRole, role]);
 
   const hasSecretConditionalRolePrompt =
     !!sync.spiritWolfDecisionTargetId &&
@@ -1042,6 +1049,7 @@ export default function Game() {
         [normalizeRoleName("Gió")]: "C Gió",
         [normalizeRoleName("Sói")]: "C Sói",
         [normalizeRoleName("Sói con")]: "C Sói Con",
+        [normalizeRoleName("Sói Dại")]: "C Sói Dại",
         [normalizeRoleName("Phù thủy")]: "C Phù Thủy",
         [normalizeRoleName("Tiên tri")]: "C Tiên Tri",
         [normalizeRoleName("Bán sói")]: "C Bán Sói",

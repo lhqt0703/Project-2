@@ -26,6 +26,8 @@ import type {
   ProtectorTargetUpdatedPayload,
   SpiritWolfDecisionNeededPayload,
   SpiritWolfDecisionRecordedPayload,
+  WildWolfConvertedStatePayload,
+  WildWolfConversionUpdatedPayload,
   WitchPendingDeathPayload,
   WitchPotionsPayload,
   WolfLockedUpdatedPayload,
@@ -63,6 +65,8 @@ export function useGameSocketSync({
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
+  const wildWolfConvertedSelfRef = useRef(false);
+  const wildWolfConversionRef = useRef({ available: false, requested: false });
 
   const [deadPlayers, setDeadPlayers] = useState<string[]>([]);
   const [seerResult, setSeerResult] = useState<SeerResultPayload | null>(null);
@@ -186,6 +190,12 @@ export function useGameSocketSync({
       setWolves([]);
       setWolfVotes2(null);
       setWolfMaxTargets(1);
+      wildWolfConversionRef.current = { available: false, requested: false };
+      setRoom((prev: any) => (prev ? {
+        ...prev,
+        wildWolfConvertAvailableTonight: false,
+        wildWolfConvertRequestedTonight: false,
+      } : prev));
       setElementalTargetId(null);
       setElementalTargetSeq(0);
       setElementalActionMode("guess");
@@ -193,14 +203,25 @@ export function useGameSocketSync({
     };
 
     const handleRoomUpdated = (data: any) => {
+      if (!data) return;
       if (roomId && data?.id && data.id !== roomId) return;
       setRoom((prev: any) => {
-        if (!prev) return data;
+        if (!prev) {
+          return {
+            ...data,
+            wildWolfConvertedSelf: data?.wildWolfConvertedSelf ?? wildWolfConvertedSelfRef.current,
+            wildWolfConvertAvailableTonight: data?.wildWolfConvertAvailableTonight ?? wildWolfConversionRef.current.available,
+            wildWolfConvertRequestedTonight: data?.wildWolfConvertRequestedTonight ?? wildWolfConversionRef.current.requested,
+          };
+        }
         return {
           ...data,
           wolfVotes: data?.wolfVotes ?? prev.wolfVotes,
           wolfVotes2: data?.wolfVotes2 ?? prev.wolfVotes2,
           wolfLocked: data?.wolfLocked ?? prev.wolfLocked,
+          wildWolfConvertedSelf: data?.wildWolfConvertedSelf ?? prev.wildWolfConvertedSelf ?? wildWolfConvertedSelfRef.current,
+          wildWolfConvertAvailableTonight: data?.wildWolfConvertAvailableTonight ?? prev.wildWolfConvertAvailableTonight ?? wildWolfConversionRef.current.available,
+          wildWolfConvertRequestedTonight: data?.wildWolfConvertRequestedTonight ?? prev.wildWolfConvertRequestedTonight ?? wildWolfConversionRef.current.requested,
         };
       });
       if (data?.phase === "dusk" || data?.phase === "day" || data?.phase === "night") {
@@ -311,6 +332,14 @@ export function useGameSocketSync({
       setLoveArrowShotSeq(0);
       setLoveState(EMPTY_LOVE_STATE);
       setElementalBuffResult(null);
+      wildWolfConvertedSelfRef.current = false;
+      wildWolfConversionRef.current = { available: false, requested: false };
+      setRoom((prev: any) => (prev ? {
+        ...prev,
+        wildWolfConvertedSelf: false,
+        wildWolfConvertAvailableTonight: false,
+        wildWolfConvertRequestedTonight: false,
+      } : prev));
     };
 
     const handleGameEnded = (payload: GameEndedPayload) => {
@@ -355,6 +384,23 @@ export function useGameSocketSync({
     const handleSpiritWolfDecisionRecorded = (_payload: SpiritWolfDecisionRecordedPayload) => {
       setSpiritWolfDecisionTargetId(null);
       setSpiritWolfDecisionDeadline(null);
+    };
+
+    const handleWildWolfConvertedState = (payload: WildWolfConvertedStatePayload) => {
+      wildWolfConvertedSelfRef.current = payload?.converted === true;
+      setRoom((prev: any) => (prev ? { ...prev, wildWolfConvertedSelf: payload?.converted === true } : prev));
+    };
+
+    const handleWildWolfConversionUpdated = (payload: WildWolfConversionUpdatedPayload) => {
+      wildWolfConversionRef.current = {
+        available: payload?.available === true,
+        requested: payload?.requested === true,
+      };
+      setRoom((prev: any) => (prev ? {
+        ...prev,
+        wildWolfConvertAvailableTonight: payload?.available === true,
+        wildWolfConvertRequestedTonight: payload?.requested === true,
+      } : prev));
     };
 
     const handleElementalTargetUpdated = (payload: ElementalTargetUpdatedPayload) => {
@@ -404,12 +450,21 @@ export function useGameSocketSync({
       setWolfLocked(locked);
     };
 
-    const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline, maxTargets, resetVotes, wolfBadgeRolesByPlayerId }: WolfPhaseStartedPayload) => {
+    const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline, maxTargets, resetVotes, wolfBadgeRolesByPlayerId, wildWolfConvertAvailable, wildWolfConvertRequested }: WolfPhaseStartedPayload) => {
       setWolves(wolves);
       setActiveWolves(activeWolves || []);
       setWolfBadgeRolesByPlayerId(wolfBadgeRolesByPlayerId || {});
       setWolfDeadline(typeof deadline === "number" ? deadline : null);
       setWolfMaxTargets(typeof maxTargets === "number" ? maxTargets : 1);
+      wildWolfConversionRef.current = {
+        available: wildWolfConvertAvailable === true,
+        requested: wildWolfConvertRequested === true,
+      };
+      setRoom((prev: any) => (prev ? {
+        ...prev,
+        wildWolfConvertAvailableTonight: wildWolfConvertAvailable === true,
+        wildWolfConvertRequestedTonight: wildWolfConvertRequested === true,
+      } : prev));
       if (resetVotes !== false) {
         setRoom((prev: any) => (prev ? { ...prev, wolfVotes: undefined } : prev));
         setWolfLocked(null);
@@ -586,6 +641,7 @@ export function useGameSocketSync({
     socket.on("wolfVotes2Updated", handleWolfVotes2Updated);
     socket.on("wolfLockedUpdated", handleWolfLockedUpdated);
     socket.on("wolfPhaseStarted", handleWolfPhaseStarted);
+    socket.on("wildWolfConversionUpdated", handleWildWolfConversionUpdated);
 
     socket.on("seerResult", handleSeerResult);
     socket.on("guardianProtected", handleGuardianProtected);
@@ -618,6 +674,7 @@ export function useGameSocketSync({
     socket.on("publicRolesRevealUpdated", handlePublicRolesRevealUpdated);
     socket.on("spiritWolfDecisionNeeded", handleSpiritWolfDecisionNeeded);
     socket.on("spiritWolfDecisionRecorded", handleSpiritWolfDecisionRecorded);
+    socket.on("wildWolfConvertedState", handleWildWolfConvertedState);
     socket.on("elementalTargetUpdated", handleElementalTargetUpdated);
     socket.on("elementalBuffVoteStateUpdated", handleElementalBuffVoteStateUpdated);
     socket.on("elementalBuffSelected", handleElementalBuffSelected);
@@ -633,6 +690,7 @@ export function useGameSocketSync({
       socket.off("wolfVotes2Updated", handleWolfVotes2Updated);
       socket.off("wolfLockedUpdated", handleWolfLockedUpdated);
       socket.off("wolfPhaseStarted", handleWolfPhaseStarted);
+      socket.off("wildWolfConversionUpdated", handleWildWolfConversionUpdated);
 
       socket.off("seerResult", handleSeerResult);
       socket.off("guardianProtected", handleGuardianProtected);
@@ -665,6 +723,7 @@ export function useGameSocketSync({
       socket.off("publicRolesRevealUpdated", handlePublicRolesRevealUpdated);
       socket.off("spiritWolfDecisionNeeded", handleSpiritWolfDecisionNeeded);
       socket.off("spiritWolfDecisionRecorded", handleSpiritWolfDecisionRecorded);
+      socket.off("wildWolfConvertedState", handleWildWolfConvertedState);
       socket.off("elementalTargetUpdated", handleElementalTargetUpdated);
       socket.off("elementalBuffVoteStateUpdated", handleElementalBuffVoteStateUpdated);
       socket.off("elementalBuffSelected", handleElementalBuffSelected);

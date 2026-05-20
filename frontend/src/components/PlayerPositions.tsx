@@ -401,7 +401,7 @@ export default function PlayerPositions({
     if (!isSimultaneousNight) return progress;
 
     const roleName = roleBadges?.[playerId] || wolfBadgeRoles?.[playerId] || "";
-    const isWolfProgress = roleName === "Sói" || roleName === "Sói con" || roleName === "Bán sói";
+    const isWolfProgress = roleName === "Sói" || roleName === "Sói con" || roleName === "Sói Dại" || roleName === "Bán sói";
     if (isWolfProgress) return progress;
 
     const baseDeadline = room.nightTurnDeadline ?? null;
@@ -1066,7 +1066,7 @@ export default function PlayerPositions({
           const showWolfBadge = !!showWolfBadges && (wolfBadgePlayerIds || []).includes(p.id);
           const wolfBadgeText = showWolfBadge ? (wolfBadgeRoles?.[p.id] || "Sói") : undefined;
           const roleBadgeText = (showRoleBadges && roleBadges) ? roleBadges[p.id] : undefined;
-          const isWolfBadgeRole = roleBadgeText === "Sói" || roleBadgeText === "Sói con" || roleBadgeText === "Bán sói";
+          const isWolfBadgeRole = roleBadgeText === "Sói" || roleBadgeText === "Sói con" || roleBadgeText === "Sói Dại" || roleBadgeText === "Bán sói";
           const isActiveNightRoleBadge = !!activeNightRole && (
             (activeNightRole === "Sói" && isWolfBadgeRole) ||
             (activeNightRole !== "Sói" && roleBadgeText === activeNightRole)

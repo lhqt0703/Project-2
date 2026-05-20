@@ -26,6 +26,7 @@ import {
   getParticipantPlayers,
   getBanSoiId,
   getSpiritWolfId,
+  getWildWolfId,
   getTrialVoters,
   getWitches,
   isPlayerConnected,
@@ -117,6 +118,8 @@ import {
 } from "./specialRoles.js";
 
 const SPIRIT_WOLF_ROLE = "Linh sói";
+const NORMAL_WOLF_ROLE = "Sói";
+const WILD_WOLF_ROLE = "Sói Dại";
 
 type RegisterSocketHandlersParams = {
   socket: Socket;
@@ -263,6 +266,62 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     });
   }
 
+  function isWildWolfConversionUsable(room: Room, playerId: string) {
+    const wildWolfId = getWildWolfId(room);
+    return (
+      wildWolfId === playerId &&
+      room.playerRoles?.[playerId] === WILD_WOLF_ROLE &&
+      room.wildWolfConvertAvailableTonight === true &&
+      room.wildWolfConvertUsed !== true &&
+      !(room.deadPlayers || []).includes(playerId)
+    );
+  }
+
+  function emitWildWolfConversionState(roomId: string, room: Room) {
+    ctx.io.to(`wolves_${roomId}`).emit("wildWolfConversionUpdated", {
+      available: room.wildWolfConvertAvailableTonight === true,
+      requested: room.wildWolfConvertRequestedTonight === true,
+    });
+  }
+
+  function convertWildWolfTargetToWolf(roomId: string, room: Room, targetId: string) {
+    if (!room.players.find((player) => player.id === targetId)) return false;
+    if ((room.deadPlayers || []).includes(targetId)) return false;
+
+    room.playerRoles = room.playerRoles || {};
+    room.playerRoles[targetId] = NORMAL_WOLF_ROLE;
+    room.wolves = Array.from(new Set([...(room.wolves || []), targetId]));
+    room.wildWolfConvertedPlayerIds = Array.from(new Set([...(room.wildWolfConvertedPlayerIds || []), targetId]));
+
+    if (room.publicRevealedRolesByPlayerId?.[targetId]) {
+      room.publicRevealedRolesByPlayerId[targetId] = NORMAL_WOLF_ROLE;
+    }
+    if (room.banSoiId === targetId) {
+      room.banSoiId = null;
+      room.banSoiWolfAligned = false;
+      room.banSoiWolfAlignedPending = false;
+    }
+    if (room.spiritWolfId === targetId) {
+      room.spiritWolfId = null;
+      room.spiritWolfWolfAligned = false;
+      room.spiritWolfWolfAlignedPending = false;
+      room.spiritWolfPendingPoisonedWolfId = null;
+    }
+
+    ctx.io.in(targetId).socketsJoin(`wolves_${roomId}`);
+    ctx.io.in(targetId).socketsLeave(`witches_${roomId}`);
+    ctx.io.to(targetId).emit("yourRole", NORMAL_WOLF_ROLE);
+    ctx.io.to(targetId).emit("wildWolfConvertedState", { converted: true });
+
+    if (room.loveTargetId === targetId) {
+      room.loveTargetWolfAligned = true;
+      emitLoveStateToPair(ctx, roomId, room);
+    }
+
+    emitRolesRevealToSocket(roomId, room.hostId);
+    return true;
+  }
+
   function finalizeElementalGuessNight(room: Room) {
     const eligibleElementalIds = new Set(getAliveElementalPlayerIds(room));
     const correctIds = Array.from(new Set(room.elementalCorrectGuessPlayerIdsTonight || []))
@@ -283,6 +342,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         phase: "night",
         correctCount,
         totalCount,
+        correctIds,
         triggeredBuffVote,
         ...(nextBuffVoteNight !== undefined ? { nextBuffVoteNight } : {}),
       });
@@ -381,6 +441,12 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const wolfAttackAt = room.wolfAttackResolvedAt || Date.now();
     const spiritWolfId = getSpiritWolfId(room);
     const banSoiId = getBanSoiId(room);
+    const wildWolfConvertTargetId =
+      room.wildWolfConvertRequestedTonight &&
+      room.wildWolfConvertAvailableTonight &&
+      !room.wildWolfConvertUsed
+        ? room.wildWolfConvertTargetId || null
+        : null;
 
     const isGuardianEffective = (targetId: string, saveCutoffAt: number | null) => {
       if (room.protectedTonight !== targetId) return false;
@@ -412,6 +478,30 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
       if (isProtected) addUnique(savedByGuardianIds, targetId);
       if (wasHealed) addUnique(savedByWitchIds, targetId);
+
+      if (targetId === wildWolfConvertTargetId) {
+        const biteCounted = (!wasHealed && !isProtected) || rules.banSoiBecomeWolfEvenIfHealed;
+        appendLogEntry(room, {
+          type: "wild_wolf_conversion",
+          phase: "night",
+          actorId: room.wildWolfConvertActorId || getWildWolfId(room),
+          targetId,
+          success: biteCounted,
+          previousTargetRole: room.playerRoles?.[targetId] || null,
+          savedByGuardian: isProtected,
+          savedByWitch: wasHealed,
+          ...(biteCounted ? {} : { reason: "saved" as const }),
+        });
+
+        if (biteCounted && convertWildWolfTargetToWolf(roomId, room, targetId)) {
+          room.wildWolfConvertUsed = true;
+        }
+
+        room.wildWolfConvertAvailableTonight = false;
+        room.wildWolfConvertRequestedTonight = false;
+        room.wildWolfConvertActorId = null;
+        continue;
+      }
 
       if (targetId === spiritWolfId) {
         if (!wasHealed && !isProtected) {
@@ -489,10 +579,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     flushProtectorSaves();
 
     if (savedByGuardianIds.length) {
-      appendLogEntry(room, { type: "saved_by_guardian", phase: "night", targetIds: savedByGuardianIds });
-    }
-    if (savedByWitchIds.length) {
-      appendLogEntry(room, { type: "saved_by_witch", phase: "night", targetIds: savedByWitchIds });
+      appendLogEntry(room, { type: "saved_by_guardian", phase: "night", targetIds: savedByGuardianIds, actorId: room.protectedTonightBy || null });
     }
     if (eliminatedIds.length) {
       unlockVillageChiefExtraVoteIfProtectorDiedByWolf();
@@ -1115,6 +1202,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       const role = room.playerRoles![player.id]!;
       room.playerRoles![player.id] = role;
       ctx.io.to(player.id).emit("yourRole", role);
+      ctx.io.to(player.id).emit("wildWolfConvertedState", { converted: false });
     });
     room.players = room.players.map((p) => ({ ...p, inGame: p.id !== room.hostId }));
 
@@ -1179,6 +1267,17 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
     room.spiritWolfDecisionDeadline = null;
+    room.wildWolfConvertedPlayerIds = [];
+    room.banSoiId = getBanSoiId(room);
+    room.banSoiWolfAligned = false;
+    room.banSoiWolfAlignedPending = false;
+    room.wildWolfId = getWildWolfId(room);
+    room.wildWolfConvertReadyNextNight = false;
+    room.wildWolfConvertAvailableTonight = false;
+    room.wildWolfConvertRequestedTonight = false;
+    room.wildWolfConvertActorId = null;
+    room.wildWolfConvertTargetId = null;
+    room.wildWolfConvertUsed = false;
 
     room.hidePlayerRoleText = true;
     room.phase = "dusk";
@@ -1308,7 +1407,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         if (room.phase) {
           room.players[playerIndex] = { ...room.players[playerIndex]!, connected: false };
 
-          if (isWolfRole(room.playerRoles?.[clientId])) {
+          if (isWolfAlignedPlayer(room, clientId)) {
             if (room.wolfVotes) room.wolfVotes[clientId] = null;
             if (room.wolfVotes2) room.wolfVotes2[clientId] = null;
             if (room.wolfLocked) room.wolfLocked[clientId] = false;
@@ -1475,6 +1574,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.privateHeartVisiblePlayerIds = [];
     room.playerHeartShakeIds = [];
     room.protectedTonight = null;
+    room.protectedTonightBy = null;
     room.protectedTonightAt = null;
     room.lastProtected = null;
     room.seerUsedTonight = {};
@@ -1513,6 +1613,17 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
     room.spiritWolfDecisionDeadline = null;
+    room.banSoiId = null;
+    room.banSoiWolfAligned = false;
+    room.banSoiWolfAlignedPending = false;
+    room.wildWolfId = null;
+    room.wildWolfConvertReadyNextNight = false;
+    room.wildWolfConvertAvailableTonight = false;
+    room.wildWolfConvertRequestedTonight = false;
+    room.wildWolfConvertActorId = null;
+    room.wildWolfConvertTargetId = null;
+    room.wildWolfConvertUsed = false;
+    room.wildWolfConvertedPlayerIds = [];
     room.villageChiefPendingWolfDeath = null;
     room.villageChiefExtraVoteAvailable = false;
     room.villageChiefExtraVoteReady = false;
@@ -1593,6 +1704,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       const role = room.playerRoles![player.id]!;
       room.playerRoles![player.id] = role;
       ctx.io.to(player.id).emit("yourRole", role);
+      ctx.io.to(player.id).emit("wildWolfConvertedState", { converted: false });
     });
     room.players = room.players.map((p) => ({ ...p, inGame: p.id !== room.hostId }));
 
@@ -1603,6 +1715,9 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     room.wolves.forEach(wolfId => {
       ctx.io.in(wolfId).socketsJoin(`wolves_${roomId}`);
     });
+
+    room.banSoiId = getBanSoiId(room);
+    room.wildWolfId = getWildWolfId(room);
 
     const witches = getWitches(room);
     witches.forEach(witchId => {
@@ -1783,6 +1898,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     if (room.gameOver) return;
 
+    const previousPhase = room.phase;
     room.phase = phase;
     if (phase === "dusk" || phase === "day" || phase === "night") {
       room.hidePlayerRoleText = true;
@@ -1806,8 +1922,8 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       if (room.spiritWolfPendingPoisonedWolfId && !room.spiritWolfDecisionMade) {
         room.spiritWolfDecisionMade = true;
         room.spiritWolfChoseSave = false;
-        appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", saved: false, timedOut: true });
         const spiritWolfId = getSpiritWolfId(room);
+        appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", actorId: spiritWolfId, saved: false, timedOut: true });
         if (spiritWolfId) {
           ctx.io.to(spiritWolfId).emit("spiritWolfDecisionRecorded", { saved: false });
         }
@@ -1826,6 +1942,26 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
         startDayDiscussion(roomId);
       }
     } else if (phase === "night") {
+      if (previousPhase === "day") {
+        const currentNightLog = ensureNightLog(room);
+        const hasDayVoteLog = currentNightLog?.entries.some((entry) =>
+          entry.phase === "day" &&
+          (
+            entry.type === "day_vote" ||
+            entry.type === "day_result" ||
+            entry.type === "day_vote_skipped" ||
+            entry.type === "trial_verdict"
+          )
+        );
+        const hadDayVotingState =
+          !!room.dayDeadline ||
+          !!room.dayDiscussionDeadline ||
+          (room.dayVoters || []).length > 0 ||
+          Object.values(room.dayVotes || {}).some(Boolean);
+        if (!hasDayVoteLog && hadDayVotingState) {
+          appendLogEntry(room, { type: "day_vote_skipped", phase: "day" });
+        }
+      }
       if (room.dayTimer) {
         clearTimeout(room.dayTimer);
         room.dayTimer = null;
@@ -1907,6 +2043,17 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
         if (room.gameOver) return;
       }
 
+      const wildWolfId = getWildWolfId(room);
+      room.wildWolfConvertAvailableTonight =
+        room.wildWolfConvertReadyNextNight === true &&
+        room.wildWolfConvertUsed !== true &&
+        !!wildWolfId &&
+        !(room.deadPlayers || []).includes(wildWolfId);
+      room.wildWolfConvertReadyNextNight = false;
+      room.wildWolfConvertRequestedTonight = false;
+      room.wildWolfConvertActorId = null;
+      room.wildWolfConvertTargetId = null;
+
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
 
       room.wolfBonusBiteThisNight = !!room.wolfExtraBiteNextNight;
@@ -1919,6 +2066,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
       // Reset night action state.
       room.protectedTonight = null;
+      room.protectedTonightBy = null;
       room.protectedTonightAt = null;
       room.hunterTargetTonight = {};
       room.elementalTargetTonight = {};
@@ -2606,6 +2754,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     }
 
     room.protectedTonight = targetId;
+    room.protectedTonightBy = clientId;
     room.protectedTonightAt = Date.now();
     ctx.io.to(clientId).emit("guardianProtected", targetId);
 
@@ -2774,9 +2923,31 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     ctx.io.to(clientId).emit("spiritWolfDecisionRecorded", { saved: !!save });
 
-    appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", saved: !!save });
+    appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", actorId: clientId, saved: !!save });
 
     finishSpiritWolfTurn(roomId, false);
+  });
+
+  socket.on("wildWolfToggleConversion", ({ roomId, active }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+    if (!isWildWolfConversionUsable(room, clientId)) return;
+    if (!canPerformNightRoleAction(room, clientId, "Sói")) return;
+    if (room.wolfVoteResolvedTonight) return;
+    if (room.wolfLocked?.[clientId]) {
+      socket.emit("errorMessage", "Bạn đã bấm CẮN, không thể thay đổi lựa chọn.");
+      return;
+    }
+    const selectedTargetId = room.wolfVotes?.[clientId] || null;
+    if (active && !selectedTargetId) return;
+
+    room.wildWolfConvertRequestedTonight = !!active;
+    room.wildWolfConvertActorId = active ? clientId : null;
+    room.wildWolfConvertTargetId = active ? selectedTargetId : null;
+
+    emitWildWolfConversionState(roomId, room);
   });
 
   socket.on("wolfChooseTarget", ({ roomId, targetId }) => {
@@ -2797,7 +2968,17 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     if (!targetId) {
       room.wolfVotes[clientId] = null;
+      let cancelledWildConversion = false;
+      if (room.wildWolfConvertActorId === clientId) {
+        room.wildWolfConvertRequestedTonight = false;
+        room.wildWolfConvertActorId = null;
+        room.wildWolfConvertTargetId = null;
+        cancelledWildConversion = true;
+      }
       ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes);
+      if (cancelledWildConversion) {
+        emitWildWolfConversionState(roomId, room);
+      }
       return;
     }
 
@@ -2808,6 +2989,10 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (isWolfAlignedPlayer(room, targetId)) return;
 
     room.wolfVotes[clientId] = targetId;
+    if (room.wildWolfConvertActorId === clientId && room.wildWolfConvertRequestedTonight) {
+      room.wildWolfConvertTargetId = targetId;
+      emitWildWolfConversionState(roomId, room);
+    }
 
     ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes);
   });
@@ -2852,7 +3037,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     const room = rooms[roomId];
     if (!room) return;
 
-    if (!isWolfRole(room.playerRoles?.[clientId])) return;
+    if (!isWolfAlignedPlayer(room, clientId)) return;
     if (room.phase !== "night") return;
     if (!canPerformNightRoleAction(room, clientId, "Sói")) return;
 

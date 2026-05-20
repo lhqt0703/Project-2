@@ -17,7 +17,6 @@ import {
   getSpiritWolfId,
   isSpiritWolfAlive,
   isWolfAlignedPlayer,
-  isWolfRole,
   resetNightTurnState,
 } from "./roomState.js";
 import { ensureRoomGameRules, type NightActionRole, type Room } from "./serverTypes.js";
@@ -226,8 +225,8 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     if (timedOut && !room.spiritWolfDecisionMade && pendingTargetId) {
       room.spiritWolfDecisionMade = true;
       room.spiritWolfChoseSave = false;
-      appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", saved: false, timedOut: true });
       const swid = getSpiritWolfId(room);
+      appendLogEntry(room, { type: "spirit_wolf_decision", phase: "night", actorId: swid, saved: false, timedOut: true });
       if (swid) {
         ctx.io.to(swid).emit("spiritWolfDecisionRecorded", { saved: false });
       }
@@ -317,6 +316,8 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       maxTargets: room.wolfBonusBiteThisNight ? 2 : 1,
       resetVotes: initializeVotes,
       wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
+      wildWolfConvertAvailable: room.wildWolfConvertAvailableTonight === true,
+      wildWolfConvertRequested: room.wildWolfConvertRequestedTonight === true,
     });
 
     ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
@@ -621,6 +622,33 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       selectedByByTarget[targetId] = selectedBy;
     }
     appendLogEntry(room, { type: "wolf_result", phase: "night", targetIds: wolfTargets, selectedByByTarget });
+
+    const wildConversionTargetId =
+      room.wildWolfConvertRequestedTonight &&
+      room.wildWolfConvertAvailableTonight &&
+      !room.wildWolfConvertUsed
+        ? room.wildWolfConvertTargetId || null
+        : null;
+    const wildConversionTargetWasBitten = !!wildConversionTargetId && wolfTargets.includes(wildConversionTargetId);
+    if (
+      room.wildWolfConvertRequestedTonight &&
+      room.wildWolfConvertAvailableTonight &&
+      !room.wildWolfConvertUsed &&
+      (!wildConversionTargetId || !wildConversionTargetWasBitten)
+    ) {
+      appendLogEntry(room, {
+        type: "wild_wolf_conversion",
+        phase: "night",
+        actorId: room.wildWolfConvertActorId || null,
+        targetId: wildConversionTargetId,
+        success: false,
+        previousTargetRole: wildConversionTargetId ? room.playerRoles?.[wildConversionTargetId] || null : null,
+        reason: "no_target",
+      });
+      room.wildWolfConvertAvailableTonight = false;
+      room.wildWolfConvertRequestedTonight = false;
+      room.wildWolfConvertActorId = null;
+    }
 
     if (rules.villageChiefKnowsWolfBite) {
       for (const targetId of wolfTargets) {

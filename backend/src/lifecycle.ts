@@ -1,6 +1,6 @@
 import type { ServerContext } from "./serverContext.js";
 import { ensureRoomGameRules, buildRoomGameRules, type Room } from "./serverTypes.js";
-import { clearGameTimers, clearTrialState, ensureWitchState, getParticipantCount, getParticipantPlayers, getParticipantIds, getSpiritWolfId, getWitches, isWolfRole, resetNightTurnState, getAlivePlayerIds, isWolfAlignedPlayer } from "./roomState.js";
+import { clearGameTimers, clearTrialState, ensureWitchState, getParticipantCount, getParticipantPlayers, getParticipantIds, getBanSoiId, getSpiritWolfId, getWildWolfId, getWitches, isWolfRole, resetNightTurnState, getAlivePlayerIds, isWolfAlignedPlayer } from "./roomState.js";
 import { RULES_RESTART_FADE_IN_MS, RULES_RESTART_FADE_OUT_MS, RULES_RESTART_HOLD_MS, RULES_RESTART_RESTART_AT_MS, TWO_HEARTS_NIGHT_LIMIT, initTwoHeartsForParticipants } from "./gameConfig.js";
 import { emitRolesRevealToSocket, toPublicRoom } from "./serverEmitters.js";
 import { dealRolesWithPendingAssignments } from "./roleAssignment.js";
@@ -185,6 +185,7 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
       const role: string = room.playerRoles![player.id] || "";
       room.playerRoles![player.id] = role;
       ctx.io.to(player.id).emit("yourRole", role);
+      ctx.io.to(player.id).emit("wildWolfConvertedState", { converted: false });
     });
     room.players = room.players.map((p) => ({ ...p, inGame: p.id !== room.hostId }));
 
@@ -216,6 +217,7 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.privateHeartVisiblePlayerIds = [];
     room.playerHeartShakeIds = [];
     room.protectedTonight = null;
+    room.protectedTonightBy = null;
     room.protectedTonightAt = null;
     room.lastProtected = null;
     room.seerUsedTonight = {};
@@ -261,9 +263,17 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
     room.spiritWolfDecisionDeadline = null;
-    room.banSoiId = null;
+    room.wildWolfConvertedPlayerIds = [];
+    room.banSoiId = getBanSoiId(room);
     room.banSoiWolfAligned = false;
     room.banSoiWolfAlignedPending = false;
+    room.wildWolfId = getWildWolfId(room);
+    room.wildWolfConvertReadyNextNight = false;
+    room.wildWolfConvertAvailableTonight = false;
+    room.wildWolfConvertRequestedTonight = false;
+    room.wildWolfConvertActorId = null;
+    room.wildWolfConvertTargetId = null;
+    room.wildWolfConvertUsed = false;
     room.villageChiefPendingWolfDeath = null;
     room.villageChiefExtraVoteAvailable = false;
     room.villageChiefExtraVoteReady = false;

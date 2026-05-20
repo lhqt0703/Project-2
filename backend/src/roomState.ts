@@ -1,8 +1,9 @@
 import { type Room, type NightActionRole } from "./serverTypes.js";
 
-const WOLF_ROLES = new Set(["Sói", "Sói con"]);
+const WOLF_ROLES = new Set(["Sói", "Sói con", "Sói Dại"]);
 const BAN_SOI_ROLE = "Bán sói";
 const SPIRIT_WOLF_ROLE = "Linh sói";
+const WILD_WOLF_ROLE = "Sói Dại";
 
 export function isWolfRole(role: string | undefined) {
   return !!role && WOLF_ROLES.has(role);
@@ -37,11 +38,28 @@ export function getSpiritWolfId(room: Room): string | null {
 
 export function getBanSoiId(room: Room): string | null {
   const cached = room.banSoiId;
-  if (cached && room.players.find((p) => p.id === cached) && room.playerRoles?.[cached] === BAN_SOI_ROLE) {
+  if (
+    cached &&
+    room.players.find((p) => p.id === cached) &&
+    room.playerRoles?.[cached] === BAN_SOI_ROLE &&
+    !isWildWolfConvertedPlayer(room, cached)
+  ) {
     return cached;
   }
-  const found = room.players.find((p) => room.playerRoles?.[p.id] === BAN_SOI_ROLE)?.id || null;
+  const found = room.players.find((p) =>
+    room.playerRoles?.[p.id] === BAN_SOI_ROLE && !isWildWolfConvertedPlayer(room, p.id)
+  )?.id || null;
   room.banSoiId = found;
+  return found;
+}
+
+export function getWildWolfId(room: Room): string | null {
+  const cached = room.wildWolfId;
+  if (cached && room.players.find((p) => p.id === cached) && room.playerRoles?.[cached] === WILD_WOLF_ROLE) {
+    return cached;
+  }
+  const found = room.players.find((p) => room.playerRoles?.[p.id] === WILD_WOLF_ROLE)?.id || null;
+  room.wildWolfId = found;
   return found;
 }
 
@@ -51,11 +69,34 @@ export function isSpiritWolfAlive(room: Room) {
   return !(room.deadPlayers || []).includes(id);
 }
 
+export function isWildWolfAlive(room: Room) {
+  const id = getWildWolfId(room);
+  if (!id) return false;
+  return !(room.deadPlayers || []).includes(id);
+}
+
+export function isWildWolfConvertedPlayer(room: Room, playerId: string) {
+  return (room.wildWolfConvertedPlayerIds || []).includes(playerId);
+}
+
 export function isWolfAlignedPlayer(room: Room, playerId: string) {
   const role = room.playerRoles?.[playerId];
+  if (isWildWolfConvertedPlayer(room, playerId)) return true;
   if (isWolfRole(role)) return true;
   if (role === BAN_SOI_ROLE) return room.banSoiWolfAligned === true && getBanSoiId(room) === playerId;
   return room.spiritWolfWolfAligned === true && getSpiritWolfId(room) === playerId;
+}
+
+export function markWildWolfConversionReadyIfWolfDied(room: Room, playerId: string) {
+  if (room.wildWolfConvertUsed) return;
+  const wildWolfId = getWildWolfId(room);
+  if (!wildWolfId) return;
+
+  const role = room.playerRoles?.[playerId];
+  const wasWolfAligned = isWolfRole(role) || isWolfAlignedPlayer(room, playerId);
+  if (!wasWolfAligned) return;
+
+  room.wildWolfConvertReadyNextNight = true;
 }
 
 export function isPlayerConnected(room: Room, playerId: string) {
@@ -209,6 +250,14 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.killedTonightExtra = null;
   room.wolfBonusBiteThisNight = false;
   room.wolfExtraBiteNextNight = false;
+  room.wildWolfId = null;
+  room.wildWolfConvertReadyNextNight = false;
+  room.wildWolfConvertAvailableTonight = false;
+  room.wildWolfConvertRequestedTonight = false;
+  room.wildWolfConvertActorId = null;
+  room.wildWolfConvertTargetId = null;
+  room.wildWolfConvertUsed = false;
+  room.wildWolfConvertedPlayerIds = [];
 
   room.dayVoters = [];
   room.dayVotes = {};
@@ -224,6 +273,7 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.privateHeartVisiblePlayerIds = [];
   room.playerHeartShakeIds = [];
   room.protectedTonight = null;
+  room.protectedTonightBy = null;
   room.protectedTonightAt = null;
   room.lastProtected = null;
   room.seerUsedTonight = {};

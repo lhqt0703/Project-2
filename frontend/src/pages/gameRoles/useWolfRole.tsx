@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { socket, clientId } from "../../socket";
 import type { GamePhase } from "./socketEvents";
 
@@ -9,6 +9,9 @@ type RoomLike = {
   wolfVotes?: Record<string, string | null>;
   deadPlayers?: string[];
   banSoiWolfAligned?: boolean;
+  wildWolfConvertAvailableTonight?: boolean;
+  wildWolfConvertRequestedTonight?: boolean;
+  wildWolfConvertedSelf?: boolean;
 };
 
 export function useWolfRole({
@@ -45,13 +48,17 @@ export function useWolfRole({
   const [localSelectedTarget, setLocalSelectedTarget] = useState<string | null>(null);
   const [localSelectedTarget2, setLocalSelectedTarget2] = useState<string | null>(null);
   const [hasSubmittedLock, setHasSubmittedLock] = useState(false);
+  const hasSubmittedLockRef = useRef(false);
   const [now, setNow] = useState(Date.now());
 
   const isBanSoiAligned = room.banSoiWolfAligned === true;
+  const isWildWolfConverted = room.wildWolfConvertedSelf === true;
   const isWolfTeam = useMemo(() => {
-    if (role === "Sói" || role === "Sói con") return true;
-    return role === "Bán sói" && isBanSoiAligned;
-  }, [isBanSoiAligned, role]);
+    if (role === "Sói" || role === "Sói con" || role === "Sói Dại") return true;
+    return role === "Bán sói" && (isBanSoiAligned || isWildWolfConverted);
+  }, [isBanSoiAligned, isWildWolfConverted, role]);
+  const isWildWolf = role === "Sói Dại";
+  const wildWolfConversionRequested = room.wildWolfConvertRequestedTonight === true;
 
   useEffect(() => {
     // Chỉ tick khi cần hiển thị countdown cho sói
@@ -80,6 +87,7 @@ export function useWolfRole({
     if (isWolfTeam && isWolfTurnActive) {
       setLocalSelectedTarget(null);
       setLocalSelectedTarget2(null);
+      hasSubmittedLockRef.current = false;
       setHasSubmittedLock(false);
     }
   }, [isWolfTeam, isWolfTurnActive]);
@@ -160,6 +168,7 @@ export function useWolfRole({
   const resetOnPhaseChange = useCallback((_nextPhase: GamePhase) => {
     setLocalSelectedTarget(null);
     setLocalSelectedTarget2(null);
+    hasSubmittedLockRef.current = false;
     // wolf state is owned by parent sync layer
   }, []);
 
@@ -169,6 +178,32 @@ export function useWolfRole({
         {wolfMaxTargets >= 2 && (
           <div style={{ marginBottom: 8 }}>
             <b>Đêm nay phe Sói được cắn 2 người</b> (do Sói con đã chết).
+          </div>
+        )}
+        {isWildWolf && room.wildWolfConvertAvailableTonight && (
+          <div style={{ marginBottom: 8 }}>
+            <button
+              disabled={!canAct || isLocked || hasSubmittedLock || deadlineReached}
+              onClick={() => {
+                if (isLocked || hasSubmittedLockRef.current || deadlineReached) return;
+                if (!wildWolfConversionRequested && !localSelectedTarget) {
+                  alert("Bạn cần chọn mục tiêu cắn chính trước.");
+                  return;
+                }
+                socket.emit("wildWolfToggleConversion", { roomId, active: !wildWolfConversionRequested });
+              }}
+              style={{
+                padding: "8px 12px",
+                cursor: !canAct || isLocked || hasSubmittedLock || deadlineReached ? "not-allowed" : "pointer",
+                opacity: !canAct || isLocked || hasSubmittedLock || deadlineReached ? 0.7 : 1,
+                marginRight: 8,
+              }}
+            >
+              {wildWolfConversionRequested ? "Hủy biến đổi" : "Biến mục tiêu cắn thành Sói thường"}
+            </button>
+            {wildWolfConversionRequested && (
+              <span style={{ fontWeight: 700 }}>Đã chọn biến đổi mục tiêu cắn chính.</span>
+            )}
           </div>
         )}
         <button
@@ -188,12 +223,16 @@ export function useWolfRole({
             }
             const name1 = room.players.find(p => p.id === localSelectedTarget)?.name || "đối tượng";
             const name2 = localSelectedTarget2 ? (room.players.find(p => p.id === localSelectedTarget2)?.name || "đối tượng") : null;
+            const wildWolfNote = isWildWolf && wildWolfConversionRequested
+              ? "\n\nSói Dại sẽ biến mục tiêu cắn chính thành Sói thường nếu vết cắn được tính."
+              : "";
             const ok = window.confirm(
               name2
-                ? `Bạn có chắc chắn muốn cắn ${name1} và ${name2}?`
-                : `Bạn có chắc chắn muốn cắn ${name1}?`
+                ? `Bạn có chắc chắn muốn cắn ${name1} và ${name2}?${wildWolfNote}`
+                : `Bạn có chắc chắn muốn cắn ${name1}?${wildWolfNote}`
             );
             if (ok) {
+              hasSubmittedLockRef.current = true;
               setHasSubmittedLock(true);
               socket.emit("wolfLockVote", { roomId });
             }

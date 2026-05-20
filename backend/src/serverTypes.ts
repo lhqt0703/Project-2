@@ -84,6 +84,7 @@ export interface Room {
   trialInteractionQueuedIds?: string[];
   trialVotes?: Record<string, "live" | "die" | null>;
   protectedTonight?: string | null;
+  protectedTonightBy?: string | null;
   lastProtected?: string | null;
   seerUsedTonight?: Record<string, number>;
   witchPotions?: Record<string, { healUsed: boolean; poisonUsed: boolean }>;
@@ -129,6 +130,14 @@ export interface Room {
   banSoiId?: string | null;
   banSoiWolfAligned?: boolean;
   banSoiWolfAlignedPending?: boolean;
+  wildWolfId?: string | null;
+  wildWolfConvertReadyNextNight?: boolean;
+  wildWolfConvertAvailableTonight?: boolean;
+  wildWolfConvertRequestedTonight?: boolean;
+  wildWolfConvertActorId?: string | null;
+  wildWolfConvertTargetId?: string | null;
+  wildWolfConvertUsed?: boolean;
+  wildWolfConvertedPlayerIds?: string[];
   villageChiefPendingWolfDeath?: { playerId: string; bittenNight: number; attackerIds: string[] } | null;
   villageChiefExtraVoteAvailable?: boolean;
   villageChiefExtraVoteReady?: boolean;
@@ -264,6 +273,7 @@ export type EliminationCause =
 export type GameLogEntry =
   | { type: "wolf_vote"; phase: GameLogEntryPhase; voteBreakdown: WolfVoteBreakdown[] }
   | { type: "day_vote"; phase: GameLogEntryPhase; voteBreakdown: WolfVoteBreakdown[] }
+  | { type: "day_vote_skipped"; phase: GameLogEntryPhase }
   | { type: "wolf_result"; phase: GameLogEntryPhase; targetIds: string[]; selectedByByTarget?: Record<string, string[]> }
   | { type: "day_result"; phase: GameLogEntryPhase; targetId: string | null; tie?: boolean }
   | { type: "trial_started"; phase: GameLogEntryPhase; targetId: string }
@@ -286,16 +296,17 @@ export type GameLogEntry =
   | { type: "love_escape_missed"; phase: GameLogEntryPhase; actorId: string; partnerId: string }
   | { type: "love_escape"; phase: GameLogEntryPhase; targetIds: string[] }
   | { type: "love_link_death"; phase: GameLogEntryPhase; sourceId: string; targetId: string }
-  | { type: "spirit_wolf_decision"; phase: GameLogEntryPhase; saved: boolean; timedOut?: boolean }
+  | { type: "spirit_wolf_decision"; phase: GameLogEntryPhase; actorId?: string | null; saved: boolean; timedOut?: boolean }
   | { type: "ban_soi_aligned"; phase: GameLogEntryPhase; targetId: string }
-  | { type: "saved_by_guardian"; phase: GameLogEntryPhase; targetIds: string[] }
+  | { type: "wild_wolf_conversion"; phase: GameLogEntryPhase; actorId: string | null; targetId: string | null; success: boolean; previousTargetRole?: string | null; savedByGuardian?: boolean; savedByWitch?: boolean; reason?: "saved" | "no_target" }
+  | { type: "saved_by_guardian"; phase: GameLogEntryPhase; targetIds: string[]; actorId?: string | null }
   | { type: "saved_by_witch"; phase: GameLogEntryPhase; targetIds: string[] }
   | { type: "eliminated"; phase: GameLogEntryPhase; targetIds: string[]; causesByTarget?: Record<string, EliminationCause[]> }
   | { type: "no_death"; phase: GameLogEntryPhase }
   | { type: "elemental_buff"; phase: GameLogEntryPhase; buffId: ElementalBuffId | null; tier: number; randomTieBreak?: boolean; tiedBuffIds?: ElementalBuffId[] }
   | { type: "elemental_guess"; phase: GameLogEntryPhase; actorId: string; targetId: string; isCorrect: boolean }
-  | { type: "elemental_guess_summary"; phase: GameLogEntryPhase; correctCount: number; totalCount: number; triggeredBuffVote: boolean; nextBuffVoteNight?: number }
-  | { type: "elemental_buff_vote"; phase: GameLogEntryPhase; voteBreakdown: { buffId: ElementalBuffId; voterIds: string[] }[] }
+  | { type: "elemental_guess_summary"; phase: GameLogEntryPhase; correctCount: number; totalCount: number; correctIds?: string[]; triggeredBuffVote: boolean; nextBuffVoteNight?: number }
+  | { type: "elemental_buff_vote"; phase: GameLogEntryPhase; voteBreakdown: { buffId: ElementalBuffId; voterIds: string[] }[]; chosenBuffId?: ElementalBuffId | null; tier?: number; randomTieBreak?: boolean; tiedBuffIds?: ElementalBuffId[]; chosenVoterIds?: string[] }
   | { type: "host_ended_game"; phase: GameLogEntryPhase };
 
 export type GameLogNight = {

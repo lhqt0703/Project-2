@@ -303,9 +303,9 @@ export default function GameRulesModal({
 
           <label style={rowStyle()}>
             <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Bán sói sẽ vẫn bị biến thành phe sói cho dù cứu được vết cắn</div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Bán sói / Sói Dại vẫn chuyển phe mục tiêu dù vết cắn được cứu</div>
               <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Mặc định tắt. Khi bật, nếu Bán sói bị cắn trong đêm và được cứu hoặc được Bảo vệ trúng, nó vẫn sẽ chuyển phe ở đêm kế tiếp.
+                Mặc định tắt. Khi bật, nếu Bán sói bị cắn được cứu / được Bảo vệ trúng thì Bán sói vẫn chuyển phe; nếu mục tiêu Sói Dại biến đổi được cứu / được Bảo vệ trúng thì mục tiêu vẫn trở thành Sói thường.
               </div>
             </div>
             <input

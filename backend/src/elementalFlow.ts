@@ -63,11 +63,6 @@ export function createElementalFlow(ctx: ServerContext) {
         .map(([voterId]) => voterId);
       buffVoteBreakdown.push({ buffId, voterIds });
     }
-    appendLogEntry(room, {
-      type: "elemental_buff_vote",
-      phase: "night",
-      voteBreakdown: buffVoteBreakdown,
-    });
 
     let chosen: ElementalBuffId | null = null;
     let wasRandom = false;
@@ -81,6 +76,9 @@ export function createElementalFlow(ctx: ServerContext) {
       tiedBuffIds = wasRandom ? finalists : [];
       chosen = finalists[Math.floor(Math.random() * finalists.length)] || null;
     }
+    const chosenVoterIds = chosen
+      ? (buffVoteBreakdown.find((item) => item.buffId === chosen)?.voterIds || [])
+      : [];
 
     room.elementalSelectedBuffId = chosen;
     const appliesNight = chosen
@@ -95,12 +93,14 @@ export function createElementalFlow(ctx: ServerContext) {
     room.elementalBuffVotesTonight = {};
 
     appendLogEntry(room, {
-      type: "elemental_buff",
+      type: "elemental_buff_vote",
       phase: "night",
-      buffId: chosen,
+      voteBreakdown: buffVoteBreakdown,
+      chosenBuffId: chosen,
       tier: chosen ? availableTier : 0,
       randomTieBreak: wasRandom,
       tiedBuffIds,
+      chosenVoterIds,
     });
 
     broadcastElementalBuffSelection(roomId, {

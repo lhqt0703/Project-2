@@ -22,7 +22,7 @@ interface PlayerPosition {
 }
 
 const NIGHT_ACTION_ROLE_ORDER: NightActionRole[] = ["Thần tình yêu", "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri"];
-const WOLF_ROLES = new Set(["Sói", "Sói con", "Bán sói"]);
+const WOLF_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
 
 function getAvailableNightActionRoles(selectedRoles?: string[]) {
   const roles = selectedRoles || [];

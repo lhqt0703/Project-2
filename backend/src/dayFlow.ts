@@ -346,8 +346,14 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
 
     const votes = room.dayVotes || {};
     const activeVoters = getActiveDayVoters(room);
+    const dayVoteBreakdown = buildDayVoteBreakdown(room, votes);
+    const voteWasSkipped = dayVoteBreakdown.type === "day_vote" && dayVoteBreakdown.voteBreakdown.length === 0;
 
-    appendLogEntry(room, buildDayVoteBreakdown(room, votes));
+    if (voteWasSkipped) {
+      appendLogEntry(room, { type: "day_vote_skipped", phase: "day" });
+    } else {
+      appendLogEntry(room, dayVoteBreakdown);
+    }
 
     const counts: Record<string, number> = {};
     for (const voterId of activeVoters) {
@@ -368,7 +374,9 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
       }
     }
 
-    appendLogEntry(room, { type: "day_result", phase: "day", targetId: executedId, tie });
+    if (!voteWasSkipped) {
+      appendLogEntry(room, { type: "day_result", phase: "day", targetId: executedId, tie });
+    }
 
     for (const voterId of activeVoters) {
       room.dayLocked = room.dayLocked || {};

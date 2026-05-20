@@ -15,11 +15,11 @@ import {
 } from "./serverTypes.js";
 import {
   ensureWitchState,
+  getActiveWolves,
   getAlivePlayerIds,
   getSpiritWolfId,
   getWitches,
   isWolfAlignedPlayer,
-  isWolfRole,
 } from "./roomState.js";
 import { LOVE_ROLE, emitLoveStateToPlayer, isLovePairMemberAwayAt } from "./love.js";
 import { PROTECTOR_ROLE } from "./specialRoles.js";
@@ -48,6 +48,7 @@ export function toPublicRoom(room: Room) {
     loveEscapeActivatedAt: _loveEscapeActivatedAt,
     wolfAttackResolvedAt: _wolfAttackResolvedAt,
     protectedTonightAt: _protectedTonightAt,
+    protectedTonightBy: _protectedTonightBy,
     witchHealTargetAt: _witchHealTargetAt,
     witchPoisonTargetAt: _witchPoisonTargetAt,
     gameLog: _gameLog,
@@ -66,11 +67,19 @@ export function toPublicRoom(room: Room) {
     pendingRoleAssignments: _pendingRoleAssignments,
     pendingRoleBlocks: _pendingRoleBlocks,
     wolfDeadline: _wolfDeadline,
+    wildWolfId: _wildWolfId,
+    wildWolfConvertReadyNextNight: _wildWolfConvertReadyNextNight,
+    wildWolfConvertAvailableTonight: _wildWolfConvertAvailableTonight,
+    wildWolfConvertRequestedTonight: _wildWolfConvertRequestedTonight,
+    wildWolfConvertActorId: _wildWolfConvertActorId,
+    wildWolfConvertTargetId: _wildWolfConvertTargetId,
+    wildWolfConvertUsed: _wildWolfConvertUsed,
     killedTonight: _killedTonight,
     killedTonightExtra: _killedTonightExtra,
     protectedTonight: _protectedTonight,
     lastProtected: _lastProtected,
     spiritWolfPendingPoisonedWolfId: _spiritWolfPendingPoisonedWolfId,
+    wildWolfConvertedPlayerIds: _wildWolfConvertedPlayerIds,
     hunterShotPlayerIds: _hunterShotPlayerIds,
     elementalTargetTonight: _elementalTargetTonight,
     elementalCorrectGuessPlayerIdsTonight: _elementalCorrectGuessPlayerIdsTonight,
@@ -357,10 +366,34 @@ export function syncPrivateRoleStateForSocket(
   if (!role) return;
 
   socket.emit("yourRole", role);
+  socket.emit("wildWolfConvertedState", {
+    converted: (room.wildWolfConvertedPlayerIds || []).includes(playerId),
+  });
   emitLoveStateToPlayer(ctx, roomId, room, playerId);
 
   if (isWolfAlignedPlayer(room, playerId)) {
     socket.join(`wolves_${roomId}`);
+    const rules = ensureRoomGameRules(room);
+    const wolfPhaseActive =
+      room.phase === "night" &&
+      !room.wolfVoteResolvedTonight &&
+      (rules.allNightActionsSimultaneous || room.nightTurnRole === "Sói");
+    if (wolfPhaseActive) {
+      const wolves = room.players.filter((p) => isWolfAlignedPlayer(room, p.id));
+      socket.emit("wolfPhaseStarted", {
+        wolves: wolves.map((w) => w.id),
+        activeWolves: getActiveWolves(room),
+        deadline: room.wolfDeadline ?? null,
+        maxTargets: room.wolfBonusBiteThisNight ? 2 : 1,
+        resetVotes: false,
+        wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
+        wildWolfConvertAvailable: room.wildWolfConvertAvailableTonight === true,
+        wildWolfConvertRequested: room.wildWolfConvertRequestedTonight === true,
+      });
+      socket.emit("wolfVotesUpdated", room.wolfVotes || {});
+      socket.emit("wolfVotes2Updated", room.wolfVotes2 || {});
+      socket.emit("wolfLockedUpdated", room.wolfLocked || {});
+    }
   } else {
     socket.leave(`wolves_${roomId}`);
   }

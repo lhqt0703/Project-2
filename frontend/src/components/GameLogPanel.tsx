@@ -312,7 +312,6 @@ function RoleSpan({
           cursor: "pointer",
           fontWeight: 600,
           color: "var(--accent, #6c5ce7)",
-          textDecoration: "underline",
           textDecorationStyle: "dotted",
           opacity: dimmed ? 0.28 : 1,
           transition: "opacity 180ms ease",
@@ -478,7 +477,7 @@ function LogEntryLine({
       }
       return (
         <li style={lineStyle}>
-          Biểu quyết ngày:{" "}
+          Người bị nghi ngờ:{" "}
           {entry.voteBreakdown.map((v, idx) => {
             const selectedByText = `Bị vote bởi: ${getRolePlayersText(v.voterIds, rolesByPlayerId, playerNamesById)}`;
             return (
@@ -508,11 +507,13 @@ function LogEntryLine({
       if (!entry.targetIds || entry.targetIds.length === 0) {
         return <li style={lineStyle}>Phe sói không thống nhất được sẽ cắn ai</li>;
       }
-      return (
-        <li style={lineStyle}>
-          Sói cắn:{" "}
+      {
+        const villageChiefDelayedIds = (entry.villageChiefDelayedTargetIds || []).filter((pid) => entry.targetIds.includes(pid));
+        const villageChiefDelayedSet = new Set(villageChiefDelayedIds);
+        const normalTargetIds = entry.targetIds.filter((pid) => !villageChiefDelayedSet.has(pid));
+        const renderTargetList = (playerIds: string[]) => (
           <RolesListSpan
-            playerIds={entry.targetIds}
+            playerIds={playerIds}
             rolesByPlayerId={rolesByPlayerId}
             playerNamesById={playerNamesById}
             getTooltipDetail={(pid) => {
@@ -526,8 +527,36 @@ function LogEntryLine({
             onEliminationFocusChange={onEliminationFocusChange}
             onHighlightPlayer={onHighlightPlayer}
           />
-        </li>
-      );
+        );
+
+        return (
+          <li style={lineStyle}>
+            {normalTargetIds.length > 0 && (
+              <>
+                {renderTargetList(normalTargetIds)}
+                {" đã bị cắn"}
+              </>
+            )}
+            {normalTargetIds.length > 0 && villageChiefDelayedIds.length > 0 ? "; " : null}
+            {villageChiefDelayedIds.map((pid, idx) => (
+              <span key={pid}>
+                <RoleSpan
+                  playerId={pid}
+                  rolesByPlayerId={rolesByPlayerId}
+                  playerNamesById={playerNamesById}
+                  secondaryHighlightIds={entry.selectedByByTarget?.[pid] || []}
+                  displayMode="role-player"
+                  popupMode="none"
+                  onEliminationFocusChange={onEliminationFocusChange}
+                  onHighlightPlayer={onHighlightPlayer}
+                />
+                {" đã bị cắn và chỉ còn cầm cự được đến đêm sau"}
+                {idx < villageChiefDelayedIds.length - 1 ? "; " : null}
+              </span>
+            ))}
+          </li>
+        );
+      }
 
     case "day_result":
       if (!entry.targetId) {
@@ -668,23 +697,14 @@ function LogEntryLine({
     case "village_chief_revealed":
       return (
         <li style={lineStyle}>
-          Trưởng làng lộ diện và sống sót sau biểu quyết:{" "}
-          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
-        </li>
-      );
-
-    case "village_chief_bitten_warning":
-      return (
-        <li style={lineStyle}>
-          Trưởng làng bị sói cắn và còn 1 tim:{" "}
-          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={entry.attackerIds || []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> lộ diện bản thân là Trưởng Làng và tiếp tục sống
         </li>
       );
 
     case "village_chief_delayed_death":
       return (
         <li style={lineStyle}>
-          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã hết máu
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã hết máu
         </li>
       );
 
@@ -917,6 +937,7 @@ function LogEntryLine({
       return <li style={{ ...lineStyle, opacity: dimmed ? 0.28 : 0.75 }}>Đêm qua không ai bị loại</li>;
 
     case "elemental_guess": {
+      const targetRoleTooltip = `${getPlayerName(entry.targetId, playerNamesById)} là ${getRoleName(entry.targetId, rolesByPlayerId)}`;
       return (
         <li style={lineStyle}>
           <RoleSpan
@@ -928,26 +949,18 @@ function LogEntryLine({
             secondaryHighlightIds={[entry.targetId]}
             onEliminationFocusChange={onEliminationFocusChange}
             onHighlightPlayer={onHighlightPlayer}
-          />{" "}chọn{" "}
+          />{" nghĩ "}
           <RoleSpan
             playerId={entry.targetId}
             rolesByPlayerId={rolesByPlayerId}
             playerNamesById={playerNamesById}
             displayMode="player"
-            popupMode="none"
+            popupMode="tooltipOnly"
+            tooltipDetail={targetRoleTooltip}
             secondaryHighlightIds={[entry.actorId]}
             onEliminationFocusChange={onEliminationFocusChange}
             onHighlightPlayer={onHighlightPlayer}
-          />{" "} - {entry.isCorrect ? "✅" : "❌"}{" "}
-          <RoleSpan
-            playerId={entry.targetId}
-            rolesByPlayerId={rolesByPlayerId}
-            playerNamesById={playerNamesById}
-            popupMode="none"
-            secondaryHighlightIds={[entry.actorId]}
-            onEliminationFocusChange={onEliminationFocusChange}
-            onHighlightPlayer={onHighlightPlayer}
-          />
+          />{" là dân làng nguyên tố"} - {entry.isCorrect ? "✅" : "❌"}{" "}
         </li>
       );
     }
@@ -977,7 +990,7 @@ function LogEntryLine({
 
     case "elemental_buff_vote": {
       if (!entry.chosenBuffId || !entry.tier) {
-        return <li style={lineStyle}>Không có hiệu ứng hỗ trợ từ dân làng nguyên tố nào được kích hoạt</li>;
+        return <li style={lineStyle}>Không hiệu ứng hỗ trợ nào được chọn</li>;
       }
       const chosenVoterIds =
         entry.chosenVoterIds ||

@@ -1078,9 +1078,47 @@ export default function Game() {
     }
     return null;
   }, [companionAssetCandidates, normalizeRoleName, rolePortraitByNameForGame]);
+  const showVillageChiefDyingFrame =
+    phase === "night" &&
+    !isHost &&
+    role === "Trưởng làng" &&
+    !!clientId &&
+    !sync.gameEnded &&
+    (room?.villageChiefDyingFramePlayerIds || []).includes(clientId);
 
   return (
     <div className={`page-shell game-page${shouldShowRolePortrait ? " has-role-portrait" : ""}`} style={{ padding: "1.25rem"/* , height: "100dvh", overflow: "hidden" */ }}>
+      {showVillageChiefDyingFrame && (
+        <>
+          <style>{`
+            @keyframes villageChiefDyingFramePulse {
+              0%, 100% {
+                opacity: 0.42;
+                box-shadow:
+                  inset 0 0 0 3px rgba(236, 58, 58, 0.62),
+                  inset 0 0 42px 12px rgba(236, 58, 58, 0.22);
+              }
+              50% {
+                opacity: 0.84;
+                box-shadow:
+                  inset 0 0 0 5px rgba(255, 79, 79, 0.9),
+                  inset 0 0 70px 20px rgba(255, 49, 49, 0.34);
+              }
+            }
+          `}</style>
+          <div
+            aria-hidden="true"
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 9997,
+              pointerEvents: "none",
+              borderRadius: 0,
+              animation: "villageChiefDyingFramePulse 1400ms ease-in-out infinite",
+            }}
+          />
+        </>
+      )}
       {!room && (
         <p>
           Hình như có gì đó sai sai... Lẽ ra bạn không nên thấy được những dòng này

@@ -83,6 +83,7 @@ import {
   TWO_HEARTS_NIGHT_LIMIT,
   initTwoHeartsForParticipants,
   getTwoHeartsWolfDamage,
+  isVillageChiefDelayedBiteNight,
 } from "./gameConfig.js";
 import {
   dealRolesWithPendingAssignments,
@@ -532,12 +533,19 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       };
 
       if (isVillageChief(room, targetId)) {
-        room.villageChiefPendingWolfDeath = {
-          playerId: targetId,
-          bittenNight: room.nightCount || 0,
-          attackerIds: wolfCause.attackerIds,
-        };
-        continue;
+        if (isVillageChiefDelayedBiteNight(room)) {
+          if (room.sharedHeartsVisible) {
+            room.playerHearts = room.playerHearts || {};
+            const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.playerHearts[targetId] ?? TWO_HEARTS_MAX_HP));
+            room.playerHearts[targetId] = Math.max(1, currentHp - 1);
+          }
+          room.villageChiefPendingWolfDeath = {
+            playerId: targetId,
+            bittenNight: room.nightCount || 0,
+            attackerIds: wolfCause.attackerIds,
+          };
+          continue;
+        }
       }
 
       const protectorSave = tryUseProtectorImmortality(room, targetId, wolfCause);
@@ -605,7 +613,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         resolveHunterShotsForDeaths(ctx, roomId, room, eliminatedIds, "night");
       }
     } else if (hadDeathThreat || savedByGuardianIds.length || savedByWitchIds.length) {
-      appendLogEntry(room, { type: "no_death", phase: "night" });
+      appendLogEntry(room, { type: "no_death", phase: "day" });
     }
 
     if (room.loveEscapeActiveTonight) {
@@ -628,6 +636,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
     room.privateHeartVisiblePlayerIds = (room.privateHeartVisiblePlayerIds || []).filter((id) => id !== pending.playerId);
     room.playerHeartShakeIds = (room.playerHeartShakeIds || []).filter((id) => id !== pending.playerId);
+    room.villageChiefDyingFramePlayerIds = (room.villageChiefDyingFramePlayerIds || []).filter((id) => id !== pending.playerId);
 
     if ((room.deadPlayers || []).includes(pending.playerId)) return;
     if (!room.players.find((player) => player.id === pending.playerId)) return;
@@ -1219,6 +1228,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.privatePlayerHearts = {};
     room.privateHeartVisiblePlayerIds = [];
     room.playerHeartShakeIds = [];
+    room.villageChiefDyingFramePlayerIds = [];
     room.villageChiefPendingWolfDeath = null;
     room.villageChiefExtraVoteAvailable = false;
     room.villageChiefExtraVoteReady = false;
@@ -1573,6 +1583,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.privatePlayerHearts = {};
     room.privateHeartVisiblePlayerIds = [];
     room.playerHeartShakeIds = [];
+    room.villageChiefDyingFramePlayerIds = [];
     room.protectedTonight = null;
     room.protectedTonightBy = null;
     room.protectedTonightAt = null;
@@ -1933,6 +1944,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       room.privatePlayerHearts = {};
       room.privateHeartVisiblePlayerIds = [];
       room.playerHeartShakeIds = [];
+      room.villageChiefDyingFramePlayerIds = [];
       resolveVillageChiefDelayedWolfDeath(roomId, room);
       resolveNightDeaths(roomId, room);
 
@@ -2008,6 +2020,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       room.privatePlayerHearts = {};
       room.privateHeartVisiblePlayerIds = [];
       room.playerHeartShakeIds = [];
+      room.villageChiefDyingFramePlayerIds = [];
       if (
         rulesForChief.villageChiefKnowsWolfBite &&
         room.villageChiefPendingWolfDeath &&
@@ -2652,6 +2665,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     }
     room.privateHeartVisiblePlayerIds = (room.privateHeartVisiblePlayerIds || []).filter((id) => id !== targetId);
     room.playerHeartShakeIds = (room.playerHeartShakeIds || []).filter((id) => id !== targetId);
+    room.villageChiefDyingFramePlayerIds = (room.villageChiefDyingFramePlayerIds || []).filter((id) => id !== targetId);
     if (room.villageChiefPendingWolfDeath?.playerId === targetId) {
       room.villageChiefPendingWolfDeath = null;
     }

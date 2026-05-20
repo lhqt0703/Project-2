@@ -272,6 +272,7 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.privatePlayerHearts = {};
   room.privateHeartVisiblePlayerIds = [];
   room.playerHeartShakeIds = [];
+  room.villageChiefDyingFramePlayerIds = [];
   room.protectedTonight = null;
   room.protectedTonightBy = null;
   room.protectedTonightAt = null;

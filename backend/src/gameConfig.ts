@@ -38,6 +38,12 @@ export function getTwoHeartsWolfDamage(room: Room) {
   return nightCount >= TWO_HEARTS_NIGHT_LIMIT ? 2 : 1;
 }
 
+export function isVillageChiefDelayedBiteNight(room: Room) {
+  const rules = ensureRoomGameRules(room);
+  if (!rules.twoHeartsFirstTwoNights) return true;
+  return (room.nightCount || 0) >= TWO_HEARTS_NIGHT_LIMIT;
+}
+
 export function clampNonWolfNightActionDurationSec(value: unknown) {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return 20;

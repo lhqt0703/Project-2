@@ -8,7 +8,7 @@ import {
   getWolfTurnDurationMs,
   isElementalRoleTurn,
 } from "./serverEmitters.js";
-import { clampNonWolfNightActionDurationSec, clampWolfNightActionDurationSec } from "./gameConfig.js";
+import { clampNonWolfNightActionDurationSec, clampWolfNightActionDurationSec, isVillageChiefDelayedBiteNight } from "./gameConfig.js";
 import { ELEMENTAL_GROUP_ROLE } from "./elemental.js";
 import {
   clearNightTurnTimer,
@@ -621,7 +621,16 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       const selectedBy = activeWolves.filter((wid) => votes[wid] === targetId || votes2[wid] === targetId);
       selectedByByTarget[targetId] = selectedBy;
     }
-    appendLogEntry(room, { type: "wolf_result", phase: "night", targetIds: wolfTargets, selectedByByTarget });
+    const villageChiefDelayedTargetIds = wolfTargets.filter((targetId) =>
+      isVillageChief(room, targetId) && isVillageChiefDelayedBiteNight(room)
+    );
+    appendLogEntry(room, {
+      type: "wolf_result",
+      phase: "night",
+      targetIds: wolfTargets,
+      selectedByByTarget,
+      villageChiefDelayedTargetIds,
+    });
 
     const wildConversionTargetId =
       room.wildWolfConvertRequestedTonight &&
@@ -650,20 +659,14 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       room.wildWolfConvertActorId = null;
     }
 
-    if (rules.villageChiefKnowsWolfBite) {
-      for (const targetId of wolfTargets) {
-        if (!isVillageChief(room, targetId)) continue;
+    if (rules.villageChiefKnowsWolfBite && villageChiefDelayedTargetIds.length) {
+      for (const targetId of villageChiefDelayedTargetIds) {
         if ((room.deadPlayers || []).includes(targetId)) continue;
         room.privatePlayerHearts = room.privatePlayerHearts || {};
         room.privatePlayerHearts[targetId] = 1;
         room.privateHeartVisiblePlayerIds = Array.from(new Set([...(room.privateHeartVisiblePlayerIds || []), targetId]));
         room.playerHeartShakeIds = (room.playerHeartShakeIds || []).filter((id) => id !== targetId);
-        appendLogEntry(room, {
-          type: "village_chief_bitten_warning",
-          phase: "night",
-          targetId,
-          attackerIds: selectedByByTarget[targetId] || [],
-        });
+        room.villageChiefDyingFramePlayerIds = Array.from(new Set([...(room.villageChiefDyingFramePlayerIds || []), targetId]));
       }
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     }

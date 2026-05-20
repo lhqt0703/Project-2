@@ -89,6 +89,7 @@ export interface RoomData {
   publicRevealedRolesByPlayerId?: Record<string, string>;
   privateHeartVisiblePlayerIds?: string[];
   playerHeartShakeIds?: string[];
+  villageChiefDyingFramePlayerIds?: string[];
   villageChiefExtraVoteReady?: boolean;
   villageChiefExtraVoteUsed?: boolean;
   sharedHeartsVisible?: boolean;

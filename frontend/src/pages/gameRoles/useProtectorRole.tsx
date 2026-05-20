@@ -51,6 +51,7 @@ export function useProtectorRole({
 
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;
+    if (playerId === clientId) return true;
     setSelectedPlayerId(playerId);
     setShowConfirm(true);
     return true;

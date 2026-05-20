@@ -152,7 +152,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
       dieVotes,
       liveVoterIds,
       dieVoterIds,
-      executed,
+      executed: votedToExecute,
     });
 
     if (chiefSurvivesByReveal) {

@@ -216,6 +216,7 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.privatePlayerHearts = {};
     room.privateHeartVisiblePlayerIds = [];
     room.playerHeartShakeIds = [];
+    room.villageChiefDyingFramePlayerIds = [];
     room.protectedTonight = null;
     room.protectedTonightBy = null;
     room.protectedTonightAt = null;

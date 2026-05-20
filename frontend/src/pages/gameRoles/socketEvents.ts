@@ -93,7 +93,7 @@ export type GameLogEntry =
   | { type: "wolf_vote"; phase: GameLogEntryPhase; voteBreakdown: WolfVoteBreakdown[] }
   | { type: "day_vote"; phase: GameLogEntryPhase; voteBreakdown: WolfVoteBreakdown[] }
   | { type: "day_vote_skipped"; phase: GameLogEntryPhase }
-  | { type: "wolf_result"; phase: GameLogEntryPhase; targetIds: string[]; selectedByByTarget?: Record<string, string[]> }
+  | { type: "wolf_result"; phase: GameLogEntryPhase; targetIds: string[]; selectedByByTarget?: Record<string, string[]>; villageChiefDelayedTargetIds?: string[] }
   | { type: "day_result"; phase: GameLogEntryPhase; targetId: string | null; tie?: boolean }
   | { type: "trial_started"; phase: GameLogEntryPhase; targetId: string }
   | { type: "trial_verdict"; phase: GameLogEntryPhase; targetId: string; liveVotes: number; dieVotes: number; liveVoterIds?: string[]; dieVoterIds?: string[]; executed: boolean }
@@ -102,7 +102,6 @@ export type GameLogEntry =
   | { type: "protector_bless"; phase: GameLogEntryPhase; actorId: string; targetId: string; permanent: boolean }
   | { type: "protector_save"; phase: GameLogEntryPhase; actorId: string | null; targetId: string; cause: EliminationCause; permanent: boolean }
   | { type: "village_chief_revealed"; phase: GameLogEntryPhase; targetId: string; reason: "day_vote" }
-  | { type: "village_chief_bitten_warning"; phase: GameLogEntryPhase; targetId: string; attackerIds: string[] }
   | { type: "village_chief_delayed_death"; phase: GameLogEntryPhase; targetId: string }
   | { type: "village_chief_extra_vote_started"; phase: GameLogEntryPhase; chiefId: string }
   | { type: "witch_heal"; phase: GameLogEntryPhase; actorId: string; targetId: string }

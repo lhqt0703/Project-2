@@ -17,7 +17,6 @@ const NIGHT_ACTION_ROLE_LABELS: Record<NightActionOrderRole, string> = {
 };
 
 const NIGHT_ACTION_DURATION_STEP_SEC = 10;
-const NIGHT_ACTION_DURATION_MIN_SEC = 0;
 const NIGHT_ACTION_DURATION_MAX_SEC = 60;
 
 function normalizeNightActionOrder(order: NightActionOrderRole[], availableRoles: NightActionOrderRole[]) {
@@ -58,14 +57,20 @@ function clampSelectionLimit(value: number) {
   return Math.max(0, Math.min(10, Math.floor(value)));
 }
 
-function normalizeDurationSec(value: number, fallback: number) {
-  if (!Number.isFinite(value)) return fallback;
-  const rounded = Math.round(value / NIGHT_ACTION_DURATION_STEP_SEC) * NIGHT_ACTION_DURATION_STEP_SEC;
-  return Math.max(NIGHT_ACTION_DURATION_MIN_SEC, Math.min(NIGHT_ACTION_DURATION_MAX_SEC, rounded));
+function clampMerchantWinRequiredSuccessfulTrades(value: number) {
+  if (!Number.isFinite(value)) return DEFAULT_ROOM_GAME_RULES.merchantWinRequiredSuccessfulTrades;
+  return Math.max(1, Math.min(10, Math.floor(value)));
 }
 
-function clampNonWolfNightActionDurationSec(value: number) {
-  return normalizeDurationSec(value, DEFAULT_ROOM_GAME_RULES.nonWolfNightActionDurationSec);
+function normalizeDurationSec(value: number, fallback: number, minSec = 0) {
+  if (!Number.isFinite(value)) return fallback;
+  const rounded = Math.round(value / NIGHT_ACTION_DURATION_STEP_SEC) * NIGHT_ACTION_DURATION_STEP_SEC;
+  return Math.max(minSec, Math.min(NIGHT_ACTION_DURATION_MAX_SEC, rounded));
+}
+
+function clampNonWolfNightActionDurationSec(value: number, allNightActionsSimultaneous: boolean) {
+  const minSec = allNightActionsSimultaneous ? 0 : NIGHT_ACTION_DURATION_STEP_SEC;
+  return normalizeDurationSec(value, DEFAULT_ROOM_GAME_RULES.nonWolfNightActionDurationSec, minSec);
 }
 
 function clampWolfNightActionDurationSec(value: number) {
@@ -73,10 +78,14 @@ function clampWolfNightActionDurationSec(value: number) {
 }
 
 function normalizeNightActionDurations(input: {
+  allNightActionsSimultaneous: boolean;
   nonWolfNightActionDurationSec: number;
   wolfNightActionDurationSec: number;
 }) {
-  const nonWolf = clampNonWolfNightActionDurationSec(input.nonWolfNightActionDurationSec);
+  const nonWolf = clampNonWolfNightActionDurationSec(
+    input.nonWolfNightActionDurationSec,
+    input.allNightActionsSimultaneous
+  );
   let wolf = clampWolfNightActionDurationSec(input.wolfNightActionDurationSec);
   if (wolf > nonWolf) wolf = nonWolf;
   return {
@@ -129,6 +138,7 @@ export default function GameRulesModal({
   useEffect(() => {
     if (!open) return;
     const normalizedDurations = normalizeNightActionDurations({
+      allNightActionsSimultaneous: initialRules.allNightActionsSimultaneous,
       nonWolfNightActionDurationSec: initialRules.nonWolfNightActionDurationSec,
       wolfNightActionDurationSec: initialRules.wolfNightActionDurationSec,
     });
@@ -140,6 +150,9 @@ export default function GameRulesModal({
         selectableNightActionRoles
       ),
       trialInteractionSelectionLimit: clampSelectionLimit(initialRules.trialInteractionSelectionLimit),
+      merchantWinRequiredSuccessfulTrades: clampMerchantWinRequiredSuccessfulTrades(
+        initialRules.merchantWinRequiredSuccessfulTrades
+      ),
       nonWolfNightActionDurationSec: normalizedDurations.nonWolfNightActionDurationSec,
       wolfNightActionDurationSec: normalizedDurations.wolfNightActionDurationSec,
     });
@@ -165,6 +178,7 @@ export default function GameRulesModal({
     if (readOnly) return;
     setDraftRules((prev) => {
       const normalizedDurations = normalizeNightActionDurations({
+        allNightActionsSimultaneous: prev.allNightActionsSimultaneous,
         nonWolfNightActionDurationSec:
           key === "nonWolfNightActionDurationSec" ? value : prev.nonWolfNightActionDurationSec,
         wolfNightActionDurationSec:
@@ -193,6 +207,7 @@ export default function GameRulesModal({
   const handleSave = () => {
     if (!onSave) return;
     const normalizedDurations = normalizeNightActionDurations({
+      allNightActionsSimultaneous: draftRules.allNightActionsSimultaneous,
       nonWolfNightActionDurationSec: draftRules.nonWolfNightActionDurationSec,
       wolfNightActionDurationSec: draftRules.wolfNightActionDurationSec,
     });
@@ -200,6 +215,9 @@ export default function GameRulesModal({
       ...draftRules,
       nightActionOrder: normalizeNightActionOrder(draftRules.nightActionOrder, selectableNightActionRoles),
       trialInteractionSelectionLimit: clampSelectionLimit(draftRules.trialInteractionSelectionLimit),
+      merchantWinRequiredSuccessfulTrades: clampMerchantWinRequiredSuccessfulTrades(
+        draftRules.merchantWinRequiredSuccessfulTrades
+      ),
       nonWolfNightActionDurationSec: normalizedDurations.nonWolfNightActionDurationSec,
       wolfNightActionDurationSec: normalizedDurations.wolfNightActionDurationSec,
       forceWolfBiteFirstNight: draftRules.twoHeartsFirstTwoNights && draftRules.forceWolfBiteFirstNight,
@@ -311,7 +329,22 @@ export default function GameRulesModal({
               type="checkbox"
               checked={draftRules.allNightActionsSimultaneous}
               disabled={readOnly}
-              onChange={(e) => updateRule("allNightActionsSimultaneous", e.target.checked)}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                if (readOnly) return;
+                setDraftRules((prev) => {
+                  const normalizedDurations = normalizeNightActionDurations({
+                    allNightActionsSimultaneous: checked,
+                    nonWolfNightActionDurationSec: prev.nonWolfNightActionDurationSec,
+                    wolfNightActionDurationSec: prev.wolfNightActionDurationSec,
+                  });
+                  return {
+                    ...prev,
+                    allNightActionsSimultaneous: checked,
+                    ...normalizedDurations,
+                  } as RoomGameRules;
+                });
+              }}
               style={{ width: 20, height: 20, marginTop: 2 }}
             />
           </label>
@@ -462,6 +495,37 @@ export default function GameRulesModal({
 
           <label style={rowStyle()}>
             <div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Số giao dịch thành công để Tay Buôn thắng</div>
+              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                Khi Tay Buôn đạt đủ số giao dịch này, nhật ký sẽ ghi nhận Tay Buôn thắng nhưng ván chơi vẫn tiếp tục.
+              </div>
+            </div>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              step={1}
+              value={draftRules.merchantWinRequiredSuccessfulTrades}
+              disabled={readOnly}
+              onChange={(e) =>
+                updateRule(
+                  "merchantWinRequiredSuccessfulTrades",
+                  clampMerchantWinRequiredSuccessfulTrades(Number(e.target.value)),
+                )
+              }
+              style={{
+                width: 76,
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: "1px solid var(--border)",
+                background: "rgba(255,255,255,0.08)",
+                color: "var(--text)",
+              }}
+            />
+          </label>
+
+          <label style={rowStyle()}>
+            <div>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>Phù thủy chỉ có thể thấy được vết cắn nếu còn bình cứu</div>
             </div>
             <input
@@ -469,6 +533,22 @@ export default function GameRulesModal({
               checked={draftRules.witchSeeBiteOnlyIfHasHealPotion}
               disabled={readOnly}
               onChange={(e) => updateRule("witchSeeBiteOnlyIfHasHealPotion", e.target.checked)}
+              style={{ width: 20, height: 20, marginTop: 2 }}
+            />
+          </label>
+
+          <label style={rowStyle()}>
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Phù thủy chỉ được cộng thêm 10 giây khi còn ít nhất 1 bình có thể dùng</div>
+              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                Khi bật, nếu Phù thủy đã dùng cả bình cứu và bình giết thì sẽ không tự động được cộng thêm thời gian.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={draftRules.witchBonusTimeRequiresUsablePotion}
+              disabled={readOnly}
+              onChange={(e) => updateRule("witchBonusTimeRequiresUsablePotion", e.target.checked)}
               style={{ width: 20, height: 20, marginTop: 2 }}
             />
           </label>
@@ -501,7 +581,7 @@ export default function GameRulesModal({
             </div>
             <input
               type="number"
-              min={0}
+              min={draftRules.allNightActionsSimultaneous ? 0 : 10}
               max={60}
               step={10}
               value={draftRules.nonWolfNightActionDurationSec}

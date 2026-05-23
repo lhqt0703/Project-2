@@ -1,5 +1,6 @@
 import type { ServerContext } from "./serverContext.js";
 import type { EliminationCause, GameLogEntryPhase, Room } from "./serverTypes.js";
+import { appendLogEntry } from "./gameLog.js";
 import { markEliminatedWithLoveChain } from "./love.js";
 import { getAdjacentPlayerIds, hasActiveMerchantItem } from "./merchant.js";
 import type { ProtectorSaveRecord } from "./specialRoles.js";
@@ -35,6 +36,15 @@ export function triggerMerchantGunpowderExplosion(
     for (const id of killed) {
       if (!newlyDead.includes(id)) newlyDead.push(id);
     }
+  }
+  if (newlyDead.length > 0) {
+    appendLogEntry(room, {
+      type: "merchant_item_used",
+      phase,
+      itemId: "gunpowder-barrel",
+      sourceId,
+      targetIds: newlyDead,
+    });
   }
   return newlyDead;
 }

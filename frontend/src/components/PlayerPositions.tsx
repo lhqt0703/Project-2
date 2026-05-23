@@ -29,10 +29,14 @@ interface RoomLike {
   playerHeartShakeIds?: string[];
   nightActionProgressByPlayerId?: Record<string, "pending" | "done">;
   nightTurnDeadline?: number | null;
+  wolfDeadline?: number | null;
+  spiritWolfDecisionDeadline?: number | null;
+  nightActionExtraTimeMsByPlayerId?: Record<string, number>;
   gameRules?: {
     allNightActionsSimultaneous?: boolean;
     nonWolfNightActionDurationSec?: number;
     wolfNightActionDurationSec?: number;
+    witchBonusTimeRequiresUsablePotion?: boolean;
   };
 }
 
@@ -344,6 +348,8 @@ export default function PlayerPositions({
   const [revealDisconnectedToAll, setRevealDisconnectedToAll] = useState<boolean>(false);
   const [dragging, setDragging] = useState<string | null>(null);
   const dragOffsetRef = useRef<{ dxPx: number; dyPx: number } | null>(null);
+  const lastPointerTypeRef = useRef<string | null>(null);
+  const lastTapRef = useRef<{ playerId: string; at: number } | null>(null);
   const [swapSource, setSwapSource] = useState<string | null>(null);
   const [compactCircles, setCompactCircles] = useState<boolean>(() => room?.compactCircles ?? false);
   const [frameScale, setFrameScale] = useState(1);
@@ -388,13 +394,14 @@ export default function PlayerPositions({
   useEffect(() => {
     if (!isHost) return;
     if (!isSimultaneousNight) return;
-    if (!room.nightTurnDeadline) return;
+    const hasAnyCountdown = !!room.nightTurnDeadline || !!room.wolfDeadline || !!room.spiritWolfDecisionDeadline;
+    if (!hasAnyCountdown) return;
     if (!hasPendingNightActionProgress) return;
 
     setNightActionNow(Date.now());
     const t = window.setInterval(() => setNightActionNow(Date.now()), 1000);
     return () => window.clearInterval(t);
-  }, [hasPendingNightActionProgress, isHost, isSimultaneousNight, room.nightTurnDeadline]);
+  }, [hasPendingNightActionProgress, isHost, isSimultaneousNight, room.nightTurnDeadline, room.spiritWolfDecisionDeadline, room.wolfDeadline]);
 
   const witchBonusApplies =
     (room.gameRules?.nonWolfNightActionDurationSec || 0) > 0
@@ -405,14 +412,27 @@ export default function PlayerPositions({
     const progress = room.nightActionProgressByPlayerId?.[playerId];
     if (progress !== "pending") return progress;
     if (!isSimultaneousNight) return progress;
+    const extraMs = Math.max(0, Math.floor(room.nightActionExtraTimeMsByPlayerId?.[playerId] || 0));
 
     const roleName = roleBadges?.[playerId] || wolfBadgeRoles?.[playerId] || "";
     const isWolfProgress = roleName === "Sói" || roleName === "Sói con" || roleName === "Sói Dại" || roleName === "Bán sói";
-    if (isWolfProgress) return progress;
+    if (isWolfProgress) {
+      const wolfDeadline = room.wolfDeadline ?? null;
+      if (!wolfDeadline) return progress;
+      return nightActionNow >= wolfDeadline + extraMs ? undefined : progress;
+    }
+
+    if (roleName === "Linh sói") {
+      const spiritDeadline = room.spiritWolfDecisionDeadline ?? null;
+      if (!spiritDeadline) return progress;
+      return nightActionNow >= spiritDeadline + extraMs ? undefined : progress;
+    }
 
     const baseDeadline = room.nightTurnDeadline ?? null;
     if (!baseDeadline) return progress;
-    const deadline = roleName === "Phù thủy" && witchBonusApplies ? baseDeadline + 10_000 : baseDeadline;
+    const deadline = roleName === "Phù thủy" && witchBonusApplies
+      ? baseDeadline + extraMs + 10_000
+      : baseDeadline + extraMs;
     return nightActionNow >= deadline ? undefined : progress;
   };
 
@@ -1188,6 +1208,7 @@ export default function PlayerPositions({
             <div
               key={pos.playerId}
               onPointerDown={(e) => {
+                lastPointerTypeRef.current = e.pointerType || null;
                 if (!isEditor) return;
                 if (swapSource === "SELECTING") {
                   setSwapSource(pos.playerId);
@@ -1198,7 +1219,19 @@ export default function PlayerPositions({
                 }
               }}
               onClick={() => {
-                if (!dragging) onPlayerClick(p.id);
+                if (dragging) return;
+                const isTouchTap = lastPointerTypeRef.current === "touch";
+                if (isTouchTap && onPlayerDoubleClick) {
+                  const now = Date.now();
+                  const lastTap = lastTapRef.current;
+                  if (lastTap && lastTap.playerId === p.id && now - lastTap.at <= 360) {
+                    onPlayerDoubleClick(p.id);
+                    lastTapRef.current = null;
+                  } else {
+                    lastTapRef.current = { playerId: p.id, at: now };
+                  }
+                }
+                onPlayerClick(p.id);
               }}
               onDoubleClick={() => {
                 if (!dragging) onPlayerDoubleClick?.(p.id);

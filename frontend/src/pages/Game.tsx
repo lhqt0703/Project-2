@@ -80,6 +80,7 @@ export default function Game() {
   const [nightTurnNow, setNightTurnNow] = useState(() => Date.now());
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
+  const [hostAddNightTimeTargetId, setHostAddNightTimeTargetId] = useState<string | null>(null);
   const [hostDisconnected, setHostDisconnected] = useState(false);
   const [frozenRoomSnapshot, setFrozenRoomSnapshot] = useState<any | null>(null);
   const [rulesRestartOverlay, setRulesRestartOverlay] = useState<{
@@ -247,11 +248,29 @@ export default function Game() {
     return nonWolf > 0 && wolf === nonWolf;
   }, [room?.gameRules]);
 
+  const witchBonusNeedsUsablePotion = room?.gameRules?.witchBonusTimeRequiresUsablePotion !== false;
+  const witchHasUsablePotion = !(
+    sync.witchPotions?.healUsed === true &&
+    sync.witchPotions?.poisonUsed === true
+  );
+  const myNightActionExtraMs = useMemo(() => {
+    if (!clientId) return 0;
+    const value = room?.nightActionExtraTimeMsByPlayerId?.[clientId] || 0;
+    return Math.max(0, Math.floor(value));
+  }, [room?.nightActionExtraTimeMsByPlayerId]);
+  const baseWolfDeadline = room ? room.wolfDeadline ?? null : sync.wolfDeadline ?? null;
+
   const isWolfTeamRole =
     role === "Sói" ||
     role === "Sói con" ||
     role === "Sói Dại" ||
     (role === "Bán sói" && isBanSoiOrWildConverted);
+
+  const myWolfDeadline = useMemo(() => {
+    if (!isSimultaneousNight) return baseWolfDeadline;
+    if (!baseWolfDeadline) return null;
+    return baseWolfDeadline + myNightActionExtraMs;
+  }, [baseWolfDeadline, isSimultaneousNight, myNightActionExtraMs]);
 
   const mySimultaneousDeadline = useMemo(() => {
     if (!isSimultaneousNight) return null;
@@ -259,16 +278,40 @@ export default function Game() {
     if (role === "Bán sói" && !isBanSoiOrWildConverted) return null;
     if (!NIGHT_ACTION_ROLE_SET.has(role) && !ELEMENTAL_ROLE_SET.has(role)) return null;
 
-    if (isWolfTeamRole) return sync.wolfDeadline ?? null;
+    if (isWolfTeamRole) return myWolfDeadline;
     if (role === "Linh sói") {
-      return sync.spiritWolfDecisionTargetId ? sync.spiritWolfDecisionDeadline ?? null : null;
+      if (!sync.spiritWolfDecisionTargetId) return null;
+      const spiritBaseDeadline = room ? room.spiritWolfDecisionDeadline ?? null : sync.spiritWolfDecisionDeadline ?? null;
+      if (!spiritBaseDeadline) return null;
+      return spiritBaseDeadline + myNightActionExtraMs;
     }
 
     const baseDeadline = nightTurnDeadline ?? null;
     if (!baseDeadline) return null;
-    if (role === "Phù thủy" && witchBonusApplies) return baseDeadline + 10_000;
-    return baseDeadline;
-  }, [isBanSoiOrWildConverted, isSimultaneousNight, isWolfTeamRole, nightTurnDeadline, role, sync.spiritWolfDecisionDeadline, sync.spiritWolfDecisionTargetId, sync.wolfDeadline, witchBonusApplies]);
+    let deadline = baseDeadline + myNightActionExtraMs;
+    if (
+      role === "Phù thủy" &&
+      witchBonusApplies &&
+      (!witchBonusNeedsUsablePotion || witchHasUsablePotion)
+    ) {
+      deadline += 10_000;
+    }
+    return deadline;
+  }, [
+    isBanSoiOrWildConverted,
+    isSimultaneousNight,
+    isWolfTeamRole,
+    myNightActionExtraMs,
+    myWolfDeadline,
+    nightTurnDeadline,
+    role,
+    room?.spiritWolfDecisionDeadline,
+    sync.spiritWolfDecisionDeadline,
+    sync.spiritWolfDecisionTargetId,
+    witchBonusApplies,
+    witchBonusNeedsUsablePotion,
+    witchHasUsablePotion,
+  ]);
 
   useEffect(() => {
     if (!isSimultaneousNight) return;
@@ -296,6 +339,27 @@ export default function Game() {
     if (!mySimultaneousDeadline) return null;
     return Math.max(0, Math.ceil((mySimultaneousDeadline - nightTurnNow) / 1000));
   }, [isSimultaneousNight, mySimultaneousDeadline, nightTurnNow]);
+
+  const canHostToggleNightTimer = useMemo(() => {
+    if (phase !== "night" || !!sync.gameEnded) return false;
+    if (isSequentialNight) return !!currentNightTurnRole;
+    if (!allNightActionsSimultaneous) return false;
+    const wolfDeadline = room ? room.wolfDeadline ?? null : sync.wolfDeadline ?? null;
+    const spiritDeadline = room ? room.spiritWolfDecisionDeadline ?? null : sync.spiritWolfDecisionDeadline ?? null;
+    return nightTurnPaused || !!nightTurnDeadline || !!wolfDeadline || !!spiritDeadline;
+  }, [
+    allNightActionsSimultaneous,
+    currentNightTurnRole,
+    isSequentialNight,
+    nightTurnDeadline,
+    nightTurnPaused,
+    phase,
+    room?.spiritWolfDecisionDeadline,
+    room?.wolfDeadline,
+    sync.gameEnded,
+    sync.spiritWolfDecisionDeadline,
+    sync.wolfDeadline,
+  ]);
 
   const isSeerTurnActive = useMemo(() => {
     if (phase !== "night") return false;
@@ -742,7 +806,7 @@ export default function Game() {
     merchantState: sync.merchantPrivateState,
     allNightActionsSimultaneous,
     currentNightTurnRole,
-    nightActionDeadline: allNightActionsSimultaneous ? nightTurnDeadline : mySimultaneousDeadline,
+    nightActionDeadline: mySimultaneousDeadline,
     nightActionNow: nightTurnNow,
   });
   const wolf = useWolfRole({
@@ -753,7 +817,7 @@ export default function Game() {
     deadPlayers,
     wolfBadgeRoles: sync.wolfBadgeRolesByPlayerId,
     wolfLocked: sync.wolfLocked,
-    wolfDeadline: sync.wolfDeadline,
+    wolfDeadline: myWolfDeadline,
     wolves: sync.wolves,
     activeWolves: sync.activeWolves,
     wolfMaxTargets: sync.wolfMaxTargets,
@@ -1028,6 +1092,15 @@ export default function Game() {
     if (elemental.onPlayerClick(playerId)) return;
   };
 
+  const handlePlayerDoubleClick = (playerId: string) => {
+    if (!isHost) return;
+    if (!roomId) return;
+    if (sync.gameEnded) return;
+    if (phase !== "night") return;
+    if (deadPlayers.includes(playerId)) return;
+    setHostAddNightTimeTargetId(playerId);
+  };
+
   const requestReturnToRoom = () => {
     if (!roomId) return;
     socket.emit("requestReturnToRoom", { roomId });
@@ -1042,6 +1115,10 @@ export default function Game() {
     setEndGameConfirmOpen(false);
     socket.emit("hostEndGameNow", { roomId });
   };
+
+  const hostAddNightTimeTargetName = hostAddNightTimeTargetId
+    ? room?.players.find((p) => p.id === hostAddNightTimeTargetId)?.name || "người chơi này"
+    : "người chơi này";
 
   const rulesRestartAnimationName = rulesRestartOverlay
     ? `gameRulesRestartOverlay_${rulesRestartOverlay.key}`
@@ -1292,6 +1369,7 @@ export default function Game() {
             mode="view"
             roomOverride={roomForDisplay}
             onPlayerClick={handlePlayerClick}
+            onPlayerDoubleClick={handlePlayerDoubleClick}
             seerResult={isSeerTurnActive ? seer.seerResult : null}
             deadPlayersOverride={deadPlayersOverrideForRender}
             bulletAnimation={hunterBulletAnim}
@@ -1420,11 +1498,11 @@ export default function Game() {
             Chuyển sang lượt tiếp theo
           </button>
         )}
-        {phase === "night" && !sync.gameEnded && isSequentialNight && (
+        {canHostToggleNightTimer && (
           <button
             onClick={() => socket.emit("hostToggleNightTurnPause", { roomId })}
-            disabled={!currentNightTurnRole}
-            style={{ opacity: currentNightTurnRole ? 1 : 0.6 }}
+            disabled={isSequentialNight ? !currentNightTurnRole : false}
+            style={{ opacity: isSequentialNight && !currentNightTurnRole ? 0.6 : 1 }}
           >
             {nightTurnPaused ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
           </button>
@@ -1547,6 +1625,22 @@ export default function Game() {
       cancelText="Hủy"
       onConfirm={handleEndGameConfirm}
       onCancel={() => setEndGameConfirmOpen(false)}
+    />
+    <ConfirmModal
+      open={!!hostAddNightTimeTargetId}
+      title="Bổ sung thời gian lượt đêm"
+      message={`Bạn có chắc muốn cộng thêm 10 giây cho ${hostAddNightTimeTargetName} không?`}
+      confirmText="Cộng 10 giây"
+      cancelText="Hủy"
+      onConfirm={() => {
+        if (!roomId || !hostAddNightTimeTargetId) return;
+        socket.emit("hostAddNightActionTime", {
+          roomId,
+          targetId: hostAddNightTimeTargetId,
+        });
+        setHostAddNightTimeTargetId(null);
+      }}
+      onCancel={() => setHostAddNightTimeTargetId(null)}
     />
 
     </div>

@@ -107,6 +107,7 @@ import {
   CURSED_ROLE,
   MERCHANT_ROLE,
   addMerchantItemToPlayer,
+  expireMerchantItemsForNight,
   getCursedSniffAreaIds,
   getMerchantAvailableItemIds,
   hasActiveMerchantItem,
@@ -140,6 +141,16 @@ import {
 const SPIRIT_WOLF_ROLE = "Linh sói";
 const NORMAL_WOLF_ROLE = "Sói";
 const WILD_WOLF_ROLE = "Sói Dại";
+const HOST_EXTRA_TIME_NON_WOLF_ROLES = new Set([
+  LOVE_ROLE,
+  "Bảo vệ",
+  PROTECTOR_ROLE,
+  "Phù thủy",
+  "Thợ săn",
+  "Tiên tri",
+  CURSED_ROLE,
+  MERCHANT_ROLE,
+]);
 
 type RegisterSocketHandlersParams = {
   socket: Socket;
@@ -285,6 +296,78 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     });
   }
 
+  function getNightActionExtraMs(room: Room, playerId: string) {
+    const extra = room.nightActionExtraTimeMsByPlayerId?.[playerId] || 0;
+    return Math.max(0, Math.floor(extra));
+  }
+
+  function shouldGrantWitchBonusToPlayer(room: Room, playerId: string) {
+    const rules = ensureRoomGameRules(room);
+    const nonWolf = rules.nonWolfNightActionDurationSec || 0;
+    const wolf = rules.wolfNightActionDurationSec || 0;
+    if (!(nonWolf > 0 && wolf === nonWolf)) return false;
+    if (!rules.witchBonusTimeRequiresUsablePotion) return true;
+    const potions = room.witchPotions?.[playerId];
+    if (!potions) return true;
+    return !(potions.healUsed === true && potions.poisonUsed === true);
+  }
+
+  function getSimultaneousDeadlineForPlayer(room: Room, playerId: string) {
+    if (room.phase !== "night") return null;
+    const rules = ensureRoomGameRules(room);
+    if (!rules.allNightActionsSimultaneous) return null;
+    if ((room.deadPlayers || []).includes(playerId)) return null;
+
+    if (isWolfAlignedPlayer(room, playerId)) {
+      if (!room.wolfDeadline) return null;
+      return room.wolfDeadline + getNightActionExtraMs(room, playerId);
+    }
+
+    const role = room.playerRoles?.[playerId] || null;
+    if (!role) return null;
+
+    if (role === SPIRIT_WOLF_ROLE) {
+      if (!room.spiritWolfDecisionDeadline || !room.spiritWolfPendingPoisonedWolfId || room.spiritWolfDecisionMade) {
+        return null;
+      }
+      return room.spiritWolfDecisionDeadline + getNightActionExtraMs(room, playerId);
+    }
+
+    if (!room.nightTurnDeadline) return null;
+    let deadline = room.nightTurnDeadline + getNightActionExtraMs(room, playerId);
+    if (role === "Phù thủy" && shouldGrantWitchBonusToPlayer(room, playerId)) {
+      deadline += 10_000;
+    }
+    return deadline;
+  }
+
+  function rescheduleWolfTimerForCurrentDeadlines(roomId: string, room: Room) {
+    if (room.wolfTimer) {
+      clearTimeout(room.wolfTimer);
+      room.wolfTimer = null;
+    }
+    if (room.wolfVoteResolvedTonight) return;
+    if (!room.wolfDeadline) return;
+
+    const activeWolves = getActiveWolves(room);
+    let maxDeadline = room.wolfDeadline;
+    for (const wolfId of activeWolves) {
+      const deadline = getSimultaneousDeadlineForPlayer(room, wolfId);
+      if (deadline && deadline > maxDeadline) {
+        maxDeadline = deadline;
+      }
+    }
+
+    const remainingMs = Math.max(0, maxDeadline - Date.now());
+    if (remainingMs <= 0) {
+      finishWolfVoting(roomId);
+      return;
+    }
+    room.wolfTimer = setTimeout(() => {
+      finishWolfVoting(roomId);
+    }, remainingMs);
+  }
+
   function isWildWolfConversionUsable(room: Room, playerId: string) {
     const wildWolfId = getWildWolfId(room);
     return (
@@ -419,30 +502,98 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     );
   }
 
+  function recordMerchantSuccessfulTrade(room: Room, merchantId: string) {
+    const rules = ensureRoomGameRules(room);
+    const requiredTrades = rules.merchantWinRequiredSuccessfulTrades;
+    room.merchantSuccessfulTradeCountsByPlayerId = room.merchantSuccessfulTradeCountsByPlayerId || {};
+
+    const successfulTrades = (room.merchantSuccessfulTradeCountsByPlayerId[merchantId] || 0) + 1;
+    room.merchantSuccessfulTradeCountsByPlayerId[merchantId] = successfulTrades;
+
+    if (successfulTrades < requiredTrades) return;
+    if ((room.merchantWinCompletedPlayerIds || []).includes(merchantId)) return;
+
+    room.merchantWinCompletedPlayerIds = Array.from(new Set([...(room.merchantWinCompletedPlayerIds || []), merchantId]));
+    appendLogEntry(room, {
+      type: "merchant_win_condition_completed",
+      phase: "night",
+      actorId: merchantId,
+      successfulTrades,
+      requiredTrades,
+    });
+  }
+
   function resolveMerchantOffer(roomId: string, room: Room, offer: MerchantTradeOffer, targetChoice: "up" | "down") {
     if (offer.resolved) return;
     offer.targetChoice = targetChoice;
     offer.resolved = true;
     offer.appliesNight = getMerchantEffectAppliesNight(room);
 
+    let result: NonNullable<MerchantTradeOffer["result"]>;
+    let receivedItem = false;
     if (offer.merchantChoice === targetChoice) {
       addMerchantItemToPlayer(room, offer.targetId, offer.itemId, offer.appliesNight);
       if (ensureRoomGameRules(room).merchantSingleUseItems) {
         room.merchantUsedItemIds = Array.from(new Set([...(room.merchantUsedItemIds || []), offer.itemId]));
       }
-      offer.result = "success";
-      return;
-    }
-
-    if (isMerchantTargetWolfTeam(room, offer.targetId)) {
+      result = "success";
+      receivedItem = true;
+    } else if (isMerchantTargetWolfTeam(room, offer.targetId)) {
       applyMerchantWolfBiteBlock(room, offer.appliesNight);
-      offer.result = "failed_wolf";
-      return;
+      result = "failed_wolf";
+    } else {
+      applyMerchantCheeseMark(room, offer.targetId, offer.appliesNight);
+      result = "failed_villager";
+      emitMerchantCheeseMarks(roomId);
     }
 
-    applyMerchantCheeseMark(room, offer.targetId, offer.appliesNight);
-    offer.result = "failed_villager";
-    emitMerchantCheeseMarks(roomId);
+    offer.result = result;
+    appendLogEntry(room, {
+      type: "merchant_trade_response",
+      phase: "night",
+      actorId: offer.actorId,
+      targetId: offer.targetId,
+      itemId: offer.itemId,
+      merchantChoice: offer.merchantChoice,
+      targetChoice,
+      result,
+    });
+    if (receivedItem) {
+      appendLogEntry(room, {
+        type: "merchant_item_received",
+        phase: "night",
+        targetId: offer.targetId,
+        itemId: offer.itemId,
+        appliesNight: offer.appliesNight,
+      });
+      recordMerchantSuccessfulTrade(room, offer.actorId);
+    }
+  }
+
+  function expireMerchantItemsAtNightEnd(room: Room) {
+    const expiredByPlayerId = expireMerchantItemsForNight(room, room.nightCount || 0);
+    for (const [targetId, itemIds] of Object.entries(expiredByPlayerId)) {
+      appendLogEntry(room, {
+        type: "merchant_item_expired",
+        phase: "day",
+        targetId,
+        itemIds,
+      });
+    }
+  }
+
+  function appendPoppyGlassesViewLogs(room: Room, targetId: string) {
+    for (const player of room.players) {
+      if ((room.deadPlayers || []).includes(player.id)) continue;
+      if (!hasActiveMerchantItem(room, player.id, "poppy-glasses")) continue;
+      appendLogEntry(room, {
+        type: "merchant_item_used",
+        phase: "night",
+        itemId: "poppy-glasses",
+        actorId: player.id,
+        targetId,
+      });
+    }
   }
 
   function resolveNightDeaths(roomId: string, room: Room) {
@@ -1953,7 +2104,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (room.loveEscapeUsed || room.loveEscapeActiveTonight) return;
     const rules = ensureRoomGameRules(room);
     if (rules.allNightActionsSimultaneous) {
-      const deadline = isWolfAlignedPlayer(room, clientId) ? room.wolfDeadline : room.nightTurnDeadline;
+      const deadline = getSimultaneousDeadlineForPlayer(room, clientId);
       if (deadline && Date.now() >= deadline) return;
     } else if (!room.nightTurnPaused && room.nightTurnDeadline && Date.now() >= room.nightTurnDeadline) {
       return;
@@ -2055,8 +2206,10 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       room.villageChiefDyingFramePlayerIds = [];
       resolveVillageChiefDelayedWolfDeath(roomId, room);
       resolveNightDeaths(roomId, room);
+      expireMerchantItemsAtNightEnd(room);
       room.merchantCheeseMarkedPlayerIds = [];
       emitMerchantCheeseMarks(roomId);
+      emitMerchantPrivateStateForAll(roomId);
 
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       checkAndEndGame(roomId, "after_night_kills");
@@ -2178,6 +2331,18 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       room.wildWolfConvertTargetId = null;
 
       prepareMerchantNightState(room);
+      if (
+        room.merchantGuardianCarryoverTargetId &&
+        room.merchantGuardianCarryoverNight === (room.nightCount || 0)
+      ) {
+        appendLogEntry(room, {
+          type: "merchant_item_used",
+          phase: "night",
+          itemId: "moth-cocoon",
+          targetId: room.merchantGuardianCarryoverTargetId,
+        });
+        appendPoppyGlassesViewLogs(room, room.merchantGuardianCarryoverTargetId);
+      }
       emitMerchantCheeseMarks(roomId);
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
 
@@ -2208,6 +2373,10 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       room.wolfLocked = {};
       room.wolfDeadline = null;
       room.wolfVoteResolvedTonight = false;
+      room.nightActionExtraTimeMsByPlayerId = {};
+      room.nightTurnRemainingMs = null;
+      room.wolfTurnRemainingMs = null;
+      room.spiritWolfDecisionRemainingMs = null;
       room.wolfAttackResolvedAt = null;
       room.loveEscapeVotesTonight = {};
       room.loveEscapeVoteAt = {};
@@ -2369,7 +2538,92 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (clientId !== room.hostId) return;
 
     const rules = ensureRoomGameRules(room);
-    if (rules.allNightActionsSimultaneous) return;
+    if (rules.allNightActionsSimultaneous) {
+      const now = Date.now();
+
+      if (!room.nightTurnPaused) {
+        room.nightTurnPaused = true;
+        room.nightTurnRemainingMs = room.nightTurnDeadline ? Math.max(0, room.nightTurnDeadline - now) : null;
+        room.wolfTurnRemainingMs = room.wolfDeadline ? Math.max(0, room.wolfDeadline - now) : null;
+        room.spiritWolfDecisionRemainingMs = room.spiritWolfDecisionDeadline
+          ? Math.max(0, room.spiritWolfDecisionDeadline - now)
+          : null;
+
+        clearNightTurnTimer(room);
+        clearSpiritWolfDecisionTimer(room);
+        if (room.wolfTimer) {
+          clearTimeout(room.wolfTimer);
+          room.wolfTimer = null;
+        }
+
+        room.nightTurnDeadline = null;
+        room.wolfDeadline = null;
+        room.spiritWolfDecisionDeadline = null;
+
+        ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+        emitHostNightActionProgress(roomId);
+        return;
+      }
+
+      room.nightTurnPaused = false;
+      room.nightTurnDeadline =
+        room.nightTurnRemainingMs == null
+          ? null
+          : now + Math.max(0, room.nightTurnRemainingMs);
+
+      const shouldResumeWolf =
+        room.wolfTurnRemainingMs != null &&
+        !room.wolfVoteResolvedTonight &&
+        !room.merchantWolfBiteDisabledTonight;
+      if (shouldResumeWolf) {
+        const wolfRemainingMs = Math.max(0, room.wolfTurnRemainingMs ?? 0);
+        room.wolfDeadline = now + wolfRemainingMs;
+        startWolfPhase(roomId, {
+          durationMs: wolfRemainingMs,
+          initializeVotes: false,
+        });
+        rescheduleWolfTimerForCurrentDeadlines(roomId, room);
+      } else {
+        room.wolfDeadline = null;
+      }
+
+      const shouldResumeSpiritWolf =
+        room.spiritWolfDecisionRemainingMs != null &&
+        !!room.spiritWolfPendingPoisonedWolfId &&
+        !room.spiritWolfDecisionMade;
+      if (shouldResumeSpiritWolf) {
+        const spiritRemainingMs = Math.max(0, room.spiritWolfDecisionRemainingMs ?? 0);
+        if (spiritRemainingMs <= 0) {
+          finishSpiritWolfTurn(roomId, true);
+          return;
+        }
+        room.spiritWolfDecisionDeadline = now + spiritRemainingMs;
+        emitSpiritWolfDecisionNeeded(roomId);
+        clearSpiritWolfDecisionTimer(room);
+        room.spiritWolfDecisionTimer = setTimeout(() => {
+          finishSpiritWolfTurn(roomId, true);
+        }, spiritRemainingMs);
+      } else {
+        room.spiritWolfDecisionDeadline = null;
+      }
+
+      if (room.nightTurnDeadline) {
+        const baseDeadline = room.nightTurnDeadline;
+        setTimeout(() => {
+          const latest = rooms[roomId];
+          if (!latest) return;
+          if (latest.phase !== "night") return;
+          if (latest.nightTurnPaused) return;
+          if (latest.nightTurnDeadline !== baseDeadline) return;
+          emitHostNightActionProgress(roomId);
+        }, Math.max(0, baseDeadline - Date.now()));
+      }
+
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      emitHostNightActionProgress(roomId);
+      return;
+    }
+
     if (!room.nightTurnRole) return;
 
     if (!room.nightTurnPaused) {
@@ -2417,6 +2671,104 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     } else if (remainingMs <= 0) {
       startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
       return;
+    } else {
+      clearNightTurnTimer(room);
+      room.nightTurnTimer = setTimeout(() => {
+        startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
+      }, remainingMs);
+    }
+
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("hostAddNightActionTime", ({ roomId, targetId }: { roomId: string; targetId: string }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+    if (clientId !== room.hostId) return;
+    if (!targetId || targetId === room.hostId) return;
+    if (!room.players.find((player) => player.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    const rules = ensureRoomGameRules(room);
+    const extraMs = 10_000;
+
+    if (rules.allNightActionsSimultaneous) {
+      const targetRole = room.playerRoles?.[targetId] || null;
+      if (!targetRole) return;
+
+      const hasActiveDeadline = !!getSimultaneousDeadlineForPlayer(room, targetId);
+      const canExtendWhilePaused =
+        room.nightTurnPaused &&
+        (
+          (isWolfAlignedPlayer(room, targetId) && room.wolfTurnRemainingMs != null) ||
+          (targetRole === SPIRIT_WOLF_ROLE && room.spiritWolfDecisionRemainingMs != null) ||
+          (!isWolfAlignedPlayer(room, targetId) && targetRole !== SPIRIT_WOLF_ROLE && room.nightTurnRemainingMs != null)
+        );
+      if (!hasActiveDeadline && !canExtendWhilePaused) return;
+
+      room.nightActionExtraTimeMsByPlayerId = room.nightActionExtraTimeMsByPlayerId || {};
+      room.nightActionExtraTimeMsByPlayerId[targetId] = getNightActionExtraMs(room, targetId) + extraMs;
+
+      if (!room.nightTurnPaused) {
+        if (isWolfAlignedPlayer(room, targetId) && room.wolfDeadline && !room.wolfVoteResolvedTonight) {
+          rescheduleWolfTimerForCurrentDeadlines(roomId, room);
+        } else if (
+          targetRole === SPIRIT_WOLF_ROLE &&
+          room.spiritWolfDecisionDeadline &&
+          room.spiritWolfPendingPoisonedWolfId &&
+          !room.spiritWolfDecisionMade
+        ) {
+          const remainingMs = Math.max(0, room.spiritWolfDecisionDeadline + getNightActionExtraMs(room, targetId) - Date.now());
+          clearSpiritWolfDecisionTimer(room);
+          room.spiritWolfDecisionTimer = setTimeout(() => {
+            finishSpiritWolfTurn(roomId, true);
+          }, remainingMs);
+        }
+      }
+
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      emitHostNightActionProgress(roomId);
+      return;
+    }
+
+    if (!room.nightTurnRole) return;
+    const targetRole = room.playerRoles?.[targetId] || null;
+    if (!targetRole) return;
+
+    const targetIsCurrentTurn =
+      room.nightTurnRole === "Sói"
+        ? isWolfAlignedPlayer(room, targetId)
+        : room.nightTurnRole === SPIRIT_WOLF_ROLE
+          ? targetRole === SPIRIT_WOLF_ROLE
+          : targetRole === room.nightTurnRole;
+    if (!targetIsCurrentTurn) return;
+
+    if (room.nightTurnPaused) {
+      room.nightTurnRemainingMs = Math.max(0, (room.nightTurnRemainingMs ?? 0) + extraMs);
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      return;
+    }
+
+    room.nightTurnDeadline = (room.nightTurnDeadline ?? Date.now()) + extraMs;
+    const remainingMs = Math.max(0, room.nightTurnDeadline - Date.now());
+
+    if (room.nightTurnRole === "Sói") {
+      if (room.wolfTimer) {
+        clearTimeout(room.wolfTimer);
+        room.wolfTimer = null;
+      }
+      room.wolfTimer = setTimeout(() => {
+        finishWolfVoting(roomId);
+      }, remainingMs);
+    } else if (room.nightTurnRole === SPIRIT_WOLF_ROLE) {
+      clearNightTurnTimer(room);
+      clearSpiritWolfDecisionTimer(room);
+      room.spiritWolfDecisionDeadline = room.nightTurnDeadline;
+      room.nightTurnTimer = setTimeout(() => {
+        finishSpiritWolfTurn(roomId, true);
+      }, remainingMs);
     } else {
       clearNightTurnTimer(room);
       room.nightTurnTimer = setTimeout(() => {
@@ -2837,18 +3189,27 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     const actionAt = Date.now();
     const roleOfTarget = room.playerRoles[targetId];
     const seerBlockedByCloak = hasActiveMerchantItem(room, targetId, "invisibility-cloak");
-
-    const isWolf =
-      seerBlockedByCloak || isLovePairMemberAwayAt(room, targetId, actionAt)
+    const actualIsWolf =
+      isLovePairMemberAwayAt(room, targetId, actionAt)
         ? false
         : roleOfTarget === "Kẻ bị nguyền"
           ? true
           : isWolfAlignedPlayer(room, targetId)
             ? true
             : isWolfRole(roleOfTarget);
+
+    const isWolf = seerBlockedByCloak ? false : actualIsWolf;
     ctx.io.to(clientId).emit("seerResult", { playerId: targetId, isWolf });
 
-    appendLogEntry(room, { type: "seer_check", phase: "night", actorId: clientId, targetId, isWolf });
+    appendLogEntry(room, {
+      type: "seer_check",
+      phase: "night",
+      actorId: clientId,
+      targetId,
+      isWolf,
+      actualIsWolf,
+      ...(seerBlockedByCloak ? { blockedByMerchantItem: "invisibility-cloak" as const } : {}),
+    });
     emitHostNightActionProgress(roomId);
   });
 
@@ -2879,12 +3240,18 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     const actionAt = Date.now();
     const areaIds = getCursedSniffAreaIds(room, targetId);
+    const blockedByMintPlayerIds: string[] = [];
     const hasWolf = areaIds.some((playerId) => {
       if ((room.deadPlayers || []).includes(playerId)) return false;
       if (isLovePairMemberAwayAt(room, playerId, actionAt)) return false;
-      if (hasActiveMerchantItem(room, playerId, "mint")) return false;
       const targetRole = room.playerRoles?.[playerId];
-      return isWolfAlignedPlayer(room, playerId) || isWolfRole(targetRole);
+      const isWolfTarget = isWolfAlignedPlayer(room, playerId) || isWolfRole(targetRole);
+      if (!isWolfTarget) return false;
+      if (hasActiveMerchantItem(room, playerId, "mint")) {
+        blockedByMintPlayerIds.push(playerId);
+        return false;
+      }
+      return true;
     });
 
     room.cursedTargetTonight[clientId] = targetId;
@@ -2892,6 +3259,15 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     room.cursedLastTargetByPlayerId[clientId] = targetId;
 
     ctx.io.to(clientId).emit("cursedResult", { targetId, areaIds, hasWolf });
+    appendLogEntry(room, {
+      type: "cursed_sniff",
+      phase: "night",
+      actorId: clientId,
+      targetId,
+      areaIds,
+      hasWolf,
+      blockedByMintPlayerIds,
+    });
     emitCursedState(roomId, clientId);
     emitHostNightActionProgress(roomId);
   });
@@ -2907,7 +3283,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     if (!isMerchantItemId(itemId) || !isMerchantDecision(choice)) return;
     if (!targetId || targetId === clientId) {
-      socket.emit("errorMessage", "Tay Buôn không thể tự giao dịch với chính mình.");
+      socket.emit("errorMessage", "Bạn không thể tự giao dịch với chính mình");
       return;
     }
     if (targetId === room.hostId) return;
@@ -2949,6 +3325,14 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     room.merchantLastTargetByPlayerId = room.merchantLastTargetByPlayerId || {};
     room.merchantLastTargetByPlayerId[clientId] = targetId;
 
+    appendLogEntry(room, {
+      type: "merchant_trade_offer",
+      phase: "night",
+      actorId: clientId,
+      targetId,
+      itemId,
+      merchantChoice: choice,
+    });
     emitMerchantPrivateState(roomId, clientId);
     emitMerchantPrivateState(roomId, targetId);
     emitHostNightActionProgress(roomId);
@@ -3012,6 +3396,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     ctx.io.to(clientId).emit("guardianProtected", targetId);
 
     appendLogEntry(room, { type: "guardian_protect", phase: "night", actorId: clientId, targetId });
+    appendPoppyGlassesViewLogs(room, targetId);
 
     emitWitchPendingDeath(roomId);
     emitMerchantPrivateStateForAll(roomId);

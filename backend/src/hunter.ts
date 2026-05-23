@@ -56,10 +56,17 @@ export function resolveHunterShotsForDeaths(
     if (!room.players.find((player) => player.id === targetId)) continue;
     if ((room.deadPlayers || []).includes(targetId)) continue;
 
-    appendLogEntry(room, { type: "hunter_shot", phase, actorId: hunterId, targetId });
+    const blockedByArmor = hasActiveMerchantItem(room, targetId, "iron-armor");
+    appendLogEntry(room, {
+      type: "hunter_shot",
+      phase,
+      actorId: hunterId,
+      targetId,
+      ...(blockedByArmor ? { blockedByMerchantItem: "iron-armor" as const } : {}),
+    });
     ctx.io.to(roomId).emit("hunterShot", { hunterId, targetId });
 
-    if (hasActiveMerchantItem(room, targetId, "iron-armor")) continue;
+    if (blockedByArmor) continue;
 
     const cause: EliminationCause = { type: "hunter_shot" };
     const newlyDead = markEliminatedWithLoveChain(ctx, roomId, room, targetId, cause, phase, {

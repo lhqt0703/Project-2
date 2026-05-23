@@ -1,5 +1,5 @@
 import { ELEMENTAL_GROUP_ROLE, type ElementalBuffId, type ElementalRole } from "./elemental.js";
-import type { MerchantItemId, MerchantItemRecord, MerchantTradeOffer } from "./merchant.js";
+import type { MerchantDecision, MerchantItemId, MerchantItemRecord, MerchantTradeOffer, MerchantTradeResult } from "./merchant.js";
 import { PROTECTOR_ROLE } from "./specialRoles.js";
 
 export interface Player {
@@ -18,6 +18,7 @@ export interface RoomGameRules {
   forceWolfBiteFirstNight: boolean;
   allNightActionsSimultaneous: boolean;
   witchSeeBiteOnlyIfHasHealPotion: boolean;
+  witchBonusTimeRequiresUsablePotion: boolean;
   witchHideProtectedBiteInSimultaneous: boolean;
   witchHideProtectedBiteWhenSequential: boolean;
   trialInteractionSelectionLimit: number;
@@ -28,6 +29,7 @@ export interface RoomGameRules {
   villageChiefKnowsWolfBite: boolean;
   witchSeeProtectorImmortalBite: boolean;
   merchantSingleUseItems: boolean;
+  merchantWinRequiredSuccessfulTrades: number;
 }
 
 export interface Room {
@@ -113,6 +115,9 @@ export interface Room {
   nightTurnDeadline?: number | null;
   nightTurnPaused?: boolean;
   nightTurnRemainingMs?: number | null;
+  wolfTurnRemainingMs?: number | null;
+  spiritWolfDecisionRemainingMs?: number | null;
+  nightActionExtraTimeMsByPlayerId?: Record<string, number>;
   nightTurnTimer?: NodeJS.Timeout | null;
   nightTurnOrderSnapshot?: NightActionRole[];
   autoArrangeUsed?: boolean;
@@ -164,6 +169,8 @@ export interface Room {
   merchantLastTargetByPlayerId?: Record<string, string | null>;
   merchantItemsByPlayerId?: Record<string, MerchantItemRecord[]>;
   merchantUsedItemIds?: MerchantItemId[];
+  merchantSuccessfulTradeCountsByPlayerId?: Record<string, number>;
+  merchantWinCompletedPlayerIds?: string[];
   merchantWolfBiteDisabledTonight?: boolean;
   merchantWolfBiteDisabledNextNight?: boolean;
   merchantCheeseMarkedPlayerIds?: string[];
@@ -179,6 +186,7 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   forceWolfBiteFirstNight: false,
   allNightActionsSimultaneous: false,
   witchSeeBiteOnlyIfHasHealPotion: true,
+  witchBonusTimeRequiresUsablePotion: true,
   witchHideProtectedBiteInSimultaneous: false,
   witchHideProtectedBiteWhenSequential: true,
   trialInteractionSelectionLimit: 2,
@@ -189,6 +197,7 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   villageChiefKnowsWolfBite: true,
   witchSeeProtectorImmortalBite: true,
   merchantSingleUseItems: false,
+  merchantWinRequiredSuccessfulTrades: 3,
 };
 
 const NIGHT_ACTION_ROLE_SET = new Set<NightActionOrderRole>([
@@ -231,6 +240,12 @@ function clampTrialInteractionSelectionLimit(value: unknown) {
   return Math.max(0, Math.min(10, Math.floor(n)));
 }
 
+function clampMerchantWinRequiredSuccessfulTrades(value: unknown) {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_ROOM_GAME_RULES.merchantWinRequiredSuccessfulTrades;
+  return Math.max(1, Math.min(10, Math.floor(n)));
+}
+
 function clampNightActionDurationSec(value: unknown, fallback: number) {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return fallback;
@@ -247,7 +262,12 @@ function clampWolfNightActionDurationSec(value: unknown) {
 }
 
 function normalizeNightActionDurations(input?: Partial<RoomGameRules> | null) {
-  const nonWolf = clampNonWolfNightActionDurationSec(input?.nonWolfNightActionDurationSec);
+  const allNightActionsSimultaneous =
+    input?.allNightActionsSimultaneous ?? DEFAULT_ROOM_GAME_RULES.allNightActionsSimultaneous;
+  let nonWolf = clampNonWolfNightActionDurationSec(input?.nonWolfNightActionDurationSec);
+  if (!allNightActionsSimultaneous && nonWolf < NIGHT_ACTION_DURATION_STEP_SEC) {
+    nonWolf = NIGHT_ACTION_DURATION_STEP_SEC;
+  }
   let wolf = clampWolfNightActionDurationSec(input?.wolfNightActionDurationSec);
   if (wolf > nonWolf) wolf = nonWolf;
   return {
@@ -262,6 +282,7 @@ export function buildRoomGameRules(input?: Partial<RoomGameRules> | null): RoomG
     ...DEFAULT_ROOM_GAME_RULES,
     ...(input || {}),
     trialInteractionSelectionLimit: clampTrialInteractionSelectionLimit(input?.trialInteractionSelectionLimit),
+    merchantWinRequiredSuccessfulTrades: clampMerchantWinRequiredSuccessfulTrades(input?.merchantWinRequiredSuccessfulTrades),
     nonWolfNightActionDurationSec: normalizedDurations.nonWolfNightActionDurationSec,
     wolfNightActionDurationSec: normalizedDurations.wolfNightActionDurationSec,
     nightActionOrder: normalizeNightActionOrder(input?.nightActionOrder),
@@ -310,9 +331,16 @@ export type GameLogEntry =
   | { type: "village_chief_extra_vote_started"; phase: GameLogEntryPhase; chiefId: string }
   | { type: "witch_heal"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "witch_poison"; phase: GameLogEntryPhase; actorId: string; targetId: string }
-  | { type: "seer_check"; phase: GameLogEntryPhase; actorId: string; targetId: string; isWolf: boolean }
+  | { type: "seer_check"; phase: GameLogEntryPhase; actorId: string; targetId: string; isWolf: boolean; actualIsWolf?: boolean; blockedByMerchantItem?: MerchantItemId }
   | { type: "hunter_mark"; phase: GameLogEntryPhase; actorId: string; targetId: string }
-  | { type: "hunter_shot"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "hunter_shot"; phase: GameLogEntryPhase; actorId: string; targetId: string; blockedByMerchantItem?: MerchantItemId }
+  | { type: "cursed_sniff"; phase: GameLogEntryPhase; actorId: string; targetId: string; hasWolf: boolean; areaIds?: string[]; blockedByMintPlayerIds?: string[] }
+  | { type: "merchant_trade_offer"; phase: GameLogEntryPhase; actorId: string; targetId: string; itemId: MerchantItemId; merchantChoice: MerchantDecision }
+  | { type: "merchant_trade_response"; phase: GameLogEntryPhase; actorId: string; targetId: string; itemId: MerchantItemId; merchantChoice: MerchantDecision; targetChoice: MerchantDecision; result: MerchantTradeResult }
+  | { type: "merchant_item_received"; phase: GameLogEntryPhase; targetId: string; itemId: MerchantItemId; appliesNight: number }
+  | { type: "merchant_item_expired"; phase: GameLogEntryPhase; targetId: string; itemIds: MerchantItemId[] }
+  | { type: "merchant_item_used"; phase: GameLogEntryPhase; itemId: MerchantItemId; actorId?: string | null; targetId?: string | null; sourceId?: string | null; targetIds?: string[] }
+  | { type: "merchant_win_condition_completed"; phase: GameLogEntryPhase; actorId: string; successfulTrades: number; requiredTrades: number }
   | { type: "love_pair"; phase: GameLogEntryPhase; actorId: string; targetId: string; targetWolfAligned: boolean }
   | { type: "love_escape_vote"; phase: GameLogEntryPhase; actorId: string; partnerId: string }
   | { type: "love_escape_missed"; phase: GameLogEntryPhase; actorId: string; partnerId: string }

@@ -1,4 +1,4 @@
-import type { ServerContext } from "./serverContext.js";
+﻿import type { ServerContext } from "./serverContext.js";
 import { appendLogEntry, buildWolfVoteBreakdown } from "./gameLog.js";
 import {
   emitSpiritWolfDecisionNeeded,
@@ -15,6 +15,7 @@ import {
   getActiveWolves,
   getParticipantIds,
   getSpiritWolfId,
+  getWitches,
   isSpiritWolfAlive,
   isWolfAlignedPlayer,
   resetNightTurnState,
@@ -41,11 +42,25 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     return Math.max(0, Math.floor(seconds * 1000));
   }
 
-  function shouldGrantWitchBonus(room: Room) {
+  function doesWitchHaveUsablePotion(room: Room, witchId: string) {
+    const potions = room.witchPotions?.[witchId];
+    if (!potions) return true;
+    return !(potions.healUsed && potions.poisonUsed);
+  }
+
+  function shouldGrantWitchBonus(room: Room, witchId?: string) {
     const rules = ensureRoomGameRules(room);
     const nonWolfSec = clampNonWolfNightActionDurationSec(rules.nonWolfNightActionDurationSec);
     const wolfSec = clampWolfNightActionDurationSec(rules.wolfNightActionDurationSec);
-    return nonWolfSec > 0 && wolfSec === nonWolfSec;
+    if (!(nonWolfSec > 0 && wolfSec === nonWolfSec)) return false;
+    if (!rules.witchBonusTimeRequiresUsablePotion) return true;
+    if (witchId) return doesWitchHaveUsablePotion(room, witchId);
+    return getWitches(room).some((id) => doesWitchHaveUsablePotion(room, id));
+  }
+
+  function getNightActionExtraMs(room: Room, playerId: string) {
+    const extraMs = room.nightActionExtraTimeMsByPlayerId?.[playerId] || 0;
+    return Math.max(0, Math.floor(extraMs));
   }
 
   function getWitchTurnDurationMs(room: Room) {
@@ -62,16 +77,25 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     });
   }
 
-  function getSimultaneousRoleDeadline(room: Room, role: NightActionRole) {
+  function getSimultaneousRoleDeadline(room: Room, playerId: string, role: NightActionRole) {
     const rules = ensureRoomGameRules(room);
     if (!rules.allNightActionsSimultaneous) return null;
-    if (role === "Sói") return room.wolfDeadline ?? null;
-    if (role === "Linh sói") return room.spiritWolfDecisionDeadline ?? null;
+    if (role === "Sói") {
+      if (!room.wolfDeadline) return null;
+      return room.wolfDeadline + getNightActionExtraMs(room, playerId);
+    }
+    if (role === "Linh sói") {
+      if (!room.spiritWolfDecisionDeadline) return null;
+      return room.spiritWolfDecisionDeadline + getNightActionExtraMs(room, playerId);
+    }
 
     const baseDeadline = room.nightTurnDeadline ?? null;
     if (!baseDeadline) return null;
-    if (role === "Phù thủy" && shouldGrantWitchBonus(room)) return baseDeadline + WITCH_BONUS_MS;
-    return baseDeadline;
+    let deadline = baseDeadline;
+    if (role === "Phù thủy" && shouldGrantWitchBonus(room, playerId)) {
+      deadline += WITCH_BONUS_MS;
+    }
+    return deadline + getNightActionExtraMs(room, playerId);
   }
 
   function canPerformNightRoleAction(room: Room, playerId: string, expectedRole: NightActionRole) {
@@ -86,7 +110,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
         if (room.playerRoles?.[playerId] !== "Linh sói") return false;
         if (!room.spiritWolfPendingPoisonedWolfId || room.spiritWolfDecisionMade) return false;
       }
-      const deadline = getSimultaneousRoleDeadline(room, expectedRole);
+      const deadline = getSimultaneousRoleDeadline(room, playerId, expectedRole);
       if (expectedRole === "Linh sói" && !deadline) return false;
       if (deadline && Date.now() >= deadline) return false;
       return true;

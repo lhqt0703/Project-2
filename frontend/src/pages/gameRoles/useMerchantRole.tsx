@@ -4,7 +4,9 @@ import { socket, clientId } from "../../socket";
 import {
   EMPTY_MERCHANT_PRIVATE_STATE,
   MERCHANT_ITEM_DESCRIPTIONS,
+  MERCHANT_ITEM_FULL_IMAGES,
   MERCHANT_ITEM_LABELS,
+  MERCHANT_ITEM_SMALL_IMAGES,
   MERCHANT_ROLE,
   type MerchantDecision,
   type MerchantItemId,
@@ -24,6 +26,70 @@ function decisionLabel(decision: MerchantDecision | null | undefined) {
   if (decision === "up") return "👍🏽";
   if (decision === "down") return "👎🏽";
   return "chưa chọn";
+}
+
+function renderMerchantItemTile({
+  tileKey,
+  itemId,
+  selected = false,
+  disabled = false,
+  suffix,
+  onClick,
+}: {
+  tileKey?: string | number;
+  itemId: MerchantItemId;
+  selected?: boolean;
+  disabled?: boolean;
+  suffix?: string;
+  onClick: () => void;
+}) {
+  const imageSrc = MERCHANT_ITEM_SMALL_IMAGES[itemId];
+  return (
+    <button
+      key={tileKey}
+      type="button"
+      disabled={disabled}
+      title={MERCHANT_ITEM_DESCRIPTIONS[itemId]}
+      onClick={onClick}
+      style={{
+        width: 104,
+        minHeight: 128,
+        borderRadius: 8,
+        border: selected ? "2px solid var(--accent)" : "1px solid var(--border)",
+        background: selected ? "var(--accent-surface)" : "rgba(255,255,255,0.05)",
+        color: "var(--text)",
+        display: "grid",
+        gridTemplateRows: "72px auto",
+        gap: 8,
+        padding: 8,
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.5 : 1,
+        textAlign: "center",
+      }}
+    >
+      <span
+        style={{
+          width: "100%",
+          height: 72,
+          borderRadius: 6,
+          overflow: "hidden",
+          background: "rgba(0,0,0,0.22)",
+          display: "grid",
+          placeItems: "center",
+        }}
+      >
+        {imageSrc ? (
+          <img src={imageSrc} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        ) : (
+          <span style={{ fontSize: 24 }}>?</span>
+        )}
+      </span>
+      <span style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.25 }}>
+        {MERCHANT_ITEM_LABELS[itemId]}
+        {suffix ? <span style={{ display: "block", marginTop: 4, opacity: 0.72 }}>{suffix}</span> : null}
+      </span>
+    </button>
+  );
 }
 
 export function useMerchantRole({
@@ -55,7 +121,14 @@ export function useMerchantRole({
   const [selectedDecision, setSelectedDecision] = useState<MerchantDecision | null>(null);
   const [selectedNight, setSelectedNight] = useState<number | null>(null);
   const [showOfferModal, setShowOfferModal] = useState(false);
+  const [detailItem, setDetailItem] = useState<{ itemId: MerchantItemId; night: number } | null>(null);
   const currentNight = room.nightCount || 0;
+  const visibleDetailItemId =
+    phase === "night" && detailItem?.night === currentNight ? detailItem.itemId : null;
+  const openDetailItem = useCallback((itemId: MerchantItemId) => {
+    setDetailItem({ itemId, night: currentNight });
+  }, [currentNight]);
+  const closeDetailItem = useCallback(() => setDetailItem(null), []);
 
   const effectiveSelectedItemId =
     selectedItemId && state.availableStockIds.includes(selectedItemId)
@@ -99,11 +172,11 @@ export function useMerchantRole({
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;
     if (playerId === clientId) {
-      alert("Tay Buôn không thể tự giao dịch với chính mình.");
+      alert("Bạn không thể tự giao dịch với chính mình");
       return true;
     }
     if (state.lastTargetId && state.lastTargetId === playerId) {
-      alert("Không thể chọn cùng một người hai đêm liên tiếp.");
+      alert("Không thể chọn cùng một người hai đêm liên tiếp");
       return true;
     }
 
@@ -137,27 +210,18 @@ export function useMerchantRole({
   const protectedName = getPlayerName(room, state.poppyGlassesProtectedTargetId);
   const isOfferModalOpen = phase === "night" && showOfferModal && selectedNight === currentNight;
 
-  const inventoryPanel = state.items.length > 0 ? (
+  const inventoryPanel = phase === "night" && state.items.length > 0 ? (
     <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
       <div style={{ fontWeight: 700 }}>Đồ đang giữ</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {state.items.map((item, index) => {
-          const active = item.appliesNight <= currentNight;
-          return (
-            <span
-              key={`${item.id}-${index}`}
-              title={MERCHANT_ITEM_DESCRIPTIONS[item.id]}
-              style={{
-                padding: "6px 9px",
-                borderRadius: 8,
-                border: "1px solid var(--border)",
-                opacity: active ? 1 : 0.62,
-                background: active ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.03)",
-              }}
-            >
-              {MERCHANT_ITEM_LABELS[item.id]}{active ? "" : ` (đêm ${item.appliesNight})`}
-            </span>
-          );
+          const active = item.appliesNight === currentNight;
+          return renderMerchantItemTile({
+            tileKey: `${item.id}-${index}`,
+            itemId: item.id,
+            suffix: active ? undefined : `Đêm ${item.appliesNight}`,
+            onClick: () => openDetailItem(item.id),
+          });
         })}
       </div>
     </div>
@@ -173,20 +237,13 @@ export function useMerchantRole({
     <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
       <div style={{ fontWeight: 700 }}>Kho hàng Tay Buôn</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {state.availableStockIds.length > 0 ? state.availableStockIds.map((itemId) => (
-          <span
-            key={itemId}
-            title={MERCHANT_ITEM_DESCRIPTIONS[itemId]}
-            style={{
-              padding: "6px 9px",
-              borderRadius: 8,
-              border: "1px solid var(--border)",
-              background: "rgba(255,255,255,0.06)",
-            }}
-          >
-            {MERCHANT_ITEM_LABELS[itemId]}
-          </span>
-        )) : (
+        {state.availableStockIds.length > 0 ? state.availableStockIds.map((itemId) =>
+          renderMerchantItemTile({
+            tileKey: itemId,
+            itemId,
+            onClick: () => openDetailItem(itemId),
+          })
+        ) : (
           <span style={{ opacity: 0.72 }}>Kho hàng đã hết món có thể giao dịch.</span>
         )}
       </div>
@@ -211,7 +268,7 @@ export function useMerchantRole({
     isMerchantWindowOpen &&
     !currentTrade.resolved ? (
       <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <b>{tradeActorName} muốn giao dịch</b>
+        <b>Bạn cần đưa ra một lựa chọn</b>
         <button onClick={() => respond("up")} style={{ padding: "8px 12px" }}>👍🏽</button>
         <button onClick={() => respond("down")} style={{ padding: "8px 12px" }}>👎🏽</button>
       </div>
@@ -252,20 +309,19 @@ export function useMerchantRole({
       >
         <h2 style={{ marginTop: 0 }}>Tạo giao dịch</h2>
         <p>Giao dịch với <b>{targetName}</b></p>
-        <label style={{ display: "grid", gap: 8 }}>
-          <span>Món đồ</span>
-          <select
-            value={effectiveSelectedItemId || ""}
-            onChange={(event) => setSelectedItemId(event.target.value as MerchantItemId)}
-            style={{ padding: "10px 12px" }}
-          >
-            {state.availableStockIds.map((itemId) => (
-              <option key={itemId} value={itemId}>
-                {MERCHANT_ITEM_LABELS[itemId]}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div style={{ display: "grid", gap: 8 }}>
+          <span style={{ fontWeight: 700 }}>Món đồ</span>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {state.availableStockIds.map((itemId) =>
+              renderMerchantItemTile({
+                tileKey: itemId,
+                itemId,
+                selected: effectiveSelectedItemId === itemId,
+                onClick: () => setSelectedItemId(itemId),
+              })
+            )}
+          </div>
+        </div>
 
         {effectiveSelectedItemId ? (
           <div style={{ marginTop: 10, opacity: 0.75 }}>
@@ -313,11 +369,58 @@ export function useMerchantRole({
     </div>
   ) : null;
 
+  const detailModal = visibleDetailItemId ? (
+    <div
+      onClick={closeDetailItem}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.42)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 20,
+        zIndex: 10000,
+      }}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        style={{
+          width: "min(92vw, 520px)",
+          borderRadius: 10,
+          border: "1px solid var(--border)",
+          background: "var(--surface)",
+          color: "var(--text)",
+          overflow: "hidden",
+          boxShadow: "0 18px 40px rgba(0,0,0,0.32)",
+        }}
+      >
+        {MERCHANT_ITEM_FULL_IMAGES[visibleDetailItemId] ? (
+          <img
+            src={MERCHANT_ITEM_FULL_IMAGES[visibleDetailItemId] || ""}
+            alt=""
+            style={{ width: "100%", display: "block", maxHeight: "62vh", objectFit: "cover" }}
+          />
+        ) : null}
+        <div style={{ padding: 18, display: "grid", gap: 8 }}>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>{MERCHANT_ITEM_LABELS[visibleDetailItemId]}</div>
+          <div style={{ opacity: 0.78, lineHeight: 1.5 }}>{MERCHANT_ITEM_DESCRIPTIONS[visibleDetailItemId]}</div>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+            <button type="button" onClick={closeDetailItem} style={{ padding: "8px 14px" }}>
+              Đóng
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   return {
     onPlayerClick,
     modal: offerModal,
     panel: (
       <>
+        {detailModal}
         {merchantStatusPanel}
         {targetTradePanel}
         {resolvedTradePanel}

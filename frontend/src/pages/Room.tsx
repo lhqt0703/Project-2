@@ -582,7 +582,7 @@ export default function Room() {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
           {(() => {
             const isQuick = isElementalQuickOrder(room.gameRules?.nightActionOrder || DEFAULT_ROOM_GAME_RULES.nightActionOrder);
-            const label = isQuick ? "Buff nhanh 🛼" : "Buff chậm 🕑";
+            const label = isQuick ? "Hiệu ứng hỗ trợ nhanh 🛼" : "Hiệu ứng hỗ trợ chậm 🕑";
             const tooltip = isQuick
               ? "Khi Dân làng nguyên tố thức đầu tiên trước các vai trò khác (không tính Thần tình yêu/Tay Buôn), buff sẽ có hiệu lực ngay trong đêm chọn buff"
               : "Khi Dân làng nguyên tố thức sau các vai trò khác (không tính Thần tình yêu/Tay Buôn), buff sẽ chỉ có hiệu lực từ đêm tiếp theo";

@@ -21,6 +21,8 @@ export type MerchantItemRecord = {
   appliesNight: number;
 };
 
+export type MerchantExpiredItemsByPlayer = Record<string, MerchantItemId[]>;
+
 export type MerchantTradeResult = "success" | "failed_wolf" | "failed_villager";
 
 export type MerchantTradeOffer = {
@@ -57,8 +59,36 @@ function getParticipantIds(room: Room) {
   return room.players.filter((player) => player.id !== room.hostId).map((player) => player.id);
 }
 
-export function getAdjacentPlayerIds(room: Room, playerId: string) {
+function getSeatOrderedParticipantIds(room: Room) {
   const ids = getParticipantIds(room);
+  if (!room.positions || room.positions.length === 0) return ids;
+
+  const posById = new Map(room.positions.map((pos) => [pos.playerId, pos] as const));
+  const positioned = ids
+    .map((id) => {
+      const pos = posById.get(id);
+      if (!pos) return null;
+      if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) return null;
+      return { id, x: pos.x, y: pos.y };
+    })
+    .filter((pos): pos is { id: string; x: number; y: number } => !!pos);
+
+  if (positioned.length !== ids.length) return ids;
+
+  const centerX = positioned.reduce((sum, p) => sum + p.x, 0) / positioned.length;
+  const centerY = positioned.reduce((sum, p) => sum + p.y, 0) / positioned.length;
+
+  return positioned
+    .map((p) => ({
+      id: p.id,
+      angle: Math.atan2(p.y - centerY, p.x - centerX),
+    }))
+    .sort((a, b) => (a.angle === b.angle ? (a.id < b.id ? -1 : 1) : a.angle - b.angle))
+    .map((p) => p.id);
+}
+
+export function getAdjacentPlayerIds(room: Room, playerId: string) {
+  const ids = getSeatOrderedParticipantIds(room);
   const index = ids.indexOf(playerId);
   if (index < 0 || ids.length <= 1) return [];
 
@@ -72,7 +102,7 @@ export function getCursedSniffAreaIds(room: Room, targetId: string) {
 }
 
 export function getActiveMerchantItems(room: Room, playerId: string, night = room.nightCount || 0) {
-  return (room.merchantItemsByPlayerId?.[playerId] || []).filter((item) => item.appliesNight <= night);
+  return (room.merchantItemsByPlayerId?.[playerId] || []).filter((item) => item.appliesNight === night);
 }
 
 export function hasActiveMerchantItem(
@@ -107,6 +137,29 @@ export function getMerchantAvailableItemIds(room: Room) {
   if (!room.gameRules?.merchantSingleUseItems) return [...MERCHANT_ITEM_IDS];
   const used = new Set(room.merchantUsedItemIds || []);
   return MERCHANT_ITEM_IDS.filter((itemId) => !used.has(itemId));
+}
+
+export function expireMerchantItemsForNight(room: Room, night = room.nightCount || 0) {
+  const expiredByPlayerId: MerchantExpiredItemsByPlayer = {};
+  const itemsByPlayer = room.merchantItemsByPlayerId || {};
+  const nextItemsByPlayer: typeof itemsByPlayer = {};
+
+  for (const [playerId, items] of Object.entries(itemsByPlayer)) {
+    const kept: MerchantItemRecord[] = [];
+    const expired: MerchantItemId[] = [];
+    for (const item of items || []) {
+      if (item.appliesNight <= night) {
+        expired.push(item.id);
+      } else {
+        kept.push(item);
+      }
+    }
+    if (kept.length > 0) nextItemsByPlayer[playerId] = kept;
+    if (expired.length > 0) expiredByPlayerId[playerId] = expired;
+  }
+
+  room.merchantItemsByPlayerId = nextItemsByPlayer;
+  return expiredByPlayerId;
 }
 
 export function getActiveGuardianProtectedTargetIds(room: Room) {
@@ -167,6 +220,8 @@ export function resetMerchantRoundState(room: Room) {
   room.merchantLastTargetByPlayerId = {};
   room.merchantItemsByPlayerId = {};
   room.merchantUsedItemIds = [];
+  room.merchantSuccessfulTradeCountsByPlayerId = {};
+  room.merchantWinCompletedPlayerIds = [];
   room.merchantWolfBiteDisabledTonight = false;
   room.merchantWolfBiteDisabledNextNight = false;
   room.merchantCheeseMarkedPlayerIds = [];

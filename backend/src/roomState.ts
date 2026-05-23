@@ -187,6 +187,9 @@ export function resetNightTurnState(room: Room) {
   room.nightTurnDeadline = null;
   room.nightTurnPaused = false;
   room.nightTurnRemainingMs = null;
+  room.wolfTurnRemainingMs = null;
+  room.spiritWolfDecisionRemainingMs = null;
+  room.nightActionExtraTimeMsByPlayerId = {};
   room.spiritWolfDecisionDeadline = null;
   delete room.nightTurnOrderSnapshot;
 }

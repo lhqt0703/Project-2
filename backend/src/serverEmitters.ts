@@ -98,6 +98,8 @@ export function toPublicRoom(room: Room) {
     merchantLastTargetByPlayerId: _merchantLastTargetByPlayerId,
     merchantItemsByPlayerId: _merchantItemsByPlayerId,
     merchantUsedItemIds: _merchantUsedItemIds,
+    merchantSuccessfulTradeCountsByPlayerId: _merchantSuccessfulTradeCountsByPlayerId,
+    merchantWinCompletedPlayerIds: _merchantWinCompletedPlayerIds,
     merchantWolfBiteDisabledTonight: _merchantWolfBiteDisabledTonight,
     merchantWolfBiteDisabledNextNight: _merchantWolfBiteDisabledNextNight,
     merchantCheeseMarkedPlayerIds: _merchantCheeseMarkedPlayerIds,
@@ -189,16 +191,51 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
   const witchBonusApplies =
     nonWolfDurationSec > 0
     && wolfDurationSec === nonWolfDurationSec;
+  const getNightActionExtraMs = (playerId: string) => {
+    const extra = room.nightActionExtraTimeMsByPlayerId?.[playerId] || 0;
+    return Math.max(0, Math.floor(extra));
+  };
 
-  const nonWolfPendingStillActive = (role: string | null | undefined) => {
+  const witchHasUsablePotion = (playerId: string) => {
+    const potions = room.witchPotions?.[playerId];
+    if (!potions) return true;
+    return !(potions.healUsed === true && potions.poisonUsed === true);
+  };
+
+  const witchGetsBonus = (playerId: string) => {
+    if (!witchBonusApplies) return false;
+    if (!rules.witchBonusTimeRequiresUsablePotion) return true;
+    return witchHasUsablePotion(playerId);
+  };
+
+  const getDeadlineForPlayer = (playerId: string, role: string | null | undefined) => {
+    if (isWolfAlignedPlayer(room, playerId)) {
+      const wolfDeadline = room.wolfDeadline ?? null;
+      if (!wolfDeadline) return null;
+      return wolfDeadline + getNightActionExtraMs(playerId);
+    }
+    if (role === "Linh sói") {
+      const spiritDeadline = room.spiritWolfDecisionDeadline ?? null;
+      if (!spiritDeadline) return null;
+      return spiritDeadline + getNightActionExtraMs(playerId);
+    }
     const baseDeadline = room.nightTurnDeadline ?? null;
-    if (!baseDeadline) return true;
-    const deadline = role === "Phù thủy" && witchBonusApplies ? baseDeadline + 10_000 : baseDeadline;
+    if (!baseDeadline) return null;
+    let deadline = baseDeadline + getNightActionExtraMs(playerId);
+    if (role === "Phù thủy" && witchGetsBonus(playerId)) {
+      deadline += 10_000;
+    }
+    return deadline;
+  };
+
+  const pendingStillActive = (playerId: string, role: string | null | undefined) => {
+    const deadline = getDeadlineForPlayer(playerId, role);
+    if (!deadline) return true;
     return now < deadline;
   };
 
   const setProgress = (playerId: string, status: "pending" | "done", role: string | null | undefined) => {
-    if (status === "pending" && !nonWolfPendingStillActive(role)) return;
+    if (status === "pending" && !pendingStillActive(playerId, role)) return;
     progress[playerId] = status;
   };
 
@@ -213,8 +250,7 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
     if (isWolfAlignedPlayer(room, playerId)) {
       const status = room.wolfLocked?.[playerId] === true ? "done" : "pending";
       if (status === "pending" && room.wolfVoteResolvedTonight) continue;
-      if (status === "pending" && room.wolfDeadline && now >= room.wolfDeadline) continue;
-      progress[playerId] = status;
+      setProgress(playerId, status, role);
       continue;
     }
 

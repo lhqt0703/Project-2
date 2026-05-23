@@ -40,6 +40,7 @@ export interface RoomGameRules {
   forceWolfBiteFirstNight: boolean;
   allNightActionsSimultaneous: boolean;
   witchSeeBiteOnlyIfHasHealPotion: boolean;
+  witchBonusTimeRequiresUsablePotion: boolean;
   witchHideProtectedBiteInSimultaneous: boolean;
   witchHideProtectedBiteWhenSequential: boolean;
   trialInteractionSelectionLimit: number;
@@ -50,6 +51,7 @@ export interface RoomGameRules {
   villageChiefKnowsWolfBite: boolean;
   witchSeeProtectorImmortalBite: boolean;
   merchantSingleUseItems: boolean;
+  merchantWinRequiredSuccessfulTrades: number;
 }
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -57,6 +59,7 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   forceWolfBiteFirstNight: true,
   allNightActionsSimultaneous: true,
   witchSeeBiteOnlyIfHasHealPotion: true,
+  witchBonusTimeRequiresUsablePotion: true,
   witchHideProtectedBiteInSimultaneous: false,
   witchHideProtectedBiteWhenSequential: true,
   trialInteractionSelectionLimit: 2,
@@ -67,6 +70,7 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   villageChiefKnowsWolfBite: true,
   witchSeeProtectorImmortalBite: true,
   merchantSingleUseItems: false,
+  merchantWinRequiredSuccessfulTrades: 3,
 };
 
 export interface RoomData {
@@ -111,6 +115,9 @@ export interface RoomData {
   spiritWolfDecisionDeadline?: number | null;
   nightTurnPaused?: boolean;
   nightTurnRemainingMs?: number | null;
+  wolfTurnRemainingMs?: number | null;
+  spiritWolfDecisionRemainingMs?: number | null;
+  nightActionExtraTimeMsByPlayerId?: Record<string, number>;
   elementalPendingBuffVote?: boolean;
   elementalBuffQuickMode?: boolean;
   elementalSelectedBuffId?: ElementalBuffId | null;

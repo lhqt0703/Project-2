@@ -117,11 +117,16 @@ export function useGuardianRole({
     setLockedTargetId(null);
   }, []);
 
+  const confirmMessage =
+    selectedPlayerId && selectedPlayerId === clientId
+      ? "Bạn có chắc muốn bảo vệ bản thân không?"
+      : "Bạn có chắc muốn bảo vệ người này không?";
+
   const modal = (
     <ConfirmModal
       open={showConfirm && !!selectedPlayerId}
       title="Xác nhận bảo vệ"
-      message="Bạn có chắc muốn bảo vệ người này?"
+      message={confirmMessage}
       onConfirm={confirm}
       onCancel={() => setShowConfirm(false)}
     />

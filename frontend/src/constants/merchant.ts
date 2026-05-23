@@ -59,6 +59,31 @@ export const MERCHANT_ITEM_DESCRIPTIONS: Record<MerchantItemId, string> = {
   "moth-cocoon": "Được Bảo Vệ chọn thì kết giới tồn tại thêm một đêm.",
 };
 
+const MERCHANT_ITEM_IMAGE_MODULES = import.meta.glob<string>(
+  "../assets/Kho hàng/*.{jpg,jpeg,png,webp}",
+  { eager: true, import: "default" },
+);
+
+function getAssetBaseName(path: string) {
+  return path.split(/[\\/]/).pop()?.replace(/\.(jpe?g|png|webp)$/i, "") ?? "";
+}
+
+function findMerchantItemImage(prefix: "S" | "F", itemId: MerchantItemId) {
+  const expectedName = `${prefix} ${MERCHANT_ITEM_LABELS[itemId]}`.normalize("NFC").toLowerCase();
+  const match = Object.entries(MERCHANT_ITEM_IMAGE_MODULES).find(([path]) =>
+    getAssetBaseName(path).normalize("NFC").toLowerCase() === expectedName
+  );
+  return match?.[1] ?? null;
+}
+
+export const MERCHANT_ITEM_SMALL_IMAGES: Record<MerchantItemId, string | null> = Object.fromEntries(
+  MERCHANT_ITEM_IDS.map((itemId) => [itemId, findMerchantItemImage("S", itemId)]),
+) as Record<MerchantItemId, string | null>;
+
+export const MERCHANT_ITEM_FULL_IMAGES: Record<MerchantItemId, string | null> = Object.fromEntries(
+  MERCHANT_ITEM_IDS.map((itemId) => [itemId, findMerchantItemImage("F", itemId)]),
+) as Record<MerchantItemId, string | null>;
+
 export const EMPTY_MERCHANT_PRIVATE_STATE: MerchantPrivateState = {
   items: [],
   activeItemIds: [],

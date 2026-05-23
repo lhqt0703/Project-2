@@ -1,3 +1,5 @@
+import type { MerchantDecision, MerchantItemId, MerchantTradeResult } from "../../constants/merchant";
+
 export type GamePhase = "dusk" | "day" | "night";
 
 export type RoomUpdatedPayload = unknown;
@@ -110,9 +112,16 @@ export type GameLogEntry =
   | { type: "village_chief_extra_vote_started"; phase: GameLogEntryPhase; chiefId: string }
   | { type: "witch_heal"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "witch_poison"; phase: GameLogEntryPhase; actorId: string; targetId: string }
-  | { type: "seer_check"; phase: GameLogEntryPhase; actorId: string; targetId: string; isWolf: boolean }
+  | { type: "seer_check"; phase: GameLogEntryPhase; actorId: string; targetId: string; isWolf: boolean; actualIsWolf?: boolean; blockedByMerchantItem?: MerchantItemId }
   | { type: "hunter_mark"; phase: GameLogEntryPhase; actorId: string; targetId: string }
-  | { type: "hunter_shot"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "hunter_shot"; phase: GameLogEntryPhase; actorId: string; targetId: string; blockedByMerchantItem?: MerchantItemId }
+  | { type: "cursed_sniff"; phase: GameLogEntryPhase; actorId: string; targetId: string; hasWolf: boolean; areaIds?: string[]; blockedByMintPlayerIds?: string[] }
+  | { type: "merchant_trade_offer"; phase: GameLogEntryPhase; actorId: string; targetId: string; itemId: MerchantItemId; merchantChoice: MerchantDecision }
+  | { type: "merchant_trade_response"; phase: GameLogEntryPhase; actorId: string; targetId: string; itemId: MerchantItemId; merchantChoice: MerchantDecision; targetChoice: MerchantDecision; result: MerchantTradeResult }
+  | { type: "merchant_item_received"; phase: GameLogEntryPhase; targetId: string; itemId: MerchantItemId; appliesNight: number }
+  | { type: "merchant_item_expired"; phase: GameLogEntryPhase; targetId: string; itemIds: MerchantItemId[] }
+  | { type: "merchant_item_used"; phase: GameLogEntryPhase; itemId: MerchantItemId; actorId?: string | null; targetId?: string | null; sourceId?: string | null; targetIds?: string[] }
+  | { type: "merchant_win_condition_completed"; phase: GameLogEntryPhase; actorId: string; successfulTrades: number; requiredTrades: number }
   | { type: "love_pair"; phase: GameLogEntryPhase; actorId: string; targetId: string; targetWolfAligned: boolean }
   | { type: "love_escape_vote"; phase: GameLogEntryPhase; actorId: string; partnerId: string }
   | { type: "love_escape_missed"; phase: GameLogEntryPhase; actorId: string; partnerId: string }

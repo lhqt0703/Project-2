@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { GameLogNight, GameLogEntry, EliminationCause } from "../pages/gameRoles/socketEvents";
+import { MERCHANT_ITEM_LABELS, type MerchantDecision, type MerchantItemId, type MerchantTradeResult } from "../constants/merchant";
 import { ELEMENTAL_BUFF_LABELS } from "../constants/elemental";
 
 function getBuffLabel(buffId: string): string {
@@ -81,6 +82,23 @@ function getElementalBuffLogText(buffId: string, rolesByPlayerId: RolesByPlayerI
     ? getRolePlayerText(targetPlayerId, rolesByPlayerId, playerNamesById)
     : targetRole;
   return `${targetText} ${actionText}`;
+}
+
+function getMerchantChoiceText(choice: MerchantDecision | null | undefined) {
+  if (choice === "up") return "👍🏽";
+  if (choice === "down") return "👎🏽";
+  return "?";
+}
+
+function getMerchantItemText(itemId: MerchantItemId | null | undefined) {
+  return itemId ? MERCHANT_ITEM_LABELS[itemId] || itemId : "món đồ";
+}
+
+function getMerchantTradeResultText(result: MerchantTradeResult | null | undefined) {
+  if (result === "success") return "giao dịch thành công";
+  if (result === "failed_wolf") return "giao dịch thất bại, phe sói bị chặn cắn";
+  if (result === "failed_villager") return "giao dịch thất bại, mục tiêu bị dính phô mai";
+  return "giao dịch thất bại";
 }
 
 function getEliminationCauseText(causes: EliminationCause[] | undefined, rolesByPlayerId: RolesByPlayerId, playerNamesById: PlayerNamesById): string {
@@ -693,7 +711,7 @@ function LogEntryLine({
           {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Hộ nhân"}{" "}
           chặn một lần chết lên{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={entry.actorId ? [entry.actorId] : []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
-          {entry.permanent ? <span style={{ opacity: 0.75 }}> (vẫn còn hiệu lực)</span> : null}
+          {/* {entry.permanent ? <span style={{ opacity: 0.75 }}> (vẫn còn hiệu lực)</span> : null} */}
         </li>
       );
 
@@ -735,17 +753,29 @@ function LogEntryLine({
         </li>
       );
 
-    case "seer_check":
+    case "seer_check": {
+      const targetRoleTooltip = `${getPlayerName(entry.targetId, playerNamesById)} là ${getRoleName(entry.targetId, rolesByPlayerId)}`;
+      if (entry.blockedByMerchantItem === "invisibility-cloak") {
+        return (
+          <li style={lineStyle}>
+            {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Tiên tri"} soi{" "}
+            {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="tooltipOnly" tooltipDetail={targetRoleTooltip} secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            nhưng {getMerchantItemText(entry.blockedByMerchantItem)} chặn lại khiến kết quả ra{" "}
+            <span style={{ fontWeight: 600, color: "#27ae60" }}>Dân</span>
+          </li>
+        );
+      }
       return (
         <li style={lineStyle}>
           {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Tiên tri"} soi{" "}
-          {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
+          {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="tooltipOnly" tooltipDetail={targetRoleTooltip} secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
           {" ra "}
           <span style={{ fontWeight: 600, color: entry.isWolf ? "#e74c3c" : "#27ae60" }}>
             {entry.isWolf ? "Sói" : "Dân"}
           </span>
         </li>
       );
+    }
 
     case "hunter_mark":
       return (
@@ -756,10 +786,113 @@ function LogEntryLine({
       );
 
     case "hunter_shot":
+      if (entry.blockedByMerchantItem === "iron-armor") {
+        return (
+          <li style={lineStyle}>
+            {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Thợ săn"} bắn{" "}
+            {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            nhưng {getMerchantItemText(entry.blockedByMerchantItem)} đã chặn lại viên đạn
+          </li>
+        );
+      }
       return (
         <li style={lineStyle}>
           {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Thợ săn"} bắn{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
+        </li>
+      );
+
+    case "cursed_sniff": {
+      const blockedIds = entry.blockedByMintPlayerIds || [];
+      if (blockedIds.length > 0 && !entry.hasWolf) {
+        return (
+          <li style={lineStyle}>
+            <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId, ...blockedIds]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> không ngửi thấy mùi sói xung quanh{" "}
+            <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId, ...blockedIds]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> do{" "}
+            <RolesListSpan playerIds={blockedIds} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã có {getMerchantItemText("mint")} chặn lại mùi
+          </li>
+        );
+      }
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đánh hơi quanh{" "}
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> và thấy{" "}
+          <span style={{ fontWeight: 700, color: entry.hasWolf ? "#e74c3c" : "#27ae60" }}>{entry.hasWolf ? "có mùi sói" : "không có mùi sói"}</span>
+        </li>
+      );
+    }
+
+    case "merchant_trade_offer":
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đề nghị giao dịch với{" "}
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />: {getMerchantItemText(entry.itemId)} / {getMerchantChoiceText(entry.merchantChoice)}
+        </li>
+      );
+
+    case "merchant_trade_response":
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> phản hồi {getMerchantChoiceText(entry.targetChoice)} với giao dịch {getMerchantItemText(entry.itemId)} của{" "}
+          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> ({getMerchantChoiceText(entry.merchantChoice)}) - {getMerchantTradeResultText(entry.result)}
+        </li>
+      );
+
+    case "merchant_item_received":
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> nhận {getMerchantItemText(entry.itemId)}
+          <span style={{ opacity: 0.72 }}> (hiệu lực đêm {entry.appliesNight})</span>
+        </li>
+      );
+
+    case "merchant_item_expired":
+      return (
+        <li style={lineStyle}>
+          {entry.itemIds.map((itemId) => getMerchantItemText(itemId)).join(", ")} trên{" "}
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã biến mất khi trời sáng
+        </li>
+      );
+
+    case "merchant_item_used":
+      if (entry.itemId === "poppy-glasses" && entry.actorId && entry.targetId) {
+        return (
+          <li style={lineStyle}>
+            <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã thấy{" "}
+            <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> được bảo vệ {/* thông qua {getMerchantItemText(entry.itemId)} */}
+          </li>
+        );
+      }
+      if (entry.itemId === "gunpowder-barrel" && entry.sourceId) {
+        return (
+          <li style={lineStyle}>
+            {getMerchantItemText(entry.itemId)} trên{" "}
+            <RoleSpan playerId={entry.sourceId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={entry.targetIds || []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> phát nổ
+            {entry.targetIds?.length ? (
+              <>
+                {" "}khiến{" "}
+                <RolesListSpan playerIds={entry.targetIds} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> cũng chết chùm chung theo
+              </>
+            ) : null}
+          </li>
+        );
+      }
+      if (entry.itemId === "moth-cocoon" && entry.targetId) {
+        return (
+          <li style={lineStyle}>
+            Bướm đêm đã kéo dài hiệu lực hoa bảo vệ lên{" "}
+            <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> thêm đêm nay
+          </li>
+        );
+      }
+      return null;
+
+    case "merchant_win_condition_completed":
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã hoàn thành điều kiện thắng của Tay Buôn với {entry.successfulTrades} giao dịch thành công
+          <span style={{ opacity: 0.72 }}> (mốc {entry.requiredTrades})</span>
+          <span style={{ opacity: 0.72 }}> (ván chơi vẫn tiếp tục)</span>
         </li>
       );
 

@@ -17,6 +17,7 @@ import {
   clearNightTurnTimer,
   clearSpiritWolfDecisionTimer,
   clearTrialState,
+  canPlayerActAtNight,
   ensureWitchState,
   getActiveDayVoters,
   getActiveWolves,
@@ -33,6 +34,7 @@ import {
   isSpiritWolfAlive,
   isWolfAlignedPlayer,
   isWolfRole,
+  markWildWolfConversionReadyIfWolfDied,
   resetNightTurnState,
   resetRoomFromGameToLobby,
 } from "./roomState.js";
@@ -131,12 +133,24 @@ import {
   PROTECTOR_ROLE,
   PROTECTOR_PERMANENT_BUFF_ID,
   VILLAGE_CHIEF_ROLE,
+  clearProtectorTargetIfDead,
   getVillageChiefId,
   isProtectorImmortalityPermanent,
   isVillageChief,
   tryUseProtectorImmortality,
   type ProtectorSaveRecord,
 } from "./specialRoles.js";
+import {
+  ANGEL_ROLE,
+  activateAngelRevivesForNight,
+  emitAngelPrivateState,
+  emitAngelPrivateStateForAll,
+  expireUnusedAngelReviveOpportunities,
+  isAngelGuess,
+  markAngelReviveAvailable,
+  recordAngelReviveChoice,
+  revealAngelHiddenRevivesForDay,
+} from "./angel.js";
 
 const SPIRIT_WOLF_ROLE = "Linh sói";
 const NORMAL_WOLF_ROLE = "Sói";
@@ -316,7 +330,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (room.phase !== "night") return null;
     const rules = ensureRoomGameRules(room);
     if (!rules.allNightActionsSimultaneous) return null;
-    if ((room.deadPlayers || []).includes(playerId)) return null;
+    if (!canPlayerActAtNight(room, playerId)) return null;
 
     if (isWolfAlignedPlayer(room, playerId)) {
       if (!room.wolfDeadline) return null;
@@ -375,7 +389,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.playerRoles?.[playerId] === WILD_WOLF_ROLE &&
       room.wildWolfConvertAvailableTonight === true &&
       room.wildWolfConvertUsed !== true &&
-      !(room.deadPlayers || []).includes(playerId)
+      canPlayerActAtNight(room, playerId)
     );
   }
 
@@ -471,7 +485,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
   function isMerchantTradeWindowOpen(room: Room, offer: MerchantTradeOffer) {
     if (room.gameOver) return false;
     if (room.phase !== "night") return false;
-    if ((room.deadPlayers || []).includes(offer.actorId)) return false;
+    if (!canPlayerActAtNight(room, offer.actorId)) return false;
     if ((room.deadPlayers || []).includes(offer.targetId)) return false;
     if (room.playerRoles?.[offer.actorId] !== MERCHANT_ROLE) return false;
     return canPerformNightRoleAction(room, offer.actorId, MERCHANT_ROLE);
@@ -1478,6 +1492,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     room.deadPlayers = room.deadPlayers || [];
     room.publicRevealedRolesByPlayerId = {};
+    room.angelReviveAvailableByPlayerId = {};
+    room.angelReviveUsedPlayerIds = [];
+    room.angelReviveRecordsByAngelId = {};
+    room.angelHiddenRevivedPlayerIds = [];
+    room.angelOutcomeLoggedPlayerIds = [];
     room.privatePlayerHearts = {};
     room.privateHeartVisiblePlayerIds = [];
     room.playerHeartShakeIds = [];
@@ -1541,6 +1560,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.wildWolfConvertActorId = null;
     room.wildWolfConvertTargetId = null;
     room.wildWolfConvertUsed = false;
+    room.angelReviveAvailableByPlayerId = {};
+    room.angelReviveUsedPlayerIds = [];
+    room.angelReviveRecordsByAngelId = {};
+    room.angelHiddenRevivedPlayerIds = [];
+    room.angelOutcomeLoggedPlayerIds = [];
     resetMerchantRoundState(room);
 
     room.hidePlayerRoleText = true;
@@ -1831,6 +1855,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.nightCount = 0;
     room.gameLog = [];
     room.deadPlayers = [];
+    room.angelReviveAvailableByPlayerId = {};
+    room.angelReviveUsedPlayerIds = [];
+    room.angelReviveRecordsByAngelId = {};
+    room.angelHiddenRevivedPlayerIds = [];
+    room.angelOutcomeLoggedPlayerIds = [];
     room.publicRevealedRolesByPlayerId = {};
     room.sharedHeartsVisible = false;
     room.playerHearts = {};
@@ -2057,7 +2086,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if ((room.nightCount || 0) !== 1) return;
     if (!canPerformNightRoleAction(room, clientId, LOVE_ROLE)) return;
     if (room.playerRoles?.[clientId] !== LOVE_ROLE) return;
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
     if (room.loveTargetId) return;
 
     if (!targetId || targetId === clientId) return;
@@ -2100,7 +2129,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (!room) return;
     if (room.gameOver) return;
     if (room.phase !== "night") return;
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
     if (room.loveEscapeUsed || room.loveEscapeActiveTonight) return;
     const rules = ensureRoomGameRules(room);
     if (rules.allNightActionsSimultaneous) {
@@ -2173,6 +2202,21 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     ctx.io.to(roomId).emit("phaseChanged", phase);
 
     if (phase === "day") {
+      const revealedAngelRevives = revealAngelHiddenRevivesForDay(room);
+      for (const record of revealedAngelRevives) {
+        appendLogEntry(room, {
+          type: "angel_revive_revealed",
+          phase: "day",
+          actorId: record.angelId,
+          targetId: record.targetId,
+        });
+        emitAngelPrivateState(ctx, roomId, room, record.angelId);
+        emitAngelPrivateState(ctx, roomId, room, record.targetId);
+      }
+      if (revealedAngelRevives.length) {
+        emitAngelPrivateStateForAll(ctx, roomId, room);
+      }
+
       const wasElementalBuffVoteNight = shouldElementalsVoteBuffTonight(room);
       if (wasElementalBuffVoteNight) {
         resolveElementalBuffVote(roomId);
@@ -2254,6 +2298,24 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       clearTrialState(room);
 
       room.nightCount = (room.nightCount || 0) + 1;
+      expireUnusedAngelReviveOpportunities(room);
+      const activatedAngelRevives = activateAngelRevivesForNight(room);
+      for (const record of activatedAngelRevives) {
+        appendLogEntry(room, {
+          type: "angel_revive_activated",
+          phase: "night",
+          actorId: record.angelId,
+          targetId: record.targetId,
+        });
+        if (isWolfAlignedPlayer(room, record.targetId)) {
+          ctx.io.in(record.targetId).socketsJoin(`wolves_${roomId}`);
+        }
+        emitAngelPrivateState(ctx, roomId, room, record.angelId);
+        emitAngelPrivateState(ctx, roomId, room, record.targetId);
+      }
+      emitAngelPrivateStateForAll(ctx, roomId, room);
+      checkAndEndGame(roomId, "angel_revive_expired");
+      if (room.gameOver) return;
 
       if (ensureRoomGameRules(room).twoHeartsFirstTwoNights) {
         if (room.nightCount <= TWO_HEARTS_NIGHT_LIMIT) {
@@ -2779,6 +2841,111 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
+  socket.on("hostEliminatePlayerForRules", ({ roomId, targetId }: { roomId: string; targetId: string }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (clientId !== room.hostId) return;
+    if (!room.phase) return;
+    if (!targetId || targetId === room.hostId) return;
+    if (!room.players.find((player) => player.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    room.deadPlayers = room.deadPlayers || [];
+    room.deadPlayers.push(targetId);
+    markWildWolfConversionReadyIfWolfDied(room, targetId);
+    clearProtectorTargetIfDead(room, targetId);
+
+    if (room.wolfVotes) {
+      for (const [wolfId, votedTargetId] of Object.entries(room.wolfVotes)) {
+        if (wolfId === targetId || votedTargetId === targetId) room.wolfVotes[wolfId] = null;
+      }
+      ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes);
+    }
+    if (room.wolfVotes2) {
+      for (const [wolfId, votedTargetId] of Object.entries(room.wolfVotes2)) {
+        if (wolfId === targetId || votedTargetId === targetId) room.wolfVotes2[wolfId] = null;
+      }
+      ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
+    }
+    if (room.wolfLocked?.[targetId] !== undefined) {
+      room.wolfLocked[targetId] = false;
+      ctx.io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked);
+    }
+
+    if (room.dayVotes) {
+      for (const [voterId, votedTargetId] of Object.entries(room.dayVotes)) {
+        if (voterId === targetId || votedTargetId === targetId) room.dayVotes[voterId] = null;
+      }
+      ctx.io.to(roomId).emit("dayVotesUpdated", room.dayVotes);
+    }
+    if (room.dayLocked?.[targetId] !== undefined) {
+      room.dayLocked[targetId] = false;
+      ctx.io.to(roomId).emit("dayLockedUpdated", room.dayLocked);
+    }
+    room.dayVoters = (room.dayVoters || []).filter((id) => id !== targetId);
+    if (room.trialVotes?.[targetId] !== undefined) {
+      delete room.trialVotes[targetId];
+      ctx.io.to(roomId).emit("trialVotesUpdated", room.trialVotes);
+    }
+    room.trialInteractionActiveIds = (room.trialInteractionActiveIds || []).filter((id) => id !== targetId);
+    room.trialSelectedInteractorIds = (room.trialSelectedInteractorIds || []).filter((id) => id !== targetId);
+    room.trialInteractionQueuedIds = (room.trialInteractionQueuedIds || []).filter((id) => id !== targetId);
+    if (room.trialSelectedInteractorId === targetId) room.trialSelectedInteractorId = null;
+    if (room.trialTargetId === targetId) {
+      clearTrialState(room);
+    } else if (room.trialStage === "defense") {
+      ctx.io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
+    }
+
+    const logPhase = room.phase === "day" ? "day" : "night";
+    appendLogEntry(room, {
+      type: "mysterious_force_eliminated",
+      phase: logPhase,
+      targetId,
+    });
+
+    if (markAngelReviveAvailable(room, targetId)) {
+      emitAngelPrivateState(ctx, roomId, room, targetId);
+    }
+
+    ctx.io.to(roomId).emit("playerKilled", targetId);
+    emitHostNightActionProgress(roomId);
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    checkAndEndGame(roomId, "host_eliminated_for_rules");
+  });
+
+  socket.on("angelChooseRevive", ({ roomId, targetId, guess }: { roomId: string; targetId: string; guess: unknown }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver) return;
+    if (room.phase !== "day") return;
+    if (room.playerRoles?.[clientId] !== ANGEL_ROLE) return;
+    if (!(room.deadPlayers || []).includes(clientId)) return;
+    if (!isAngelGuess(guess)) return;
+    if (!targetId || targetId === clientId || targetId === room.hostId) return;
+    if (!room.players.find((player) => player.id === targetId)) return;
+    if (!(room.deadPlayers || []).includes(targetId)) return;
+    if ((room.angelReviveUsedPlayerIds || []).includes(clientId)) return;
+    if (room.angelReviveRecordsByAngelId?.[clientId]) return;
+    if (room.angelReviveAvailableByPlayerId?.[clientId] !== (room.nightCount || 0)) return;
+    const targetAlreadyChosen = Object.values(room.angelReviveRecordsByAngelId || {}).some((record) => record.targetId === targetId);
+    if (targetAlreadyChosen) return;
+
+    const record = recordAngelReviveChoice(room, clientId, targetId, guess);
+    appendLogEntry(room, {
+      type: "angel_revive_choice",
+      phase: "day",
+      actorId: clientId,
+      targetId,
+      guess,
+      targetTeam: record.targetTeam,
+    });
+    emitAngelPrivateState(ctx, roomId, room, clientId);
+    emitAngelPrivateState(ctx, roomId, room, targetId);
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
   socket.on("hostEndGameNow", ({ roomId }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -2956,7 +3123,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (room.phase !== "night") return;
     if (!canPerformNightRoleAction(room, clientId, "Thợ săn")) return;
     if (room.playerRoles?.[clientId] !== "Thợ săn") return;
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
 
     room.hunterTargetTonight = room.hunterTargetTonight || {};
 
@@ -2995,7 +3162,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     const myRole = room.playerRoles?.[clientId] || null;
     if (!isElementalRoleTurn(myRole)) return;
     if (!canPerformNightRoleAction(room, clientId, myRole as any)) return;
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
     if (shouldElementalsVoteBuffTonight(room)) return;
 
     room.elementalTargetTonight = room.elementalTargetTonight || {};
@@ -3047,7 +3214,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     const myRole = room.playerRoles?.[clientId] || null;
     if (!isElementalRoleTurn(myRole)) return;
     if (!canPerformNightRoleAction(room, clientId, myRole as any)) return;
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
     if (!shouldElementalsVoteBuffTonight(room)) return;
     const availableTier = getBuffTier(room.elementalCorrectGuessCountForBuff || 0);
     const selectedBuff = ELEMENTAL_BUFFS.find((buff) => buff.id === buffId);
@@ -3172,7 +3339,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     if (room.playerRoles?.[clientId] !== "Tiên tri") return;
 
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
 
     if (!room.players.find(p => p.id === targetId)) return;
     if ((room.deadPlayers || []).includes(targetId)) return;
@@ -3220,7 +3387,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (room.phase !== "night") return;
     if (!canPerformNightRoleAction(room, clientId, CURSED_ROLE)) return;
     if (room.playerRoles?.[clientId] !== CURSED_ROLE) return;
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
 
     if (targetId === room.hostId) return;
     if (!room.players.find((player) => player.id === targetId)) return;
@@ -3279,7 +3446,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (room.phase !== "night") return;
     if (!canPerformNightRoleAction(room, clientId, MERCHANT_ROLE)) return;
     if (room.playerRoles?.[clientId] !== MERCHANT_ROLE) return;
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
 
     if (!isMerchantItemId(itemId) || !isMerchantDecision(choice)) return;
     if (!targetId || targetId === clientId) {
@@ -3344,7 +3511,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (!isMerchantDecision(choice)) return;
     if (room.gameOver) return;
     if (room.phase !== "night") return;
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
 
     const offers = Object.values(room.merchantTradeOffersTonight || {});
     const offer = offers.find((item) => item.targetId === clientId && item.resolved !== true) || null;
@@ -3370,7 +3537,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     if (room.playerRoles?.[clientId] !== "Bảo vệ") return;
 
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
 
     if (room.protectedTonight) {
       socket.emit("errorMessage", "Bạn đã xác nhận bảo vệ đêm nay rồi, không thể thay đổi lựa chọn.");
@@ -3378,7 +3545,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     }
 
     if (!room.players.find(p => p.id === targetId)) return;
-    if ((room.deadPlayers || []).includes(targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId) && targetId !== clientId) return;
 
     if (room.lastProtected && room.lastProtected === targetId) {
       socket.emit("errorMessage", "Không thể bảo vệ cùng người hai đêm liên tiếp!");
@@ -3410,7 +3577,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (room.phase !== "night") return;
     if (!canPerformNightRoleAction(room, clientId, PROTECTOR_ROLE)) return;
     if (room.playerRoles?.[clientId] !== PROTECTOR_ROLE) return;
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
 
     if (room.protectorTargetId) {
       socket.emit("errorMessage", "Hộ nhân đã chọn người được bất tử. Chỉ có thể chọn lại sau khi bất tử bị kích hoạt.");
@@ -3448,7 +3615,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (room.phase !== "night") return;
     if (!canPerformNightRoleAction(room, clientId, "Phù thủy")) return;
     if (room.playerRoles?.[clientId] !== "Phù thủy") return;
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
 
     ensureWitchState(room, clientId);
 
@@ -3490,7 +3657,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (room.phase !== "night") return;
     if (!canPerformNightRoleAction(room, clientId, "Phù thủy")) return;
     if (room.playerRoles?.[clientId] !== "Phù thủy") return;
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
 
     ensureWitchState(room, clientId);
 
@@ -3536,7 +3703,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (room.phase !== "night") return;
     if (!canPerformNightRoleAction(room, clientId, "Linh sói")) return;
     if (room.playerRoles?.[clientId] !== SPIRIT_WOLF_ROLE) return;
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
 
     const pendingTargetId = room.spiritWolfPendingPoisonedWolfId;
     if (!pendingTargetId) return;
@@ -3594,7 +3761,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (!room) return;
     if (room.gameOver) return;
     if (!isWolfAlignedPlayer(room, clientId)) return;
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
     if (room.phase !== "night") return;
     if (!canPerformNightRoleAction(room, clientId, "Sói")) return;
 
@@ -3642,7 +3809,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (room.gameOver) return;
     if (!isWolfAlignedPlayer(room, clientId)) return;
     if (room.phase !== "night") return;
-    if ((room.deadPlayers || []).includes(clientId)) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
     if (!canPerformNightRoleAction(room, clientId, "Sói")) return;
 
     if (!room.wolfBonusBiteThisNight) return;

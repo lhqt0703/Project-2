@@ -5,11 +5,74 @@ import { RULES_RESTART_FADE_IN_MS, RULES_RESTART_FADE_OUT_MS, RULES_RESTART_HOLD
 import { emitRolesRevealToSocket, toPublicRoom } from "./serverEmitters.js";
 import { dealRolesWithPendingAssignments } from "./roleAssignment.js";
 import { clearLoveStateForPlayers, getLovePairIds } from "./love.js";
-import { resetMerchantRoundState } from "./merchant.js";
+import { MERCHANT_ROLE, resetMerchantRoundState } from "./merchant.js";
+import { shouldDeferEndGameForAngel } from "./angel.js";
+import { appendLogEntry } from "./gameLog.js";
 
 const SPIRIT_WOLF_ROLE = "Linh sói";
 
 export function createLifecycleFlow(ctx: ServerContext) {
+  function appendAngelOutcomes(room: Room, winner: NonNullable<Room["winner"]>) {
+    const logged = new Set(room.angelOutcomeLoggedPlayerIds || []);
+    const records = Object.values(room.angelReviveRecordsByAngelId || {});
+    const phase = (room.phase === "day" ? "day" : "night") as "day" | "night";
+
+    for (const record of records) {
+      if (logged.has(record.angelId)) continue;
+
+      const targetRole = room.playerRoles?.[record.targetId] || null;
+      let won = false;
+      let noContest = false;
+      let reason: "matched_wolves" | "matched_villagers" | "wrong_guess" | "aligned_team_lost" | "third_party_target_won" | "third_party_target_lost";
+
+      if (record.targetTeam === "third") {
+        const targetWon = targetRole === MERCHANT_ROLE && (room.merchantWinCompletedPlayerIds || []).includes(record.targetId);
+        won = targetWon;
+        reason = targetWon ? "third_party_target_won" : "third_party_target_lost";
+      } else if (record.guess !== record.targetTeam) {
+        noContest = true;
+        reason = "wrong_guess";
+      } else if (record.targetTeam === "wolves" && winner === "wolves") {
+        won = true;
+        reason = "matched_wolves";
+      } else if (record.targetTeam === "villagers" && winner === "villagers") {
+        won = true;
+        reason = "matched_villagers";
+      } else {
+        reason = "aligned_team_lost";
+      }
+
+      appendLogEntry(room, {
+        type: "angel_outcome",
+        phase,
+        actorId: record.angelId,
+        targetId: record.targetId,
+        guess: record.guess,
+        targetTeam: record.targetTeam,
+        won,
+        noContest,
+        reason,
+        winner,
+      });
+      logged.add(record.angelId);
+    }
+
+    room.angelOutcomeLoggedPlayerIds = Array.from(logged);
+  }
+
+  function endGame(roomId: string, room: Room, winner: NonNullable<Room["winner"]>, reason: string) {
+    room.gameOver = true;
+    room.winner = winner;
+    appendAngelOutcomes(room, winner);
+    ctx.io.to(roomId).emit("gameEnded", { winner: room.winner, reason });
+    ctx.io.to(roomId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
+    ctx.io.to(roomId).emit(
+      "rolesRevealUpdated",
+      { roomId, rolesByPlayerId: room.playerRoles || {} }
+    );
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  }
+
   function emitRestartCinematicToPlayers(roomId: string, message: string) {
     const room = ctx.rooms[roomId];
     if (!room) return;
@@ -293,6 +356,11 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     room.elementalSelectedBuffId = null;
     room.elementalSelectedBuffAppliesNight = null;
     room.elementalBuffQuickMode = true;
+    room.angelReviveAvailableByPlayerId = {};
+    room.angelReviveUsedPlayerIds = [];
+    room.angelReviveRecordsByAngelId = {};
+    room.angelHiddenRevivedPlayerIds = [];
+    room.angelOutcomeLoggedPlayerIds = [];
     resetMerchantRoundState(room);
 
     ctx.io.to(roomId).emit("phaseChanged", "dusk");
@@ -311,11 +379,8 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
 
     const aliveIds = getAlivePlayerIds(room);
     if (aliveIds.length === 0) {
-      room.gameOver = true;
-      room.winner = "nobody";
-      ctx.io.to(roomId).emit("gameEnded", { winner: room.winner, reason: reason || "nobody_alive" });
-      ctx.io.to(roomId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      if (shouldDeferEndGameForAngel(room)) return;
+      endGame(roomId, room, "nobody", reason || "nobody_alive");
       return;
     }
 
@@ -333,50 +398,20 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
       aliveIds.length === 2 &&
       lovePair.every((id) => aliveIds.includes(id))
     ) {
-      room.gameOver = true;
-      room.winner = "lovers";
-      ctx.io.to(roomId).emit("gameEnded", {
-        winner: room.winner,
-        reason: reason || "love_pair_last_survivors",
-      });
-      ctx.io.to(roomId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
-      ctx.io.to(roomId).emit(
-        "rolesRevealUpdated",
-        { roomId, rolesByPlayerId: room.playerRoles || {} }
-      );
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      if (shouldDeferEndGameForAngel(room)) return;
+      endGame(roomId, room, "lovers", reason || "love_pair_last_survivors");
       return;
     }
 
     if (wolfAligned.length === 0) {
-      room.gameOver = true;
-      room.winner = "villagers";
-      ctx.io.to(roomId).emit("gameEnded", {
-        winner: room.winner,
-        reason: reason || "wolves_eliminated",
-      });
-      ctx.io.to(roomId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
-      ctx.io.to(roomId).emit(
-        "rolesRevealUpdated",
-        { roomId, rolesByPlayerId: room.playerRoles || {} }
-      );
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      if (shouldDeferEndGameForAngel(room)) return;
+      endGame(roomId, room, "villagers", reason || "wolves_eliminated");
       return;
     }
 
     if (nonWolfAligned.length === 0) {
-      room.gameOver = true;
-      room.winner = "wolves";
-      ctx.io.to(roomId).emit("gameEnded", {
-        winner: room.winner,
-        reason: reason || "all_villagers_dead",
-      });
-      ctx.io.to(roomId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
-      ctx.io.to(roomId).emit(
-        "rolesRevealUpdated",
-        { roomId, rolesByPlayerId: room.playerRoles || {} }
-      );
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      if (shouldDeferEndGameForAngel(room)) return;
+      endGame(roomId, room, "wolves", reason || "all_villagers_dead");
       return;
     }
 
@@ -390,15 +425,8 @@ function pickRolesForParticipants(roles: string[], participantCount: number) {
     }).length;
 
     if (bitingWolvesAlive >= villagersAlive) {
-      room.gameOver = true;
-      room.winner = "wolves";
-      ctx.io.to(roomId).emit("gameEnded", { winner: room.winner, reason: reason || "wolves_ge_villagers" });
-      ctx.io.to(roomId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
-      ctx.io.to(roomId).emit(
-        "rolesRevealUpdated",
-        { roomId, rolesByPlayerId: room.playerRoles || {} }
-      );
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      if (shouldDeferEndGameForAngel(room)) return;
+      endGame(roomId, room, "wolves", reason || "wolves_ge_villagers");
     }
   }
 

@@ -581,6 +581,7 @@ export default function GameRulesModal({
             </div>
             <input
               type="number"
+              inputMode="numeric"
               min={draftRules.allNightActionsSimultaneous ? 0 : 10}
               max={60}
               step={10}
@@ -599,6 +600,7 @@ export default function GameRulesModal({
             </div>
             <input
               type="number"
+              inputMode="numeric"
               min={0}
               max={60}
               step={10}

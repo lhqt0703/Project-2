@@ -19,6 +19,7 @@ import {
   getAlivePlayerIds,
   getSpiritWolfId,
   getWitches,
+  canPlayerActAtNight,
   isWolfAlignedPlayer,
 } from "./roomState.js";
 import { LOVE_ROLE, emitLoveStateToPlayer, isLovePairMemberAwayAt } from "./love.js";
@@ -31,6 +32,7 @@ import {
   getVisibleGuardianProtectionTargetId,
 } from "./merchant.js";
 import { PROTECTOR_ROLE } from "./specialRoles.js";
+import { emitAngelPrivateState } from "./angel.js";
 
 export function toPublicRoom(room: Room) {
   ensureRoomGameRules(room);
@@ -108,6 +110,11 @@ export function toPublicRoom(room: Room) {
     merchantGuardianCarryoverBy: _merchantGuardianCarryoverBy,
     merchantGuardianCarryoverNight: _merchantGuardianCarryoverNight,
     merchantGunpowderExplodedPlayerIdsTonight: _merchantGunpowderExplodedPlayerIdsTonight,
+    angelReviveAvailableByPlayerId: _angelReviveAvailableByPlayerId,
+    angelReviveUsedPlayerIds: _angelReviveUsedPlayerIds,
+    angelReviveRecordsByAngelId: _angelReviveRecordsByAngelId,
+    angelHiddenRevivedPlayerIds: _angelHiddenRevivedPlayerIds,
+    angelOutcomeLoggedPlayerIds: _angelOutcomeLoggedPlayerIds,
     ...rest
   } = room;
 
@@ -242,7 +249,7 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
   for (const player of room.players) {
     const playerId = player.id;
     if (playerId === room.hostId) continue;
-    if (dead.has(playerId)) continue;
+    if (dead.has(playerId) && !canPlayerActAtNight(room, playerId)) continue;
 
     const role = room.playerRoles?.[playerId];
     if (!role) continue;
@@ -574,6 +581,7 @@ export function syncPrivateRoleStateForSocket(
   }
 
   emitMerchantPrivateState(roomId, playerId);
+  emitAngelPrivateState(ctx, roomId, room, playerId);
   socket.emit("merchantCheeseMarksUpdated", {
     playerIds: isWolfAlignedPlayer(room, playerId) ? room.merchantCheeseMarkedPlayerIds || [] : [],
   });

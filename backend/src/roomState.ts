@@ -24,7 +24,15 @@ export function getParticipantCount(room: Room) {
 
 export function getAlivePlayerIds(room: Room) {
   const dead = new Set(room.deadPlayers || []);
-  return getParticipantIds(room).filter((id) => !dead.has(id));
+  return getParticipantIds(room).filter((id) => !dead.has(id) || isAngelHiddenRevivedPlayer(room, id));
+}
+
+export function isAngelHiddenRevivedPlayer(room: Room, playerId: string) {
+  return room.phase === "night" && (room.angelHiddenRevivedPlayerIds || []).includes(playerId);
+}
+
+export function canPlayerActAtNight(room: Room, playerId: string) {
+  return !(room.deadPlayers || []).includes(playerId) || isAngelHiddenRevivedPlayer(room, playerId);
 }
 
 export function getSpiritWolfId(room: Room): string | null {
@@ -67,13 +75,13 @@ export function getWildWolfId(room: Room): string | null {
 export function isSpiritWolfAlive(room: Room) {
   const id = getSpiritWolfId(room);
   if (!id) return false;
-  return !(room.deadPlayers || []).includes(id);
+  return canPlayerActAtNight(room, id);
 }
 
 export function isWildWolfAlive(room: Room) {
   const id = getWildWolfId(room);
   if (!id) return false;
-  return !(room.deadPlayers || []).includes(id);
+  return canPlayerActAtNight(room, id);
 }
 
 export function isWildWolfConvertedPlayer(room: Room, playerId: string) {
@@ -109,8 +117,7 @@ export function getActiveWolves(room: Room) {
   const allWolves = room.players
     .filter((p) => isWolfAlignedPlayer(room, p.id))
     .map((p) => p.id);
-  const dead = new Set(room.deadPlayers || []);
-  return allWolves.filter((id) => !dead.has(id) && isPlayerConnected(room, id));
+  return allWolves.filter((id) => canPlayerActAtNight(room, id) && isPlayerConnected(room, id));
 }
 
 export function getWitches(room: Room) {
@@ -317,6 +324,11 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.elementalBuffVotesResolvedNight = null;
   room.elementalSelectedBuffId = null;
   room.elementalSelectedBuffAppliesNight = null;
+  room.angelReviveAvailableByPlayerId = {};
+  room.angelReviveUsedPlayerIds = [];
+  room.angelReviveRecordsByAngelId = {};
+  room.angelHiddenRevivedPlayerIds = [];
+  room.angelOutcomeLoggedPlayerIds = [];
   resetMerchantRoundState(room);
 
   room.players = room.players.map((p) => ({ ...p, inGame: false }));

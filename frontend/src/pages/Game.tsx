@@ -24,6 +24,7 @@ import { useElementalRole } from "./gameRoles/useElementalRole";
 import { useLoveRole } from "./gameRoles/useLoveRole";
 import { useCursedRole } from "./gameRoles/useCursedRole";
 import { useMerchantRole } from "./gameRoles/useMerchantRole";
+import { useAngelRole } from "./gameRoles/useAngelRole";
 
 const WOLF_TEAM_REVEAL_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
 const NIGHT_ACTION_ROLE_SET = new Set([
@@ -67,8 +68,19 @@ export default function Game() {
   const deadPlayers = sync.deadPlayers;
   const isHost = !!room?.hostId && clientId === room.hostId;
   const isCurrentPlayerDead = !!clientId && deadPlayers.includes(clientId);
-  const shouldBlockDeadNightRoleReveal = phase === "night" && isCurrentPlayerDead;
-  const shouldHidePlayerRoleText = !isHost && (!!room?.hidePlayerRoleText || shouldBlockDeadNightRoleReveal);
+  const isCurrentPlayerHiddenRevived = sync.angelReviveState.reviveStage === "hidden";
+  const isCurrentPlayerDeadForNightActions = isCurrentPlayerDead && !isCurrentPlayerHiddenRevived;
+  const shouldForceHideAngelReviveIdentity =
+    phase === "day" &&
+    isCurrentPlayerDead &&
+    !sync.gameEnded &&
+    (role === "Thiên Sứ" || sync.angelReviveState.reviveStage === "pending");
+  const deadPlayersForNightActions = useMemo(
+    () => (isCurrentPlayerHiddenRevived && clientId ? deadPlayers.filter((id) => id !== clientId) : deadPlayers),
+    [deadPlayers, isCurrentPlayerHiddenRevived]
+  );
+  const shouldBlockDeadNightRoleReveal = phase === "night" && isCurrentPlayerDeadForNightActions;
+  const shouldHidePlayerRoleText = !isHost && (!!room?.hidePlayerRoleText || shouldBlockDeadNightRoleReveal || shouldForceHideAngelReviveIdentity);
   const allNightActionsSimultaneous = room?.gameRules?.allNightActionsSimultaneous === true;
   const isBanSoiAligned = room?.banSoiWolfAligned === true;
   const isWildWolfConverted = room?.wildWolfConvertedSelf === true;
@@ -80,7 +92,8 @@ export default function Game() {
   const [nightTurnNow, setNightTurnNow] = useState(() => Date.now());
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
-  const [hostAddNightTimeTargetId, setHostAddNightTimeTargetId] = useState<string | null>(null);
+  const [hostPlayerActionTargetId, setHostPlayerActionTargetId] = useState<string | null>(null);
+  const [hostRuleEliminateTargetId, setHostRuleEliminateTargetId] = useState<string | null>(null);
   const [hostDisconnected, setHostDisconnected] = useState(false);
   const [frozenRoomSnapshot, setFrozenRoomSnapshot] = useState<any | null>(null);
   const [rulesRestartOverlay, setRulesRestartOverlay] = useState<{
@@ -573,8 +586,11 @@ export default function Game() {
     if (!isHost && sync.gameEnded && frozenRoomSnapshot) {
       return (frozenRoomSnapshot.deadPlayers || []) as string[];
     }
+    if (isCurrentPlayerHiddenRevived && clientId) {
+      return deadPlayers.filter((id) => id !== clientId);
+    }
     return deadPlayers;
-  }, [deadPlayers, frozenRoomSnapshot, isHost, sync.gameEnded]);
+  }, [deadPlayers, frozenRoomSnapshot, isCurrentPlayerHiddenRevived, isHost, sync.gameEnded]);
 
   const playerNamesById = useMemo(() => {
     const map: Record<string, string> = {};
@@ -774,7 +790,7 @@ export default function Game() {
     roomId,
     phase,
     role,
-    deadPlayers,
+    deadPlayers: deadPlayersForNightActions,
     seerResult: sync.seerResult,
     allNightActionsSimultaneous,
     currentNightTurnRole,
@@ -788,7 +804,7 @@ export default function Game() {
     phase,
     role,
     nightCount: room?.nightCount,
-    deadPlayers,
+    deadPlayers: deadPlayersForNightActions,
     cursedResult: sync.cursedResult,
     cursedTargetId: sync.cursedTargetId,
     cursedLastTargetId: sync.cursedLastTargetId,
@@ -802,7 +818,7 @@ export default function Game() {
     phase,
     role,
     room: roomForRoles,
-    deadPlayers,
+    deadPlayers: deadPlayersForNightActions,
     merchantState: sync.merchantPrivateState,
     allNightActionsSimultaneous,
     currentNightTurnRole,
@@ -814,7 +830,7 @@ export default function Game() {
     phase,
     role,
     room: roomForRoles,
-    deadPlayers,
+    deadPlayers: deadPlayersForNightActions,
     wolfBadgeRoles: sync.wolfBadgeRolesByPlayerId,
     wolfLocked: sync.wolfLocked,
     wolfDeadline: myWolfDeadline,
@@ -830,7 +846,7 @@ export default function Game() {
     roomId,
     phase,
     role,
-    deadPlayers,
+    deadPlayers: deadPlayersForNightActions,
     guardianProtectedSeq: sync.guardianProtectedSeq,
     guardianProtectedTargetId: sync.guardianProtectedTargetId,
     allNightActionsSimultaneous,
@@ -845,7 +861,7 @@ export default function Game() {
     phase,
     role,
     room: roomForRoles,
-    deadPlayers,
+    deadPlayers: deadPlayersForNightActions,
     protectorTargetId: sync.protectorTargetId,
     allNightActionsSimultaneous,
     currentNightTurnRole,
@@ -858,7 +874,7 @@ export default function Game() {
     phase,
     role,
     room: roomForRoles,
-    deadPlayers,
+    deadPlayers: deadPlayersForNightActions,
     witchPendingDeathTargetIds: sync.witchPendingDeathTargetIds,
     witchPotions: sync.witchPotions,
     allNightActionsSimultaneous,
@@ -872,7 +888,7 @@ export default function Game() {
     roomId,
     phase,
     role,
-    deadPlayers,
+    deadPlayers: deadPlayersForNightActions,
     hunterTargetSeq: sync.hunterTargetSeq,
     hunterTargetId: sync.hunterTargetId,
     allNightActionsSimultaneous,
@@ -887,7 +903,7 @@ export default function Game() {
     phase,
     role,
     room: roomForRoles,
-    deadPlayers,
+    deadPlayers: deadPlayersForNightActions,
     loveState: sync.loveState,
     allNightActionsSimultaneous,
     currentNightTurnRole,
@@ -901,7 +917,7 @@ export default function Game() {
     phase,
     role,
     room: roomForRoles,
-    deadPlayers,
+    deadPlayers: deadPlayersForNightActions,
     decisionTargetId: sync.spiritWolfDecisionTargetId,
     allNightActionsSimultaneous,
     currentNightTurnRole,
@@ -915,7 +931,7 @@ export default function Game() {
     phase,
     role,
     room: roomForRoles,
-    deadPlayers,
+    deadPlayers: deadPlayersForNightActions,
     elementalTargetSeq: sync.elementalTargetSeq,
     elementalTargetId: sync.elementalTargetId,
     elementalActionMode: sync.elementalActionMode,
@@ -955,6 +971,15 @@ export default function Game() {
     trialSelectedInteractorIds: sync.trialSelectedInteractorIds,
     trialInteractionSelectionLimit: sync.trialInteractionSelectionLimit,
     trialVotes: sync.trialVotes,
+  });
+
+  const angel = useAngelRole({
+    roomId,
+    phase,
+    role,
+    room: roomForRoles,
+    deadPlayers,
+    angelState: sync.angelReviveState,
   });
 
   const canStartVillageChiefExtraVote =
@@ -1075,8 +1100,9 @@ export default function Game() {
   // Xử lý click vào avatar người chơi
   const handlePlayerClick = (playerId: string) => {
     if (sync.gameEnded) return;
+    if (angel.onPlayerClick(playerId)) return;
     // Nếu người chơi đã chết thì không được chọn họ nữa
-    if (deadPlayers.includes(playerId)) return;
+    if (deadPlayers.includes(playerId) && !(isCurrentPlayerHiddenRevived && playerId === clientId)) return;
 
     if (dayVote.onPlayerClick(playerId)) return;
 
@@ -1096,9 +1122,8 @@ export default function Game() {
     if (!isHost) return;
     if (!roomId) return;
     if (sync.gameEnded) return;
-    if (phase !== "night") return;
     if (deadPlayers.includes(playerId)) return;
-    setHostAddNightTimeTargetId(playerId);
+    setHostPlayerActionTargetId(playerId);
   };
 
   const requestReturnToRoom = () => {
@@ -1116,8 +1141,11 @@ export default function Game() {
     socket.emit("hostEndGameNow", { roomId });
   };
 
-  const hostAddNightTimeTargetName = hostAddNightTimeTargetId
-    ? room?.players.find((p) => p.id === hostAddNightTimeTargetId)?.name || "người chơi này"
+  const hostPlayerActionTargetName = hostPlayerActionTargetId
+    ? room?.players.find((p) => p.id === hostPlayerActionTargetId)?.name || "người chơi này"
+    : "người chơi này";
+  const hostRuleEliminateTargetName = hostRuleEliminateTargetId
+    ? room?.players.find((p) => p.id === hostRuleEliminateTargetId)?.name || "người chơi này"
     : "người chơi này";
 
   const rulesRestartAnimationName = rulesRestartOverlay
@@ -1170,6 +1198,7 @@ export default function Game() {
         [normalizeRoleName("Thợ săn")]: "C Thợ Săn",
         [normalizeRoleName("Thần tình yêu")]: "C Thần Tình Yêu",
         [normalizeRoleName("Tay Buôn")]: "C Tay Buôn",
+        [normalizeRoleName("Thiên Sứ")]: "C Thiên Sứ",
       }) as Record<string, string>,
     [normalizeRoleName]
   );
@@ -1302,13 +1331,13 @@ export default function Game() {
         );
       })()}
 
-      {isSequentialNight && currentNightTurnRole && !isHost && !isCurrentPlayerDead && doesNightTurnMatchMyRole && nightTurnRemainingSec !== null && (
+      {isSequentialNight && currentNightTurnRole && !isHost && !isCurrentPlayerDeadForNightActions && doesNightTurnMatchMyRole && nightTurnRemainingSec !== null && (
         <div style={{ marginTop: 8, fontWeight: 700 }}>
           Còn {nightTurnRemainingSec}s nữa để thực hiện chức năng{nightTurnPaused ? " (đang tạm ngưng)" : ""}
         </div>
       )}
 
-      {isSimultaneousNight && !isHost && !isCurrentPlayerDead && !isWolfTeamRole && role && mySimultaneousDeadline && simultaneousRemainingSec !== null && (
+      {isSimultaneousNight && !isHost && !isCurrentPlayerDeadForNightActions && !isWolfTeamRole && role && mySimultaneousDeadline && simultaneousRemainingSec !== null && (
         <div style={{ marginTop: 8, fontWeight: 700 }}>
           Còn {simultaneousRemainingSec}s nữa để thực hiện chức năng
         </div>
@@ -1362,6 +1391,7 @@ export default function Game() {
           </div>
         </div>
       )}
+      {angel.panel}
       {/* Hiển thị bố cục vị trí người chơi khi có room.positions */}
       {roomForDisplay?.positions && (
         <div style={{ margin: "2rem auto" }}>
@@ -1393,6 +1423,7 @@ export default function Game() {
               elemental.playerPositionsProps.selectedOutlinePlayerId ||
               hunter.playerPositionsProps.selectedOutlinePlayerId ||
               love.playerPositionsProps.selectedOutlinePlayerId ||
+              angel.playerPositionsProps.selectedOutlinePlayerId ||
               null
             }
             selectedOutlinePlayerIds={(wolf.playerPositionsProps.selectedOutlinePlayerIds || []).filter(
@@ -1448,6 +1479,7 @@ export default function Game() {
       {seer.modal}
       {cursed.modal}
       {merchant.modal}
+      {angel.modal}
       {guardian.modal}
       {protector.modal}
       {love.modals}
@@ -1626,21 +1658,80 @@ export default function Game() {
       onConfirm={handleEndGameConfirm}
       onCancel={() => setEndGameConfirmOpen(false)}
     />
+    {hostPlayerActionTargetId && (
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 9999,
+          background: "rgba(0,0,0,0.3)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 16,
+        }}
+      >
+        <div
+          style={{
+            width: "min(92vw, 420px)",
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: 12,
+            padding: 24,
+            boxShadow: "0 2px 16px rgba(0,0,0,0.2)",
+          }}
+        >
+          <h2 style={{ marginTop: 0 }}>Thao tác với {hostPlayerActionTargetName}</h2>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+            <button
+              disabled={phase !== "night"}
+              style={{ opacity: phase === "night" ? 1 : 0.55 }}
+              onClick={() => {
+                if (!roomId || !hostPlayerActionTargetId || phase !== "night") return;
+                socket.emit("hostAddNightActionTime", {
+                  roomId,
+                  targetId: hostPlayerActionTargetId,
+                });
+                setHostPlayerActionTargetId(null);
+              }}
+            >
+              +10 giây lượt hành động
+            </button>
+            <button
+              style={{ background: "#e74c3c", color: "#fff" }}
+              onClick={() => {
+                setHostRuleEliminateTargetId(hostPlayerActionTargetId);
+                setHostPlayerActionTargetId(null);
+              }}
+            >
+              Loại vì phạm luật
+            </button>
+            <button onClick={() => setHostPlayerActionTargetId(null)}>Đóng</button>
+          </div>
+          {phase !== "night" && (
+            <div style={{ marginTop: 12, fontSize: 13, opacity: 0.72 }}>
+              Chỉ có thể cộng thời gian khi đang trong ban đêm.
+            </div>
+          )}
+        </div>
+      </div>
+    )}
+
     <ConfirmModal
-      open={!!hostAddNightTimeTargetId}
-      title="Bổ sung thời gian lượt đêm"
-      message={`Bạn có chắc muốn cộng thêm 10 giây cho ${hostAddNightTimeTargetName} không?`}
-      confirmText="Cộng 10 giây"
+      open={!!hostRuleEliminateTargetId}
+      title="Loại người chơi vì phạm luật"
+      message={`Bạn có chắc muốn loại ${hostRuleEliminateTargetName} vì phạm luật không? Người chơi này sẽ chết ngay lập tức trong ván hiện tại.`}
+      confirmText="Loại người chơi"
       cancelText="Hủy"
       onConfirm={() => {
-        if (!roomId || !hostAddNightTimeTargetId) return;
-        socket.emit("hostAddNightActionTime", {
+        if (!roomId || !hostRuleEliminateTargetId) return;
+        socket.emit("hostEliminatePlayerForRules", {
           roomId,
-          targetId: hostAddNightTimeTargetId,
+          targetId: hostRuleEliminateTargetId,
         });
-        setHostAddNightTimeTargetId(null);
+        setHostRuleEliminateTargetId(null);
       }}
-      onCancel={() => setHostAddNightTimeTargetId(null)}
+      onCancel={() => setHostRuleEliminateTargetId(null)}
     />
 
     </div>

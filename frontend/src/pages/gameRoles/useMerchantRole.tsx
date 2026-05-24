@@ -123,8 +123,9 @@ export function useMerchantRole({
   const [showOfferModal, setShowOfferModal] = useState(false);
   const [detailItem, setDetailItem] = useState<{ itemId: MerchantItemId; night: number } | null>(null);
   const currentNight = room.nightCount || 0;
+  const isCurrentMerchantDead = !!clientId && deadPlayers.includes(clientId);
   const visibleDetailItemId =
-    phase === "night" && detailItem?.night === currentNight ? detailItem.itemId : null;
+    phase === "night" && !isCurrentMerchantDead && detailItem?.night === currentNight ? detailItem.itemId : null;
   const openDetailItem = useCallback((itemId: MerchantItemId) => {
     setDetailItem({ itemId, night: currentNight });
   }, [currentNight]);
@@ -156,13 +157,13 @@ export function useMerchantRole({
     if (phase !== "night") return false;
     if (role !== MERCHANT_ROLE) return false;
     if (hasMerchantTradeTonight) return false;
-    if (clientId && deadPlayers.includes(clientId)) return false;
+    if (isCurrentMerchantDead) return false;
     if (state.availableStockIds.length <= 0) return false;
     if (!isMerchantWindowOpen) return false;
     return true;
   }, [
-    deadPlayers,
     hasMerchantTradeTonight,
+    isCurrentMerchantDead,
     isMerchantWindowOpen,
     phase,
     role,
@@ -210,7 +211,7 @@ export function useMerchantRole({
   const protectedName = getPlayerName(room, state.poppyGlassesProtectedTargetId);
   const isOfferModalOpen = phase === "night" && showOfferModal && selectedNight === currentNight;
 
-  const inventoryPanel = phase === "night" && state.items.length > 0 ? (
+  const inventoryPanel = phase === "night" && !isCurrentMerchantDead && state.items.length > 0 ? (
     <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
       <div style={{ fontWeight: 700 }}>Đồ đang giữ</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -233,10 +234,10 @@ export function useMerchantRole({
     </div>
   ) : null;
 
-  const merchantStatusPanel = role === MERCHANT_ROLE && phase === "night" && isMerchantTurnActive ? (
+  const merchantStatusPanel = role === MERCHANT_ROLE && phase === "night" && isMerchantTurnActive && !isCurrentMerchantDead ? (
     <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-      <div style={{ fontWeight: 700 }}>Kho hàng Tay Buôn</div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div style={{ fontWeight: 700 }}>Kho hàng hiện tại</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 104px))", gap: 8, width: "fit-content" }}>
         {state.availableStockIds.length > 0 ? state.availableStockIds.map((itemId) =>
           renderMerchantItemTile({
             tileKey: itemId,
@@ -285,7 +286,7 @@ export function useMerchantRole({
       </div>
     ) : null;
 
-  const offerModal = isOfferModalOpen ? (
+  const offerModal = isOfferModalOpen && !isCurrentMerchantDead ? (
     <div
       style={{
         position: "fixed",

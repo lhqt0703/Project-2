@@ -40,6 +40,7 @@ import type {
   ElementalBuffVoteStatePayload,
   ElementalBuffSelectedPayload,
   HostNightActionProgressUpdatedPayload,
+  AngelReviveStatePayload,
   MerchantCheeseMarksUpdatedPayload,
   MerchantPrivateStateUpdatedPayload,
 } from "./socketEvents";
@@ -56,6 +57,14 @@ const EMPTY_LOVE_STATE: LoveStatePayload = {
   escapeUsed: false,
   escapeActiveTonight: false,
   escapeVotes: [],
+};
+
+const EMPTY_ANGEL_REVIVE_STATE: AngelReviveStatePayload = {
+  canRevive: false,
+  availableDay: null,
+  selectedTargetId: null,
+  selectedGuess: null,
+  reviveStage: "none",
 };
 
 export function useGameSocketSync({
@@ -81,6 +90,7 @@ export function useGameSocketSync({
   const [cursedTargetSeq, setCursedTargetSeq] = useState(0);
   const [merchantPrivateState, setMerchantPrivateState] = useState(EMPTY_MERCHANT_PRIVATE_STATE);
   const [merchantCheeseMarkPlayerIds, setMerchantCheeseMarkPlayerIds] = useState<string[]>([]);
+  const [angelReviveState, setAngelReviveState] = useState<AngelReviveStatePayload>(EMPTY_ANGEL_REVIVE_STATE);
 
   const [witchPendingDeathTargetIds, setWitchPendingDeathTargetIds] = useState<string[]>([]);
   const [witchPotions, setWitchPotions] = useState<WitchPotionsPayload | null>(null);
@@ -324,6 +334,7 @@ export function useGameSocketSync({
       setCursedTargetSeq(0);
       setMerchantPrivateState(EMPTY_MERCHANT_PRIVATE_STATE);
       setMerchantCheeseMarkPlayerIds([]);
+      setAngelReviveState(EMPTY_ANGEL_REVIVE_STATE);
       setWitchPendingDeathTargetIds([]);
       setDeadPlayers([]);
       setGameLogNights([]);
@@ -528,6 +539,21 @@ export function useGameSocketSync({
       setMerchantCheeseMarkPlayerIds(Array.isArray(payload?.playerIds) ? payload.playerIds.filter(Boolean) : []);
     };
 
+    const handleAngelReviveStateUpdated = (payload: AngelReviveStatePayload) => {
+      setAngelReviveState({
+        ...EMPTY_ANGEL_REVIVE_STATE,
+        ...(payload || {}),
+        canRevive: payload?.canRevive === true,
+        availableDay: typeof payload?.availableDay === "number" ? payload.availableDay : null,
+        selectedTargetId: payload?.selectedTargetId ?? null,
+        selectedGuess: payload?.selectedGuess === "wolves" || payload?.selectedGuess === "villagers" ? payload.selectedGuess : null,
+        reviveStage:
+          payload?.reviveStage === "pending" || payload?.reviveStage === "hidden"
+            ? payload.reviveStage
+            : "none",
+      });
+    };
+
     const handleGuardianProtected = (targetId: GuardianProtectedPayload) => {
       setGuardianProtectedTargetId(targetId);
       setGuardianProtectedSeq(s => s + 1);
@@ -699,6 +725,7 @@ export function useGameSocketSync({
     socket.on("cursedTargetUpdated", handleCursedTargetUpdated);
     socket.on("merchantPrivateStateUpdated", handleMerchantPrivateStateUpdated);
     socket.on("merchantCheeseMarksUpdated", handleMerchantCheeseMarksUpdated);
+    socket.on("angelReviveStateUpdated", handleAngelReviveStateUpdated);
     socket.on("guardianProtected", handleGuardianProtected);
     socket.on("protectorTargetUpdated", handleProtectorTargetUpdated);
 
@@ -752,6 +779,7 @@ export function useGameSocketSync({
       socket.off("cursedTargetUpdated", handleCursedTargetUpdated);
       socket.off("merchantPrivateStateUpdated", handleMerchantPrivateStateUpdated);
       socket.off("merchantCheeseMarksUpdated", handleMerchantCheeseMarksUpdated);
+      socket.off("angelReviveStateUpdated", handleAngelReviveStateUpdated);
       socket.off("guardianProtected", handleGuardianProtected);
       socket.off("protectorTargetUpdated", handleProtectorTargetUpdated);
 
@@ -802,6 +830,7 @@ export function useGameSocketSync({
       cursedTargetSeq,
       merchantPrivateState,
       merchantCheeseMarkPlayerIds,
+      angelReviveState,
       witchPendingDeathTargetIds,
       witchPotions,
       guardianProtectedSeq,
@@ -864,6 +893,7 @@ export function useGameSocketSync({
       cursedTargetSeq,
       merchantPrivateState,
       merchantCheeseMarkPlayerIds,
+      angelReviveState,
       witchPendingDeathTargetIds,
       witchPotions,
       guardianProtectedSeq,

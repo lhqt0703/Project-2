@@ -12,6 +12,7 @@ import { clampNonWolfNightActionDurationSec, clampWolfNightActionDurationSec, is
 import { ELEMENTAL_GROUP_ROLE } from "./elemental.js";
 import {
   clearNightTurnTimer,
+  canPlayerActAtNight,
   getActiveWolves,
   getParticipantIds,
   getSpiritWolfId,
@@ -100,7 +101,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
 
   function canPerformNightRoleAction(room: Room, playerId: string, expectedRole: NightActionRole) {
     if (room.phase !== "night") return false;
-    if ((room.deadPlayers || []).includes(playerId)) return false;
+    if (!canPlayerActAtNight(room, playerId)) return false;
 
     if (expectedRole === "Sói" && room.wolfVoteResolvedTonight) return false;
 
@@ -160,7 +161,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     if (!isElementalRoleTurn(role)) return;
     const dead = new Set(room.deadPlayers || []);
     for (const player of room.players) {
-      if (dead.has(player.id)) continue;
+      if (dead.has(player.id) && !canPlayerActAtNight(room, player.id)) continue;
       if (room.playerRoles?.[player.id] !== role) continue;
       deps.emitElementalNightState(roomId, player.id);
     }
@@ -171,7 +172,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     if (!room) return;
     const dead = new Set(room.deadPlayers || []);
     for (const player of room.players) {
-      if (dead.has(player.id)) continue;
+      if (dead.has(player.id) && !canPlayerActAtNight(room, player.id)) continue;
       if (!isElementalRoleTurn(room.playerRoles?.[player.id] || null)) continue;
       deps.emitElementalNightState(roomId, player.id);
     }

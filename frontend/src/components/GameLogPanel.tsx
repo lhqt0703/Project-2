@@ -101,6 +101,29 @@ function getMerchantTradeResultText(result: MerchantTradeResult | null | undefin
   return "giao dịch thất bại";
 }
 
+function getAngelGuessText(guess: string | null | undefined) {
+  if (guess === "wolves") return "phe sói";
+  if (guess === "villagers") return "phe dân";
+  return "không rõ";
+}
+
+function getAngelTargetTeamText(team: string | null | undefined) {
+  if (team === "wolves") return "phe sói";
+  if (team === "villagers") return "phe dân";
+  if (team === "third") return "phe 3";
+  return "không rõ";
+}
+
+function getAngelOutcomeText(entry: Extract<GameLogEntry, { type: "angel_outcome" }>) {
+  if (entry.noContest) return "không tính thắng thua vì đoán sai phe";
+  if (entry.won) {
+    if (entry.targetTeam === "third") return "thắng cùng điều kiện riêng của người được hồi sinh";
+    return `thắng cùng ${getAngelTargetTeamText(entry.targetTeam)}`;
+  }
+  if (entry.targetTeam === "third") return "không thắng vì người được hồi sinh chưa hoàn thành điều kiện riêng";
+  return `không thắng vì ${getAngelTargetTeamText(entry.targetTeam)} không thắng ván này`;
+}
+
 function getEliminationCauseText(causes: EliminationCause[] | undefined, rolesByPlayerId: RolesByPlayerId, playerNamesById: PlayerNamesById): string {
   if (!causes || causes.length === 0) return "Bị loại";
   const parts = causes.map((cause) => {
@@ -848,10 +871,7 @@ function LogEntryLine({
 
     case "merchant_item_expired":
       return (
-        <li style={lineStyle}>
-          {entry.itemIds.map((itemId) => getMerchantItemText(itemId)).join(", ")} trên{" "}
-          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã biến mất khi trời sáng
-        </li>
+        null
       );
 
     case "merchant_item_used":
@@ -871,7 +891,7 @@ function LogEntryLine({
             {entry.targetIds?.length ? (
               <>
                 {" "}khiến{" "}
-                <RolesListSpan playerIds={entry.targetIds} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> cũng chết chùm chung theo
+                <RolesListSpan playerIds={entry.targetIds} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> chết chùm chung theo
               </>
             ) : null}
           </li>
@@ -893,6 +913,37 @@ function LogEntryLine({
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã hoàn thành điều kiện thắng của Tay Buôn với {entry.successfulTrades} giao dịch thành công
           <span style={{ opacity: 0.72 }}> (mốc {entry.requiredTrades})</span>
           <span style={{ opacity: 0.72 }}> (ván chơi vẫn tiếp tục)</span>
+        </li>
+      );
+
+    case "angel_revive_choice":
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> âm thầm chọn hồi sinh{" "}
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+          <span style={{ opacity: 0.72 }}> (đoán {getAngelGuessText(entry.guess)}, thực tế {getAngelTargetTeamText(entry.targetTeam)})</span>
+        </li>
+      );
+
+    case "angel_revive_activated":
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> được Thiên Sứ đưa trở lại trong âm thầm và có thể hành động đêm nay
+        </li>
+      );
+
+    case "angel_revive_revealed":
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> chính thức sống lại sau sự can thiệp của Thiên Sứ
+        </li>
+      );
+
+    case "angel_outcome":
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> {getAngelOutcomeText(entry)} với lựa chọn hồi sinh{" "}
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="role-player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
         </li>
       );
 
@@ -1015,6 +1066,13 @@ function LogEntryLine({
 
     case "saved_by_witch":
       return null;
+
+    case "mysterious_force_eliminated":
+      return (
+        <li style={lineStyle}>
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã bị thế lực bí ẩn hốt mất xác
+        </li>
+      );
 
     case "eliminated":
       return (

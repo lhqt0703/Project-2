@@ -80,6 +80,24 @@ export type TrialVerdictFinishedPayload = {
 export type GameEndedPayload = { winner: "wolves" | "villagers" | "lovers" | "nobody"; reason?: string };
 
 export type GameLogEntryPhase = "night" | "day";
+export type AngelAlignmentGuess = "wolves" | "villagers";
+export type AngelTargetTeam = "wolves" | "villagers" | "third";
+export type AngelReviveStage = "none" | "pending" | "hidden";
+export type AngelOutcomeReason =
+  | "matched_wolves"
+  | "matched_villagers"
+  | "wrong_guess"
+  | "aligned_team_lost"
+  | "third_party_target_won"
+  | "third_party_target_lost";
+
+export type AngelReviveStatePayload = {
+  canRevive: boolean;
+  availableDay: number | null;
+  selectedTargetId: string | null;
+  selectedGuess: AngelAlignmentGuess | null;
+  reviveStage: AngelReviveStage;
+};
 
 export type WolfVoteBreakdown = {
   targetId: string;
@@ -122,6 +140,11 @@ export type GameLogEntry =
   | { type: "merchant_item_expired"; phase: GameLogEntryPhase; targetId: string; itemIds: MerchantItemId[] }
   | { type: "merchant_item_used"; phase: GameLogEntryPhase; itemId: MerchantItemId; actorId?: string | null; targetId?: string | null; sourceId?: string | null; targetIds?: string[] }
   | { type: "merchant_win_condition_completed"; phase: GameLogEntryPhase; actorId: string; successfulTrades: number; requiredTrades: number }
+  | { type: "angel_revive_choice"; phase: GameLogEntryPhase; actorId: string; targetId: string; guess: AngelAlignmentGuess; targetTeam: AngelTargetTeam }
+  | { type: "angel_revive_activated"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "angel_revive_revealed"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "angel_outcome"; phase: GameLogEntryPhase; actorId: string; targetId: string; guess: AngelAlignmentGuess; targetTeam: AngelTargetTeam; won: boolean; noContest: boolean; reason: AngelOutcomeReason; winner: "wolves" | "villagers" | "lovers" | "nobody" }
+  | { type: "mysterious_force_eliminated"; phase: GameLogEntryPhase; targetId: string }
   | { type: "love_pair"; phase: GameLogEntryPhase; actorId: string; targetId: string; targetWolfAligned: boolean }
   | { type: "love_escape_vote"; phase: GameLogEntryPhase; actorId: string; partnerId: string }
   | { type: "love_escape_missed"; phase: GameLogEntryPhase; actorId: string; partnerId: string }

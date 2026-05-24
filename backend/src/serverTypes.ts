@@ -2,6 +2,26 @@ import { ELEMENTAL_GROUP_ROLE, type ElementalBuffId, type ElementalRole } from "
 import type { MerchantDecision, MerchantItemId, MerchantItemRecord, MerchantTradeOffer, MerchantTradeResult } from "./merchant.js";
 import { PROTECTOR_ROLE } from "./specialRoles.js";
 
+export type AngelAlignmentGuess = "wolves" | "villagers";
+export type AngelTargetTeam = "wolves" | "villagers" | "third";
+
+export type AngelReviveRecord = {
+  angelId: string;
+  targetId: string;
+  guess: AngelAlignmentGuess;
+  targetTeam: AngelTargetTeam;
+  chosenDay: number;
+  activeNight: number;
+};
+
+export type AngelPrivateState = {
+  canRevive: boolean;
+  availableDay: number | null;
+  selectedTargetId: string | null;
+  selectedGuess: AngelAlignmentGuess | null;
+  reviveStage: "none" | "pending" | "hidden";
+};
+
 export interface Player {
   id: string;
   name: string;
@@ -179,6 +199,11 @@ export interface Room {
   merchantGuardianCarryoverBy?: string | null;
   merchantGuardianCarryoverNight?: number | null;
   merchantGunpowderExplodedPlayerIdsTonight?: string[];
+  angelReviveAvailableByPlayerId?: Record<string, number>;
+  angelReviveUsedPlayerIds?: string[];
+  angelReviveRecordsByAngelId?: Record<string, AngelReviveRecord>;
+  angelHiddenRevivedPlayerIds?: string[];
+  angelOutcomeLoggedPlayerIds?: string[];
 }
 
 const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -341,6 +366,10 @@ export type GameLogEntry =
   | { type: "merchant_item_expired"; phase: GameLogEntryPhase; targetId: string; itemIds: MerchantItemId[] }
   | { type: "merchant_item_used"; phase: GameLogEntryPhase; itemId: MerchantItemId; actorId?: string | null; targetId?: string | null; sourceId?: string | null; targetIds?: string[] }
   | { type: "merchant_win_condition_completed"; phase: GameLogEntryPhase; actorId: string; successfulTrades: number; requiredTrades: number }
+  | { type: "angel_revive_choice"; phase: GameLogEntryPhase; actorId: string; targetId: string; guess: AngelAlignmentGuess; targetTeam: AngelTargetTeam }
+  | { type: "angel_revive_activated"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "angel_revive_revealed"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "angel_outcome"; phase: GameLogEntryPhase; actorId: string; targetId: string; guess: AngelAlignmentGuess; targetTeam: AngelTargetTeam; won: boolean; noContest?: boolean; reason: "matched_wolves" | "matched_villagers" | "wrong_guess" | "aligned_team_lost" | "third_party_target_won" | "third_party_target_lost"; winner?: "wolves" | "villagers" | "lovers" | "nobody" }
   | { type: "love_pair"; phase: GameLogEntryPhase; actorId: string; targetId: string; targetWolfAligned: boolean }
   | { type: "love_escape_vote"; phase: GameLogEntryPhase; actorId: string; partnerId: string }
   | { type: "love_escape_missed"; phase: GameLogEntryPhase; actorId: string; partnerId: string }
@@ -357,6 +386,7 @@ export type GameLogEntry =
   | { type: "elemental_guess"; phase: GameLogEntryPhase; actorId: string; targetId: string; isCorrect: boolean }
   | { type: "elemental_guess_summary"; phase: GameLogEntryPhase; correctCount: number; totalCount: number; correctIds?: string[]; triggeredBuffVote: boolean; nextBuffVoteNight?: number }
   | { type: "elemental_buff_vote"; phase: GameLogEntryPhase; voteBreakdown: { buffId: ElementalBuffId; voterIds: string[] }[]; chosenBuffId?: ElementalBuffId | null; tier?: number; randomTieBreak?: boolean; tiedBuffIds?: ElementalBuffId[]; chosenVoterIds?: string[] }
+  | { type: "mysterious_force_eliminated"; phase: GameLogEntryPhase; targetId: string }
   | { type: "host_ended_game"; phase: GameLogEntryPhase };
 
 export type GameLogNight = {

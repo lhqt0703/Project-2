@@ -1,7 +1,7 @@
 import { getServerContext } from "./serverContext.js";
 import type { GameLogEntry, Room } from "./serverTypes.js";
 import { getActiveDayVoters, getActiveWolves } from "./roomState.js";
-import { emitGameLogToSocket } from "./serverEmitters.js";
+import { emitGameLogToSocket, emitPublicDayGameLogToRoom } from "./serverEmitters.js";
 
 function getPlayerName(room: Room, playerId: string | null | undefined) {
   if (!playerId) return "(không rõ)";
@@ -30,6 +30,9 @@ export function appendLogEntry(room: Room, entry: GameLogEntry) {
     const ctx = getServerContext();
     if (ctx) {
       emitGameLogToSocket(room.id, room.hostId);
+      if (entry.phase === "day") {
+        emitPublicDayGameLogToRoom(room.id);
+      }
     }
   }
 }

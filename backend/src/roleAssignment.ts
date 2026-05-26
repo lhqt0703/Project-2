@@ -1,3 +1,5 @@
+import { isWolfRole } from "./roomState.js";
+
 type RoleDealPlayer = {
   id: string;
 };
@@ -178,4 +180,47 @@ export function dealRolesWithPendingAssignments<T extends RoleDealPlayer>(
   const playerRoles: Record<string, string> = { ...appliedAssignments, ...assignedRemainingRoles };
 
   return { playerRoles, appliedAssignments };
+}
+
+const HIGH_PRIORITY_ROLES = new Set(["Tiên tri", "Bảo vệ", "Phù thủy"]);
+
+export function pickRolesForParticipants(allRoles: string[], participantCount: number): string[] {
+  const normalizedRoles = allRoles.filter((role): role is string => typeof role === "string" && role.trim().length > 0);
+  if (normalizedRoles.length <= participantCount) {
+    return shuffle(normalizedRoles);
+  }
+
+  const selectedRoles: string[] = [];
+  const pool = shuffle(normalizedRoles);
+
+  // 1. Ensure at least one wolf role is picked (if any exists)
+  const firstWolfIndex = pool.findIndex(isWolfRole);
+  if (firstWolfIndex >= 0) {
+    selectedRoles.push(pool[firstWolfIndex]!);
+    pool.splice(firstWolfIndex, 1);
+  }
+
+  // 2. Ensure each high priority role is picked (if any exists in pool)
+  const highPriorityList = shuffle(Array.from(HIGH_PRIORITY_ROLES));
+  for (const highRole of highPriorityList) {
+    if (selectedRoles.length >= participantCount) break;
+    const index = pool.findIndex((r) => r === highRole);
+    if (index >= 0) {
+      selectedRoles.push(pool[index]!);
+      pool.splice(index, 1);
+    }
+  }
+
+  // 3. Fill the rest of the participant count with the remaining roles in pool
+  // Keep elemental roles ("nguyên tố") at the lowest priority
+  const sortedPool = [
+    ...pool.filter((r) => !r.includes("nguyên tố")),
+    ...pool.filter((r) => r.includes("nguyên tố"))
+  ];
+
+  while (selectedRoles.length < participantCount && sortedPool.length > 0) {
+    selectedRoles.push(sortedPool.shift()!);
+  }
+
+  return shuffle(selectedRoles);
 }

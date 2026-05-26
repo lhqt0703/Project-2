@@ -348,6 +348,7 @@ export type GameLogEntry =
   | { type: "trial_started"; phase: GameLogEntryPhase; targetId: string }
   | { type: "trial_verdict"; phase: GameLogEntryPhase; targetId: string; liveVotes: number; dieVotes: number; liveVoterIds?: string[]; dieVoterIds?: string[]; executed: boolean }
   | { type: "bonus_bite"; phase: GameLogEntryPhase }
+  | { type: "night_action_extra_time"; phase: GameLogEntryPhase; targetId: string; roleName: string; extraSeconds: number }
   | { type: "guardian_protect"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "protector_bless"; phase: GameLogEntryPhase; actorId: string; targetId: string; permanent: boolean }
   | { type: "protector_save"; phase: GameLogEntryPhase; actorId: string | null; targetId: string; cause: EliminationCause; permanent: boolean }
@@ -366,9 +367,7 @@ export type GameLogEntry =
   | { type: "merchant_item_expired"; phase: GameLogEntryPhase; targetId: string; itemIds: MerchantItemId[] }
   | { type: "merchant_item_used"; phase: GameLogEntryPhase; itemId: MerchantItemId; actorId?: string | null; targetId?: string | null; sourceId?: string | null; targetIds?: string[] }
   | { type: "merchant_win_condition_completed"; phase: GameLogEntryPhase; actorId: string; successfulTrades: number; requiredTrades: number }
-  | { type: "angel_revive_choice"; phase: GameLogEntryPhase; actorId: string; targetId: string; guess: AngelAlignmentGuess; targetTeam: AngelTargetTeam }
-  | { type: "angel_revive_activated"; phase: GameLogEntryPhase; actorId: string; targetId: string }
-  | { type: "angel_revive_revealed"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "angel_revive_activated"; phase: GameLogEntryPhase; actorId: string; targetId: string; guess: AngelAlignmentGuess }
   | { type: "angel_outcome"; phase: GameLogEntryPhase; actorId: string; targetId: string; guess: AngelAlignmentGuess; targetTeam: AngelTargetTeam; won: boolean; noContest?: boolean; reason: "matched_wolves" | "matched_villagers" | "wrong_guess" | "aligned_team_lost" | "third_party_target_won" | "third_party_target_lost"; winner?: "wolves" | "villagers" | "lovers" | "nobody" }
   | { type: "love_pair"; phase: GameLogEntryPhase; actorId: string; targetId: string; targetWolfAligned: boolean }
   | { type: "love_escape_vote"; phase: GameLogEntryPhase; actorId: string; partnerId: string }

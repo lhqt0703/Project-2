@@ -3,7 +3,7 @@ import { ensureRoomGameRules, buildRoomGameRules, type Room } from "./serverType
 import { clearGameTimers, clearTrialState, ensureWitchState, getParticipantCount, getParticipantPlayers, getParticipantIds, getBanSoiId, getSpiritWolfId, getWildWolfId, getWitches, isWolfRole, resetNightTurnState, getAlivePlayerIds, isWolfAlignedPlayer } from "./roomState.js";
 import { RULES_RESTART_FADE_IN_MS, RULES_RESTART_FADE_OUT_MS, RULES_RESTART_HOLD_MS, RULES_RESTART_RESTART_AT_MS, TWO_HEARTS_NIGHT_LIMIT, initTwoHeartsForParticipants } from "./gameConfig.js";
 import { emitRolesRevealToSocket, toPublicRoom } from "./serverEmitters.js";
-import { dealRolesWithPendingAssignments } from "./roleAssignment.js";
+import { dealRolesWithPendingAssignments, pickRolesForParticipants } from "./roleAssignment.js";
 import { clearLoveStateForPlayers, getLovePairIds } from "./love.js";
 import { MERCHANT_ROLE, resetMerchantRoundState } from "./merchant.js";
 import { shouldDeferEndGameForAngel } from "./angel.js";
@@ -179,62 +179,13 @@ export function createLifecycleFlow(ctx: ServerContext) {
       ctx.io.in(p.id).socketsLeave(`witches_${roomId}`);
     }
 
-    function shuffle<T>(arr: T[]) {
-  return arr.slice().sort(() => Math.random() - 0.5);
-}
-
-const HIGH_PRIORITY_ROLES = new Set(["Tiên tri", "Bảo vệ", "Phù thủy"]);
-
-function isLowPriorityElementalRole(role: string) {
-  // nếu role nguyên tố của bạn nằm trong ELEMENTAL_ROLE_SET thì import và dùng ở đây
-  return role.includes("nguyên tố");
-}
-
-function pickRolesForParticipants(roles: string[], participantCount: number) {
-  const selected: string[] = [];
-
-  const wolves = roles.filter(isWolfRole);
-  const high = roles.filter((r) => HIGH_PRIORITY_ROLES.has(r));
-  const low = roles.filter((r) => isLowPriorityElementalRole(r));
-  const medium = roles.filter(
-    (r) =>
-      !isWolfRole(r) &&
-      !HIGH_PRIORITY_ROLES.has(r) &&
-      !isLowPriorityElementalRole(r)
-  );
-
-  if (wolves.length > 0 && selected.length < participantCount) {
-    selected.push(shuffle(wolves)[0]!);
-  }
-
-  for (const role of shuffle(high)) {
-    if (selected.length >= participantCount) break;
-    selected.push(role);
-  }
-
-  for (const role of shuffle(medium)) {
-    if (selected.length >= participantCount) break;
-    selected.push(role);
-  }
-
-  for (const role of shuffle(low)) {
-    if (selected.length >= participantCount) break;
-    selected.push(role);
-  }
-
-  return shuffle(selected);
-}
-
     const participants = getParticipantPlayers(room);
     const deal = dealRolesWithPendingAssignments(
       participants,
       roles,
       room.pendingRoleAssignments,
       room.pendingRoleBlocks,
-      (remainingRoles, remainingPlayerCount) =>
-        remainingRoles.length > remainingPlayerCount
-          ? pickRolesForParticipants(remainingRoles, remainingPlayerCount)
-          : shuffle(remainingRoles),
+      pickRolesForParticipants,
     );
 
     if (!deal) return false;

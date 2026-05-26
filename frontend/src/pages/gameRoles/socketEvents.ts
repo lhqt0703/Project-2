@@ -23,7 +23,7 @@ export type SeerResultPayload = { playerId: string; isWolf: boolean };
 export type CursedResultPayload = { targetId: string; areaIds: string[]; hasWolf: boolean };
 export type CursedTargetUpdatedPayload = { targetId: string | null; lastTargetId: string | null };
 export type GuardianProtectedPayload = string; // targetId
-export type ProtectorTargetUpdatedPayload = { targetId: string | null };
+export type ProtectorTargetUpdatedPayload = { targetId: string | null; hasUsed?: boolean };
 
 export type WitchPendingDeathPayload = { targetId: string | null; targetIds?: string[] };
 export type WitchPotionsPayload = { healUsed: boolean; poisonUsed: boolean };
@@ -122,6 +122,7 @@ export type GameLogEntry =
   | { type: "trial_started"; phase: GameLogEntryPhase; targetId: string }
   | { type: "trial_verdict"; phase: GameLogEntryPhase; targetId: string; liveVotes: number; dieVotes: number; liveVoterIds?: string[]; dieVoterIds?: string[]; executed: boolean }
   | { type: "bonus_bite"; phase: GameLogEntryPhase }
+  | { type: "night_action_extra_time"; phase: GameLogEntryPhase; targetId: string; roleName: string; extraSeconds: number }
   | { type: "guardian_protect"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "protector_bless"; phase: GameLogEntryPhase; actorId: string; targetId: string; permanent: boolean }
   | { type: "protector_save"; phase: GameLogEntryPhase; actorId: string | null; targetId: string; cause: EliminationCause; permanent: boolean }
@@ -140,8 +141,8 @@ export type GameLogEntry =
   | { type: "merchant_item_expired"; phase: GameLogEntryPhase; targetId: string; itemIds: MerchantItemId[] }
   | { type: "merchant_item_used"; phase: GameLogEntryPhase; itemId: MerchantItemId; actorId?: string | null; targetId?: string | null; sourceId?: string | null; targetIds?: string[] }
   | { type: "merchant_win_condition_completed"; phase: GameLogEntryPhase; actorId: string; successfulTrades: number; requiredTrades: number }
-  | { type: "angel_revive_choice"; phase: GameLogEntryPhase; actorId: string; targetId: string; guess: AngelAlignmentGuess; targetTeam: AngelTargetTeam }
-  | { type: "angel_revive_activated"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "angel_revive_activated"; phase: GameLogEntryPhase; actorId: string; targetId: string; guess?: AngelAlignmentGuess | null }
+  | { type: "angel_revive_choice"; phase: GameLogEntryPhase; actorId: string; targetId: string; guess?: AngelAlignmentGuess | null; targetTeam?: AngelTargetTeam | null }
   | { type: "angel_revive_revealed"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "angel_outcome"; phase: GameLogEntryPhase; actorId: string; targetId: string; guess: AngelAlignmentGuess; targetTeam: AngelTargetTeam; won: boolean; noContest: boolean; reason: AngelOutcomeReason; winner: "wolves" | "villagers" | "lovers" | "nobody" }
   | { type: "mysterious_force_eliminated"; phase: GameLogEntryPhase; targetId: string }
@@ -160,7 +161,8 @@ export type GameLogEntry =
   | { type: "elemental_guess"; phase: GameLogEntryPhase; actorId: string; targetId: string; isCorrect: boolean }
   | { type: "elemental_guess_summary"; phase: GameLogEntryPhase; correctCount: number; totalCount: number; correctIds?: string[]; triggeredBuffVote: boolean; nextBuffVoteNight?: number }
   | { type: "elemental_buff_vote"; phase: GameLogEntryPhase; voteBreakdown: { buffId: string; voterIds: string[] }[]; chosenBuffId?: string | null; tier?: number; randomTieBreak?: boolean; tiedBuffIds?: string[]; chosenVoterIds?: string[] }
-  | { type: "elemental_buff"; phase: GameLogEntryPhase; buffId: string | null; tier: number; randomTieBreak?: boolean; tiedBuffIds?: string[] };
+  | { type: "elemental_buff"; phase: GameLogEntryPhase; buffId: string | null; tier: number; randomTieBreak?: boolean; tiedBuffIds?: string[] }
+  | { type: "host_ended_game"; phase: GameLogEntryPhase };
 
 export type GameLogNight = {
   night: number;

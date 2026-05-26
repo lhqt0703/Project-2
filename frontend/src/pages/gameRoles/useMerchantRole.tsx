@@ -280,9 +280,9 @@ export function useMerchantRole({
     currentTrade?.resolved &&
     (currentTrade.actorId === clientId || currentTrade.targetId === clientId) ? (
       <div style={{ marginTop: 12, opacity: 0.9 }}>
-        Giao dịch với <b>{currentTrade.actorId === clientId ? tradeTargetName : tradeActorName}</b>{" "}
+        Giao dịch {" "}
         {currentTrade.result === "success" ? "thành công" : "thất bại"}
-        {currentTrade.itemId && currentTrade.result === "success" ? `: ${MERCHANT_ITEM_LABELS[currentTrade.itemId]}` : ""}
+        
       </div>
     ) : null;
 

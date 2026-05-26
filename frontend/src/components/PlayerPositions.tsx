@@ -1298,7 +1298,7 @@ export default function PlayerPositions({
                   position: "absolute",
                   top: -badgeOffsetPx,
                   left: -badgeOffsetPx,
-                  background: "#000",
+                  background: "#63381e",
                   color: "#fff",
                   padding: badgePadding,
                   borderRadius: scalePx(6, 3),
@@ -1341,6 +1341,25 @@ export default function PlayerPositions({
                   width: "max-content",
                 }}>
                   {roleBadgeText}
+                </div>
+              )}
+
+              {showDisconnectedBadge && (
+                <div style={{
+                  position: "absolute",
+                  bottom: roleBadgeText ? -(badgeOffsetPx + scalePx(24, 12)) : -badgeOffsetPx,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  background: "#555",
+                  color: "#fff",
+                  padding: badgePadding,
+                  borderRadius: scalePx(6, 3),
+                  fontSize: badgeFontSizePx,
+                  fontWeight: "bold",
+                  opacity: 0.9,
+                  width: "max-content",
+                }}>
+                  Mất kết nối
                 </div>
               )}
 
@@ -1391,25 +1410,6 @@ export default function PlayerPositions({
                   {emptyHearts.map((_, idx) => (
                     <span key={`empty-${idx}`}>♡</span>
                   ))}
-                </div>
-              )}
-
-              {showDisconnectedBadge && (
-                <div style={{
-                  position: "absolute",
-                  bottom: -badgeOffsetPx,
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  background: "#555",
-                  color: "#fff",
-                  padding: badgePadding,
-                  borderRadius: scalePx(6, 3),
-                  fontSize: badgeFontSizePx,
-                  fontWeight: "bold",
-                  opacity: 0.9,
-                  width: "max-content",
-                }}>
-                  Mất kết nối
                 </div>
               )}
 

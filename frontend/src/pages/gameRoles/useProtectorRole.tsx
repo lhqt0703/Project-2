@@ -13,6 +13,7 @@ export function useProtectorRole({
   room,
   deadPlayers,
   protectorTargetId,
+  protectorHasUsed,
   allNightActionsSimultaneous,
   currentNightTurnRole,
   nightActionDeadline,
@@ -24,6 +25,7 @@ export function useProtectorRole({
   room: RoomLike;
   deadPlayers: string[];
   protectorTargetId: string | null;
+  protectorHasUsed: boolean;
   allNightActionsSimultaneous: boolean;
   currentNightTurnRole: string | null;
   nightActionDeadline: number | null;
@@ -36,11 +38,12 @@ export function useProtectorRole({
     if (phase !== "night") return false;
     if (role !== "Hộ nhân") return false;
     if (clientId && deadPlayers.includes(clientId)) return false;
+    if (protectorHasUsed) return false;
     if (protectorTargetId) return false;
     if (allNightActionsSimultaneous && nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
     if (!allNightActionsSimultaneous && currentNightTurnRole !== "Hộ nhân") return false;
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, nightActionDeadline, nightActionNow, phase, protectorTargetId, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, nightActionDeadline, nightActionNow, phase, protectorHasUsed, protectorTargetId, role]);
 
   const isProtectorTurnActive = useMemo(() => {
     if (phase !== "night") return false;
@@ -68,11 +71,21 @@ export function useProtectorRole({
     ? room.players.find((player) => player.id === selectedPlayerId)?.name || "người này"
     : "người này";
 
-  const panel = role === "Hộ nhân" && phase === "night" && protectorTargetId ? (
-    <div style={{ marginTop: 12, opacity: 0.85 }}>
-      Người đang được bất tử: <b>{room.players.find((player) => player.id === protectorTargetId)?.name || "người đã chọn"}</b>
-    </div>
-  ) : null;
+  const panel = role === "Hộ nhân" && phase === "night"
+    ? protectorTargetId
+      ? (
+        <div style={{ marginTop: 12, opacity: 0.85 }}>
+          Người đang được bất tử: <b>{room.players.find((player) => player.id === protectorTargetId)?.name || "người đã chọn"}</b>
+        </div>
+      )
+      : protectorHasUsed
+        ? (
+          <div style={{ marginTop: 12, opacity: 0.85 }}>
+            Bạn đã dùng kỹ năng trao bất tử trong ván này.
+          </div>
+        )
+        : null
+    : null;
 
   return {
     onPlayerClick,

@@ -99,6 +99,7 @@ export function useGameSocketSync({
   const [guardianProtectedTargetId, setGuardianProtectedTargetId] = useState<string | null>(null);
   const [protectorTargetSeq, setProtectorTargetSeq] = useState(0);
   const [protectorTargetId, setProtectorTargetId] = useState<string | null>(null);
+  const [protectorHasUsed, setProtectorHasUsed] = useState(false);
 
   const [hunterTargetSeq, setHunterTargetSeq] = useState(0);
   const [hunterTargetId, setHunterTargetId] = useState<string | null>(null);
@@ -318,6 +319,11 @@ export function useGameSocketSync({
       setRoom((prev: any) => (prev ? { ...prev, positions } : prev));
     };
 
+    const handlePositionEditorsUpdated = (editors: any) => {
+      if (!Array.isArray(editors)) return;
+      setRoom((prev: any) => (prev ? { ...prev, positionEditors: editors } : prev));
+    };
+
     const handlePhaseChanged = (newPhase: GamePhase) => {
       phaseRef.current = newPhase;
       applyPhaseTransition(newPhase);
@@ -341,6 +347,7 @@ export function useGameSocketSync({
       setRevealedRolesByPlayerId({});
       setProtectorTargetId(null);
       setProtectorTargetSeq(0);
+      setProtectorHasUsed(false);
       setDayVotes(null);
       setDayLocked(null);
       setDayDiscussionDeadline(null);
@@ -406,6 +413,7 @@ export function useGameSocketSync({
 
     const handleProtectorTargetUpdated = (payload: ProtectorTargetUpdatedPayload) => {
       setProtectorTargetId(payload?.targetId ?? null);
+      setProtectorHasUsed(payload?.hasUsed === true);
       setProtectorTargetSeq((s) => s + 1);
     };
 
@@ -482,6 +490,22 @@ export function useGameSocketSync({
 
     const handleWolfLockedUpdated = (locked: WolfLockedUpdatedPayload) => {
       setWolfLocked(locked);
+    };
+
+    const handleWolfVoteFinished = () => {
+      setWolfDeadline(null);
+      setActiveWolves([]);
+      setWolfBiteDisabled(true);
+      setWolfMaxTargets(1);
+      wildWolfConversionRef.current = {
+        available: false,
+        requested: false,
+      };
+      setRoom((prev: any) => (prev ? {
+        ...prev,
+        wildWolfConvertAvailableTonight: false,
+        wildWolfConvertRequestedTonight: false,
+      } : prev));
     };
 
     const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline, maxTargets, resetVotes, biteDisabled, wolfBadgeRolesByPlayerId, wildWolfConvertAvailable, wildWolfConvertRequested }: WolfPhaseStartedPayload) => {
@@ -711,12 +735,14 @@ export function useGameSocketSync({
 
     socket.on("roomUpdated", handleRoomUpdated);
     socket.on("positionsUpdated", handlePositionsUpdated);
+    socket.on("positionEditorsUpdated", handlePositionEditorsUpdated);
     socket.on("phaseChanged", handlePhaseChanged);
     socket.on("playerKilled", handlePlayerKilled);
 
     socket.on("wolfVotesUpdated", handleWolfVotesUpdated);
     socket.on("wolfVotes2Updated", handleWolfVotes2Updated);
     socket.on("wolfLockedUpdated", handleWolfLockedUpdated);
+    socket.on("wolfVoteFinished", handleWolfVoteFinished);
     socket.on("wolfPhaseStarted", handleWolfPhaseStarted);
     socket.on("wildWolfConversionUpdated", handleWildWolfConversionUpdated);
 
@@ -765,12 +791,14 @@ export function useGameSocketSync({
     return () => {
       socket.off("roomUpdated", handleRoomUpdated);
       socket.off("positionsUpdated", handlePositionsUpdated);
+      socket.off("positionEditorsUpdated", handlePositionEditorsUpdated);
       socket.off("phaseChanged", handlePhaseChanged);
       socket.off("playerKilled", handlePlayerKilled);
 
       socket.off("wolfVotesUpdated", handleWolfVotesUpdated);
       socket.off("wolfVotes2Updated", handleWolfVotes2Updated);
       socket.off("wolfLockedUpdated", handleWolfLockedUpdated);
+      socket.off("wolfVoteFinished", handleWolfVoteFinished);
       socket.off("wolfPhaseStarted", handleWolfPhaseStarted);
       socket.off("wildWolfConversionUpdated", handleWildWolfConversionUpdated);
 
@@ -837,6 +865,7 @@ export function useGameSocketSync({
       guardianProtectedTargetId,
       protectorTargetSeq,
       protectorTargetId,
+      protectorHasUsed,
       hunterTargetSeq,
       hunterTargetId,
       hunterShotSeq,
@@ -900,6 +929,7 @@ export function useGameSocketSync({
       guardianProtectedTargetId,
       protectorTargetSeq,
       protectorTargetId,
+      protectorHasUsed,
       hunterTargetSeq,
       hunterTargetId,
       hunterShotSeq,

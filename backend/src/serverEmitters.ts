@@ -10,6 +10,7 @@ import {
 import { clampNonWolfNightActionDurationSec, clampWolfNightActionDurationSec } from "./gameConfig.js";
 import {
   ensureRoomGameRules,
+  type GameLogNight,
   type RolesRevealPayload,
   type Room,
 } from "./serverTypes.js";
@@ -139,8 +140,9 @@ export function emitProtectorTarget(roomId: string, protectorId: string) {
   if (!ctx) return;
   const room = ctx.rooms[roomId];
   if (!room) return;
-  const targetId = room.protectorActorId === protectorId ? room.protectorTargetId ?? null : null;
-  ctx.io.to(protectorId).emit("protectorTargetUpdated", { targetId });
+  const hasUsed = room.protectorActorId === protectorId;
+  const targetId = hasUsed ? room.protectorTargetId ?? null : null;
+  ctx.io.to(protectorId).emit("protectorTargetUpdated", { targetId, hasUsed });
 }
 
 function isElementalRoleTurn(role: string | null | undefined): role is ElementalRole {
@@ -273,7 +275,8 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
     }
 
     if (role === PROTECTOR_ROLE) {
-      setProgress(playerId, room.protectorTargetId ? "done" : "pending", role);
+      const hasUsed = room.protectorActorId === playerId;
+      setProgress(playerId, hasUsed || !!room.protectorTargetId ? "done" : "pending", role);
       continue;
     }
 
@@ -366,6 +369,35 @@ export function emitGameLogToSocket(roomId: string, socketId: string) {
   const room = ctx.rooms[roomId];
   if (!room) return;
   ctx.io.to(socketId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
+}
+
+function getPublicDayGameLog(room: Room): GameLogNight[] {
+  return (room.gameLog || [])
+    .map((nightLog) => ({
+      ...nightLog,
+      entries: (nightLog.entries || []).filter((entry) => entry.phase === "day"),
+    }))
+    .filter((nightLog) => nightLog.entries.length > 0);
+}
+
+export function emitPublicDayGameLogToSocket(roomId: string, socketId: string) {
+  const ctx = getServerContext();
+  if (!ctx) return;
+  const room = ctx.rooms[roomId];
+  if (!room) return;
+  ctx.io.to(socketId).emit("gameLogUpdated", { roomId, nights: getPublicDayGameLog(room) });
+}
+
+export function emitPublicDayGameLogToRoom(roomId: string) {
+  const ctx = getServerContext();
+  if (!ctx) return;
+  const room = ctx.rooms[roomId];
+  if (!room) return;
+  const nights = getPublicDayGameLog(room);
+  for (const player of room.players || []) {
+    if (player.id === room.hostId) continue;
+    ctx.io.to(player.id).emit("gameLogUpdated", { roomId, nights });
+  }
 }
 
 export function emitRolesRevealToSocket(roomId: string, socketId: string) {

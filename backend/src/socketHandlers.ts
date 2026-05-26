@@ -34,6 +34,7 @@ import {
   isSpiritWolfAlive,
   isWolfAlignedPlayer,
   isWolfRole,
+  markWolfCubExtraBiteReadyIfDied,
   markWildWolfConversionReadyIfWolfDied,
   resetNightTurnState,
   resetRoomFromGameToLobby,
@@ -59,6 +60,7 @@ import {
   emitMerchantPrivateState,
   emitMerchantPrivateStateForAll,
   emitProtectorTarget,
+  emitPublicDayGameLogToSocket,
   emitRolesRevealToSocket,
   emitSpiritWolfDecisionNeeded,
   getHostNightActionProgressByPlayerId,
@@ -95,6 +97,7 @@ import {
   dealRolesWithPendingAssignments,
   prunePendingRoleBlocks,
   prunePendingRoleAssignments,
+  pickRolesForParticipants,
   type PendingRoleBlocks,
   type PendingRoleAssignments,
 } from "./roleAssignment.js";
@@ -244,6 +247,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       .filter((player) => !dead.has(player.id))
       .filter((player) => isElementalRoleTurn(room.playerRoles?.[player.id] || null))
       .map((player) => player.id);
+  }
+
+  function canUseTrialFlowControls(room: Room) {
+    return clientId === room.hostId || room.positionEditors?.includes(clientId) === true;
   }
 
   function setRoomPendingRoleAssignments(room: Room, assignments: PendingRoleAssignments) {
@@ -398,6 +405,50 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       available: room.wildWolfConvertAvailableTonight === true,
       requested: room.wildWolfConvertRequestedTonight === true,
     });
+  }
+
+  function getWildWolfConversionCandidateIds(room: Room, playerId: string) {
+    return [room.wolfVotes?.[playerId], room.wolfVotes2?.[playerId]]
+      .filter((targetId): targetId is string => !!targetId);
+  }
+
+  function clearWildWolfConversionIfTargetIsNoLongerSelected(roomId: string, room: Room, playerId: string) {
+    if (room.wildWolfConvertActorId !== playerId) return;
+    if (!room.wildWolfConvertRequestedTonight) return;
+    const targetId = room.wildWolfConvertTargetId || null;
+    if (targetId && getWildWolfConversionCandidateIds(room, playerId).includes(targetId)) return;
+
+    room.wildWolfConvertRequestedTonight = false;
+    room.wildWolfConvertActorId = null;
+    room.wildWolfConvertTargetId = null;
+    emitWildWolfConversionState(roomId, room);
+  }
+
+  function canWaitForWildWolfConversionAfterLocked(room: Room) {
+    const wildWolfId = getWildWolfId(room);
+    if (!wildWolfId) return false;
+    if (!room.wolfDeadline || Date.now() >= room.wolfDeadline) return false;
+    return (
+      room.wildWolfConvertAvailableTonight === true &&
+      room.wildWolfConvertRequestedTonight !== true &&
+      room.wildWolfConvertUsed !== true &&
+      room.playerRoles?.[wildWolfId] === WILD_WOLF_ROLE &&
+      isPlayerConnected(room, wildWolfId) &&
+      canPlayerActAtNight(room, wildWolfId)
+    );
+  }
+
+  function finishWolfVotingIfAllLocked(roomId: string, room: Room, allowWildWolfConversionWait = true) {
+    const activeWolves = getActiveWolves(room);
+    const allLocked = activeWolves.length > 0 && activeWolves.every((id) => room.wolfLocked?.[id] === true);
+    if (!allLocked) return;
+    if (allowWildWolfConversionWait && canWaitForWildWolfConversionAfterLocked(room)) return;
+
+    if (room.wolfTimer) {
+      clearTimeout(room.wolfTimer);
+      room.wolfTimer = null;
+    }
+    finishWolfVoting(roomId);
   }
 
   function convertWildWolfTargetToWolf(roomId: string, room: Room, targetId: string) {
@@ -618,8 +669,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const protectorSaves: ProtectorSaveRecord[] = [];
     const loveLinkDeaths: { sourceId: string; targetId: string }[] = [];
     const savedByGuardianIds: string[] = [];
-    const savedByWitchIds: string[] = [];
-    let hadDeathThreat = false;
 
     const addUnique = (ids: string[], id: string) => {
       if (!ids.includes(id)) ids.push(id);
@@ -723,7 +772,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     };
 
     for (const targetId of wolfTargets) {
-      hadDeathThreat = true;
       if (initialDead.has(targetId)) continue;
 
       if (isLovePairMemberAwayAt(room, targetId, wolfAttackAt)) continue;
@@ -736,7 +784,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       const isProtected = isGuardianEffective(targetId, saveCutoffAt);
 
       if (isProtected) addUnique(savedByGuardianIds, targetId);
-      if (wasHealed) addUnique(savedByWitchIds, targetId);
 
       if (targetId === wildWolfConvertTargetId) {
         const biteCounted = (!wasHealed && !isProtected) || rules.banSoiBecomeWolfEvenIfHealed;
@@ -832,7 +879,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const poisonEntries = Object.entries(room.witchPoisonTargetTonight || {});
     const poisonTargets = getUniqueTargets(poisonEntries.map(([, targetId]) => targetId));
     for (const targetId of poisonTargets) {
-      hadDeathThreat = true;
       const poisonAts = poisonEntries
         .filter(([, poisonedTargetId]) => poisonedTargetId === targetId)
         .map(([witchId]) => room.witchPoisonTargetAt?.[witchId] || Date.now());
@@ -879,7 +925,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         appendLogEntry(room, { type: "eliminated", phase: "night", targetIds: eliminatedIds, causesByTarget });
         resolveHunterShotsForDeaths(ctx, roomId, room, eliminatedIds, "night");
       }
-    } else if (hadDeathThreat || savedByGuardianIds.length || savedByWitchIds.length) {
+    } else {
       appendLogEntry(room, { type: "no_death", phase: "day" });
     }
 
@@ -1064,6 +1110,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       if (clientId === room.hostId) {
         syncPendingRoleInterventionsToHost(roomId);
         emitGameLogToSocket(roomId, clientId);
+      } else if (room.gameOver) {
+        emitGameLogToSocket(roomId, clientId);
+      } else if (room.phase === "day") {
+        emitPublicDayGameLogToSocket(roomId, clientId);
       }
       ctx.io.to(roomId).emit("positionsUpdated", room.positions);
       ctx.io.to(roomId).emit("positionEditorsUpdated", room.positionEditors || []);
@@ -1704,11 +1754,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
             ctx.io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked || {});
             emitHostNightActionProgress(roomId);
 
-            const activeWolves = getActiveWolves(room);
-            const allLocked = activeWolves.length > 0 && activeWolves.every(id => room.wolfLocked?.[id] === true);
-            if (allLocked) {
-              finishWolfVoting(roomId);
-            }
+            finishWolfVotingIfAllLocked(roomId, room);
           }
 
           if (room.phase === "day") {
@@ -1948,32 +1994,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       initTwoHeartsForParticipants(room);
     }
 
-    function shuffle<T>(arr: T[]): T[] {
-  return arr.slice().sort(() => Math.random() - 0.5);
-}
-
-function pickRolesForParticipants(allRoles: string[], participantCount: number): string[] {
-  const normalizedRoles = allRoles.filter((role): role is string => typeof role === "string" && role.trim().length > 0);
-  if (normalizedRoles.length <= participantCount) {
-    return shuffle(normalizedRoles);
-  }
-
-  const selectedRoles: string[] = [];
-  const shuffledRoles = shuffle(normalizedRoles);
-  const firstWolfIndex = shuffledRoles.findIndex(isWolfRole);
-
-  if (firstWolfIndex >= 0) {
-    selectedRoles.push(shuffledRoles[firstWolfIndex]!);
-    shuffledRoles.splice(firstWolfIndex, 1);
-  }
-
-  for (const role of shuffledRoles) {
-    if (selectedRoles.length >= participantCount) break;
-    selectedRoles.push(role);
-  }
-
-  return shuffle(selectedRoles);
-}
 
     const participants = getParticipantPlayers(room);
     const deal = dealRolesWithPendingAssignments(
@@ -2061,6 +2081,20 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (clientId !== room.hostId) return;
 
     emitRolesRevealToSocket(roomId, clientId);
+  });
+
+  socket.on("requestGameLog", ({ roomId }: { roomId: string }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (clientId === room.hostId || room.gameOver) {
+      emitGameLogToSocket(roomId, clientId);
+      return;
+    }
+
+    if (room.phase === "day") {
+      emitPublicDayGameLogToSocket(roomId, clientId);
+    }
   });
 
   socket.on("hostRevealDisconnectedBadge", ({ roomId, show }: { roomId: string; show: boolean }) => {
@@ -2204,12 +2238,6 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (phase === "day") {
       const revealedAngelRevives = revealAngelHiddenRevivesForDay(room);
       for (const record of revealedAngelRevives) {
-        appendLogEntry(room, {
-          type: "angel_revive_revealed",
-          phase: "day",
-          actorId: record.angelId,
-          targetId: record.targetId,
-        });
         emitAngelPrivateState(ctx, roomId, room, record.angelId);
         emitAngelPrivateState(ctx, roomId, room, record.targetId);
       }
@@ -2306,6 +2334,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
           phase: "night",
           actorId: record.angelId,
           targetId: record.targetId,
+          guess: record.guess,
         });
         if (isWolfAlignedPlayer(room, record.targetId)) {
           ctx.io.in(record.targetId).socketsJoin(`wolves_${roomId}`);
@@ -2417,7 +2446,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       }
 
       // Reset night action state.
-      room.lastProtected = room.protectedTonight;
+      room.lastProtected = room.protectedTonight ?? null;
       room.protectedTonight = null;
       room.protectedTonightBy = null;
       room.protectedTonightAt = null;
@@ -2516,7 +2545,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (!room) return;
     if (room.gameOver) return;
     if (room.phase !== "day") return;
-    if (clientId !== room.hostId) return;
+    if (!canUseTrialFlowControls(room)) return;
     if (room.trialStage && room.trialStage !== "none") return;
     if (room.dayDeadline) return;
 
@@ -2548,7 +2577,10 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (!room) return;
     if (room.gameOver) return;
     if (room.phase !== "day") return;
-    if (clientId !== room.hostId) return;
+    const canForceFinishDayVote =
+      clientId === room.hostId ||
+      (room.trialStage === "defense" && canUseTrialFlowControls(room));
+    if (!canForceFinishDayVote) return;
 
     if (room.trialStage === "verdict") {
       finishTrialVerdict(roomId);
@@ -2755,6 +2787,15 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     const rules = ensureRoomGameRules(room);
     const extraMs = 10_000;
+    const appendExtraTimeLog = (targetRole: string) => {
+      appendLogEntry(room, {
+        type: "night_action_extra_time",
+        phase: "night",
+        targetId,
+        roleName: targetRole,
+        extraSeconds: Math.round(extraMs / 1000),
+      });
+    };
 
     if (rules.allNightActionsSimultaneous) {
       const targetRole = room.playerRoles?.[targetId] || null;
@@ -2770,8 +2811,26 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
         );
       if (!hasActiveDeadline && !canExtendWhilePaused) return;
 
+      let baseDeadline = 0;
+      if (isWolfAlignedPlayer(room, targetId)) {
+        baseDeadline = room.wolfDeadline ?? Date.now();
+      } else if (targetRole === SPIRIT_WOLF_ROLE) {
+        baseDeadline = room.spiritWolfDecisionDeadline ?? Date.now();
+      } else {
+        baseDeadline = room.nightTurnDeadline ?? Date.now();
+        if (targetRole === "Phù thủy" && shouldGrantWitchBonusToPlayer(room, targetId)) {
+          baseDeadline += 10_000;
+        }
+      }
+
+      const currentExtraMs = getNightActionExtraMs(room, targetId);
+      const currentTotalDeadline = baseDeadline + currentExtraMs;
+
+      const newTotalDeadline = Math.max(currentTotalDeadline, Date.now()) + extraMs;
+      const newExtraMs = newTotalDeadline - baseDeadline;
+
       room.nightActionExtraTimeMsByPlayerId = room.nightActionExtraTimeMsByPlayerId || {};
-      room.nightActionExtraTimeMsByPlayerId[targetId] = getNightActionExtraMs(room, targetId) + extraMs;
+      room.nightActionExtraTimeMsByPlayerId[targetId] = newExtraMs;
 
       if (!room.nightTurnPaused) {
         if (isWolfAlignedPlayer(room, targetId) && room.wolfDeadline && !room.wolfVoteResolvedTonight) {
@@ -2790,6 +2849,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
         }
       }
 
+      appendExtraTimeLog(targetRole);
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       emitHostNightActionProgress(roomId);
       return;
@@ -2809,21 +2869,19 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     if (room.nightTurnPaused) {
       room.nightTurnRemainingMs = Math.max(0, (room.nightTurnRemainingMs ?? 0) + extraMs);
+      appendExtraTimeLog(targetRole);
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       return;
     }
 
-    room.nightTurnDeadline = (room.nightTurnDeadline ?? Date.now()) + extraMs;
+    room.nightTurnDeadline = Math.max(room.nightTurnDeadline ?? Date.now(), Date.now()) + extraMs;
     const remainingMs = Math.max(0, room.nightTurnDeadline - Date.now());
 
     if (room.nightTurnRole === "Sói") {
-      if (room.wolfTimer) {
-        clearTimeout(room.wolfTimer);
-        room.wolfTimer = null;
-      }
-      room.wolfTimer = setTimeout(() => {
-        finishWolfVoting(roomId);
-      }, remainingMs);
+      startWolfPhase(roomId, {
+        durationMs: remainingMs,
+        initializeVotes: false,
+      });
     } else if (room.nightTurnRole === SPIRIT_WOLF_ROLE) {
       clearNightTurnTimer(room);
       clearSpiritWolfDecisionTimer(room);
@@ -2838,6 +2896,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
       }, remainingMs);
     }
 
+    appendExtraTimeLog(targetRole);
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
@@ -2853,6 +2912,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     room.deadPlayers = room.deadPlayers || [];
     room.deadPlayers.push(targetId);
+    markWolfCubExtraBiteReadyIfDied(room, targetId);
     markWildWolfConversionReadyIfWolfDied(room, targetId);
     clearProtectorTargetIfDead(room, targetId);
 
@@ -2932,15 +2992,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     const targetAlreadyChosen = Object.values(room.angelReviveRecordsByAngelId || {}).some((record) => record.targetId === targetId);
     if (targetAlreadyChosen) return;
 
-    const record = recordAngelReviveChoice(room, clientId, targetId, guess);
-    appendLogEntry(room, {
-      type: "angel_revive_choice",
-      phase: "day",
-      actorId: clientId,
-      targetId,
-      guess,
-      targetTeam: record.targetTeam,
-    });
+    recordAngelReviveChoice(room, clientId, targetId, guess);
     emitAngelPrivateState(ctx, roomId, room, clientId);
     emitAngelPrivateState(ctx, roomId, room, targetId);
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
@@ -3051,7 +3103,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (room.phase !== "day") return;
     if (room.trialStage !== "defense") return;
     if (!room.trialTargetId) return;
-    if (clientId !== room.hostId) return;
+    if (!canUseTrialFlowControls(room)) return;
 
     const nextLimit = Math.max(0, room.trialInteractionSelectionLimit || 0) + 1;
     room.trialInteractionSelectionLimit = nextLimit;
@@ -3734,7 +3786,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     finishSpiritWolfTurn(roomId, false);
   });
 
-  socket.on("wildWolfToggleConversion", ({ roomId, active }) => {
+  socket.on("wildWolfToggleConversion", ({ roomId, active, targetId }) => {
     const room = rooms[roomId];
     if (!room) return;
     if (room.gameOver) return;
@@ -3742,18 +3794,32 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (!isWildWolfConversionUsable(room, clientId)) return;
     if (!canPerformNightRoleAction(room, clientId, "Sói")) return;
     if (room.wolfVoteResolvedTonight) return;
-    if (room.wolfLocked?.[clientId]) {
-      socket.emit("errorMessage", "Bạn đã bấm CẮN, không thể thay đổi lựa chọn.");
+
+    if (!active) {
+      room.wildWolfConvertRequestedTonight = false;
+      room.wildWolfConvertActorId = null;
+      room.wildWolfConvertTargetId = null;
+      emitWildWolfConversionState(roomId, room);
+      finishWolfVotingIfAllLocked(roomId, room, false);
       return;
     }
-    const selectedTargetId = room.wolfVotes?.[clientId] || null;
-    if (active && !selectedTargetId) return;
 
-    room.wildWolfConvertRequestedTonight = !!active;
-    room.wildWolfConvertActorId = active ? clientId : null;
-    room.wildWolfConvertTargetId = active ? selectedTargetId : null;
+    const candidates = getWildWolfConversionCandidateIds(room, clientId);
+    const selectedTargetId =
+      typeof targetId === "string" && candidates.includes(targetId)
+        ? targetId
+        : candidates[0] || null;
+    if (!selectedTargetId) return;
+    if (!room.players.find((player) => player.id === selectedTargetId)) return;
+    if ((room.deadPlayers || []).includes(selectedTargetId)) return;
+    if (isWolfAlignedPlayer(room, selectedTargetId)) return;
+
+    room.wildWolfConvertRequestedTonight = true;
+    room.wildWolfConvertActorId = clientId;
+    room.wildWolfConvertTargetId = selectedTargetId;
 
     emitWildWolfConversionState(roomId, room);
+    finishWolfVotingIfAllLocked(roomId, room);
   });
 
   socket.on("wolfChooseTarget", ({ roomId, targetId }) => {
@@ -3774,17 +3840,8 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     if (!targetId) {
       room.wolfVotes[clientId] = null;
-      let cancelledWildConversion = false;
-      if (room.wildWolfConvertActorId === clientId) {
-        room.wildWolfConvertRequestedTonight = false;
-        room.wildWolfConvertActorId = null;
-        room.wildWolfConvertTargetId = null;
-        cancelledWildConversion = true;
-      }
       ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes);
-      if (cancelledWildConversion) {
-        emitWildWolfConversionState(roomId, room);
-      }
+      clearWildWolfConversionIfTargetIsNoLongerSelected(roomId, room, clientId);
       return;
     }
 
@@ -3795,10 +3852,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (isWolfAlignedPlayer(room, targetId)) return;
 
     room.wolfVotes[clientId] = targetId;
-    if (room.wildWolfConvertActorId === clientId && room.wildWolfConvertRequestedTonight) {
-      room.wildWolfConvertTargetId = targetId;
-      emitWildWolfConversionState(roomId, room);
-    }
+    clearWildWolfConversionIfTargetIsNoLongerSelected(roomId, room, clientId);
 
     ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes);
   });
@@ -3824,6 +3878,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     if (!targetId) {
       room.wolfVotes2[clientId] = null;
       ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
+      clearWildWolfConversionIfTargetIsNoLongerSelected(roomId, room, clientId);
       return;
     }
 
@@ -3837,6 +3892,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
 
     room.wolfVotes2[clientId] = targetId;
     ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
+    clearWildWolfConversionIfTargetIsNoLongerSelected(roomId, room, clientId);
   });
 
   socket.on("wolfLockVote", ({ roomId }) => {
@@ -3853,15 +3909,7 @@ function pickRolesForParticipants(allRoles: string[], participantCount: number):
     ctx.io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked);
     emitHostNightActionProgress(roomId);
 
-    const activeWolves = getActiveWolves(room);
-    const allLocked = activeWolves.length > 0 && activeWolves.every(id => room.wolfLocked?.[id] === true);
-    if (allLocked) {
-      if (room.wolfTimer) {
-        clearTimeout(room.wolfTimer);
-        room.wolfTimer = null;
-      }
-      finishWolfVoting(roomId);
-    }
+    finishWolfVotingIfAllLocked(roomId, room);
   });
 }
 

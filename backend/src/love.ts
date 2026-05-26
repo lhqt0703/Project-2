@@ -1,7 +1,7 @@
 import type { ServerContext } from "./serverContext.js";
 import type { EliminationCause, GameLogEntryPhase, Room } from "./serverTypes.js";
 import { clearProtectorTargetIfDead, tryUseProtectorImmortality, type ProtectorSaveRecord } from "./specialRoles.js";
-import { markWildWolfConversionReadyIfWolfDied } from "./roomState.js";
+import { markWildWolfConversionReadyIfWolfDied, markWolfCubExtraBiteReadyIfDied } from "./roomState.js";
 import { emitAngelPrivateState, markAngelReviveAvailable } from "./angel.js";
 
 export const LOVE_ROLE = "Thần tình yêu";
@@ -152,6 +152,7 @@ export function markEliminatedWithLoveChain(
     if (!room.deadPlayers.includes(id)) {
       room.deadPlayers.push(id);
     }
+    markWolfCubExtraBiteReadyIfDied(room, id);
     markWildWolfConversionReadyIfWolfDied(room, id);
     if (markAngelReviveAvailable(room, id)) {
       emitAngelPrivateState(ctx, roomId, room, id);

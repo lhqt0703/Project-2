@@ -115,7 +115,7 @@ export function useAngelRole({
     if (role === ANGEL_ROLE && angelState.selectedTargetId) {
       return (
         <div style={{ marginTop: 10, padding: "8px 10px", borderRadius: 8, background: "rgba(255, 214, 102, 0.12)", border: "1px solid rgba(173, 120, 20, 0.22)" }}>
-          Bạn đã âm thầm chọn hồi sinh <strong>{targetName}</strong>. Người này sẽ hành động được từ đêm kế tiếp.
+          <strong>{targetName}</strong> đã hồi sinh và bắt đầu có thể thực hiện được kỹ năng nhưng qua đêm nay mới sẽ lộ diện
         </div>
       );
     }

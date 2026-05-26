@@ -7,11 +7,15 @@ type Player = { id: string; name: string; connected?: boolean };
 type RoomLike = {
   players: Player[];
   wolfVotes?: Record<string, string | null>;
+  wolfVotes2?: Record<string, string | null>;
   deadPlayers?: string[];
   banSoiWolfAligned?: boolean;
   wildWolfConvertAvailableTonight?: boolean;
   wildWolfConvertRequestedTonight?: boolean;
   wildWolfConvertedSelf?: boolean;
+  gameRules?: {
+    wolfNightActionDurationSec?: number;
+  };
 };
 
 export function useWolfRole({
@@ -51,6 +55,8 @@ export function useWolfRole({
   const [localSelectedTarget2, setLocalSelectedTarget2] = useState<string | null>(null);
   const [hasSubmittedLock, setHasSubmittedLock] = useState(false);
   const hasSubmittedLockRef = useRef(false);
+  const [wildWolfConversionPickerOpen, setWildWolfConversionPickerOpen] = useState(false);
+  const [wildWolfLocalConversionTarget, setWildWolfLocalConversionTarget] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
   const isBanSoiAligned = room.banSoiWolfAligned === true;
@@ -61,6 +67,10 @@ export function useWolfRole({
   }, [isBanSoiAligned, isWildWolfConverted, role]);
   const isWildWolf = role === "Sói Dại";
   const wildWolfConversionRequested = room.wildWolfConvertRequestedTonight === true;
+  const wolfDurationSec =
+    typeof room.gameRules?.wolfNightActionDurationSec === "number"
+      ? Math.max(0, room.gameRules.wolfNightActionDurationSec)
+      : null;
 
   useEffect(() => {
     // Chỉ tick khi cần hiển thị countdown cho sói
@@ -90,6 +100,8 @@ export function useWolfRole({
     if (isWolfTeam && isWolfTurnActive) {
       setLocalSelectedTarget(null);
       setLocalSelectedTarget2(null);
+      setWildWolfConversionPickerOpen(false);
+      setWildWolfLocalConversionTarget(null);
       hasSubmittedLockRef.current = false;
       setHasSubmittedLock(false);
     }
@@ -111,7 +123,46 @@ export function useWolfRole({
     return true;
   }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, isWolfTeam, phase, wolfBiteDisabled]);
 
-  const deadlineReached = !!(wolfDeadline && Date.now() >= wolfDeadline && !nightTurnPaused);
+  const deadlineReached = !!(wolfDeadline && now >= wolfDeadline && !nightTurnPaused);
+  const effectiveSelectedTarget = localSelectedTarget || (clientId ? room.wolfVotes?.[clientId] || null : null);
+  const effectiveSelectedTarget2 = localSelectedTarget2 || (clientId ? room.wolfVotes2?.[clientId] || null : null);
+  const wildWolfConversionCandidateIds = useMemo(
+    () =>
+      (wolfMaxTargets >= 2
+        ? [effectiveSelectedTarget, effectiveSelectedTarget2]
+        : [effectiveSelectedTarget]
+      ).filter((targetId): targetId is string => !!targetId),
+    [effectiveSelectedTarget, effectiveSelectedTarget2, wolfMaxTargets]
+  );
+  const wildWolfConversionCandidateNames = useMemo(
+    () =>
+      Object.fromEntries(
+        wildWolfConversionCandidateIds.map((targetId) => [
+          targetId,
+          room.players.find((p) => p.id === targetId)?.name || "đối tượng",
+        ])
+      ),
+    [room.players, wildWolfConversionCandidateIds]
+  );
+  const wildWolfHalfTimeReached = useMemo(() => {
+    if (!wolfDeadline || !wolfDurationSec || wolfDurationSec <= 0) return false;
+    const durationMs = Math.floor(wolfDurationSec * 1000);
+    return now >= wolfDeadline - durationMs / 2;
+  }, [now, wolfDeadline, wolfDurationSec]);
+  const shouldPulseWildWolfConversion =
+    isWildWolf &&
+    room.wildWolfConvertAvailableTonight === true &&
+    !wildWolfConversionRequested &&
+    !deadlineReached &&
+    !nightTurnPaused &&
+    (wolfDurationSec === 0 || wildWolfHalfTimeReached);
+  const canPressWildWolfConversion = canAct && !deadlineReached;
+
+  useEffect(() => {
+    if (!wildWolfLocalConversionTarget) return;
+    if (wildWolfConversionCandidateIds.includes(wildWolfLocalConversionTarget)) return;
+    setWildWolfLocalConversionTarget(null);
+  }, [wildWolfConversionCandidateIds, wildWolfLocalConversionTarget]);
 
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;
@@ -172,6 +223,8 @@ export function useWolfRole({
   const resetOnPhaseChange = useCallback((_nextPhase: GamePhase) => {
     setLocalSelectedTarget(null);
     setLocalSelectedTarget2(null);
+    setWildWolfConversionPickerOpen(false);
+    setWildWolfLocalConversionTarget(null);
     hasSubmittedLockRef.current = false;
     // wolf state is owned by parent sync layer
   }, []);
@@ -180,33 +233,122 @@ export function useWolfRole({
     isWolfTeam && isWolfTurnActive && clientId && !deadPlayers.includes(clientId) ? (
       <div style={{ marginTop: 12 }}>
         {wolfMaxTargets >= 2 && (
-          <div style={{ marginBottom: 8 }}>
+          <div
+            style={{
+              marginTop: 10,
+              marginBottom: 10,
+              padding: "8px 10px",
+              borderRadius: 8,
+              background: "rgba(255, 214, 102, 0.12)",
+              border: "1px solid rgba(173, 120, 20, 0.22)",
+            }}
+          >
             <b>Đêm nay phe Sói được cắn 2 người</b> (do Sói con đã chết).
           </div>
         )}
         {isWildWolf && room.wildWolfConvertAvailableTonight && (
           <div style={{ marginBottom: 8 }}>
+            {shouldPulseWildWolfConversion && (
+              <style>{`
+                @keyframes wildWolfConversionPulse {
+                  0%, 100% {
+                    opacity: 0.42;
+                    box-shadow:
+                      inset 0 0 0 2px rgba(236, 58, 58, 0.62),
+                      inset 0 0 12px 4px rgba(236, 58, 58, 0.22);
+                  }
+                  50% {
+                    opacity: 0.84;
+                    box-shadow:
+                      inset 0 0 0 3px rgba(255, 79, 79, 0.9),
+                      inset 0 0 18px 6px rgba(255, 49, 49, 0.34);
+                  }
+                }
+              `}</style>
+            )}
             <button
-              disabled={!canAct || isLocked || hasSubmittedLock || deadlineReached}
+              disabled={!canPressWildWolfConversion}
               onClick={() => {
-                if (isLocked || hasSubmittedLockRef.current || deadlineReached) return;
-                if (!wildWolfConversionRequested && !localSelectedTarget) {
-                  alert("Bạn cần chọn mục tiêu cắn chính trước.");
+                if (!canPressWildWolfConversion) return;
+                if (wildWolfConversionRequested) {
+                  setWildWolfConversionPickerOpen(false);
+                  setWildWolfLocalConversionTarget(null);
+                  socket.emit("wildWolfToggleConversion", { roomId, active: false });
                   return;
                 }
-                socket.emit("wildWolfToggleConversion", { roomId, active: !wildWolfConversionRequested });
+                if (wildWolfConversionCandidateIds.length === 0) {
+                  alert("Bạn cần chọn mục tiêu cắn trước.");
+                  return;
+                }
+                if (wolfMaxTargets >= 2) {
+                  setWildWolfConversionPickerOpen(true);
+                  return;
+                }
+                const targetId = wildWolfConversionCandidateIds[0];
+                setWildWolfLocalConversionTarget(targetId);
+                socket.emit("wildWolfToggleConversion", { roomId, active: true, targetId });
               }}
               style={{
                 padding: "8px 12px",
-                cursor: !canAct || isLocked || hasSubmittedLock || deadlineReached ? "not-allowed" : "pointer",
-                opacity: !canAct || isLocked || hasSubmittedLock || deadlineReached ? 0.7 : 1,
+                cursor: !canPressWildWolfConversion ? "not-allowed" : "pointer",
+                opacity: !canPressWildWolfConversion ? 0.7 : 1,
                 marginRight: 8,
+                borderRadius: 8,
+                border: "1px solid rgba(236, 58, 58, 0.45)",
+                animation: shouldPulseWildWolfConversion ? "wildWolfConversionPulse 1.1s ease-in-out infinite" : undefined,
               }}
             >
-              {wildWolfConversionRequested ? "Hủy biến đổi" : "Biến mục tiêu cắn thành Sói thường"}
+              {wildWolfConversionRequested
+                ? "Hủy lây nhiễm"
+                : wolfMaxTargets >= 2
+                  ? "Chọn mục tiêu lây nhiễm"
+                  : "Biến mục tiêu thành Sói"}
             </button>
             {wildWolfConversionRequested && (
-              <span style={{ fontWeight: 700 }}>Đã chọn biến đổi mục tiêu cắn chính.</span>
+              <span style={{ fontWeight: 700 }}>
+                Đã xác nhận mục tiêu sẽ lây nhiễm
+                {wildWolfLocalConversionTarget ? `: ${wildWolfConversionCandidateNames[wildWolfLocalConversionTarget] || "đối tượng"}` : ""}
+              </span>
+            )}
+            {wildWolfConversionPickerOpen && !wildWolfConversionRequested && (
+              <div
+                style={{
+                  marginTop: 8,
+                  padding: "8px 10px",
+                  borderRadius: 8,
+                  background: "rgba(236, 58, 58, 0.08)",
+                  border: "1px solid rgba(236, 58, 58, 0.2)",
+                }}
+              >
+                <div style={{ fontWeight: 700, marginBottom: 6 }}>Sói Dại chỉ được lây nhiễm 1 mục tiêu bị cắn.</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {wildWolfConversionCandidateIds.map((targetId) => (
+                    <button
+                      key={targetId}
+                      type="button"
+                      onClick={() => {
+                        setWildWolfLocalConversionTarget(targetId);
+                        setWildWolfConversionPickerOpen(false);
+                        socket.emit("wildWolfToggleConversion", { roomId, active: true, targetId });
+                      }}
+                      style={{ padding: "6px 10px", borderRadius: 8 }}
+                    >
+                      Lây nhiễm {wildWolfConversionCandidateNames[targetId] || "đối tượng"}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setWildWolfLocalConversionTarget(null);
+                      setWildWolfConversionPickerOpen(false);
+                      socket.emit("wildWolfToggleConversion", { roomId, active: false });
+                    }}
+                    style={{ padding: "6px 10px", borderRadius: 8, opacity: 0.82 }}
+                  >
+                    Không lây nhiễm đêm nay
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         )}
@@ -228,7 +370,7 @@ export function useWolfRole({
             const name1 = room.players.find(p => p.id === localSelectedTarget)?.name || "đối tượng";
             const name2 = localSelectedTarget2 ? (room.players.find(p => p.id === localSelectedTarget2)?.name || "đối tượng") : null;
             const wildWolfNote = isWildWolf && wildWolfConversionRequested
-              ? "\n\nSói Dại sẽ biến mục tiêu cắn chính thành Sói thường nếu vết cắn được tính."
+              ? "\n\nSói Dại sẽ biến mục tiêu đã chọn lây nhiễm thành Sói thường nếu vết cắn được tính."
               : "";
             const ok = window.confirm(
               name2

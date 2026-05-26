@@ -43,6 +43,7 @@ const NIGHT_ACTION_ROLE_SET = new Set([
   "Tay Buôn",
 ]);
 const HUNTER_BULLET_ANIM_MS = 1000;
+type TargetRoleDisplayOrder = "player-role" | "role-player";
 
 function doesRoleMatchNightTurn(roleName: string | null | undefined, nightTurnRole: NightActionRole | null) {
   if (!roleName || !nightTurnRole) return false;
@@ -67,6 +68,8 @@ export default function Game() {
     !sync.gameEnded;
   const deadPlayers = sync.deadPlayers;
   const isHost = !!room?.hostId && clientId === room.hostId;
+  const isPositionEditor = !!room?.positionEditors?.includes(clientId);
+  const canControlTrialFlow = isHost || isPositionEditor;
   const isCurrentPlayerDead = !!clientId && deadPlayers.includes(clientId);
   const isCurrentPlayerHiddenRevived = sync.angelReviveState.reviveStage === "hidden";
   const isCurrentPlayerDeadForNightActions = isCurrentPlayerDead && !isCurrentPlayerHiddenRevived;
@@ -93,6 +96,7 @@ export default function Game() {
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const [hostPlayerActionTargetId, setHostPlayerActionTargetId] = useState<string | null>(null);
+  const [targetRoleDisplayOrderByPlayerId, setTargetRoleDisplayOrderByPlayerId] = useState<Record<string, TargetRoleDisplayOrder>>({});
   const [hostRuleEliminateTargetId, setHostRuleEliminateTargetId] = useState<string | null>(null);
   const [hostDisconnected, setHostDisconnected] = useState(false);
   const [frozenRoomSnapshot, setFrozenRoomSnapshot] = useState<any | null>(null);
@@ -108,6 +112,10 @@ export default function Game() {
   const showNotice = useCallback((title: string, message: string, onConfirm?: () => void) => {
     setNoticeModal({ title, message, onConfirm });
   }, []);
+
+  useEffect(() => {
+    setTargetRoleDisplayOrderByPlayerId({});
+  }, [roomId]);
 
   // State for highlighting player from log click
   const [highlightPlayerId, setHighlightPlayerId] = useState<string | null>(null);
@@ -237,7 +245,7 @@ export default function Game() {
   }, [clearVerdictHighlight, sync.gameLogNights]);
 
   // During dusk, log stays hidden to everyone.
-  const canViewLog = !isDusk && (isHost || !!sync.gameEnded);
+  const canViewLog = !isDusk && (isHost || phase === "day" || !!sync.gameEnded);
   const canViewRoles = isHost || !!sync.gameEnded;
 
   useEffect(() => {
@@ -271,7 +279,7 @@ export default function Game() {
     const value = room?.nightActionExtraTimeMsByPlayerId?.[clientId] || 0;
     return Math.max(0, Math.floor(value));
   }, [room?.nightActionExtraTimeMsByPlayerId]);
-  const baseWolfDeadline = room ? room.wolfDeadline ?? null : sync.wolfDeadline ?? null;
+  const baseWolfDeadline = room?.wolfDeadline ?? sync.wolfDeadline ?? null;
 
   const isWolfTeamRole =
     role === "Sói" ||
@@ -357,8 +365,8 @@ export default function Game() {
     if (phase !== "night" || !!sync.gameEnded) return false;
     if (isSequentialNight) return !!currentNightTurnRole;
     if (!allNightActionsSimultaneous) return false;
-    const wolfDeadline = room ? room.wolfDeadline ?? null : sync.wolfDeadline ?? null;
-    const spiritDeadline = room ? room.spiritWolfDecisionDeadline ?? null : sync.spiritWolfDecisionDeadline ?? null;
+    const wolfDeadline = room?.wolfDeadline ?? sync.wolfDeadline ?? null;
+    const spiritDeadline = room?.spiritWolfDecisionDeadline ?? sync.spiritWolfDecisionDeadline ?? null;
     return nightTurnPaused || !!nightTurnDeadline || !!wolfDeadline || !!spiritDeadline;
   }, [
     allNightActionsSimultaneous,
@@ -393,9 +401,9 @@ export default function Game() {
 
   useEffect(() => {
     if (!roomId) return;
-    if (!isHost) return;
+    if (!canViewLog) return;
     socket.emit("requestGameLog", { roomId });
-  }, [roomId, isHost]);
+  }, [canViewLog, roomId]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -581,6 +589,7 @@ export default function Game() {
     () => (!isHost && sync.gameEnded && frozenRoomSnapshot ? frozenRoomSnapshot : room),
     [frozenRoomSnapshot, isHost, room, sync.gameEnded]
   );
+  const displayNightNumber = roomForDisplay?.nightCount ?? 0;
 
   const displayDeadPlayers = useMemo<string[]>(() => {
     if (!isHost && sync.gameEnded && frozenRoomSnapshot) {
@@ -605,7 +614,9 @@ export default function Game() {
       nights={sync.gameLogNights || []}
       rolesByPlayerId={sync.revealedRolesByPlayerId || {}}
       playerNamesById={playerNamesById}
+      targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
       onHighlightPlayer={handleLogHighlightPlayer}
+      canViewNightLogs={isHost || !!sync.gameEnded}
     />
   ) : null;
 
@@ -863,6 +874,7 @@ export default function Game() {
     room: roomForRoles,
     deadPlayers: deadPlayersForNightActions,
     protectorTargetId: sync.protectorTargetId,
+    protectorHasUsed: sync.protectorHasUsed,
     allNightActionsSimultaneous,
     currentNightTurnRole,
     nightActionDeadline: mySimultaneousDeadline,
@@ -1122,7 +1134,6 @@ export default function Game() {
     if (!isHost) return;
     if (!roomId) return;
     if (sync.gameEnded) return;
-    if (deadPlayers.includes(playerId)) return;
     setHostPlayerActionTargetId(playerId);
   };
 
@@ -1141,9 +1152,36 @@ export default function Game() {
     socket.emit("hostEndGameNow", { roomId });
   };
 
+  const isHostPlayerActionTargetDead =
+    !!hostPlayerActionTargetId && deadPlayers.includes(hostPlayerActionTargetId);
+  const canShowStartDayVotingControl = canControlTrialFlow && phase === "day" && !sync.gameEnded;
+  const canShowFinishTrialInteractionControl =
+    canControlTrialFlow && phase === "day" && !sync.gameEnded && sync.trialStage === "defense";
+  const canShowAddTrialInteractionControl =
+    canControlTrialFlow && phase === "day" && !sync.gameEnded && sync.trialStage === "defense";
+  const canShowGameControls =
+    isHost ||
+    canShowStartDayVotingControl ||
+    canShowFinishTrialInteractionControl ||
+    canShowAddTrialInteractionControl;
   const hostPlayerActionTargetName = hostPlayerActionTargetId
     ? room?.players.find((p) => p.id === hostPlayerActionTargetId)?.name || "người chơi này"
     : "người chơi này";
+  const hostTargetRoleDisplayOrder = hostPlayerActionTargetId
+    ? targetRoleDisplayOrderByPlayerId[hostPlayerActionTargetId]
+    : undefined;
+  const setHostTargetRoleDisplayOrder = (order: TargetRoleDisplayOrder | null) => {
+    if (!hostPlayerActionTargetId) return;
+    setTargetRoleDisplayOrderByPlayerId((prev) => {
+      const next = { ...prev };
+      if (order) {
+        next[hostPlayerActionTargetId] = order;
+      } else {
+        delete next[hostPlayerActionTargetId];
+      }
+      return next;
+    });
+  };
   const hostRuleEliminateTargetName = hostRuleEliminateTargetId
     ? room?.players.find((p) => p.id === hostRuleEliminateTargetId)?.name || "người chơi này"
     : "người chơi này";
@@ -1287,9 +1325,9 @@ export default function Game() {
           {phase === "dusk" ? (
             <h1>🌥️ Hoàng hôn</h1>
           ) : phase === "day" ? (
-            <h1>🌞 Ban ngày</h1>
+            <h1>🌞 Ngày {displayNightNumber}</h1>
           ) : (
-            <h1>🌙 Ban đêm</h1>
+            <h1>🌙 Đêm {displayNightNumber}</h1>
           )}
         </>
       )}
@@ -1499,19 +1537,23 @@ export default function Game() {
       </div>
 
 
-    {/* Host controls */}
-    {isHost && (
+    {/* Game controls */}
+    {canShowGameControls && (
       <div className="game-host-controls">
-        <button
-          onClick={() =>
-            socket.emit("changePhase", { roomId, phase: "night" })
-          }
-        >
-          Bắt đầu đêm
-        </button>
-        <button onClick={() => socket.emit("restartGame", { roomId })}>
-          Chia bài lại
-        </button>
+        {isHost && (
+          <button
+            onClick={() =>
+              socket.emit("changePhase", { roomId, phase: "night" })
+            }
+          >
+            Bắt đầu đêm
+          </button>
+        )}
+        {isHost && (
+          <button onClick={() => socket.emit("restartGame", { roomId })}>
+            Chia bài lại
+          </button>
+        )}
         {phase === "night" && !sync.gameEnded && (
           <button
             onClick={() =>
@@ -1539,7 +1581,7 @@ export default function Game() {
             {nightTurnPaused ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
           </button>
         )}
-        {phase === "day" && !sync.gameEnded && (
+        {canShowStartDayVotingControl && (
           <button
             onClick={() => socket.emit("hostStartDayVoting", { roomId })}
             disabled={!isDayDiscussion}
@@ -1548,25 +1590,27 @@ export default function Game() {
             Bắt đầu biểu quyết
           </button>
         )}
-        {phase === "day" && !sync.gameEnded && sync.trialStage === "defense" && (
+        {canShowFinishTrialInteractionControl && (
           <button onClick={() => socket.emit("hostForceFinishDayVote", { roomId })}>
             Kết thúc tương tác ngay
           </button>
         )}
-        {phase === "day" && !sync.gameEnded && (sync.dayDeadline || sync.trialStage === "verdict") && (
+        {isHost && phase === "day" && !sync.gameEnded && (sync.dayDeadline || sync.trialStage === "verdict") && (
           <button onClick={() => socket.emit("hostForceFinishDayVote", { roomId })}>
             Chốt vote ngay
           </button>
         )}
-        {phase === "day" && !sync.gameEnded && sync.trialStage === "defense" && (
+        {canShowAddTrialInteractionControl && (
           <button onClick={() => socket.emit("trialAddInteractionTurn", { roomId })}>
             Bổ sung lượt tương tác
           </button>
         )}
-        <button onClick={() => socket.emit("hostTogglePlayerRoleText", { roomId })}>
-          {room?.hidePlayerRoleText ? "Hiện vai trò người chơi" : "Ẩn vai trò người chơi"}
-        </button>
-        {!sync.gameEnded && (
+        {isHost && (
+          <button onClick={() => socket.emit("hostTogglePlayerRoleText", { roomId })}>
+            {room?.hidePlayerRoleText ? "Hiện vai trò người chơi" : "Ẩn vai trò người chơi"}
+          </button>
+        )}
+        {isHost && !sync.gameEnded && (
           <button 
             onClick={() => setEndGameConfirmOpen(true)}
             style={{ background: "#e74c3c", color: "#fff" }}
@@ -1682,35 +1726,71 @@ export default function Game() {
           }}
         >
           <h2 style={{ marginTop: 0 }}>Thao tác với {hostPlayerActionTargetName}</h2>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
-            <button
-              disabled={phase !== "night"}
-              style={{ opacity: phase === "night" ? 1 : 0.55 }}
-              onClick={() => {
-                if (!roomId || !hostPlayerActionTargetId || phase !== "night") return;
-                socket.emit("hostAddNightActionTime", {
-                  roomId,
-                  targetId: hostPlayerActionTargetId,
-                });
-                setHostPlayerActionTargetId(null);
-              }}
-            >
-              +10 giây lượt hành động
-            </button>
-            <button
-              style={{ background: "#e74c3c", color: "#fff" }}
-              onClick={() => {
-                setHostRuleEliminateTargetId(hostPlayerActionTargetId);
-                setHostPlayerActionTargetId(null);
-              }}
-            >
-              Loại vì phạm luật
-            </button>
-            <button onClick={() => setHostPlayerActionTargetId(null)}>Đóng</button>
+          <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 12 }}>
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Thứ tự targetId trong log</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => setHostTargetRoleDisplayOrder("player-role")}
+                style={{
+                  background: hostTargetRoleDisplayOrder === "player-role" ? "var(--accent)" : undefined,
+                  color: hostTargetRoleDisplayOrder === "player-role" ? "#fff" : undefined,
+                }}
+              >
+                Tên trước role
+              </button>
+              <button
+                type="button"
+                onClick={() => setHostTargetRoleDisplayOrder("role-player")}
+                style={{
+                  background: hostTargetRoleDisplayOrder === "role-player" ? "var(--accent)" : undefined,
+                  color: hostTargetRoleDisplayOrder === "role-player" ? "#fff" : undefined,
+                }}
+              >
+                Role trước tên
+              </button>
+              <button type="button" onClick={() => setHostTargetRoleDisplayOrder(null)}>
+                Tự động
+              </button>
+            </div>
           </div>
-          {phase !== "night" && (
-            <div style={{ marginTop: 12, fontSize: 13, opacity: 0.72 }}>
-              Chỉ có thể cộng thời gian khi đang trong ban đêm.
+          {!isHostPlayerActionTargetDead ? (
+            <>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+                <button
+                  disabled={phase !== "night"}
+                  style={{ opacity: phase === "night" ? 1 : 0.55 }}
+                  onClick={() => {
+                    if (!roomId || !hostPlayerActionTargetId || phase !== "night") return;
+                    socket.emit("hostAddNightActionTime", {
+                      roomId,
+                      targetId: hostPlayerActionTargetId,
+                    });
+                    setHostPlayerActionTargetId(null);
+                  }}
+                >
+                  +10 giây lượt hành động
+                </button>
+                <button
+                  style={{ background: "#e74c3c", color: "#fff" }}
+                  onClick={() => {
+                    setHostRuleEliminateTargetId(hostPlayerActionTargetId);
+                    setHostPlayerActionTargetId(null);
+                  }}
+                >
+                  Loại vì phạm luật
+                </button>
+                <button onClick={() => setHostPlayerActionTargetId(null)}>Đóng</button>
+              </div>
+              {phase !== "night" && (
+                <div style={{ marginTop: 12, fontSize: 13, opacity: 0.72 }}>
+                  Chỉ có thể cộng thời gian khi đang trong ban đêm.
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+              <button onClick={() => setHostPlayerActionTargetId(null)}>Đóng</button>
             </div>
           )}
         </div>

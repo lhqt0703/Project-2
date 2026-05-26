@@ -5,6 +5,7 @@ const WOLF_ROLES = new Set(["Sói", "Sói con", "Sói Dại"]);
 const BAN_SOI_ROLE = "Bán sói";
 const SPIRIT_WOLF_ROLE = "Linh sói";
 const WILD_WOLF_ROLE = "Sói Dại";
+const WOLF_CUB_ROLE = "Sói con";
 
 export function isWolfRole(role: string | undefined) {
   return !!role && WOLF_ROLES.has(role);
@@ -106,6 +107,11 @@ export function markWildWolfConversionReadyIfWolfDied(room: Room, playerId: stri
   if (!wasWolfAligned) return;
 
   room.wildWolfConvertReadyNextNight = true;
+}
+
+export function markWolfCubExtraBiteReadyIfDied(room: Room, playerId: string) {
+  if (room.playerRoles?.[playerId] !== WOLF_CUB_ROLE) return;
+  room.wolfExtraBiteNextNight = true;
 }
 
 export function isPlayerConnected(room: Room, playerId: string) {

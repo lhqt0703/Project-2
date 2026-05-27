@@ -1,7 +1,9 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, createContext, useContext } from "react";
 import type { GameLogNight, GameLogEntry, EliminationCause } from "../pages/gameRoles/socketEvents";
 import { MERCHANT_ITEM_LABELS, type MerchantDecision, type MerchantItemId, type MerchantTradeResult } from "../constants/merchant";
 import { ELEMENTAL_BUFF_LABELS } from "../constants/elemental";
+
+const ShowRolesOnlyContext = createContext<boolean>(false);
 
 function getBuffLabel(buffId: string): string {
   return (ELEMENTAL_BUFF_LABELS as Record<string, string>)[buffId] || buffId;
@@ -40,14 +42,15 @@ function getPlayerName(playerId: string, playerNamesById: PlayerNamesById): stri
   return playerNamesById[playerId] || playerId.slice(0, 8) + "...";
 }
 
-function getRolePlayerText(playerId: string, rolesByPlayerId: RolesByPlayerId, playerNamesById: PlayerNamesById, roleOverride?: string | null): string {
+function getRolePlayerText(playerId: string, rolesByPlayerId: RolesByPlayerId, playerNamesById: PlayerNamesById, roleOverride?: string | null, showRolesOnly?: boolean): string {
   const roleName = roleOverride || getRoleName(playerId, rolesByPlayerId);
+  if (showRolesOnly) return roleName;
   return `${getPlayerName(playerId, playerNamesById)} ${roleName}`;
 }
 
-function getRolePlayersText(playerIds: string[] | undefined, rolesByPlayerId: RolesByPlayerId, playerNamesById: PlayerNamesById): string {
+function getRolePlayersText(playerIds: string[] | undefined, rolesByPlayerId: RolesByPlayerId, playerNamesById: PlayerNamesById, showRolesOnly?: boolean): string {
   if (!playerIds || playerIds.length === 0) return "(không rõ)";
-  return playerIds.map((id) => getRolePlayerText(id, rolesByPlayerId, playerNamesById)).join(", ");
+  return playerIds.map((id) => getRolePlayerText(id, rolesByPlayerId, playerNamesById, null, showRolesOnly)).join(", ");
 }
 
 function getDefaultTargetRoleDisplayOrder(playerId: string, playerNamesById: PlayerNamesById): TargetRoleDisplayOrder {
@@ -64,9 +67,14 @@ function getTargetRoleDisplayOrder(
   return overrides?.[playerId] || getDefaultTargetRoleDisplayOrder(playerId, playerNamesById);
 }
 
-function getPlayerNamesText(playerIds: string[] | undefined, playerNamesById: PlayerNamesById): string {
+function getPlayerNamesText(playerIds: string[] | undefined, playerNamesById: PlayerNamesById, rolesByPlayerId?: RolesByPlayerId, showRolesOnly?: boolean): string {
   if (!playerIds || playerIds.length === 0) return "(không ai)";
-  return playerIds.map((id) => getPlayerName(id, playerNamesById)).join(", ");
+  return playerIds.map((id) => {
+    if (showRolesOnly && rolesByPlayerId) {
+      return getRoleName(id, rolesByPlayerId);
+    }
+    return getPlayerName(id, playerNamesById);
+  }).join(", ");
 }
 
 const ELEMENTAL_BUFF_TARGET_ROLE_BY_ID: Record<string, string | undefined> = {
@@ -90,14 +98,14 @@ function getPlayerIdByRole(rolesByPlayerId: RolesByPlayerId, roleName: string | 
   return Object.entries(rolesByPlayerId).find(([, role]) => role === roleName)?.[0] || null;
 }
 
-function getElementalBuffLogText(buffId: string, rolesByPlayerId: RolesByPlayerId, playerNamesById: PlayerNamesById) {
+function getElementalBuffLogText(buffId: string, rolesByPlayerId: RolesByPlayerId, playerNamesById: PlayerNamesById, showRolesOnly?: boolean) {
   const targetRole = ELEMENTAL_BUFF_TARGET_ROLE_BY_ID[buffId];
   const actionText = ELEMENTAL_BUFF_ACTION_BY_ID[buffId];
   if (!targetRole || !actionText) return getBuffLabel(buffId);
 
   const targetPlayerId = getPlayerIdByRole(rolesByPlayerId, targetRole);
   const targetText = targetPlayerId
-    ? getRolePlayerText(targetPlayerId, rolesByPlayerId, playerNamesById)
+    ? getRolePlayerText(targetPlayerId, rolesByPlayerId, playerNamesById, null, showRolesOnly)
     : targetRole;
   return `${targetText} ${actionText}`;
 }
@@ -146,26 +154,26 @@ function isLegacyAngelReviveLog(entry: GameLogEntry) {
   return entry.type === "angel_revive_choice" || entry.type === "angel_revive_revealed";
 }
 
-function getEliminationCauseText(causes: EliminationCause[] | undefined, rolesByPlayerId: RolesByPlayerId, playerNamesById: PlayerNamesById): string {
+function getEliminationCauseText(causes: EliminationCause[] | undefined, rolesByPlayerId: RolesByPlayerId, playerNamesById: PlayerNamesById, showRolesOnly?: boolean): string {
   if (!causes || causes.length === 0) return "Bị loại";
   const parts = causes.map((cause) => {
     if (cause.type === "wolf") {
-      const attackersText = getRolePlayersText(cause.attackerIds, rolesByPlayerId, playerNamesById);
+      const attackersText = getRolePlayersText(cause.attackerIds, rolesByPlayerId, playerNamesById, showRolesOnly);
       return `Bị ${attackersText} cắn`;
     }
     if (cause.type === "witch_poison") return "Phù thủy quăng bình giết";
     if (cause.type === "merchant_gunpowder") {
-      return `Nổ thuốc súng từ ${getRolePlayerText(cause.sourceId, rolesByPlayerId, playerNamesById)}`;
+      return `Nổ thuốc súng từ ${getRolePlayerText(cause.sourceId, rolesByPlayerId, playerNamesById, null, showRolesOnly)}`;
     }
     if (cause.type === "love_link") {
-      return `Chết theo cặp đôi với ${getRolePlayerText(cause.sourceId, rolesByPlayerId, playerNamesById)}`;
+      return `Chết theo cặp đôi với ${getRolePlayerText(cause.sourceId, rolesByPlayerId, playerNamesById, null, showRolesOnly)}`;
     }
     if (cause.type === "day_vote") {
-      const votersText = getPlayerNamesText(cause.voterIds, playerNamesById);
+      const votersText = getPlayerNamesText(cause.voterIds, playerNamesById, rolesByPlayerId, showRolesOnly);
       return `Bị biểu quyết bởi: ${votersText}`;
     }
     if (cause.type === "trial_verdict") {
-      const votersText = getPlayerNamesText(cause.voterIds, playerNamesById);
+      const votersText = getPlayerNamesText(cause.voterIds, playerNamesById, rolesByPlayerId, showRolesOnly);
       return `Bị biểu quyết sống/chết bởi: ${votersText}`;
     }
     return "Thợ săn đã bắn trúng";
@@ -318,6 +326,7 @@ function RoleSpan({
   roleOverride,
   onEliminationFocusChange,
   onHighlightPlayer,
+  showRolesOnly: showRolesOnlyProp,
 }: {
   playerId: string;
   rolesByPlayerId: RolesByPlayerId;
@@ -332,21 +341,27 @@ function RoleSpan({
   roleOverride?: string | null;
   onEliminationFocusChange?: (focus: EliminationFocus | null) => void;
   onHighlightPlayer: (payload: HighlightPayload) => void;
+  showRolesOnly?: boolean;
 }) {
   const [showPopup, setShowPopup] = useState(false);
   const spanRef = useRef<HTMLSpanElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
 
+  const showRolesOnlyContext = useContext(ShowRolesOnlyContext);
+  const showRolesOnly = showRolesOnlyProp ?? showRolesOnlyContext;
+
   const roleName = roleOverride || getRoleName(playerId, rolesByPlayerId);
   const playerName = getPlayerName(playerId, playerNamesById);
   const displayText =
-    displayMode === "player"
-      ? playerName
-      : displayMode === "player-role"
-        ? `${playerName} ${roleName}`
-        : displayMode === "role-player"
-          ? `${roleName} ${playerName}`
-          : roleName;
+    showRolesOnly
+      ? roleName
+      : displayMode === "player"
+        ? playerName
+        : displayMode === "player-role"
+          ? `${playerName} ${roleName}`
+          : displayMode === "role-player"
+            ? `${roleName} ${playerName}`
+            : roleName;
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -433,6 +448,7 @@ function RolesListSpan({
   popupMode,
   onEliminationFocusChange,
   onHighlightPlayer,
+  showRolesOnly: showRolesOnlyProp,
 }: {
   playerIds: string[];
   rolesByPlayerId: RolesByPlayerId;
@@ -447,7 +463,11 @@ function RolesListSpan({
   popupMode?: "default" | "tooltipOnly" | "none";
   onEliminationFocusChange?: (focus: EliminationFocus | null) => void;
   onHighlightPlayer: (payload: HighlightPayload) => void;
+  showRolesOnly?: boolean;
 }) {
+  const showRolesOnlyContext = useContext(ShowRolesOnlyContext);
+  const showRolesOnly = showRolesOnlyProp ?? showRolesOnlyContext;
+
   return (
     <>
       {playerIds.map((pid, idx) => (
@@ -465,11 +485,29 @@ function RolesListSpan({
             roleOverride={getRoleOverride?.(pid)}
             onEliminationFocusChange={onEliminationFocusChange}
             onHighlightPlayer={onHighlightPlayer}
+            showRolesOnly={showRolesOnly}
           />
           {idx < playerIds.length - 1 && ", "}
         </span>
       ))}
     </>
+  );
+}
+
+function LogItem({
+  emoji,
+  style,
+  children,
+}: {
+  emoji: string;
+  style?: React.CSSProperties;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className="game-log-item" style={style}>
+      <span className="game-log-item-icon">{emoji}</span>
+      <span className="game-log-item-content">{children}</span>
+    </li>
   );
 }
 
@@ -498,6 +536,7 @@ function LogEntryLine({
   onEliminationFocusChange: (focus: EliminationFocus | null) => void;
   onHighlightPlayer: (payload: HighlightPayload) => void;
 }) {
+  const showRolesOnly = useContext(ShowRolesOnlyContext);
   const isDayPhase = entry.phase === "day";
   const getTargetDisplayMode = (playerId: string) =>
     playerOnlyDayLogs && isDayPhase
@@ -509,8 +548,8 @@ function LogEntryLine({
       : displayMode;
   const getVotersText = (playerIds: string[] | undefined) =>
     isDayPhase
-      ? getPlayerNamesText(playerIds, playerNamesById)
-      : getRolePlayersText(playerIds, rolesByPlayerId, playerNamesById);
+      ? getPlayerNamesText(playerIds, playerNamesById, rolesByPlayerId, showRolesOnly)
+      : getRolePlayersText(playerIds, rolesByPlayerId, playerNamesById, showRolesOnly);
 
   const isCauseLineForFocus = (f: EliminationFocus) => {
     const causeTypes = new Set((f.causes || []).map((c) => c.type));
@@ -534,13 +573,13 @@ function LogEntryLine({
   switch (entry.type) {
     case "wolf_vote":
       if (!entry.voteBreakdown || entry.voteBreakdown.length === 0) {
-        return <li style={lineStyle}>Phe sói nhắm đến: (không ai cả)</li>;
+        return <LogItem emoji="🐺" style={lineStyle}>Phe sói nhắm đến: (không ai cả)</LogItem>;
       }
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🐺" style={lineStyle}>
           Phe sói nhắm đến:{" "}
           {entry.voteBreakdown.map((v, idx) => {
-            const selectedByText = `Bị chọn bởi: ${getRolePlayersText(v.voterIds, rolesByPlayerId, playerNamesById)}`;
+            const selectedByText = `Bị chọn bởi: ${getRolePlayersText(v.voterIds, rolesByPlayerId, playerNamesById, showRolesOnly)}`;
             return (
               <span key={v.targetId}>
                 <RoleSpan
@@ -558,15 +597,15 @@ function LogEntryLine({
               </span>
             );
           })}
-        </li>
+        </LogItem>
       );
 
     case "day_vote":
       if (!entry.voteBreakdown || entry.voteBreakdown.length === 0) {
-        return <li style={lineStyle}>Biểu quyết đã được bỏ qua</li>;
+        return <LogItem emoji="🗳️" style={lineStyle}>Biểu quyết đã được bỏ qua</LogItem>;
       }
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🗳️" style={lineStyle}>
           Người bị nghi ngờ:{" "}
           {entry.voteBreakdown.map((v, idx) => {
             const selectedByText = `Bị vote bởi: ${getVotersText(v.voterIds)}`;
@@ -587,15 +626,15 @@ function LogEntryLine({
               </span>
             );
           })}
-        </li>
+        </LogItem>
       );
 
     case "day_vote_skipped":
-      return <li style={lineStyle}>Biểu quyết đã được bỏ qua</li>;
+      return <LogItem emoji="🗳️" style={lineStyle}>Biểu quyết đã được bỏ qua</LogItem>;
 
     case "wolf_result":
       if (!entry.targetIds || entry.targetIds.length === 0) {
-        return <li style={lineStyle}>Phe sói không thống nhất được sẽ cắn ai</li>;
+        return <LogItem emoji="🐺" style={lineStyle}>Phe sói không thống nhất được sẽ cắn ai</LogItem>;
       }
       {
         const villageChiefDelayedIds = (entry.villageChiefDelayedTargetIds || []).filter((pid) => entry.targetIds.includes(pid));
@@ -609,7 +648,7 @@ function LogEntryLine({
             getTooltipDetail={(pid) => {
               const selectedBy = entry.selectedByByTarget?.[pid] || [];
               if (!selectedBy.length) return undefined;
-              return `Bị chọn bởi: ${getRolePlayersText(selectedBy, rolesByPlayerId, playerNamesById)}`;
+              return `Bị chọn bởi: ${getRolePlayersText(selectedBy, rolesByPlayerId, playerNamesById, showRolesOnly)}`;
             }}
             getSecondaryHighlightIds={(pid) => entry.selectedByByTarget?.[pid] || []}
             getDisplayMode={getTargetDisplayMode}
@@ -620,7 +659,7 @@ function LogEntryLine({
         );
 
         return (
-          <li style={lineStyle}>
+          <LogItem emoji="🩸" style={lineStyle}>
             {normalTargetIds.length > 0 && (
               <>
                 {renderTargetList(normalTargetIds)}
@@ -644,19 +683,19 @@ function LogEntryLine({
                 {idx < villageChiefDelayedIds.length - 1 ? "; " : null}
               </span>
             ))}
-          </li>
+          </LogItem>
         );
       }
 
     case "day_result":
       if (!entry.targetId) {
-        return <li style={lineStyle}>Kết quả biểu quyết: hòa phiếu / không ai lên giàn</li>;
+        return <LogItem emoji="⚖️" style={lineStyle}>Kết quả biểu quyết: hòa phiếu / không ai lên giàn</LogItem>;
       }
       {
         const voterIds = dayVotersByTarget[entry.targetId] || [];
         const tooltipDetail = voterIds.length ? `Bị vote bởi: ${getVotersText(voterIds)}` : undefined;
         return (
-          <li style={lineStyle}>
+          <LogItem emoji="⚖️" style={lineStyle}>
             Kết quả biểu quyết:{" "}
             <RoleSpan
               playerId={entry.targetId}
@@ -670,7 +709,7 @@ function LogEntryLine({
               onHighlightPlayer={onHighlightPlayer}
             />
             {" "}lên giàn
-          </li>
+          </LogItem>
         );
       }
 
@@ -685,7 +724,7 @@ function LogEntryLine({
       const allVoteTooltip = `Người chơi sống: ${liveNamesText} | Người chơi chết: ${dieNamesText}`;
 
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="⚖️" style={lineStyle}>
           <ActionSpan
             highlightPayload={{ primaryId: entry.targetId, secondaryIds: liveVoterIds, dangerIds: dieVoterIds }}
             tooltipDetail={allVoteTooltip}
@@ -733,16 +772,16 @@ function LogEntryLine({
             Chết {entry.dieVotes}
           </ActionSpan>
           {")"}
-        </li>
+        </LogItem>
       );
     }
 
     case "bonus_bite":
-      return <li style={{ ...lineStyle, fontStyle: "italic", opacity: dimmed ? 0.28 : 0.85 }}>⚠️ Đêm nay Sói được cắn 2 người (do Sói con đã chết)</li>;
+      return <LogItem emoji="⚠️" style={{ ...lineStyle, fontStyle: "italic" }}>Đêm nay Sói được cắn 2 người (do Sói con đã chết)</LogItem>;
 
     case "night_action_extra_time":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="⏰" style={lineStyle}>
           <RoleSpan
             playerId={entry.targetId}
             rolesByPlayerId={rolesByPlayerId}
@@ -755,27 +794,27 @@ function LogEntryLine({
           />{" "}
           đã được quản trò cộng thêm thời gian hành động
           {entry.extraSeconds ? <span style={{ opacity: 0.72 }}> (+{entry.extraSeconds}s)</span> : null}
-        </li>
+        </LogItem>
       );
 
     case "guardian_protect":
       if (entry.actorId && entry.targetId && entry.actorId === entry.targetId) {
         return (
-          <li style={lineStyle}>
+          <LogItem emoji="🛡️" style={lineStyle}>
             <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã tự bảo vệ bản thân
-          </li>
+          </LogItem>
         );
       }
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🛡️" style={lineStyle}>
           {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={entry.targetId ? [entry.targetId] : []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Bảo vệ"} bảo vệ{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={entry.actorId ? [entry.actorId] : []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
-        </li>
+        </LogItem>
       );
 
     case "protector_bless":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="✨" style={lineStyle}>
           <RoleSpan
             playerId={entry.actorId}
             rolesByPlayerId={rolesByPlayerId}
@@ -788,149 +827,149 @@ function LogEntryLine({
           />{" "}trao bất tử cho{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
           {entry.permanent ? <span style={{ opacity: 0.75 }}> đến cuối game</span> : null}
-        </li>
+        </LogItem>
       );
 
     case "protector_save":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="👼" style={lineStyle}>
           Bất tử của{" "}
           {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Hộ nhân"}{" "}
           chặn một lần chết lên{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={entry.actorId ? [entry.actorId] : []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
           {/* {entry.permanent ? <span style={{ opacity: 0.75 }}> (vẫn còn hiệu lực)</span> : null} */}
-        </li>
+        </LogItem>
       );
 
     case "village_chief_revealed":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="👑" style={lineStyle}>
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> lộ diện bản thân là Trưởng Làng và tiếp tục sống
-        </li>
+        </LogItem>
       );
 
     case "village_chief_delayed_death":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🥀" style={lineStyle}>
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã hết máu
-        </li>
+        </LogItem>
       );
 
     case "village_chief_extra_vote_started":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="👑" style={lineStyle}>
           Trưởng làng{" "}
           <RoleSpan playerId={entry.chiefId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã mở thêm một lượt biểu quyết
-        </li>
+        </LogItem>
       );
 
     case "witch_heal":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🧪" style={lineStyle}>
           {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Phù thủy"} dùng bình cứu cho{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
-        </li>
+        </LogItem>
       );
 
     case "witch_poison":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🧪" style={lineStyle}>
           {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Phù thủy"} dùng bình giết{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
-        </li>
+        </LogItem>
       );
 
     case "seer_check": {
       const targetRoleTooltip = `${getPlayerName(entry.targetId, playerNamesById)} là ${getRoleName(entry.targetId, rolesByPlayerId)}`;
       if (entry.blockedByMerchantItem === "invisibility-cloak") {
         return (
-          <li style={lineStyle}>
+          <LogItem emoji="🔮" style={lineStyle}>
             {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Tiên tri"} soi{" "}
             {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="tooltipOnly" tooltipDetail={targetRoleTooltip} secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
             nhưng {getMerchantItemText(entry.blockedByMerchantItem)} chặn lại khiến kết quả ra{" "}
             <span style={{ fontWeight: 600, color: "#27ae60" }}>Dân</span>
-          </li>
+          </LogItem>
         );
       }
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🔮" style={lineStyle}>
           {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Tiên tri"} soi{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="tooltipOnly" tooltipDetail={targetRoleTooltip} secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
           {" ra "}
           <span style={{ fontWeight: 600, color: entry.isWolf ? "#e74c3c" : "#27ae60" }}>
             {entry.isWolf ? "Sói" : "Dân"}
           </span>
-        </li>
+        </LogItem>
       );
     }
 
     case "hunter_mark":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🎯" style={lineStyle}>
           {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Thợ săn"} ghim{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
-        </li>
+        </LogItem>
       );
 
     case "hunter_shot":
       if (entry.blockedByMerchantItem === "iron-armor") {
         return (
-          <li style={lineStyle}>
+          <LogItem emoji="💥" style={lineStyle}>
             {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Thợ săn"} bắn{" "}
             {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
             nhưng {getMerchantItemText(entry.blockedByMerchantItem)} đã chặn lại viên đạn
-          </li>
+          </LogItem>
         );
       }
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="💥" style={lineStyle}>
           {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Thợ săn"} bắn{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
-        </li>
+        </LogItem>
       );
 
     case "cursed_sniff": {
       const blockedIds = entry.blockedByMintPlayerIds || [];
       if (blockedIds.length > 0 && !entry.hasWolf) {
         return (
-          <li style={lineStyle}>
+          <LogItem emoji="🐺" style={lineStyle}>
             <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId, ...blockedIds]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> không ngửi thấy mùi sói xung quanh{" "}
             <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId, ...blockedIds]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> do{" "}
             <RolesListSpan playerIds={blockedIds} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã có {getMerchantItemText("mint")} chặn lại mùi
-          </li>
+          </LogItem>
         );
       }
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🐺" style={lineStyle}>
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đánh hơi quanh{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> và thấy{" "}
           <span style={{ fontWeight: 700, color: entry.hasWolf ? "#e74c3c" : "#27ae60" }}>{entry.hasWolf ? "có mùi sói" : "không có mùi sói"}</span>
-        </li>
+        </LogItem>
       );
     }
 
     case "merchant_trade_offer":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="💼" style={lineStyle}>
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đề nghị giao dịch với{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />: {getMerchantItemText(entry.itemId)} / {getMerchantChoiceText(entry.merchantChoice)}
-        </li>
+        </LogItem>
       );
 
     case "merchant_trade_response":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🤝" style={lineStyle}>
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> phản hồi {getMerchantChoiceText(entry.targetChoice)} với giao dịch {getMerchantItemText(entry.itemId)} của{" "}
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> ({getMerchantChoiceText(entry.merchantChoice)}) - {getMerchantTradeResultText(entry.result)}
-        </li>
+        </LogItem>
       );
 
     case "merchant_item_received":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🎁" style={lineStyle}>
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> nhận {getMerchantItemText(entry.itemId)}
           <span style={{ opacity: 0.72 }}> (hiệu lực đêm {entry.appliesNight})</span>
-        </li>
+        </LogItem>
       );
 
     case "merchant_item_expired":
@@ -941,15 +980,15 @@ function LogEntryLine({
     case "merchant_item_used":
       if (entry.itemId === "poppy-glasses" && entry.actorId && entry.targetId) {
         return (
-          <li style={lineStyle}>
+          <LogItem emoji="✨" style={lineStyle}>
             <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã thấy{" "}
             <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> được bảo vệ {/* thông qua {getMerchantItemText(entry.itemId)} */}
-          </li>
+          </LogItem>
         );
       }
       if (entry.itemId === "gunpowder-barrel" && entry.sourceId) {
         return (
-          <li style={lineStyle}>
+          <LogItem emoji="✨" style={lineStyle}>
             {getMerchantItemText(entry.itemId)} trên{" "}
             <RoleSpan playerId={entry.sourceId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" secondaryHighlightIds={entry.targetIds || []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> phát nổ
             {entry.targetIds?.length ? (
@@ -958,26 +997,26 @@ function LogEntryLine({
                 <RolesListSpan playerIds={entry.targetIds} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} getDisplayMode={getTargetDisplayMode} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> chết chùm chung theo
               </>
             ) : null}
-          </li>
+          </LogItem>
         );
       }
       if (entry.itemId === "moth-cocoon" && entry.targetId) {
         return (
-          <li style={lineStyle}>
+          <LogItem emoji="✨" style={lineStyle}>
             Bướm đêm đã kéo dài hiệu lực hoa bảo vệ lên{" "}
             <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> thêm đêm nay
-          </li>
+          </LogItem>
         );
       }
       return null;
 
     case "merchant_win_condition_completed":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🏆" style={lineStyle}>
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã hoàn thành điều kiện thắng của Tay Buôn với {entry.successfulTrades} giao dịch thành công
           <span style={{ opacity: 0.72 }}> (mốc {entry.requiredTrades})</span>
           <span style={{ opacity: 0.72 }}> (ván chơi vẫn tiếp tục)</span>
-        </li>
+        </LogItem>
       );
 
     case "angel_revive_choice":
@@ -991,26 +1030,26 @@ function LogEntryLine({
         const legacyGuess = legacyAngelGuessByPair[`${entry.actorId}:${entry.targetId}`];
         const resolvedGuess = entry.guess ?? legacyGuess;
         return (
-          <li style={lineStyle}>
+          <LogItem emoji="👼" style={lineStyle}>
             Thiên sứ{" "}
             <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />{" "}
             quyết định theo {getAngelGuessText(resolvedGuess)} và hồi sinh{" "}
             <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
-          </li>
+          </LogItem>
         );
       }
 
     case "angel_outcome":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🌟" style={lineStyle}>
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> {getAngelOutcomeText(entry)} với lựa chọn hồi sinh{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
-        </li>
+        </LogItem>
       );
 
     case "love_pair":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="💖" style={lineStyle}>
           <RoleSpan
             playerId={entry.actorId}
             rolesByPlayerId={rolesByPlayerId}
@@ -1023,28 +1062,28 @@ function LogEntryLine({
           />{" "}ghép đôi với{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
           {entry.targetWolfAligned ? <span style={{ opacity: 0.75 }}> - tình yêu trái phe</span> : null}
-        </li>
+        </LogItem>
       );
 
     case "love_escape_vote":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🕊️" style={lineStyle}>
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.partnerId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> muốn ra khỏi làng, đang chờ{" "}
           <RoleSpan playerId={entry.partnerId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
-        </li>
+        </LogItem>
       );
 
     case "love_escape_missed":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🕊️" style={lineStyle}>
           <RoleSpan playerId={entry.partnerId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> không đồng ý ra khỏi làng
-        </li>
+        </LogItem>
       );
 
     case "love_escape": {
-      const pairNames = (entry.targetIds || []).map((id) => getPlayerName(id, playerNamesById)).join(" và ") || "(không ai)";
+      const pairNames = (entry.targetIds || []).map((id) => showRolesOnly ? getRoleName(id, rolesByPlayerId) : getPlayerName(id, playerNamesById)).join(" và ") || "(không ai)";
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🕊️" style={lineStyle}>
           <ActionSpan
             highlightPayload={{ primaryId: null, secondaryIds: entry.targetIds || [], dangerIds: [] }}
             tooltipDetail={pairNames}
@@ -1052,39 +1091,39 @@ function LogEntryLine({
           >
             Cặp đôi
           </ActionSpan>{" "}đã cùng nhau ra khỏi làng
-        </li>
+        </LogItem>
       );
     }
 
     case "love_link_death":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="💔" style={lineStyle}>
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.sourceId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> chết theo vì{" "}
           <RoleSpan playerId={entry.sourceId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã chết
-        </li>
+        </LogItem>
       );
 
     case "spirit_wolf_decision":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🐺" style={lineStyle}>
           {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Linh sói"} quyết định: <span style={{ fontWeight: 600 }}>{entry.saved ? "CỨU" : "KHÔNG CỨU"}</span>
           {entry.timedOut ? (
             <TimeoutBadge message="Quá thời gian chờ thực hiện hành động" />
           ) : null}
-        </li>
+        </LogItem>
       );
 
     case "ban_soi_aligned":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🦠" style={lineStyle}>
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã trở thành sói
-        </li>
+        </LogItem>
       );
 
     case "wild_wolf_conversion":
       if (!entry.targetId || entry.reason === "no_target") {
         return (
-          <li style={lineStyle}>
+          <LogItem emoji="🦠" style={lineStyle}>
             {entry.actorId ? (
               <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={entry.targetId ? [entry.targetId] : []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
             ) : "Sói Dại"}{" "}
@@ -1096,30 +1135,30 @@ function LogEntryLine({
               </>
             ) : null}{" "}
              không có vết cắn
-          </li>
+          </LogItem>
         );
       }
       if (entry.success) {
         return (
-          <li style={lineStyle}>
+          <LogItem emoji="🦠" style={lineStyle}>
             <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={entry.actorId ? [entry.actorId] : []} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" roleOverride={entry.previousTargetRole} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />{" "}
             đã bị lây dại từ{" "}
             {entry.actorId ? (
               <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
             ) : "Sói Dại"}{" "}
             và trở thành sói
-          </li>
+          </LogItem>
         );
       }
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🦠" style={lineStyle}>
           {entry.actorId ? (
             <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
           ) : "Sói Dại"}{" "}
           không lây dại được{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} secondaryHighlightIds={entry.actorId ? [entry.actorId] : []} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" roleOverride={entry.previousTargetRole} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
           {" "}vì được cứu khỏi vết cắn, kỹ năng chưa bị tính là đã dùng
-        </li>
+        </LogItem>
       );
 
     case "saved_by_guardian":
@@ -1130,22 +1169,22 @@ function LogEntryLine({
 
     case "mysterious_force_eliminated":
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="💀" style={lineStyle}>
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã bị thế lực bí ẩn hốt mất xác
-        </li>
+        </LogItem>
       );
 
     case "eliminated": {
       const hideEliminationDetails = playerOnlyDayLogs && isDayPhase;
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="💀" style={lineStyle}>
           Người chơi đã bị loại:{" "}
           {entry.targetIds && (
             <RolesListSpan
               playerIds={entry.targetIds}
               rolesByPlayerId={rolesByPlayerId}
               playerNamesById={playerNamesById}
-              getTooltipDetail={hideEliminationDetails ? undefined : (pid) => getEliminationCauseText(entry.causesByTarget?.[pid], rolesByPlayerId, playerNamesById)}
+              getTooltipDetail={hideEliminationDetails ? undefined : (pid) => getEliminationCauseText(entry.causesByTarget?.[pid], rolesByPlayerId, playerNamesById, showRolesOnly)}
               getSecondaryHighlightIds={hideEliminationDetails ? undefined : (pid) => {
                 const causes = entry.causesByTarget?.[pid] || [];
                 const wolfCause = causes.find((c) => c.type === "wolf");
@@ -1170,17 +1209,17 @@ function LogEntryLine({
               onHighlightPlayer={onHighlightPlayer}
             />
           )}
-        </li>
+        </LogItem>
       );
     }
 
     case "no_death":
-      return <li style={{ ...lineStyle, opacity: dimmed ? 0.28 : 0.75 }}>Đêm qua không ai bị loại</li>;
+      return <LogItem emoji="☮️" style={lineStyle}>Đêm qua không ai bị loại</LogItem>;
 
     case "elemental_guess": {
       const targetRoleTooltip = `${getPlayerName(entry.targetId, playerNamesById)} là ${getRoleName(entry.targetId, rolesByPlayerId)}`;
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🌪️" style={lineStyle}>
           <RoleSpan
             playerId={entry.actorId}
             rolesByPlayerId={rolesByPlayerId}
@@ -1202,21 +1241,21 @@ function LogEntryLine({
             onEliminationFocusChange={onEliminationFocusChange}
             onHighlightPlayer={onHighlightPlayer}
           />{" là dân làng nguyên tố"} - {entry.isCorrect ? "✅" : "❌"}{" "}
-        </li>
+        </LogItem>
       );
     }
 
     case "elemental_guess_summary": {
       const correctIds = entry.correctIds || [];
       if (entry.correctCount <= 0) {
-        return <li style={lineStyle}>Không dân làng nguyên tố nào chọn đúng</li>;
+        return <LogItem emoji="🌪️" style={lineStyle}>Không dân làng nguyên tố nào chọn đúng</LogItem>;
       }
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="🌪️" style={lineStyle}>
           Có{" "}
           <ActionSpan
             highlightPayload={{ primaryId: null, secondaryIds: correctIds, dangerIds: [] }}
-            tooltipDetail={getRolePlayersText(correctIds, rolesByPlayerId, playerNamesById)}
+            tooltipDetail={getRolePlayersText(correctIds, rolesByPlayerId, playerNamesById, showRolesOnly)}
             onHighlightPlayer={onHighlightPlayer}
           >
             <span style={{ fontWeight: 600 }}>{entry.correctCount}</span>
@@ -1225,13 +1264,13 @@ function LogEntryLine({
           {entry.triggeredBuffVote && entry.nextBuffVoteNight ? (
             <span style={{ opacity: 0.75 }}> - mở chọn buff vào đêm {entry.nextBuffVoteNight}</span>
           ) : null}
-        </li>
+        </LogItem>
       );
     }
 
     case "elemental_buff_vote": {
       if (!entry.chosenBuffId || !entry.tier) {
-        return <li style={lineStyle}>Không hiệu ứng hỗ trợ nào được chọn</li>;
+        return <LogItem emoji="⚡" style={lineStyle}>Không hiệu ứng hỗ trợ nào được chọn</LogItem>;
       }
       const chosenVoterIds =
         entry.chosenVoterIds ||
@@ -1239,18 +1278,18 @@ function LogEntryLine({
         [];
       const targetRole = ELEMENTAL_BUFF_TARGET_ROLE_BY_ID[entry.chosenBuffId];
       const targetPlayerId = getPlayerIdByRole(rolesByPlayerId, targetRole);
-      const tooltipDetail = `${entry.randomTieBreak ? "Được chọn ngẫu nhiên do hòa phiếu | " : ""}Người chọn hiệu ứng này: ${getRolePlayersText(chosenVoterIds, rolesByPlayerId, playerNamesById)}`;
+      const tooltipDetail = `${entry.randomTieBreak ? "Được chọn ngẫu nhiên do hòa phiếu | " : ""}Người chọn hiệu ứng này: ${getRolePlayersText(chosenVoterIds, rolesByPlayerId, playerNamesById, showRolesOnly)}`;
       return (
-        <li style={lineStyle}>
+        <LogItem emoji="⚡" style={lineStyle}>
           Hiệu ứng hỗ trợ từ dân làng nguyên tố:{" "}
           <ActionSpan
             highlightPayload={{ primaryId: targetPlayerId, secondaryIds: chosenVoterIds, dangerIds: [] }}
             tooltipDetail={tooltipDetail}
             onHighlightPlayer={onHighlightPlayer}
           >
-            <span style={{ fontWeight: 600 }}>{getElementalBuffLogText(entry.chosenBuffId, rolesByPlayerId, playerNamesById)}</span>
+            <span style={{ fontWeight: 600 }}>{getElementalBuffLogText(entry.chosenBuffId, rolesByPlayerId, playerNamesById, showRolesOnly)}</span>
           </ActionSpan>
-        </li>
+        </LogItem>
       );
     }
 
@@ -1259,10 +1298,10 @@ function LogEntryLine({
     }
 
     case "host_ended_game":
-      return <li style={lineStyle}>Quản trò đã cho ngừng ván chơi</li>;
+      return <LogItem emoji="🛑" style={lineStyle}>Quản trò đã cho ngừng ván chơi</LogItem>;
 
     default:
-      return <li style={lineStyle}>(log không rõ)</li>;
+      return <LogItem emoji="📝" style={lineStyle}>(log không rõ)</LogItem>;
   }
 }
 
@@ -1274,6 +1313,7 @@ export default function GameLogPanel({
   onHighlightPlayer,
   canViewNightLogs = true,
 }: GameLogPanelProps) {
+  const [showRolesOnly, setShowRolesOnly] = useState(false);
   const [eliminationFocus, setEliminationFocus] = useState<EliminationFocus | null>(null);
   const legacyAngelGuessByPair = Object.fromEntries(
     (nights || [])
@@ -1283,59 +1323,259 @@ export default function GameLogPanel({
   );
 
   return (
-    <div style={{ marginTop: 12, padding: 12, border: "1px solid var(--border)", borderRadius: 8 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <h3 style={{ margin: 0 }}>Nhật ký ván chơi</h3>
-      </div>
+    <ShowRolesOnlyContext.Provider value={showRolesOnly}>
+      <style>{`
+        .game-log-panel-container {
+          margin-top: 24px;
+          padding: 24px;
+          background: linear-gradient(145deg, rgba(23, 26, 33, 0.72) 0%, rgba(15, 17, 21, 0.9) 100%);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 16px;
+          box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+          backdrop-filter: blur(16px);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
 
-      {(nights || []).map((n) => {
-        const nightEntries = canViewNightLogs ? (n.entries || []).filter((e) => e.phase !== "day") : [];
-        const displayNightEntries = nightEntries.filter((e) => {
-          if (isLegacyAngelReviveLog(e)) return false;
-          if (e.type === "saved_by_witch" || e.type === "saved_by_guardian" || e.type === "elemental_buff") return false;
-          if (e.type === "wolf_vote" && (e.voteBreakdown?.length || 0) <= 1) return false;
-          return true;
-        });
-        const rawDayEntries = (n.entries || []).filter((e) => e.phase === "day" && !isLegacyAngelReviveLog(e));
-        const hasSkippedDayVote = rawDayEntries.some(
-          (e) => e.type === "day_vote_skipped" || (e.type === "day_vote" && (e.voteBreakdown?.length || 0) === 0)
-        );
-        const dayEntries = rawDayEntries.filter(
-          (e) => {
-            if (e.type === "saved_by_guardian" || e.type === "saved_by_witch" || e.type === "trial_started") return false;
-            if (hasSkippedDayVote && e.type === "day_result" && !e.targetId) return false;
-            if (e.type === "eliminated") {
-              const targetIds = e.targetIds || [];
-              const trialVerdictOnly =
-                targetIds.length > 0 &&
-                targetIds.every((pid) => {
-                  const causes = e.causesByTarget?.[pid] || [];
-                  return causes.length > 0 && causes.every((c) => c.type === "trial_verdict");
-                });
-              if (trialVerdictOnly) return false;
-            }
+        .game-log-panel-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          padding-bottom: 16px;
+          margin-bottom: 24px;
+          gap: 16px;
+          flex-wrap: wrap;
+        }
+
+        .game-log-panel-title {
+          font-size: 20px;
+          font-weight: 800;
+          background: linear-gradient(135deg, #ffffff 0%, #a29bfe 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .game-log-toggle-btn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background: linear-gradient(135deg, rgba(108, 92, 231, 0.18) 0%, rgba(109, 68, 232, 0.12) 100%);
+          border: 1px solid rgba(108, 92, 231, 0.4);
+          color: #a29bfe;
+          padding: 8px 16px;
+          border-radius: 20px;
+          font-size: 13px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: 0 4px 12px rgba(108, 92, 231, 0.08);
+          user-select: none;
+        }
+
+        .game-log-toggle-btn:hover {
+          background: linear-gradient(135deg, rgba(108, 92, 231, 0.28) 0%, rgba(109, 68, 232, 0.22) 100%);
+          border-color: rgba(108, 92, 231, 0.7);
+          box-shadow: 0 6px 16px rgba(108, 92, 231, 0.15);
+          transform: translateY(-1px);
+        }
+
+        .game-log-toggle-btn:active {
+          transform: translateY(1px);
+        }
+
+        .game-log-night-section, .game-log-day-section {
+          margin-bottom: 20px;
+          border-radius: 12px;
+          overflow: hidden;
+          transition: all 0.3s ease;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .game-log-night-section {
+          background: rgba(108, 92, 231, 0.03);
+          border: 1px solid rgba(108, 92, 231, 0.1);
+        }
+
+        .game-log-day-section {
+          background: rgba(255, 152, 0, 0.02);
+          border: 1px solid rgba(255, 152, 0, 0.07);
+        }
+
+        .game-log-phase-header {
+          padding: 12px 20px;
+          font-weight: 800;
+          font-size: 13.5px;
+          text-transform: uppercase;
+          letter-spacing: 0.8px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        .game-log-night-header {
+          color: #a29bfe;
+          background: rgba(108, 92, 231, 0.08);
+        }
+
+        .game-log-day-header {
+          color: #ffeaa7;
+          background: rgba(255, 152, 0, 0.04);
+        }
+
+        .game-log-list {
+          list-style: none;
+          margin: 0;
+          padding: 14px 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .game-log-item {
+          font-size: 14px;
+          line-height: 1.6;
+          color: rgba(232, 232, 232, 0.95);
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          padding: 6px 8px;
+          border-radius: 8px;
+          transition: background 0.2s ease, transform 0.2s ease;
+        }
+
+        .game-log-item:hover {
+          background: rgba(255, 255, 255, 0.03);
+          transform: translateX(2px);
+        }
+
+        .game-log-item-icon {
+          flex-shrink: 0;
+          font-size: 16px;
+          width: 26px;
+          height: 26px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(255, 255, 255, 0.04);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 6px;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+
+        .game-log-item-content {
+          flex: 1;
+          align-self: center;
+        }
+
+        .game-log-empty-msg {
+          padding: 16px 24px;
+          font-style: italic;
+          color: rgba(232, 232, 232, 0.45);
+          font-size: 13.5px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+      `}</style>
+
+      <div className="game-log-panel-container">
+        <div className="game-log-panel-header">
+          <h3 className="game-log-panel-title">
+            <span>📜</span> Nhật ký ván chơi
+          </h3>
+          {canViewNightLogs && (
+            <button
+              type="button"
+              className="game-log-toggle-btn"
+              onClick={() => setShowRolesOnly((prev) => !prev)}
+            >
+              <span>🎭</span> Chế độ xem: {showRolesOnly ? "Chỉ hiện Vai trò" : "Tên & Vai trò"}
+            </button>
+          )}
+        </div>
+
+        {(nights || []).map((n) => {
+          const nightEntries = canViewNightLogs ? (n.entries || []).filter((e) => e.phase !== "day") : [];
+          const displayNightEntries = nightEntries.filter((e) => {
+            if (isLegacyAngelReviveLog(e)) return false;
+            if (e.type === "saved_by_witch" || e.type === "saved_by_guardian" || e.type === "elemental_buff") return false;
+            if (e.type === "wolf_vote" && (e.voteBreakdown?.length || 0) <= 1) return false;
             return true;
-          }
-        );
-        const dayVoteEntry = dayEntries.find((e) => e.type === "day_vote");
-        const dayVotersByTarget: Record<string, string[]> =
-          dayVoteEntry && dayVoteEntry.type === "day_vote"
-            ? Object.fromEntries((dayVoteEntry.voteBreakdown || []).map((v) => [v.targetId, v.voterIds || []]))
-            : {};
-        const dimBucket = !!eliminationFocus && eliminationFocus.night !== n.night;
+          });
+          const rawDayEntries = (n.entries || []).filter((e) => e.phase === "day" && !isLegacyAngelReviveLog(e));
+          const hasSkippedDayVote = rawDayEntries.some(
+            (e) => e.type === "day_vote_skipped" || (e.type === "day_vote" && (e.voteBreakdown?.length || 0) === 0)
+          );
+          const dayEntries = rawDayEntries.filter(
+            (e) => {
+              if (e.type === "saved_by_guardian" || e.type === "saved_by_witch" || e.type === "trial_started") return false;
+              if (hasSkippedDayVote && e.type === "day_result" && !e.targetId) return false;
+              if (e.type === "eliminated") {
+                const targetIds = e.targetIds || [];
+                const trialVerdictOnly =
+                  targetIds.length > 0 &&
+                  targetIds.every((pid) => {
+                    const causes = e.causesByTarget?.[pid] || [];
+                    return causes.length > 0 && causes.every((c) => c.type === "trial_verdict");
+                  });
+                if (trialVerdictOnly) return false;
+              }
+              return true;
+            }
+          );
+          const dayVoteEntry = dayEntries.find((e) => e.type === "day_vote");
+          const dayVotersByTarget: Record<string, string[]> =
+            dayVoteEntry && dayVoteEntry.type === "day_vote"
+              ? Object.fromEntries((dayVoteEntry.voteBreakdown || []).map((v) => [v.targetId, v.voterIds || []]))
+              : {};
+          const dimBucket = !!eliminationFocus && eliminationFocus.night !== n.night;
 
-        return (
-          <div key={n.night} style={{ marginTop: 14 }}>
-            {canViewNightLogs && (
-              <>
-                <div style={{ fontWeight: 600, fontSize: 15, opacity: dimBucket ? 0.3 : 1, transition: "opacity 180ms ease" }}>🌙 Đêm {n.night}</div>
-                {displayNightEntries.length === 0 ? (
-                  <div style={{ opacity: dimBucket ? 0.3 : 0.75, marginLeft: 18, transition: "opacity 180ms ease" }}>Không có sự kiện.</div>
-                ) : (
-                  <ul style={{ margin: "6px 0 0 18px" }}>
-                    {displayNightEntries.map((entry, idx) => (
+          return (
+            <div key={n.night} style={{ opacity: dimBucket ? 0.42 : 1, transition: "all 240ms ease", marginTop: 14 }}>
+              {canViewNightLogs && (
+                <div className="game-log-night-section">
+                  <div className="game-log-phase-header game-log-night-header">
+                    <span>🌙</span> Đêm {n.night}
+                  </div>
+                  {displayNightEntries.length === 0 ? (
+                    <div className="game-log-empty-msg">Không có sự kiện đêm.</div>
+                  ) : (
+                    <ul className="game-log-list">
+                      {displayNightEntries.map((entry, idx) => (
+                        <LogEntryLine
+                          key={idx}
+                          night={n.night}
+                          entry={entry}
+                          dayVotersByTarget={dayVotersByTarget}
+                          legacyAngelGuessByPair={legacyAngelGuessByPair}
+                          playerOnlyDayLogs={!canViewNightLogs}
+                          rolesByPlayerId={rolesByPlayerId}
+                          playerNamesById={playerNamesById}
+                          targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
+                          eliminationFocus={eliminationFocus}
+                          onEliminationFocusChange={setEliminationFocus}
+                          onHighlightPlayer={onHighlightPlayer}
+                        />
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {dayEntries.length > 0 && (
+                <div className="game-log-day-section">
+                  <div className="game-log-phase-header game-log-day-header">
+                    <span>🌞</span> Ngày {n.night}
+                  </div>
+                  <ul className="game-log-list">
+                    {dayEntries.map((entry, idx) => (
                       <LogEntryLine
-                        key={idx}
+                        key={`day-${idx}`}
                         night={n.night}
                         entry={entry}
                         dayVotersByTarget={dayVotersByTarget}
@@ -1350,36 +1590,12 @@ export default function GameLogPanel({
                       />
                     ))}
                   </ul>
-                )}
-              </>
-            )}
-
-            {dayEntries.length > 0 && (
-              <>
-                <div style={{ fontWeight: 600, fontSize: 15, marginTop: 10, opacity: dimBucket ? 0.3 : 1, transition: "opacity 180ms ease" }}>🌞 Ngày {n.night}</div>
-                <ul style={{ margin: "6px 0 0 18px" }}>
-                  {dayEntries.map((entry, idx) => (
-                    <LogEntryLine
-                      key={`day-${idx}`}
-                      night={n.night}
-                      entry={entry}
-                      dayVotersByTarget={dayVotersByTarget}
-                      legacyAngelGuessByPair={legacyAngelGuessByPair}
-                      playerOnlyDayLogs={!canViewNightLogs}
-                      rolesByPlayerId={rolesByPlayerId}
-                      playerNamesById={playerNamesById}
-                      targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
-                      eliminationFocus={eliminationFocus}
-                      onEliminationFocusChange={setEliminationFocus}
-                      onHighlightPlayer={onHighlightPlayer}
-                    />
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
-        );
-      })}
-    </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </ShowRolesOnlyContext.Provider>
   );
 }

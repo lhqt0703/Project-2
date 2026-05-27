@@ -1431,7 +1431,7 @@ export default function Game() {
                 boxShadow: "0 4px 12px rgba(155, 89, 182, 0.3)"
               }}
             >
-              📊 Xem bảng điểm MVP
+              📊 Xem điểm
             </button>
           )}
           {!hostDisconnected && (
@@ -1564,7 +1564,6 @@ export default function Game() {
         </div>
       )}
 
-      {!isHost && logPanel}
       {canShowConfirmModals && seer.modal}
       {canShowConfirmModals && cursed.modal}
       {canShowConfirmModals && merchant.modal}
@@ -1680,6 +1679,7 @@ export default function Game() {
     </div>
     {!isHost && dayVote.panel}
     {!isHost && villageChiefExtraVotePanel}
+    {!isHost && logPanel}
 
     {rulesRestartOverlay && (
       <>

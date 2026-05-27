@@ -125,6 +125,7 @@ import {
 } from "./merchant.js";
 import {
   LOVE_ROLE,
+  canLoveChoosePartnerTonight,
   clearLoveStateForPlayers,
   emitLoveStateToPair,
   isLovePairMemberAwayAt,
@@ -315,6 +316,98 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     ctx.io.to(room.hostId).emit("hostNightActionProgressUpdated", {
       progressByPlayerId: getHostNightActionProgressByPlayerId(room),
     });
+  }
+
+  function removePlayerFromRoom(
+    roomId: string,
+    targetId: string,
+    opts?: { source?: "room" | "game"; forceReturnAll?: boolean; notifyTarget?: boolean }
+  ) {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const shouldForceReturnAll =
+      typeof opts?.forceReturnAll === "boolean"
+        ? opts.forceReturnAll
+        : opts?.source === "room" && !!room.phase && !room.gameOver;
+
+    if (shouldForceReturnAll) {
+      resetRoomFromGameToLobby(room);
+    }
+
+    room.players = room.players.filter((p) => p.id !== targetId);
+    room.positions = (room.positions || []).filter((pos) => pos.playerId !== targetId);
+    room.positionEditors = (room.positionEditors || []).filter((id) => id !== targetId);
+    room.lockedPlayerIds = (room.lockedPlayerIds || []).filter((id) => id !== targetId);
+    const removedRole = room.playerRoles?.[targetId] || null;
+
+    if (room.playerRoles) {
+      delete room.playerRoles[targetId];
+    }
+    if (room.wolfVotes) {
+      delete room.wolfVotes[targetId];
+    }
+    if (room.wolfVotes2) {
+      delete room.wolfVotes2[targetId];
+    }
+    if (room.wolfLocked) {
+      delete room.wolfLocked[targetId];
+    }
+    if (room.dayVotes) {
+      delete room.dayVotes[targetId];
+    }
+    if (room.dayLocked) {
+      delete room.dayLocked[targetId];
+    }
+    if (room.trialVotes) {
+      delete room.trialVotes[targetId];
+    }
+    room.dayVoters = (room.dayVoters || []).filter((id) => id !== targetId);
+    room.deadPlayers = (room.deadPlayers || []).filter((id) => id !== targetId);
+    room.wolves = (room.wolves || []).filter((id) => id !== targetId);
+    if (room.publicRevealedRolesByPlayerId) {
+      delete room.publicRevealedRolesByPlayerId[targetId];
+    }
+    if (room.privatePlayerHearts) {
+      delete room.privatePlayerHearts[targetId];
+    }
+    room.privateHeartVisiblePlayerIds = (room.privateHeartVisiblePlayerIds || []).filter((id) => id !== targetId);
+    room.playerHeartShakeIds = (room.playerHeartShakeIds || []).filter((id) => id !== targetId);
+    room.villageChiefDyingFramePlayerIds = (room.villageChiefDyingFramePlayerIds || []).filter((id) => id !== targetId);
+    if (room.villageChiefPendingWolfDeath?.playerId === targetId) {
+      room.villageChiefPendingWolfDeath = null;
+    }
+    if (room.protectorActorId === targetId || room.protectorTargetId === targetId) {
+      room.protectorActorId = null;
+      room.protectorTargetId = null;
+      room.protectorTargetSetNight = null;
+    }
+    if (removedRole === VILLAGE_CHIEF_ROLE) {
+      room.villageChiefExtraVoteAvailable = false;
+      room.villageChiefExtraVoteReady = false;
+    }
+
+    if (room.hostId === targetId && room.players.length > 0) {
+      const firstPlayer = room.players[0];
+      if (firstPlayer) {
+        room.hostId = firstPlayer.id;
+        const nextHeightPxAfterHostChange = desiredLayoutHeightPx(getParticipantCount(room));
+        rescaleRoomPositionsForHeight(room, nextHeightPxAfterHostChange);
+        const hostChangedOpts = layoutOptsForRoom(room);
+        room.positions = ensureNonOverlappingPositions(getParticipantIds(room), room.positions, hostChangedOpts);
+        ctx.io.to(roomId).emit("hostChanged", room.hostId);
+      }
+    }
+
+    syncPendingRoleInterventionsToHost(roomId);
+    ctx.io.to(roomId).emit("positionsUpdated", room.positions || []);
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    if (shouldForceReturnAll) {
+      ctx.io.to(roomId).emit("forceReturnToRoom", { roomId, reason: "host_returned_to_room" });
+    }
+    if (opts?.notifyTarget) {
+      ctx.io.to(targetId).emit("kicked");
+    }
   }
 
   function getNightActionExtraMs(room: Room, playerId: string) {
@@ -1232,7 +1325,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       delete room.pendingGameRules;
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       returnHostToGameView(roomId, "Đang khởi tạo ván chơi mới");
-      emitRestartCinematicToPlayers(roomId, "Chủ phòng đã thiết lập lại luật chơi và khởi động lại ván chơi mới");
+      emitRestartCinematicToPlayers(roomId, "Quản trò đã thiết lập lại luật chơi và khởi động lại ván chơi mới");
       setTimeout(() => {
         startFreshRoundWithCurrentRoles(roomId);
       }, RULES_RESTART_RESTART_AT_MS);
@@ -1466,7 +1559,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       returnHostToGameView(roomId, "Đang khởi tạo ván chơi mới");
-      emitRestartCinematicToPlayers(roomId, "Chủ phòng đã cập nhật danh sách vai trò và khởi động lại ván chơi mới");
+      emitRestartCinematicToPlayers(roomId, "Quản trò đã cập nhật danh sách vai trò và khởi động lại ván chơi mới");
       setTimeout(() => {
         startFreshRoundWithCurrentRoles(roomId);
       }, RULES_RESTART_RESTART_AT_MS);
@@ -2117,7 +2210,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!room || !room.playerRoles) return;
     if (room.gameOver) return;
     if (room.phase !== "night") return;
-    if ((room.nightCount || 0) !== 1) return;
+    if (!canLoveChoosePartnerTonight(room)) return;
     if (!canPerformNightRoleAction(room, clientId, LOVE_ROLE)) return;
     if (room.playerRoles?.[clientId] !== LOVE_ROLE) return;
     if (!canPlayerActAtNight(room, clientId)) return;
@@ -3297,87 +3390,31 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     emitPendingRoleBlocksToHost(roomId);
   });
 
+  socket.on("leaveRoom", ({ roomId }: { roomId: string }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (!room.players.find((p) => p.id === clientId)) return;
+
+    const isHost = room.hostId === clientId;
+    if (isHost) {
+      clearGameTimers(room);
+      ctx.io.to(roomId).emit("roomClosed", { roomId, reason: "host_left" });
+      ctx.io.in(roomId).socketsLeave(roomId);
+      delete rooms[roomId];
+      activeRooms?.delete(roomId);
+      return;
+    }
+
+    removePlayerFromRoom(roomId, clientId, { forceReturnAll: false });
+    socket.leave(roomId);
+  });
+
   socket.on("kickPlayer", ({ roomId, targetId, source }: { roomId: string; targetId: string; source?: "room" | "game" }) => {
     const room = rooms[roomId];
     if (!room) return;
     if (clientId !== room.hostId) return;
     if (!room.players.find(p => p.id === targetId)) return;
-
-    const shouldForceReturnAll = source === "room" && !!room.phase && !room.gameOver;
-    if (shouldForceReturnAll) {
-      resetRoomFromGameToLobby(room);
-    }
-
-    room.players = room.players.filter(p => p.id !== targetId);
-    room.positions = (room.positions || []).filter((pos) => pos.playerId !== targetId);
-    room.positionEditors = (room.positionEditors || []).filter((id) => id !== targetId);
-    room.lockedPlayerIds = (room.lockedPlayerIds || []).filter((id) => id !== targetId);
-    const removedRole = room.playerRoles?.[targetId] || null;
-
-    if (room.playerRoles) {
-      delete room.playerRoles[targetId];
-    }
-    if (room.wolfVotes) {
-      delete room.wolfVotes[targetId];
-    }
-    if (room.wolfVotes2) {
-      delete room.wolfVotes2[targetId];
-    }
-    if (room.wolfLocked) {
-      delete room.wolfLocked[targetId];
-    }
-    if (room.dayVotes) {
-      delete room.dayVotes[targetId];
-    }
-    if (room.dayLocked) {
-      delete room.dayLocked[targetId];
-    }
-    if (room.trialVotes) {
-      delete room.trialVotes[targetId];
-    }
-    room.dayVoters = (room.dayVoters || []).filter((id) => id !== targetId);
-    room.deadPlayers = (room.deadPlayers || []).filter((id) => id !== targetId);
-    room.wolves = (room.wolves || []).filter((id) => id !== targetId);
-    if (room.publicRevealedRolesByPlayerId) {
-      delete room.publicRevealedRolesByPlayerId[targetId];
-    }
-    if (room.privatePlayerHearts) {
-      delete room.privatePlayerHearts[targetId];
-    }
-    room.privateHeartVisiblePlayerIds = (room.privateHeartVisiblePlayerIds || []).filter((id) => id !== targetId);
-    room.playerHeartShakeIds = (room.playerHeartShakeIds || []).filter((id) => id !== targetId);
-    room.villageChiefDyingFramePlayerIds = (room.villageChiefDyingFramePlayerIds || []).filter((id) => id !== targetId);
-    if (room.villageChiefPendingWolfDeath?.playerId === targetId) {
-      room.villageChiefPendingWolfDeath = null;
-    }
-    if (room.protectorActorId === targetId || room.protectorTargetId === targetId) {
-      room.protectorActorId = null;
-      room.protectorTargetId = null;
-      room.protectorTargetSetNight = null;
-    }
-    if (removedRole === VILLAGE_CHIEF_ROLE) {
-      room.villageChiefExtraVoteAvailable = false;
-      room.villageChiefExtraVoteReady = false;
-    }
-
-    if (room.hostId === targetId && room.players.length > 0) {
-      const firstPlayer = room.players[0];
-      if (firstPlayer) {
-        room.hostId = firstPlayer.id;
-        const nextHeightPxAfterHostChange = desiredLayoutHeightPx(getParticipantCount(room));
-        rescaleRoomPositionsForHeight(room, nextHeightPxAfterHostChange);
-        const hostChangedOpts = layoutOptsForRoom(room);
-        room.positions = ensureNonOverlappingPositions(getParticipantIds(room), room.positions, hostChangedOpts);
-        ctx.io.to(roomId).emit("hostChanged", room.hostId);
-      }
-    }
-    syncPendingRoleInterventionsToHost(roomId);
-    ctx.io.to(roomId).emit("positionsUpdated", room.positions || []);
-    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-    if (shouldForceReturnAll) {
-      ctx.io.to(roomId).emit("forceReturnToRoom", { roomId, reason: "host_returned_to_room" });
-    }
-    ctx.io.to(targetId).emit("kicked");
+    removePlayerFromRoom(roomId, targetId, { source, notifyTarget: true });
   });
 
   socket.on("seerCheck", ({ roomId, targetId }) => {

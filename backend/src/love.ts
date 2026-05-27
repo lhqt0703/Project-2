@@ -1,10 +1,23 @@
 import type { ServerContext } from "./serverContext.js";
-import type { EliminationCause, GameLogEntryPhase, Room } from "./serverTypes.js";
+import { ensureRoomGameRules, type EliminationCause, type GameLogEntryPhase, type Room } from "./serverTypes.js";
 import { clearProtectorTargetIfDead, tryUseProtectorImmortality, type ProtectorSaveRecord } from "./specialRoles.js";
 import { markWildWolfConversionReadyIfWolfDied, markWolfCubExtraBiteReadyIfDied } from "./roomState.js";
 import { emitAngelPrivateState, markAngelReviveAvailable } from "./angel.js";
 
 export const LOVE_ROLE = "Thần tình yêu";
+
+export function getLovePartnerChoiceLastNight(room: Room) {
+  return ensureRoomGameRules(room).loveCanChoosePartnerFirstTwoNights ? 2 : 1;
+}
+
+export function isLovePartnerChoiceNight(room: Room) {
+  const currentNight = room.nightCount || 0;
+  return currentNight >= 1 && currentNight <= getLovePartnerChoiceLastNight(room);
+}
+
+export function canLoveChoosePartnerTonight(room: Room) {
+  return isLovePartnerChoiceNight(room) && !room.loveTargetId;
+}
 
 export type LoveStatePayload = {
   cupidId: string | null;

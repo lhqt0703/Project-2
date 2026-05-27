@@ -48,8 +48,10 @@ export interface RoomGameRules {
   wolfNightActionDurationSec: number;
   nightActionOrder: NightActionOrderRole[];
   banSoiBecomeWolfEvenIfHealed: boolean;
+  loveCanChoosePartnerFirstTwoNights: boolean;
   villageChiefKnowsWolfBite: boolean;
   witchSeeProtectorImmortalBite: boolean;
+  hunterShotPublicInDay: boolean;
   merchantSingleUseItems: boolean;
   merchantWinRequiredSuccessfulTrades: number;
 }
@@ -67,8 +69,10 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   wolfNightActionDurationSec: 20,
   nightActionOrder: ["Thần tình yêu", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền"],
   banSoiBecomeWolfEvenIfHealed: false,
+  loveCanChoosePartnerFirstTwoNights: false,
   villageChiefKnowsWolfBite: true,
   witchSeeProtectorImmortalBite: true,
+  hunterShotPublicInDay: true,
   merchantSingleUseItems: false,
   merchantWinRequiredSuccessfulTrades: 3,
 };

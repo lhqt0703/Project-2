@@ -23,7 +23,7 @@ import {
 } from "./roomState.js";
 import { ensureRoomGameRules, type NightActionRole, type Room } from "./serverTypes.js";
 import { toPublicRoom } from "./serverEmitters.js";
-import { LOVE_ROLE, isLovePairMemberAwayAt } from "./love.js";
+import { LOVE_ROLE, canLoveChoosePartnerTonight, isLovePairMemberAwayAt } from "./love.js";
 import { CURSED_ROLE, MERCHANT_ROLE, getMerchantAvailableItemIds } from "./merchant.js";
 import { PROTECTOR_ROLE, isVillageChief } from "./specialRoles.js";
 
@@ -128,7 +128,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     const selected = new Set<NightActionRole>();
 
     if (hasWolfRole && !room.merchantWolfBiteDisabledTonight) selected.add("Sói");
-    if (sourceRoles.includes(LOVE_ROLE) && (room.nightCount || 0) === 1 && !room.loveTargetId) {
+    if (sourceRoles.includes(LOVE_ROLE) && canLoveChoosePartnerTonight(room)) {
       selected.add(LOVE_ROLE as NightActionRole);
     }
 

@@ -23,7 +23,7 @@ import {
   canPlayerActAtNight,
   isWolfAlignedPlayer,
 } from "./roomState.js";
-import { LOVE_ROLE, emitLoveStateToPlayer, isLovePairMemberAwayAt } from "./love.js";
+import { LOVE_ROLE, emitLoveStateToPlayer, isLovePairMemberAwayAt, isLovePartnerChoiceNight } from "./love.js";
 import {
   CURSED_ROLE,
   MERCHANT_ROLE,
@@ -264,7 +264,7 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
     }
 
     if (role === LOVE_ROLE) {
-      if (currentNight !== 1) continue;
+      if (!isLovePartnerChoiceNight(room)) continue;
       setProgress(playerId, room.loveTargetId ? "done" : "pending", role);
       continue;
     }

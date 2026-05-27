@@ -88,6 +88,7 @@ export default function Game() {
   const isBanSoiAligned = room?.banSoiWolfAligned === true;
   const isWildWolfConverted = room?.wildWolfConvertedSelf === true;
   const isBanSoiOrWildConverted = isBanSoiAligned || isWildWolfConverted;
+  const shouldRevealHunterShotInDay = room?.gameRules?.hunterShotPublicInDay !== false;
   const currentNightTurnRole = (room?.nightTurnRole || null) as NightActionRole | null;
   const nightTurnPaused = !!room?.nightTurnPaused;
   const nightTurnDeadline = room?.nightTurnDeadline ?? null;
@@ -471,7 +472,7 @@ export default function Game() {
       if (payload?.reason === "kicked") {
         showNotice(
           "Không thể quay về phòng",
-          "Bạn đã bị chủ phòng mời khỏi phòng. Bạn sẽ được chuyển về Lobby.",
+          "Bạn đã bị quản trò mời khỏi phòng. Bạn sẽ được chuyển về Lobby.",
           () => nav("/lobby")
         );
         return;
@@ -479,7 +480,7 @@ export default function Game() {
 
       showNotice(
         "Phòng đã đóng",
-        "Chủ phòng đã đóng phòng hoặc phòng không còn tồn tại. Bạn sẽ được chuyển về Lobby.",
+        "Quản trò đã đóng phòng hoặc phòng không còn tồn tại. Bạn sẽ được chuyển về Lobby.",
         () => nav("/lobby")
       );
     };
@@ -517,7 +518,7 @@ export default function Game() {
       const overlayKey = Date.now();
 
       setRulesRestartOverlay({
-        message: payload?.message || "Chủ phòng đã thiết lập lại luật chơi và khởi động lại ván chơi mới",
+        message: payload?.message || "Quản trò đã thiết lập lại luật chơi và khởi động lại ván chơi mới",
         fadeInMs,
         holdMs,
         fadeOutMs,
@@ -697,6 +698,7 @@ export default function Game() {
         assetSrc?: string;
         alt?: string;
         rotationOffsetDeg?: number;
+        kind: "hunter" | "love";
       }
     | null
   >(null);
@@ -708,7 +710,7 @@ export default function Game() {
   const playHunterShotAnim = useCallback((
     hunterId: string,
     targetId: string,
-    options?: { assetSrc?: string; alt?: string; rotationOffsetDeg?: number }
+    options?: { assetSrc?: string; alt?: string; rotationOffsetDeg?: number; kind?: "hunter" | "love" }
   ) => {
     if (!hunterId || !targetId || hunterId === targetId) return;
 
@@ -725,6 +727,7 @@ export default function Game() {
       assetSrc: options?.assetSrc,
       alt: options?.alt,
       rotationOffsetDeg: options?.rotationOffsetDeg,
+      kind: options?.kind ?? "hunter",
     });
 
     hunterBulletTimeoutRef.current = window.setTimeout(() => {
@@ -738,12 +741,13 @@ export default function Game() {
     if (!shot?.hunterId || !shot?.targetId) return;
 
     lastHunterShotRef.current = { hunterId: shot.hunterId, targetId: shot.targetId };
+    if (phase === "day" && !shouldRevealHunterShotInDay) return;
 
     const frame = window.requestAnimationFrame(() => {
       playHunterShotAnim(shot.hunterId, shot.targetId);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [playHunterShotAnim, sync.hunterShot, sync.hunterShotSeq]);
+  }, [phase, playHunterShotAnim, shouldRevealHunterShotInDay, sync.hunterShot, sync.hunterShotSeq]);
 
   useEffect(() => {
     const shot = sync.loveArrowShot;
@@ -753,7 +757,8 @@ export default function Game() {
       playHunterShotAnim(shot.cupidId, shot.targetId, {
         assetSrc: encodeURI("/Mũi tên.svg"),
         alt: "Mũi tên",
-        rotationOffsetDeg: 0,
+        rotationOffsetDeg: -45,
+        kind: "love",
       });
     });
     return () => window.cancelAnimationFrame(frame);
@@ -789,6 +794,10 @@ export default function Game() {
     const { fromPlayerId, toPlayerId } = hunterBulletAnim;
     return displayDeadPlayers.filter((id) => id !== fromPlayerId && id !== toPlayerId);
   }, [displayDeadPlayers, hunterBulletAnim]);
+
+  const shouldDelayConfirmModals =
+    phase === "day" && shouldRevealHunterShotInDay && hunterBulletAnim?.kind === "hunter";
+  const canShowConfirmModals = !shouldDelayConfirmModals;
 
   const seerMaxChecksTonight = useMemo(() => {
     const buff = sync.elementalBuffResult;
@@ -1025,7 +1034,7 @@ export default function Game() {
       setHostDisconnected(true);
       showNotice(
         "Thông báo",
-        "Chủ phòng đã rời đi. Bạn có thể chờ chủ phòng quay lại hoặc thoát khỏi phòng."
+        "Quản trò đã rời đi. Bạn có thể chờ quản trò quay lại hoặc thoát khỏi phòng."
       );
       // Có thể thêm logic cho phép người chơi tự thoát hoặc chờ
     };
@@ -1049,15 +1058,32 @@ export default function Game() {
   }, [showNotice, nav]);
 
   useEffect(() => {
+    const handleRoomClosed = (payload?: { roomId?: string }) => {
+      if (!roomId) return;
+      if (payload?.roomId && payload.roomId !== roomId) return;
+      showNotice("Phòng đã đóng", "Quản trò đã đóng phòng. Bạn sẽ được đưa về sảnh chờ.", () => {
+        setRoom(null);
+        nav("/lobby");
+      });
+    };
+    socket.on("roomClosed", handleRoomClosed);
+    return () => {
+      socket.off("roomClosed", handleRoomClosed);
+    };
+  }, [nav, roomId, setRoom, showNotice]);
+
+  useEffect(() => {
     if (!sync.gameEnded) return;
+    if (sync.gameEnded.winner === "nobody") {
+      showNotice("Trò chơi kết thúc", "Quản trò đã cho ngừng ván chơi này");
+      return;
+    }
     const winnerText =
       sync.gameEnded.winner === "wolves"
         ? "Phe Sói"
         : sync.gameEnded.winner === "lovers"
           ? "Cặp đôi"
-          : sync.gameEnded.winner === "nobody"
-            ? "Không ai"
-            : "Phe Dân";
+          : "Phe Dân";
     showNotice("Trò chơi kết thúc", `${winnerText} chiến thắng`);
   }, [showNotice, sync.gameEnded]);
 
@@ -1309,15 +1335,19 @@ export default function Game() {
       
       {sync.gameEnded && (
         <h2>
-          Kết thúc:{" "}
-          {sync.gameEnded.winner === "wolves"
-            ? "Phe Sói"
-            : sync.gameEnded.winner === "lovers"
-              ? "Cặp đôi"
-              : sync.gameEnded.winner === "nobody"
-                ? "Không ai"
-                : "Phe Dân"}{" "}
-          chiến thắng
+          {sync.gameEnded.winner === "nobody" ? (
+            "Kết thúc: Ván chơi đã được ngừng lại"
+          ) : (
+            <>
+              Kết thúc:{" "}
+              {sync.gameEnded.winner === "wolves"
+                ? "Phe Sói"
+                : sync.gameEnded.winner === "lovers"
+                  ? "Cặp đôi"
+                  : "Phe Dân"}{" "}
+              chiến thắng
+            </>
+          )}
         </h2>
       )}
       {!sync.gameEnded && (
@@ -1514,19 +1544,19 @@ export default function Game() {
       )}
 
       {!isHost && logPanel}
-      {seer.modal}
-      {cursed.modal}
-      {merchant.modal}
-      {angel.modal}
-      {guardian.modal}
-      {protector.modal}
-      {love.modals}
+      {canShowConfirmModals && seer.modal}
+      {canShowConfirmModals && cursed.modal}
+      {canShowConfirmModals && merchant.modal}
+      {canShowConfirmModals && angel.modal}
+      {canShowConfirmModals && guardian.modal}
+      {canShowConfirmModals && protector.modal}
+      {canShowConfirmModals && love.modals}
       {loveActionPlacement === "general" ? love.actionButton : null}
 
-      {hunter.modal}
-      {elemental.modal}
+      {canShowConfirmModals && hunter.modal}
+      {canShowConfirmModals && elemental.modal}
 
-      {spiritWolf.modal}
+      {canShowConfirmModals && spiritWolf.modal}
 
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
         {witch.panel}
@@ -1680,7 +1710,7 @@ export default function Game() {
     )}
 
     <ConfirmModal
-      open={!!noticeModal}
+      open={!!noticeModal && canShowConfirmModals}
       infoOnly
       title={noticeModal?.title || "Thông báo"}
       message={noticeModal?.message || ""}
@@ -1694,7 +1724,7 @@ export default function Game() {
     />
 
     <ConfirmModal
-      open={endGameConfirmOpen}
+      open={endGameConfirmOpen && canShowConfirmModals}
       title="Kết thúc trò chơi"
       message="Bạn có chắc chắn muốn kết thúc trò chơi ngay bây giờ? Hành động này sẽ dừng trò chơi và hiển thị vai trò của tất cả người chơi."
       confirmText="Kết thúc"
@@ -1798,7 +1828,7 @@ export default function Game() {
     )}
 
     <ConfirmModal
-      open={!!hostRuleEliminateTargetId}
+      open={!!hostRuleEliminateTargetId && canShowConfirmModals}
       title="Loại người chơi vì phạm luật"
       message={`Bạn có chắc muốn loại ${hostRuleEliminateTargetName} vì phạm luật không? Người chơi này sẽ chết ngay lập tức trong ván hiện tại.`}
       confirmText="Loại người chơi"

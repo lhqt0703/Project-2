@@ -1,5 +1,5 @@
 import type { ServerContext } from "./serverContext.js";
-import type { EliminationCause, GameLogEntryPhase, Room } from "./serverTypes.js";
+import { ensureRoomGameRules, type EliminationCause, type GameLogEntryPhase, type Room } from "./serverTypes.js";
 import { appendLogEntry } from "./gameLog.js";
 import { getHunters } from "./roomState.js";
 import { markEliminatedWithLoveChain } from "./love.js";
@@ -64,7 +64,10 @@ export function resolveHunterShotsForDeaths(
       targetId,
       ...(blockedByArmor ? { blockedByMerchantItem: "iron-armor" as const } : {}),
     });
-    ctx.io.to(roomId).emit("hunterShot", { hunterId, targetId });
+    const rules = ensureRoomGameRules(room);
+    if (!(phase === "day" && !rules.hunterShotPublicInDay)) {
+      ctx.io.to(roomId).emit("hunterShot", { hunterId, targetId });
+    }
 
     if (blockedByArmor) continue;
 

@@ -8,6 +8,9 @@ type Player = { id: string; name: string; connected?: boolean };
 type RoomLike = {
   players: Player[];
   nightCount?: number;
+  gameRules?: {
+    loveCanChoosePartnerFirstTwoNights?: boolean;
+  };
 };
 
 const LOVE_ROLE = "Thần tình yêu";
@@ -47,11 +50,13 @@ export function useLoveRole({
   const partnerName = partnerId ? room.players.find((player) => player.id === partnerId)?.name : null;
   const hasVotedEscape = !!clientId && loveState.escapeVotes.includes(clientId);
   const partnerRequestedEscape = !!partnerId && loveState.escapeVotes.includes(partnerId);
+  const loveChoiceLastNight = room.gameRules?.loveCanChoosePartnerFirstTwoNights ? 2 : 1;
 
   const canChoosePartner = useMemo(() => {
+    const currentNight = room.nightCount || 0;
     if (phase !== "night") return false;
     if (role !== LOVE_ROLE) return false;
-    if ((room.nightCount || 0) !== 1) return false;
+    if (currentNight < 1 || currentNight > loveChoiceLastNight) return false;
     if (!isMeAlive) return false;
     if (loveState.targetId) return false;
     if (allNightActionsSimultaneous && nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
@@ -61,6 +66,7 @@ export function useLoveRole({
     allNightActionsSimultaneous,
     currentNightTurnRole,
     isMeAlive,
+    loveChoiceLastNight,
     loveState.targetId,
     nightActionDeadline,
     nightActionNow,

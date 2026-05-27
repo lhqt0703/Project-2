@@ -351,6 +351,22 @@ export default function GameRulesModal({
 
           <label style={rowStyle()}>
             <div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Thần tình yêu được ghép đôi trong 2 đêm đầu nếu chưa chọn</div>
+              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                Khi bật, nếu đêm 1 Thần tình yêu chưa ghép đôi thì sang đêm 2 vẫn có lượt chọn. Nếu đã chọn rồi thì các đêm sau không mở lại lượt này.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={draftRules.loveCanChoosePartnerFirstTwoNights === true}
+              disabled={readOnly}
+              onChange={(e) => updateRule("loveCanChoosePartnerFirstTwoNights", e.target.checked)}
+              style={{ width: 20, height: 20, marginTop: 2 }}
+            />
+          </label>
+
+          <label style={rowStyle()}>
+            <div>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>Bán sói / Sói Dại vẫn chuyển phe mục tiêu dù vết cắn được cứu</div>
               <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
                 Mặc định tắt. Khi bật, nếu Bán sói bị cắn được cứu / được Bảo vệ trúng thì Bán sói vẫn chuyển phe; nếu mục tiêu Sói Dại biến đổi được cứu / được Bảo vệ trúng thì mục tiêu vẫn trở thành Sói thường.
@@ -377,6 +393,22 @@ export default function GameRulesModal({
               checked={draftRules.villageChiefKnowsWolfBite}
               disabled={readOnly}
               onChange={(e) => updateRule("villageChiefKnowsWolfBite", e.target.checked)}
+              style={{ width: 20, height: 20, marginTop: 2 }}
+            />
+          </label>
+
+          <label style={rowStyle()}>
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Mọi người biết Thợ săn bắn ai ban ngày</div>
+              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                Khi bật, hiệu ứng đạn bắn sẽ hiển thị cho tất cả người chơi khi Thợ săn bắn trong ban ngày. Khi tắt sẽ không có animation đạn bắn.
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={draftRules.hunterShotPublicInDay}
+              disabled={readOnly}
+              onChange={(e) => updateRule("hunterShotPublicInDay", e.target.checked)}
               style={{ width: 20, height: 20, marginTop: 2 }}
             />
           </label>

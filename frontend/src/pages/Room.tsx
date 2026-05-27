@@ -80,6 +80,7 @@ export default function Room() {
   const [elementalInfoModal, setElementalInfoModal] = useState<{ title: string; message: string } | null>(null);
   const [pendingRulesUpdate, setPendingRulesUpdate] = useState<RoomData["gameRules"] | null>(null);
   const [showRulesApplyDecisionModal, setShowRulesApplyDecisionModal] = useState(false);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [rulesRestartOverlay, setRulesRestartOverlay] = useState<{
     message: string;
     totalMs: number;
@@ -296,7 +297,7 @@ export default function Room() {
   useEffect(() => {
     // Khi host rời khi game đang diễn ra
     const handleHostDisconnected = () => {
-      showNotice("Thông báo", "Chủ phòng đã rời đi. Bạn có thể chờ chủ phòng quay lại hoặc thoát khỏi phòng.");
+      showNotice("Thông báo", "Quản trò đã rời đi. Bạn có thể chờ quản trò quay lại hoặc thoát khỏi phòng.");
       // Có thể thêm logic cho phép người chơi tự thoát hoặc chờ
     };
     socket.on("hostDisconnected", handleHostDisconnected);
@@ -455,13 +456,27 @@ export default function Room() {
   // Lắng nghe bị kick
   useEffect(() => {
     const handleKicked = () => {
-      showNotice("Bạn đã bị mời khỏi phòng", "Bạn đã bị chủ phòng kick khỏi phòng!", () => nav("/lobby"));
+      showNotice("Bạn đã bị mời khỏi phòng", "Bạn đã bị quản trò kick khỏi phòng!", () => nav("/lobby"));
     };
     socket.on("kicked", handleKicked);
     return () => {
       socket.off("kicked", handleKicked);
     };
   }, [nav, showNotice]);
+
+  useEffect(() => {
+    const handleRoomClosed = (payload?: { roomId?: string }) => {
+      if (payload?.roomId && roomId && payload.roomId !== roomId) return;
+      showNotice("Phòng đã đóng", "Quản trò đã đóng phòng. Bạn sẽ được đưa về sảnh chờ.", () => {
+        setRoom(null);
+        nav("/lobby");
+      });
+    };
+    socket.on("roomClosed", handleRoomClosed);
+    return () => {
+      socket.off("roomClosed", handleRoomClosed);
+    };
+  }, [nav, roomId, setRoom, showNotice]);
 
   useEffect(() => {
     const handleRulesRestartCinematic = (payload: {
@@ -481,7 +496,7 @@ export default function Room() {
       const overlayKey = Date.now();
 
       setRulesRestartOverlay({
-        message: payload?.message || "Chủ phòng đã thiết lập lại luật chơi và khởi động lại ván chơi mới",
+        message: payload?.message || "Quản trò đã thiết lập lại luật chơi và khởi động lại ván chơi mới",
         fadeInMs,
         holdMs,
         fadeOutMs,
@@ -550,6 +565,14 @@ export default function Room() {
     nav(`/game?roomId=${room.id}`);
   };
 
+  const handleLeaveRoomConfirm = () => {
+    if (!room) return;
+    setLeaveConfirmOpen(false);
+    socket.emit("leaveRoom", { roomId: room.id });
+    setRoom(null);
+    nav("/lobby");
+  };
+
   const startButtonAction = () => {
     if (gameInProgress) {
       returnToCurrentGame();
@@ -575,6 +598,10 @@ export default function Room() {
   const rulesRestartTextAnimationName = rulesRestartOverlay
     ? `roomRulesRestartText_${rulesRestartOverlay.key}`
     : "";
+
+  const leaveConfirmMessage = amIHost
+    ? "Bạn có chắc muốn rời phòng? Phòng sẽ bị đóng và tất cả người chơi sẽ được đưa về sảnh chờ"
+    : "Bạn có chắc muốn rời phòng và về sảnh chờ không?";
 
   return (
       <div className="page-shell room-page" style={{ padding: 20, position: "relative" }}>
@@ -637,6 +664,9 @@ export default function Room() {
                   Trở lại trò chơi
                 </button>
               )}
+              <button onClick={() => setLeaveConfirmOpen(true)} title="Rời phòng và về sảnh chờ">
+                Quay về sảnh chờ
+              </button>
             </div>
           )}
 
@@ -661,6 +691,11 @@ export default function Room() {
                   style={{ opacity: startGameDisabled ? 0.6 : 1, cursor: startGameDisabled ? "not-allowed" : "pointer" }}
                 >
                   {startButtonText}
+                </button>
+              </div>
+              <div style={{ marginTop: 8 }}>
+                <button onClick={() => setLeaveConfirmOpen(true)} title="Rời phòng và về sảnh chờ">
+                  Quay về sảnh chờ
                 </button>
               </div>
             </>
@@ -690,7 +725,7 @@ export default function Room() {
                   onClick={amIHost && p.id !== room.hostId ? (e) => handlePlayerLeftClick(e, p) : undefined}
                   style={{ cursor: amIHost && p.id !== room.hostId ? "pointer" : undefined }}
                 >
-                  {p.name} {p.id === room.hostId && "(Chủ phòng)"} {room.positionEditors?.includes(p.id) && " • (Quyền sắp xếp)"}
+                  {p.name} {p.id === room.hostId && "(Quản trò)"} {room.positionEditors?.includes(p.id) && " • (Quyền sắp xếp)"}
                   {pendingRole && (
                     <span style={{ color: "var(--accent)", fontWeight: 700 }}>
                       {" • "}(Phát trước: {pendingRole})
@@ -857,6 +892,16 @@ export default function Room() {
             </div>
           </div>
         )}
+
+        <ConfirmModal
+          open={leaveConfirmOpen}
+          title="Xác nhận rời phòng"
+          message={leaveConfirmMessage}
+          confirmText="Rời phòng"
+          cancelText="Ở lại"
+          onConfirm={handleLeaveRoomConfirm}
+          onCancel={() => setLeaveConfirmOpen(false)}
+        />
 
         <ConfirmModal
           open={!!pendingKickByDoubleClick}

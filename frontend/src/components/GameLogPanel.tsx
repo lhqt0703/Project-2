@@ -478,6 +478,7 @@ function LogEntryLine({
   entry,
   dayVotersByTarget,
   legacyAngelGuessByPair,
+  playerOnlyDayLogs,
   rolesByPlayerId,
   playerNamesById,
   targetRoleDisplayOrderByPlayerId,
@@ -489,6 +490,7 @@ function LogEntryLine({
   entry: GameLogEntry;
   dayVotersByTarget: Record<string, string[]>;
   legacyAngelGuessByPair: Record<string, string | null | undefined>;
+  playerOnlyDayLogs: boolean;
   rolesByPlayerId: RolesByPlayerId;
   playerNamesById: PlayerNamesById;
   targetRoleDisplayOrderByPlayerId?: TargetRoleDisplayOrderByPlayerId;
@@ -498,7 +500,13 @@ function LogEntryLine({
 }) {
   const isDayPhase = entry.phase === "day";
   const getTargetDisplayMode = (playerId: string) =>
-    getTargetRoleDisplayOrder(playerId, playerNamesById, targetRoleDisplayOrderByPlayerId);
+    playerOnlyDayLogs && isDayPhase
+      ? "player"
+      : getTargetRoleDisplayOrder(playerId, playerNamesById, targetRoleDisplayOrderByPlayerId);
+  const getDayLogDisplayMode = (displayMode: "role" | "player" | "player-role" | "role-player") =>
+    playerOnlyDayLogs && isDayPhase && (displayMode === "player-role" || displayMode === "role-player")
+      ? "player"
+      : displayMode;
   const getVotersText = (playerIds: string[] | undefined) =>
     isDayPhase
       ? getPlayerNamesText(playerIds, playerNamesById)
@@ -739,7 +747,7 @@ function LogEntryLine({
             playerId={entry.targetId}
             rolesByPlayerId={rolesByPlayerId}
             playerNamesById={playerNamesById}
-            displayMode="role-player"
+            displayMode={getDayLogDisplayMode("role-player")}
             popupMode="none"
             roleOverride={entry.roleName}
             onEliminationFocusChange={onEliminationFocusChange}
@@ -787,7 +795,7 @@ function LogEntryLine({
       return (
         <li style={lineStyle}>
           Bất tử của{" "}
-          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player-role" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Hộ nhân"}{" "}
+          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Hộ nhân"}{" "}
           chặn một lần chết lên{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={entry.actorId ? [entry.actorId] : []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
           {/* {entry.permanent ? <span style={{ opacity: 0.75 }}> (vẫn còn hiệu lực)</span> : null} */}
@@ -888,7 +896,7 @@ function LogEntryLine({
           <li style={lineStyle}>
             <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId, ...blockedIds]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> không ngửi thấy mùi sói xung quanh{" "}
             <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId, ...blockedIds]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> do{" "}
-            <RolesListSpan playerIds={blockedIds} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player-role" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã có {getMerchantItemText("mint")} chặn lại mùi
+            <RolesListSpan playerIds={blockedIds} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã có {getMerchantItemText("mint")} chặn lại mùi
           </li>
         );
       }
@@ -943,7 +951,7 @@ function LogEntryLine({
         return (
           <li style={lineStyle}>
             {getMerchantItemText(entry.itemId)} trên{" "}
-            <RoleSpan playerId={entry.sourceId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player-role" popupMode="none" secondaryHighlightIds={entry.targetIds || []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> phát nổ
+            <RoleSpan playerId={entry.sourceId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" secondaryHighlightIds={entry.targetIds || []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> phát nổ
             {entry.targetIds?.length ? (
               <>
                 {" "}khiến{" "}
@@ -966,7 +974,7 @@ function LogEntryLine({
     case "merchant_win_condition_completed":
       return (
         <li style={lineStyle}>
-          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player-role" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã hoàn thành điều kiện thắng của Tay Buôn với {entry.successfulTrades} giao dịch thành công
+          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã hoàn thành điều kiện thắng của Tay Buôn với {entry.successfulTrades} giao dịch thành công
           <span style={{ opacity: 0.72 }}> (mốc {entry.requiredTrades})</span>
           <span style={{ opacity: 0.72 }}> (ván chơi vẫn tiếp tục)</span>
         </li>
@@ -995,7 +1003,7 @@ function LogEntryLine({
     case "angel_outcome":
       return (
         <li style={lineStyle}>
-          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player-role" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> {getAngelOutcomeText(entry)} với lựa chọn hồi sinh{" "}
+          <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> {getAngelOutcomeText(entry)} với lựa chọn hồi sinh{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
         </li>
       );
@@ -1059,7 +1067,7 @@ function LogEntryLine({
     case "spirit_wolf_decision":
       return (
         <li style={lineStyle}>
-          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player-role" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Linh sói"} quyết định: <span style={{ fontWeight: 600 }}>{entry.saved ? "CỨU" : "KHÔNG CỨU"}</span>
+          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Linh sói"} quyết định: <span style={{ fontWeight: 600 }}>{entry.saved ? "CỨU" : "KHÔNG CỨU"}</span>
           {entry.timedOut ? (
             <TimeoutBadge message="Quá thời gian chờ thực hiện hành động" />
           ) : null}
@@ -1127,7 +1135,8 @@ function LogEntryLine({
         </li>
       );
 
-    case "eliminated":
+    case "eliminated": {
+      const hideEliminationDetails = playerOnlyDayLogs && isDayPhase;
       return (
         <li style={lineStyle}>
           Người chơi đã bị loại:{" "}
@@ -1136,33 +1145,34 @@ function LogEntryLine({
               playerIds={entry.targetIds}
               rolesByPlayerId={rolesByPlayerId}
               playerNamesById={playerNamesById}
-              getTooltipDetail={(pid) => getEliminationCauseText(entry.causesByTarget?.[pid], rolesByPlayerId, playerNamesById)}
-              getSecondaryHighlightIds={(pid) => {
+              getTooltipDetail={hideEliminationDetails ? undefined : (pid) => getEliminationCauseText(entry.causesByTarget?.[pid], rolesByPlayerId, playerNamesById)}
+              getSecondaryHighlightIds={hideEliminationDetails ? undefined : (pid) => {
                 const causes = entry.causesByTarget?.[pid] || [];
                 const wolfCause = causes.find((c) => c.type === "wolf");
                 if (wolfCause && wolfCause.type === "wolf") return wolfCause.attackerIds;
                 const loveCause = causes.find((c) => c.type === "love_link");
                 return loveCause && loveCause.type === "love_link" ? [loveCause.sourceId] : [];
               }}
-              getEliminationFocus={(pid) => ({
+              getEliminationFocus={hideEliminationDetails ? undefined : (pid) => ({
                 night,
                 targetId: pid,
                 causes: entry.causesByTarget?.[pid] || [],
               })}
-              getItemDimmed={(pid) => {
+              getItemDimmed={hideEliminationDetails ? undefined : (pid) => {
                 if (!eliminationFocus) return false;
                 if (eliminationFocus.night !== night) return false;
                 if (!(entry.targetIds || []).includes(eliminationFocus.targetId)) return false;
                 return pid !== eliminationFocus.targetId;
               }}
               getDisplayMode={getTargetDisplayMode}
-              popupMode="tooltipOnly"
+              popupMode={hideEliminationDetails ? "none" : "tooltipOnly"}
               onEliminationFocusChange={onEliminationFocusChange}
               onHighlightPlayer={onHighlightPlayer}
             />
           )}
         </li>
       );
+    }
 
     case "no_death":
       return <li style={{ ...lineStyle, opacity: dimmed ? 0.28 : 0.75 }}>Đêm qua không ai bị loại</li>;
@@ -1249,7 +1259,7 @@ function LogEntryLine({
     }
 
     case "host_ended_game":
-      return <li style={lineStyle}>Quản trò đã cho ngừng trò chơi</li>;
+      return <li style={lineStyle}>Quản trò đã cho ngừng ván chơi</li>;
 
     default:
       return <li style={lineStyle}>(log không rõ)</li>;
@@ -1330,6 +1340,7 @@ export default function GameLogPanel({
                         entry={entry}
                         dayVotersByTarget={dayVotersByTarget}
                         legacyAngelGuessByPair={legacyAngelGuessByPair}
+                        playerOnlyDayLogs={!canViewNightLogs}
                         rolesByPlayerId={rolesByPlayerId}
                         playerNamesById={playerNamesById}
                         targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
@@ -1354,6 +1365,7 @@ export default function GameLogPanel({
                       entry={entry}
                       dayVotersByTarget={dayVotersByTarget}
                       legacyAngelGuessByPair={legacyAngelGuessByPair}
+                      playerOnlyDayLogs={!canViewNightLogs}
                       rolesByPlayerId={rolesByPlayerId}
                       playerNamesById={playerNamesById}
                       targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}

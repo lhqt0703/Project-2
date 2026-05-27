@@ -113,7 +113,8 @@ export default function Lobby() {
               </button>
               <div style={{ fontSize: 13, lineHeight: 1.5, color: "rgba(244,246,251,0.68)" }}>
                 Luật hiện tại: đồng thời {gameRules.allNightActionsSimultaneous ? "bật" : "tắt"}, phù thủy chỉ thấy vết cắn khi còn bình {gameRules.witchSeeBiteOnlyIfHasHealPotion ? "bật" : "tắt"},
-                lượt tương tác: {gameRules.trialInteractionSelectionLimit}, ép sói cắn đêm đầu {gameRules.forceWolfBiteFirstNight ? "bật" : "tắt"}.
+                lượt tương tác: {gameRules.trialInteractionSelectionLimit}, ép sói cắn đêm đầu {gameRules.forceWolfBiteFirstNight ? "bật" : "tắt"},
+                Thần tình yêu chọn trong 2 đêm đầu {gameRules.loveCanChoosePartnerFirstTwoNights ? "bật" : "tắt"}.
               </div>
             </div>
           </section>

@@ -238,11 +238,11 @@ test("Case 7: Tay buôn hoàn thành 5 giao dịch và thắng riêng", (t) => {
       { id: "p1", name: "Player 1", role: "merchant", team: "neutral", finalTeam: "merchant", aliveAtEnd: true, specialWin: true },
     ],
     events: [
-      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1" },
-      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1" },
-      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1" },
-      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1" },
-      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1" },
+      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1", targetId: "p2", night: 1 },
+      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1", targetId: "p3", night: 2 },
+      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1", targetId: "p4", night: 3 },
+      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1", targetId: "p5", night: 4 },
+      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1", targetId: "p6", night: 5 },
       {
         type: "MERCHANT_COMPLETED_PERSONAL_WIN",
         actorId: "p1",
@@ -381,10 +381,10 @@ test("Case 10: Diminishing returns cho merchantSuccessfulTrade", (t) => {
       { id: "p1", name: "Player 1", role: "merchant", team: "neutral", finalTeam: "merchant", aliveAtEnd: false, specialWin: true },
     ],
     events: [
-      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1" },
-      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1" },
-      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1" },
-      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1" },
+      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1", targetId: "p2", night: 1 },
+      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1", targetId: "p3", night: 2 },
+      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1", targetId: "p4", night: 3 },
+      { type: "MERCHANT_SUCCESSFUL_TRADE", actorId: "p1", targetId: "p5", night: 4 },
     ],
   };
 
@@ -443,3 +443,92 @@ test("Case 11: Love God linking with a same-team partner and winning with that t
   assert.ok(p2Card);
   assert.strictEqual(p2Card.totalScore, 8);
 });
+
+test("Case 12: Phù thủy dùng bình độc giết nhầm dân (deduplicated)", (t) => {
+  const summary: GameSummary = {
+    gameId: "game_12",
+    playerCount: 12,
+    winningTeam: "villagers",
+    players: [
+      { id: "p1", name: "Phù thủy", role: "witch", team: "villagers", finalTeam: "villagers", aliveAtEnd: true },
+      { id: "p2", name: "Dân làng", role: "villager", team: "villagers", finalTeam: "villagers", aliveAtEnd: false },
+    ],
+    events: [
+      // Raw WITCH_POISON event (should be no-op/ignored for scoring now)
+      {
+        type: "WITCH_KILLED_VILLAGER", // Mapper event generated originally, but now we get it from PLAYER_ELIMINATED
+        actorId: "p1",
+        targetId: "p2",
+        night: 1,
+        phase: "night",
+      },
+      // PLAYER_ELIMINATED event (cause type = witch_poison)
+      {
+        type: "WITCH_KILLED_VILLAGER", // The actual event mapped from PLAYER_ELIMINATED
+        actorId: "p1",
+        targetId: "p2",
+        night: 1,
+        phase: "night",
+      },
+    ],
+  };
+
+  const result = engine.calculateScore(summary);
+
+  const p1Card = result.ranking.find((p) => p.playerId === "p1");
+  assert.ok(p1Card);
+
+  // Check how many penalties are listed
+  const penalties = p1Card.breakdown.filter((b) => b.category === "penalty" && b.reason.includes("giết nhầm dân"));
+  // Should be exactly 1 due to seenEventKeys deduplication!
+  assert.strictEqual(penalties.length, 1, "Should have exactly one penalty for killing villager");
+  assert.strictEqual(penalties[0]?.points, -2);
+});
+
+test("Case 13: Phù thủy tự cứu chính mình (+3) vs cứu vai chủ lực khác (+4)", (t) => {
+  const summary: GameSummary = {
+    gameId: "game_13",
+    playerCount: 12,
+    winningTeam: "villagers",
+    players: [
+      { id: "p1", name: "Phù thủy", role: "witch", team: "villagers", finalTeam: "villagers", aliveAtEnd: true },
+      { id: "p2", name: "Tiên tri", role: "seer", team: "villagers", finalTeam: "villagers", aliveAtEnd: true },
+    ],
+    events: [
+      // Witch saves themselves (p1 saves p1) -> Should score +3 points
+      {
+        type: "WITCH_SAVED_PLAYER",
+        actorId: "p1",
+        targetId: "p1",
+        night: 1,
+        phase: "night",
+        metadata: { targetIsCoreRole: true },
+      },
+      // Witch saves seer (p1 saves p2) -> Should score +4 points
+      {
+        type: "WITCH_SAVED_PLAYER",
+        actorId: "p1",
+        targetId: "p2",
+        night: 2,
+        phase: "night",
+        metadata: { targetIsCoreRole: true },
+      },
+    ],
+  };
+
+  const result = engine.calculateScore(summary);
+
+  const p1Card = result.ranking.find((p) => p.playerId === "p1");
+  assert.ok(p1Card);
+
+  // Find the self-save breakdown
+  const selfSave = p1Card.breakdown.find((b) => b.reason.includes("giải cứu chính mình"));
+  assert.ok(selfSave, "Should find self-save event breakdown");
+  assert.strictEqual(selfSave?.points, 3, "Self-save should yield exactly +3 points");
+
+  // Find the core role save breakdown
+  const seerSave = p1Card.breakdown.find((b) => b.reason.includes("giải cứu vai chủ lực bị sói cắn"));
+  assert.ok(seerSave, "Should find core role save event breakdown");
+  assert.strictEqual(seerSave?.points, 4, "Core role save should yield exactly +4 points");
+});
+

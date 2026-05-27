@@ -1,6 +1,7 @@
 import type { ServerContext } from "./serverContext.js";
 import { ensureRoomGameRules, type EliminationCause, type GameLogEntryPhase, type Room } from "./serverTypes.js";
 import { appendLogEntry } from "./gameLog.js";
+import { appendGameEvent } from "./gameEvent.js";
 import { getHunters } from "./roomState.js";
 import { markEliminatedWithLoveChain } from "./love.js";
 import { triggerMerchantGunpowderExplosion } from "./merchantEffects.js";
@@ -63,6 +64,13 @@ export function resolveHunterShotsForDeaths(
       actorId: hunterId,
       targetId,
       ...(blockedByArmor ? { blockedByMerchantItem: "iron-armor" as const } : {}),
+    });
+    appendGameEvent(room, {
+      type: "HUNTER_SHOT",
+      phase,
+      actorIds: [hunterId],
+      targetIds: [targetId],
+      metadata: { blockedByArmor },
     });
     const rules = ensureRoomGameRules(room);
     if (!(phase === "day" && !rules.hunterShotPublicInDay)) {

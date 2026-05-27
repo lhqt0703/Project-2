@@ -1,5 +1,5 @@
 import type { Room, GameLogEntry } from "../serverTypes.js";
-import type { GameSummary, PlayerState, EventLog, CoupleConfig } from "./scoringTypes.js";
+import type { GameSummary, PlayerState, EventLog, CoupleConfig, EventType } from "./scoringTypes.js";
 import { isWolfRole } from "../roomState.js";
 import { MERCHANT_ROLE } from "../merchant.js";
 
@@ -70,25 +70,29 @@ export function buildGameSummaryFromRoom(room: Room): GameSummary {
     });
   }
 
-  // Build events by scanning gameLog
+  // Build events by scanning gameEventLog
   const events: EventLog[] = [];
-  const entries: GameLogEntry[] = [];
-  if (room.gameLog && Array.isArray(room.gameLog)) {
-    room.gameLog.forEach((nightLog) => {
-      if (nightLog.entries && Array.isArray(nightLog.entries)) {
-        nightLog.entries.forEach((entry) => entries.push(entry));
-      }
-    });
-  }
+  const entries = room.gameEventLog || [];
+
+  const pushEvent = (
+    ev: Omit<EventLog, "night" | "phase"> & { night?: number; phase?: string },
+    currentEntry?: any
+  ) => {
+    events.push({
+      night: ev.night !== undefined ? ev.night : (currentEntry && currentEntry.night !== undefined ? currentEntry.night : (room.nightCount || 0)),
+      phase: ev.phase !== undefined ? ev.phase : (currentEntry ? currentEntry.phase : "day"),
+      ...ev,
+    } as EventLog);
+  };
 
   // Helper to check if a player was executed day after an action
   const checkExecutionAfter = (targetId: string, startIndex: number): boolean => {
     for (let i = startIndex; i < entries.length; i++) {
       const e = entries[i]!;
-      if (e.type === "trial_verdict" && e.targetId === targetId && e.executed) {
+      if (e.type === "TRIAL_VERDICT" && e.targetIds?.includes(targetId) && e.metadata?.executed) {
         return true;
       }
-      if (e.type === "day_result" && e.targetId === targetId) {
+      if (e.type === "DAY_VOTE" && e.targetIds?.includes(targetId)) {
         return true;
       }
     }
@@ -97,161 +101,194 @@ export function buildGameSummaryFromRoom(room: Room): GameSummary {
 
   entries.forEach((entry, idx) => {
     switch (entry.type) {
-      case "saved_by_guardian": {
-        const actorId = entry.actorId;
+      case "GUARD_SAVE": {
+        const actorId = entry.actorIds?.[0];
         const targetId = entry.targetIds?.[0];
         if (actorId && targetId) {
           const targetPlayer = playerMap.get(targetId);
-          events.push({
+          pushEvent({
             type: "GUARD_BLOCKED_WOLF_KILL",
             actorId,
             targetId,
             metadata: { targetIsCoreRole: targetPlayer ? ["seer", "witch", "guard", "protector"].includes(targetPlayer.role) : false },
-          });
+          }, entry);
         }
         break;
       }
 
-      case "witch_heal": {
-        const targetPlayer = playerMap.get(entry.targetId);
-        events.push({
-          type: "WITCH_SAVED_PLAYER",
-          actorId: entry.actorId,
-          targetId: entry.targetId,
-          metadata: { targetIsCoreRole: targetPlayer ? ["seer", "witch", "guard", "protector"].includes(targetPlayer.role) : false },
-        });
-        break;
-      }
-
-      case "witch_poison": {
-        const targetPlayer = playerMap.get(entry.targetId);
-        const isWolf = targetPlayer ? targetPlayer.team === "wolves" : false;
-        events.push({
-          type: isWolf ? "WITCH_KILLED_WOLF" : "WITCH_KILLED_VILLAGER",
-          actorId: entry.actorId,
-          targetId: entry.targetId,
-        });
-        break;
-      }
-
-      case "seer_check": {
-        const targetPlayer = playerMap.get(entry.targetId);
-        const isWolf = targetPlayer ? targetPlayer.team === "wolves" : entry.isWolf;
-        if (isWolf) {
-          const ledToWolfExecutionNextDay = checkExecutionAfter(entry.targetId, idx + 1);
-          events.push({
-            type: "SEER_FOUND_WOLF",
-            actorId: entry.actorId,
-            targetId: entry.targetId,
-            metadata: { ledToWolfExecutionNextDay },
-          });
+      case "WITCH_HEAL": {
+        const actorId = entry.actorIds?.[0];
+        const targetId = entry.targetIds?.[0];
+        if (actorId && targetId) {
+          const targetPlayer = playerMap.get(targetId);
+          pushEvent({
+            type: "WITCH_SAVED_PLAYER",
+            actorId,
+            targetId,
+            metadata: { targetIsCoreRole: targetPlayer ? ["seer", "witch", "guard", "protector"].includes(targetPlayer.role) : false },
+          }, entry);
         }
         break;
       }
 
-      case "hunter_shot": {
-        const targetPlayer = playerMap.get(entry.targetId);
-        const isWolf = targetPlayer ? targetPlayer.team === "wolves" : false;
-        events.push({
-          type: isWolf ? "HUNTER_SHOT_WOLF" : "HUNTER_SHOT_VILLAGER",
-          actorId: entry.actorId,
-          targetId: entry.targetId,
-        });
+      case "WITCH_POISON": {
+        // WITCH_POISON is treated as an intent/action log only, not scored directly.
         break;
       }
 
-      case "cursed_sniff": {
-        if (entry.hasWolf) {
-          events.push({
+      case "SEER_CHECK": {
+        const actorId = entry.actorIds?.[0];
+        const targetId = entry.targetIds?.[0];
+        if (actorId && targetId) {
+          const targetPlayer = playerMap.get(targetId);
+          const isWolf = targetPlayer ? targetPlayer.team === "wolves" : entry.metadata?.isWolf;
+          if (isWolf) {
+            const ledToWolfExecutionNextDay = checkExecutionAfter(targetId, idx + 1);
+            pushEvent({
+              type: "SEER_FOUND_WOLF",
+              actorId,
+              targetId,
+              metadata: { ledToWolfExecutionNextDay },
+            }, entry);
+          }
+        }
+        break;
+      }
+
+      case "HUNTER_SHOT": {
+        const actorId = entry.actorIds?.[0];
+        const targetId = entry.targetIds?.[0];
+        if (actorId && targetId && !entry.metadata?.blockedByArmor) {
+          const targetPlayer = playerMap.get(targetId);
+          const isWolf = targetPlayer ? targetPlayer.team === "wolves" : false;
+          pushEvent({
+            type: isWolf ? "HUNTER_SHOT_WOLF" : "HUNTER_SHOT_VILLAGER",
+            actorId,
+            targetId,
+          }, entry);
+        }
+        break;
+      }
+
+      case "CURSED_SNIFF": {
+        const actorId = entry.actorIds?.[0];
+        const targetId = entry.targetIds?.[0];
+        if (actorId && targetId && entry.metadata?.hasWolf) {
+          pushEvent({
             type: "CURSED_FOUND_WOLF_ZONE",
-            actorId: entry.actorId,
-            targetId: entry.targetId,
-          });
+            actorId,
+            targetId,
+          }, entry);
         }
         break;
       }
 
-      case "merchant_trade_response": {
-        if (entry.result === "success") {
-          events.push({
+      case "MERCHANT_TRADE": {
+        const actorId = entry.actorIds?.[0];
+        const targetId = entry.targetIds?.[0];
+        if (actorId && targetId && entry.metadata?.result === "success") {
+          pushEvent({
             type: "MERCHANT_SUCCESSFUL_TRADE",
-            actorId: entry.actorId,
-            targetId: entry.targetId,
-          });
+            actorId,
+            targetId,
+          }, entry);
         }
         break;
       }
 
-      case "merchant_win_condition_completed": {
-        events.push({
-          type: "MERCHANT_COMPLETED_PERSONAL_WIN",
-          actorId: entry.actorId,
-          metadata: { successfulTrades: entry.successfulTrades },
-        });
+      case "MERCHANT_WIN": {
+        const actorId = entry.actorIds?.[0];
+        if (actorId) {
+          pushEvent({
+            type: "MERCHANT_COMPLETED_PERSONAL_WIN",
+            actorId,
+            metadata: { successfulTrades: entry.metadata?.successfulTrades },
+          }, entry);
+        }
         break;
       }
 
-      case "trial_verdict": {
-        if (entry.executed) {
-          const targetPlayer = playerMap.get(entry.targetId);
+      case "TRIAL_VERDICT": {
+        const targetId = entry.targetIds?.[0];
+        const executed = entry.metadata?.executed;
+        const dieVoterIds = entry.metadata?.dieVoterIds || [];
+        if (executed && targetId) {
+          const targetPlayer = playerMap.get(targetId);
           const isWolf = targetPlayer ? targetPlayer.team === "wolves" : false;
 
           if (isWolf) {
-            if (entry.dieVoterIds && Array.isArray(entry.dieVoterIds)) {
-              entry.dieVoterIds.forEach((voterId) => {
-                const voter = playerMap.get(voterId);
-                if (voter && voter.team === "villagers") {
-                  events.push({
-                    type: "VILLAGER_VOTED_EXECUTED_WOLF",
-                    actorId: voterId,
-                    targetId: entry.targetId,
-                  });
-                }
-              });
-            }
+            dieVoterIds.forEach((voterId: string) => {
+              const voter = playerMap.get(voterId);
+              if (voter && voter.team === "villagers") {
+                pushEvent({
+                  type: "VILLAGER_VOTED_EXECUTED_WOLF",
+                  actorId: voterId,
+                  targetId,
+                }, entry);
+              }
+            });
           } else {
-            if (entry.dieVoterIds && Array.isArray(entry.dieVoterIds)) {
-              entry.dieVoterIds.forEach((voterId) => {
-                const voter = playerMap.get(voterId);
-                if (voter && voter.team === "wolves") {
-                  events.push({
-                    type: "WOLF_VOTED_EXECUTED_VILLAGER",
-                    actorId: voterId,
-                    targetId: entry.targetId,
-                  });
+            dieVoterIds.forEach((voterId: string) => {
+              const voter = playerMap.get(voterId);
+              if (voter && voter.team === "wolves") {
+                pushEvent({
+                  type: "WOLF_VOTED_EXECUTED_VILLAGER",
+                  actorId: voterId,
+                  targetId,
+                }, entry);
+              }
+            });
+          }
+        }
+        break;
+      }
+
+      case "PLAYER_ELIMINATED": {
+        const targetId = entry.targetIds?.[0];
+        const cause = entry.metadata?.cause;
+        if (targetId && cause) {
+          if (cause.type === "wolf") {
+            const targetPlayer = playerMap.get(targetId);
+            const isCore = targetPlayer ? ["seer", "witch", "guard", "protector"].includes(targetPlayer.role) : false;
+            pushEvent({
+              type: isCore ? "WOLF_NIGHT_KILLED_CORE_ROLE" : "WOLF_NIGHT_KILLED_VILLAGER",
+              actorIds: cause.attackerIds || [],
+              targetId,
+            }, entry);
+          } else if (cause.type === "witch_poison") {
+            const actorId = cause.sourceActorId || cause.killerId;
+            if (actorId) {
+              const targetPlayer = playerMap.get(targetId);
+              if (targetPlayer) {
+                const isWolf = targetPlayer.team === "wolves";
+                const isCore = ["seer", "witch", "guard", "protector"].includes(targetPlayer.role);
+                const isSpecialWolf = isWolf && targetPlayer.role !== "sói" && targetPlayer.role !== "Sói";
+                
+                let type: EventType;
+                if (isWolf) {
+                  type = isSpecialWolf ? "WITCH_KILLED_SPECIAL_WOLF" : "WITCH_KILLED_WOLF";
+                } else {
+                  type = isCore ? "WITCH_KILLED_CORE_ROLE" : "WITCH_KILLED_VILLAGER";
                 }
-              });
+
+                pushEvent({
+                  type,
+                  actorId,
+                  targetId,
+                }, entry);
+              }
             }
           }
         }
         break;
       }
 
-      case "wolf_result": {
-        if (entry.targetIds && Array.isArray(entry.targetIds)) {
-          entry.targetIds.forEach((targetId) => {
-            const targetPlayer = playerMap.get(targetId);
-            const isCore = targetPlayer ? ["seer", "witch", "guard", "protector"].includes(targetPlayer.role) : false;
-            
-            const voters = entry.selectedByByTarget?.[targetId] || [];
-            if (voters.length > 0) {
-              events.push({
-                type: isCore ? "WOLF_NIGHT_KILLED_CORE_ROLE" : "WOLF_NIGHT_KILLED_VILLAGER",
-                actorIds: voters,
-                targetId,
-              });
-            }
-          });
-        }
-        break;
-      }
-
-      case "love_escape": {
+      case "LOVE_ESCAPE": {
         if (loveGodId && partnerId) {
-          events.push({
+          pushEvent({
             type: "LOVE_COUPLE_ESCAPE_DODGED_WOLF_KILL",
             actorIds: [loveGodId, partnerId],
-          });
+          }, entry);
         }
         break;
       }
@@ -263,7 +300,7 @@ export function buildGameSummaryFromRoom(room: Room): GameSummary {
 
   // If different team couple won
   if (isCoupleWinner && loveGodId && partnerId && !sameOriginalTeam) {
-    events.push({
+    pushEvent({
       type: "LOVE_COUPLE_SPECIAL_WIN",
       actorIds: [loveGodId, partnerId],
       metadata: { playerCount: room.players.length },
@@ -275,7 +312,7 @@ export function buildGameSummaryFromRoom(room: Room): GameSummary {
     const isCupidAlive = !(room.deadPlayers || []).includes(loveGodId);
     const isPartnerAlive = !(room.deadPlayers || []).includes(partnerId);
     if (isCupidAlive && isPartnerAlive) {
-      events.push({
+      pushEvent({
         type: "LOVE_COUPLE_SAME_TEAM_SURVIVED_TO_END",
         actorIds: [loveGodId, partnerId],
       });

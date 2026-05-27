@@ -1,5 +1,6 @@
-﻿import type { ServerContext } from "./serverContext.js";
+import type { ServerContext } from "./serverContext.js";
 import { appendLogEntry, buildWolfVoteBreakdown } from "./gameLog.js";
+import { appendGameEvent } from "./gameEvent.js";
 import {
   emitSpiritWolfDecisionNeeded,
   emitWitchPendingDeath,
@@ -713,6 +714,20 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       selectedByByTarget,
       villageChiefDelayedTargetIds,
     });
+
+    for (const targetId of wolfTargets) {
+      const voters = selectedByByTarget[targetId] || [];
+      appendGameEvent(room, {
+        type: "WOLF_BITE",
+        phase: "night",
+        actorIds: voters,
+        targetIds: [targetId],
+        metadata: {
+          votes: votes,
+          wolfBonusBite: room.wolfBonusBiteThisNight === true,
+        },
+      });
+    }
 
     const wildConversionTargetId =
       room.wildWolfConvertRequestedTonight &&

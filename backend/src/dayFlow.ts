@@ -1,5 +1,6 @@
 import type { ServerContext } from "./serverContext.js";
 import { appendLogEntry, buildDayVoteBreakdown } from "./gameLog.js";
+import { appendGameEvent } from "./gameEvent.js";
 import { resolveHunterShotsForDeaths } from "./hunter.js";
 import { emitGameLogToSocket, toPublicRoom } from "./serverEmitters.js";
 import { clearTrialState, getActiveDayVoters, getAlivePlayerIds, getTrialVoters } from "./roomState.js";
@@ -153,6 +154,18 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
       liveVoterIds,
       dieVoterIds,
       executed: votedToExecute,
+    });
+    appendGameEvent(room, {
+      type: "TRIAL_VERDICT",
+      phase: "day",
+      targetIds: [targetId],
+      metadata: {
+        executed: votedToExecute,
+        liveVotes,
+        dieVotes,
+        liveVoterIds,
+        dieVoterIds,
+      },
     });
 
     if (chiefSurvivesByReveal) {
@@ -377,6 +390,17 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     if (!voteWasSkipped) {
       appendLogEntry(room, { type: "day_result", phase: "day", targetId: executedId, tie });
     }
+    appendGameEvent(room, {
+      type: "DAY_VOTE",
+      phase: "day",
+      targetIds: executedId ? [executedId] : [],
+      metadata: {
+        tie,
+        skipped: voteWasSkipped,
+        votes,
+        voteKind: room.dayVoteKind || "main",
+      },
+    });
 
     for (const voterId of activeVoters) {
       room.dayLocked = room.dayLocked || {};
@@ -430,6 +454,11 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
         type: "village_chief_extra_vote_started",
         phase: "day",
         chiefId,
+      });
+      appendGameEvent(room, {
+        type: "VILLAGE_CHIEF_EXTRA_VOTE",
+        phase: "day",
+        actorIds: [chiefId],
       });
 
       startDayVoting(roomId, { kind: "village_chief_extra" });

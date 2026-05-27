@@ -71,6 +71,7 @@ export interface Room {
   publicRevealedRolesByPlayerId?: Record<string, string>;
   nightCount?: number;
   gameLog?: GameLogNight[];
+  gameEventLog?: GameEvent[];
   wolves?: string[];
   wolfVotes?: Record<string, string | null>;
   wolfVotes2?: Record<string, string | null>;
@@ -208,6 +209,9 @@ export interface Room {
   angelHiddenRevivedPlayerIds?: string[];
   angelOutcomeLoggedPlayerIds?: string[];
   scoreResult?: any;
+  isReplay?: boolean;
+  replayEvents?: GameEvent[];
+  replayIndex?: number;
 }
 
 const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -338,7 +342,7 @@ export type WolfVoteBreakdown = {
 
 export type EliminationCause =
   | { type: "wolf"; attackerIds: string[] }
-  | { type: "witch_poison" }
+  | { type: "witch_poison"; sourceActorId?: string | undefined; killerId?: string | undefined }
   | { type: "hunter_shot" }
   | { type: "merchant_gunpowder"; sourceId: string }
   | { type: "love_link"; sourceId: string }
@@ -346,6 +350,7 @@ export type EliminationCause =
   | { type: "trial_verdict"; voterIds: string[] };
 
 export type GameLogEntry =
+  | { type: "custom_log"; phase: GameLogEntryPhase; message: string; timestamp?: number }
   | { type: "wolf_vote"; phase: GameLogEntryPhase; voteBreakdown: WolfVoteBreakdown[] }
   | { type: "day_vote"; phase: GameLogEntryPhase; voteBreakdown: WolfVoteBreakdown[] }
   | { type: "day_vote_skipped"; phase: GameLogEntryPhase }
@@ -404,3 +409,15 @@ export type RolesRevealPayload = {
   roomId: string;
   rolesByPlayerId: Record<string, string>;
 };
+
+export interface GameEvent {
+  id: string;
+  timestamp: number;
+  phase: string;
+  type: string;
+  actorIds?: string[];
+  targetIds?: string[];
+  night?: number;
+  metadata?: Record<string, any>;
+}
+

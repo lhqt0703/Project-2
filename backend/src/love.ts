@@ -1,5 +1,6 @@
 import type { ServerContext } from "./serverContext.js";
 import { ensureRoomGameRules, type EliminationCause, type GameLogEntryPhase, type Room } from "./serverTypes.js";
+import { appendGameEvent } from "./gameEvent.js";
 import { clearProtectorTargetIfDead, tryUseProtectorImmortality, type ProtectorSaveRecord } from "./specialRoles.js";
 import { markWildWolfConversionReadyIfWolfDied, markWolfCubExtraBiteReadyIfDied } from "./roomState.js";
 import { emitAngelPrivateState, markAngelReviveAvailable } from "./angel.js";
@@ -172,6 +173,22 @@ export function markEliminatedWithLoveChain(
     }
     clearProtectorTargetIfDead(room, id);
     ctx.io.to(roomId).emit("playerKilled", id);
+
+    appendGameEvent(room, {
+      type: "PLAYER_ELIMINATED",
+      phase: _phase,
+      targetIds: [id],
+      metadata: { cause: nextCause },
+    });
+
+    if (nextCause.type === "love_link") {
+      appendGameEvent(room, {
+        type: "LOVE_LINK_DEATH",
+        phase: _phase,
+        actorIds: [nextCause.sourceId],
+        targetIds: [id],
+      });
+    }
 
     const partnerId = getLovePartnerId(room, id);
     if (partnerId && !dead.has(partnerId) && !initialDead.has(partnerId)) {

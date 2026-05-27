@@ -77,6 +77,7 @@ export interface EventLog {
   actorIds?: string[];
   targetId?: string;
   night?: number;
+  phase?: string;
   metadata?: Record<string, any>;
 }
 

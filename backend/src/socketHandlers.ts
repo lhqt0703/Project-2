@@ -52,6 +52,8 @@ import {
   buildWolfVoteBreakdown,
   ensureNightLog,
 } from "./gameLog.js";
+import { appendGameEvent } from "./gameEvent.js";
+import { listSavedMatches, loadSavedMatch } from "./gameHistory.js";
 import {
   emitGameLogToSocket,
   emitCursedState,
@@ -549,7 +551,19 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if ((room.deadPlayers || []).includes(targetId)) return false;
 
     room.playerRoles = room.playerRoles || {};
+    const fromRole = room.playerRoles[targetId] || "Dân làng";
     room.playerRoles[targetId] = NORMAL_WOLF_ROLE;
+    appendGameEvent(room, {
+      type: "ROLE_CONVERSION",
+      phase: "night",
+      actorIds: room.wildWolfId ? [room.wildWolfId] : [],
+      targetIds: [targetId],
+      metadata: {
+        type: "wild_wolf",
+        fromRole,
+        toRole: NORMAL_WOLF_ROLE,
+      },
+    });
     room.wolves = Array.from(new Set([...(room.wolves || []), targetId]));
     room.wildWolfConvertedPlayerIds = Array.from(new Set([...(room.wildWolfConvertedPlayerIds || []), targetId]));
 
@@ -679,6 +693,12 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       successfulTrades,
       requiredTrades,
     });
+    appendGameEvent(room, {
+      type: "MERCHANT_WIN",
+      phase: "night",
+      actorIds: [merchantId],
+      metadata: { successfulTrades, requiredTrades },
+    });
   }
 
   function resolveMerchantOffer(roomId: string, room: Room, offer: MerchantTradeOffer, targetChoice: "up" | "down") {
@@ -715,6 +735,18 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       merchantChoice: offer.merchantChoice,
       targetChoice,
       result,
+    });
+    appendGameEvent(room, {
+      type: "MERCHANT_TRADE",
+      phase: "night",
+      actorIds: [offer.actorId],
+      targetIds: [offer.targetId],
+      metadata: {
+        itemId: offer.itemId,
+        result,
+        merchantChoice: offer.merchantChoice,
+        targetChoice,
+      },
     });
     if (receivedItem) {
       appendLogEntry(room, {
@@ -813,6 +845,13 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
           targetId: save.targetId,
           cause: save.cause,
           permanent: save.permanent,
+        });
+        appendGameEvent(room, {
+          type: "PROTECTOR_SAVE",
+          phase: "night",
+          actorIds: save.actorId ? [save.actorId] : [],
+          targetIds: [save.targetId],
+          metadata: { cause: save.cause, permanent: save.permanent },
         });
         if (save.actorId) {
           emitProtectorTarget(roomId, save.actorId);
@@ -978,7 +1017,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       if (poisonAts.length > 0 && poisonAts.every((poisonAt) => isLovePairMemberAwayAt(room, targetId, poisonAt))) {
         continue;
       }
-      const newlyDead = markEliminated(targetId, { type: "witch_poison" });
+      const witchEntry = poisonEntries.find(([, poisonedTargetId]) => poisonedTargetId === targetId);
+      const witchId = witchEntry ? witchEntry[0] : undefined;
+      const newlyDead = markEliminated(targetId, { type: "witch_poison", sourceActorId: witchId, killerId: witchId });
       if (newlyDead.includes(targetId)) {
         triggerMerchantGunpowderExplosion(ctx, roomId, room, targetId, "night", {
           initialDead,
@@ -994,6 +1035,14 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     if (savedByGuardianIds.length) {
       appendLogEntry(room, { type: "saved_by_guardian", phase: "night", targetIds: savedByGuardianIds, actorId: room.protectedTonightBy || null });
+      for (const targetId of savedByGuardianIds) {
+        appendGameEvent(room, {
+          type: "GUARD_SAVE",
+          phase: "night",
+          actorIds: room.protectedTonightBy ? [room.protectedTonightBy] : [],
+          targetIds: [targetId],
+        });
+      }
     }
     if (eliminatedIds.length) {
       unlockVillageChiefExtraVoteIfProtectorDiedByWolf();
@@ -1147,6 +1196,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       autoArrangeUsed: false,
       compactCircles: false,
       gameRules: buildRoomGameRules(gameRules),
+      gameEventLog: [],
     };
 
     socket.join(roomId);
@@ -2297,6 +2347,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         phase: "night",
         targetIds: pair,
       });
+      appendGameEvent(room, {
+        type: "LOVE_ESCAPE",
+        phase: "night",
+        targetIds: pair,
+      });
     }
 
     emitLoveStateToPair(ctx, roomId, room);
@@ -2493,6 +2548,15 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         room.banSoiWolfAlignedPending = false;
         if (room.banSoiId) {
           appendLogEntry(room, { type: "ban_soi_aligned", phase: "night", targetId: room.banSoiId });
+          appendGameEvent(room, {
+            type: "ROLE_CONVERSION",
+            phase: "night",
+            targetIds: [room.banSoiId],
+            metadata: {
+              type: "ban_soi",
+              toTeam: "wolves",
+            },
+          });
           ctx.io.in(room.banSoiId).socketsJoin(`wolves_${roomId}`);
           if (room.loveTargetId === room.banSoiId) {
             room.loveTargetWolfAligned = true;
@@ -3652,6 +3716,12 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     ctx.io.to(clientId).emit("guardianProtected", targetId);
 
     appendLogEntry(room, { type: "guardian_protect", phase: "night", actorId: clientId, targetId });
+    appendGameEvent(room, {
+      type: "BODYGUARD_PROTECT",
+      phase: "night",
+      actorIds: [clientId],
+      targetIds: [targetId],
+    });
     appendPoppyGlassesViewLogs(room, targetId);
 
     emitWitchPendingDeath(roomId);
@@ -3687,6 +3757,14 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       actorId: clientId,
       targetId,
       permanent,
+    });
+
+    appendGameEvent(room, {
+      type: "PROTECTOR_BLESS",
+      phase: "night",
+      actorIds: [clientId],
+      targetIds: [targetId],
+      metadata: { permanent },
     });
 
     emitProtectorTarget(roomId, clientId);
@@ -3732,6 +3810,12 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     emitWitchPotions(roomId, clientId);
 
     appendLogEntry(room, { type: "witch_heal", phase: "night", actorId: clientId, targetId });
+    appendGameEvent(room, {
+      type: "WITCH_HEAL",
+      phase: "night",
+      actorIds: [clientId],
+      targetIds: [targetId],
+    });
 
     emitWitchPendingDeath(roomId);
     emitHostNightActionProgress(roomId);
@@ -3771,6 +3855,12 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     emitWitchPotions(roomId, clientId);
 
     appendLogEntry(room, { type: "witch_poison", phase: "night", actorId: clientId, targetId });
+    appendGameEvent(room, {
+      type: "WITCH_POISON",
+      phase: "night",
+      actorIds: [clientId],
+      targetIds: [targetId],
+    });
     emitHostNightActionProgress(roomId);
 
     const targetRole = room.playerRoles?.[targetId];
@@ -3947,6 +4037,251 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     emitHostNightActionProgress(roomId);
 
     finishWolfVotingIfAllLocked(roomId, room);
+  });
+
+  // --- SCENARIO REPLAYER HANDLERS ---
+  socket.on("listSavedMatches", (callback?: (res: { matches: string[] }) => void) => {
+    const matches = listSavedMatches();
+    if (callback) {
+      callback({ matches });
+    } else {
+      socket.emit("savedMatchesList", { matches });
+    }
+  });
+
+  socket.on("startScenarioReplay", ({ fileName }: { fileName: string }, callback?: (res: { ok: boolean; roomId?: string; error?: string }) => void) => {
+    try {
+      const match = loadSavedMatch(fileName);
+      if (!match) {
+        const err = "Không tìm thấy tệp lịch sử trận đấu.";
+        if (callback) callback({ ok: false, error: err });
+        else socket.emit("errorMessage", err);
+        return;
+      }
+
+      const replayRoomId = generateRoomId(activeRooms!);
+      const room: Room = {
+        id: replayRoomId,
+        players: match.players.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          connected: true,
+          inGame: true,
+        })),
+        hostId: clientId,
+        hidePlayerRoleText: false,
+        layoutHeightPx: BASE_FRAME_HEIGHT_PX,
+        positions: ensureNonOverlappingPositions([], undefined, { ...POSITION_LAYOUT, heightPx: BASE_FRAME_HEIGHT_PX }),
+        positionEditors: [],
+        autoArrangeUsed: false,
+        compactCircles: false,
+        gameRules: buildRoomGameRules(undefined),
+        gameEventLog: match.gameEventLog,
+        isReplay: true,
+        replayEvents: match.gameEventLog,
+        replayIndex: 0,
+        playerRoles: {},
+        deadPlayers: [],
+        phase: "lobby",
+        gameLog: [],
+        nightCount: 0,
+      };
+
+      for (const p of match.players) {
+        room.playerRoles![p.id] = p.role;
+      }
+
+      rooms[replayRoomId] = room;
+      socket.join(replayRoomId);
+      
+      socket.emit("roomCreated", toPublicRoom(room));
+      
+      if (callback) {
+        callback({ ok: true, roomId: replayRoomId });
+      }
+    } catch (err: any) {
+      console.error("Error starting scenario replay:", err);
+      if (callback) callback({ ok: false, error: err.message || String(err) });
+    }
+  });
+
+  socket.on("nextReplayStep", ({ roomId }: { roomId: string }, callback?: (res: { ok: boolean; finished: boolean }) => void) => {
+    const room = rooms[roomId];
+    if (!room) {
+      if (callback) callback({ ok: false, finished: false });
+      return;
+    }
+
+    if (!room.isReplay || !room.replayEvents) {
+      if (callback) callback({ ok: false, finished: false });
+      return;
+    }
+
+    const totalSteps = room.replayEvents.length;
+    if (room.replayIndex! >= totalSteps) {
+      if (callback) callback({ ok: true, finished: true });
+      return;
+    }
+
+    const event = room.replayEvents[room.replayIndex!];
+    if (!event) {
+      if (callback) callback({ ok: false, finished: true });
+      return;
+    }
+    room.replayIndex! += 1;
+
+    // Transition phase and nightCount
+    if (event.phase === "night" && room.phase !== "night") {
+      room.nightCount = (room.nightCount || 0) + 1;
+    }
+    room.phase = event.phase;
+
+    const getPlayerNameLocal = (pid: string) => {
+      return room.players.find(p => p.id === pid)?.name || pid;
+    };
+
+    let logMessage = `[Bước ${room.replayIndex}/${totalSteps}] ${event.type}: `;
+
+    // Visual state reconstruction based on event type
+    switch (event.type) {
+      case "WOLF_BITE": {
+        const target = event.targetIds?.[0];
+        const targetName = target ? getPlayerNameLocal(target) : "Không ai";
+        logMessage += `Sói chọn cắn ${targetName}`;
+        room.killedTonight = target || null;
+        if (event.metadata?.votes) {
+          room.wolfVotes = event.metadata.votes as Record<string, string | null>;
+        }
+        break;
+      }
+      case "BODYGUARD_PROTECT": {
+        const target = event.targetIds?.[0];
+        const targetName = target ? getPlayerNameLocal(target) : "Không ai";
+        logMessage += `Bảo vệ chọn bảo vệ ${targetName}`;
+        room.protectedTonight = target || null;
+        break;
+      }
+      case "PROTECTOR_BLESS": {
+        const target = event.targetIds?.[0];
+        const targetName = target ? getPlayerNameLocal(target) : "Không ai";
+        logMessage += `Nhà bảo hộ ban phước cho ${targetName}`;
+        room.protectorTargetId = target || null;
+        break;
+      }
+      case "PROTECTOR_SAVE": {
+        logMessage += `Nhà bảo hộ cứu thành công`;
+        break;
+      }
+      case "WITCH_HEAL": {
+        const target = event.targetIds?.[0];
+        const targetName = target ? getPlayerNameLocal(target) : "Không ai";
+        logMessage += `Phù thủy dùng bình cứu cứu ${targetName}`;
+        room.killedTonight = null;
+        break;
+      }
+      case "WITCH_POISON": {
+        const target = event.targetIds?.[0];
+        const targetName = target ? getPlayerNameLocal(target) : "Không ai";
+        logMessage += `Phù thủy dùng bình độc độc ${targetName}`;
+        room.killedTonightExtra = target || null;
+        break;
+      }
+      case "HUNTER_SHOT": {
+        const hunter = event.actorIds?.[0] || "";
+        const target = event.targetIds?.[0];
+        const hunterName = getPlayerNameLocal(hunter);
+        const targetName = target ? getPlayerNameLocal(target) : "Không ai";
+        logMessage += `Thợ săn [${hunterName}] bắn hạ ${targetName}`;
+        room.hunterTargetTonight = room.hunterTargetTonight || {};
+        room.hunterTargetTonight[hunter] = target || null;
+        break;
+      }
+      case "DAY_VOTE": {
+        const target = event.targetIds?.[0];
+        const targetName = target ? getPlayerNameLocal(target) : "Bỏ qua";
+        logMessage += `Biểu quyết ngày chọn treo cổ ${targetName}`;
+        if (event.metadata?.votes) {
+          room.dayVotes = event.metadata.votes as Record<string, string | null>;
+        }
+        break;
+      }
+      case "TRIAL_VERDICT": {
+        const target = event.targetIds?.[0];
+        const targetName = target ? getPlayerNameLocal(target) : "Không ai";
+        const executed = event.metadata?.executed ? "Bị treo cổ" : "Được tha bổng";
+        logMessage += `Tòa án quyết định: ${targetName} ${executed}`;
+        room.trialTargetId = target || null;
+        room.trialStage = "verdict";
+        break;
+      }
+      case "VILLAGE_CHIEF_EXTRA_VOTE": {
+        const chief = event.actorIds?.[0] || "";
+        const chiefName = getPlayerNameLocal(chief);
+        logMessage += `Trưởng làng [${chiefName}] bỏ phiếu quyết định`;
+        break;
+      }
+      case "LOVE_LINK_DEATH": {
+        const partner = event.targetIds?.[0];
+        const partnerName = partner ? getPlayerNameLocal(partner) : "";
+        logMessage += `Cặp đôi chết chùm: ${partnerName} chết theo bạn đời`;
+        if (partner && !room.deadPlayers?.includes(partner)) {
+          room.deadPlayers = room.deadPlayers || [];
+          room.deadPlayers.push(partner);
+        }
+        break;
+      }
+      case "PLAYER_ELIMINATED": {
+        const target = event.targetIds?.[0];
+        const targetName = target ? getPlayerNameLocal(target) : "";
+        const cause = event.metadata?.cause || "không rõ";
+        logMessage += `Người chơi ${targetName} đã bị loại do: ${cause}`;
+        if (target && !room.deadPlayers?.includes(target)) {
+          room.deadPlayers = room.deadPlayers || [];
+          room.deadPlayers.push(target);
+        }
+        break;
+      }
+      case "ROLE_CONVERSION": {
+        const target = event.targetIds?.[0];
+        const toRole = event.metadata?.toRole || "Sói";
+        const targetName = target ? getPlayerNameLocal(target) : "";
+        logMessage += `${targetName} chuyển đổi vai trò thành ${toRole}`;
+        if (target) {
+          room.playerRoles = room.playerRoles || {};
+          room.playerRoles[target] = toRole;
+        }
+        break;
+      }
+      case "GAME_OVER": {
+        const winner = event.metadata?.winner || "Không ai";
+        const reason = event.metadata?.reason || "";
+        logMessage += `Trò chơi kết thúc! Phe thắng: ${winner}. Lý do: ${reason}`;
+        room.gameOver = true;
+        room.winner = winner as any;
+        break;
+      }
+      default: {
+        logMessage += `Sự kiện ${event.type}`;
+        break;
+      }
+    }
+
+    // Append to gameLog
+    const phaseStr = event.phase === "night" ? "night" : "day";
+    appendLogEntry(room, {
+      type: "custom_log",
+      phase: phaseStr,
+      message: logMessage,
+      timestamp: event.timestamp,
+    });
+
+    // Notify all players in room
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    ctx.io.to(roomId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
+
+    if (callback) {
+      callback({ ok: true, finished: room.replayIndex! >= totalSteps });
+    }
   });
 }
 

@@ -148,27 +148,41 @@ export function mapEventToScores(
     }
 
     case "WITCH_SAVED_PLAYER": {
-      const isCore = isTargetCore || event.metadata?.targetIsCoreRole === true;
-      const base = isCore ? config.actions.witchSavedCoreRole : config.actions.witchSavedPlayer;
-      const pts = getPoints(base);
-      const reason = isCore
-        ? "Phù thủy dùng bình thuốc giải cứu vai chủ lực bị sói cắn"
-        : "Phù thủy dùng bình thuốc giải cứu người bị sói cắn";
-
       actorIds.forEach((actorId) => {
+        const isSelfSave = actorId === event.targetId;
+        const isCore = !isSelfSave && (isTargetCore || event.metadata?.targetIsCoreRole === true);
+        const base = isCore ? config.actions.witchSavedCoreRole : config.actions.witchSavedPlayer;
+        const pts = getPoints(base);
+
+        let reason = "Phù thủy dùng bình thuốc giải cứu người bị sói cắn";
+        if (isSelfSave) {
+          reason = "Phù thủy dùng bình thuốc giải cứu chính mình";
+        } else if (isCore) {
+          reason = "Phù thủy dùng bình thuốc giải cứu vai chủ lực bị sói cắn";
+        }
+
         results.push({ playerId: actorId, category: "action", points: pts, reason });
       });
       break;
     }
 
     case "WITCH_SAVED_CORE_ROLE": {
-      const pts = getPoints(config.actions.witchSavedCoreRole);
       actorIds.forEach((actorId) => {
+        const isSelfSave = actorId === event.targetId;
+        const isCore = !isSelfSave;
+        const base = isCore ? config.actions.witchSavedCoreRole : config.actions.witchSavedPlayer;
+        const pts = getPoints(base);
+
+        let reason = "Phù thủy dùng bình thuốc giải cứu vai chủ lực bị sói cắn";
+        if (isSelfSave) {
+          reason = "Phù thủy dùng bình thuốc giải cứu chính mình";
+        }
+
         results.push({
           playerId: actorId,
           category: "action",
           points: pts,
-          reason: "Phù thủy dùng bình thuốc giải cứu vai chủ lực bị sói cắn",
+          reason,
         });
       });
       break;

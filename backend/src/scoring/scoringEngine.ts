@@ -99,7 +99,14 @@ export class ScoringEngine {
       eventCounts.set(key, (eventCounts.get(key) || 0) + 1);
     };
 
+    const seenEventKeys = new Set<string>();
+
     summary.events.forEach((event) => {
+      const actorId = event.actorId || (event.actorIds ? [...event.actorIds].sort().join(",") : "");
+      const eventKey = `${event.type}:${actorId}:${event.targetId || ""}:${event.phase || ""}:${event.night || 0}`;
+      if (seenEventKeys.has(eventKey)) return;
+      seenEventKeys.add(eventKey);
+
       const actorScores = mapEventToScores(
         event,
         this.config,

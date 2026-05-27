@@ -10,6 +10,8 @@ import { shouldDeferEndGameForAngel } from "./angel.js";
 import { appendLogEntry } from "./gameLog.js";
 import { ScoringEngine } from "./scoring/scoringEngine.js";
 import { buildGameSummaryFromRoom } from "./scoring/gameLogMapper.js";
+import { appendGameEvent } from "./gameEvent.js";
+import { saveMatchHistory } from "./gameHistory.js";
 
 
 const SPIRIT_WOLF_ROLE = "Linh sói";
@@ -68,12 +70,24 @@ export function createLifecycleFlow(ctx: ServerContext) {
     room.winner = winner;
     appendAngelOutcomes(room, winner);
 
+    appendGameEvent(room, {
+      type: "GAME_OVER",
+      phase: room.phase || "day",
+      metadata: { winner, reason },
+    });
+
     try {
       const summary = buildGameSummaryFromRoom(room);
       const engine = new ScoringEngine();
       room.scoreResult = engine.calculateScore(summary);
     } catch (err) {
       console.error("Error calculating scoreResult at endGame:", err);
+    }
+
+    try {
+      saveMatchHistory(room);
+    } catch (err) {
+      console.error("Error saving match history at endGame:", err);
     }
 
     ctx.io.to(roomId).emit("gameEnded", { winner: room.winner, reason });
@@ -236,6 +250,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
     room.phase = "dusk";
     room.nightCount = 0;
     room.gameLog = [];
+    room.gameEventLog = [];
     room.deadPlayers = [];
     room.publicRevealedRolesByPlayerId = {};
     room.sharedHeartsVisible = false;

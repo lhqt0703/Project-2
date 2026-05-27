@@ -101,6 +101,23 @@ export function getCursedSniffAreaIds(room: Room, targetId: string) {
   return Array.from(new Set([targetId, ...getAdjacentPlayerIds(room, targetId)]));
 }
 
+export function getCursedMaxSniffUses(room: Room) {
+  return getParticipantIds(room).length >= 15 ? 2 : 1;
+}
+
+export function getCursedSniffUseCount(room: Room, playerId: string) {
+  const count = room.cursedSniffUseCountsByPlayerId?.[playerId] || 0;
+  return Math.max(0, Math.floor(count));
+}
+
+export function getCursedSniffUsesRemaining(room: Room, playerId: string) {
+  return Math.max(0, getCursedMaxSniffUses(room) - getCursedSniffUseCount(room, playerId));
+}
+
+export function canUseCursedSniff(room: Room, playerId: string) {
+  return getCursedSniffUsesRemaining(room, playerId) > 0;
+}
+
 export function getActiveMerchantItems(room: Room, playerId: string, night = room.nightCount || 0) {
   return (room.merchantItemsByPlayerId?.[playerId] || []).filter((item) => item.appliesNight === night);
 }
@@ -216,6 +233,7 @@ export function prepareMerchantNightState(room: Room) {
 export function resetMerchantRoundState(room: Room) {
   room.cursedTargetTonight = {};
   room.cursedLastTargetByPlayerId = {};
+  room.cursedSniffUseCountsByPlayerId = {};
   room.merchantTradeOffersTonight = {};
   room.merchantLastTargetByPlayerId = {};
   room.merchantItemsByPlayerId = {};

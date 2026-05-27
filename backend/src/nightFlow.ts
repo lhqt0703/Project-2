@@ -24,7 +24,7 @@ import {
 import { ensureRoomGameRules, type NightActionRole, type Room } from "./serverTypes.js";
 import { toPublicRoom } from "./serverEmitters.js";
 import { LOVE_ROLE, canLoveChoosePartnerTonight, isLovePairMemberAwayAt } from "./love.js";
-import { CURSED_ROLE, MERCHANT_ROLE, getMerchantAvailableItemIds } from "./merchant.js";
+import { CURSED_ROLE, MERCHANT_ROLE, canUseCursedSniff, getMerchantAvailableItemIds } from "./merchant.js";
 import { PROTECTOR_ROLE, isVillageChief } from "./specialRoles.js";
 
 type NightFlowDeps = {
@@ -132,8 +132,21 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       selected.add(LOVE_ROLE as NightActionRole);
     }
 
-    for (const role of ["Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Thợ săn", "Tiên tri", CURSED_ROLE] as NightActionRole[]) {
+    for (const role of ["Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Thợ săn", "Tiên tri"] as NightActionRole[]) {
       if (sourceRoles.includes(role)) selected.add(role);
+    }
+
+    const cursedPlayerIds = room.playerRoles
+      ? Object.entries(room.playerRoles)
+        .filter(([, role]) => role === CURSED_ROLE)
+        .map(([playerId]) => playerId)
+      : [];
+    if (
+      cursedPlayerIds.length > 0
+        ? cursedPlayerIds.some((playerId) => canUseCursedSniff(room, playerId))
+        : sourceRoles.includes(CURSED_ROLE)
+    ) {
+      selected.add(CURSED_ROLE as NightActionRole);
     }
 
     if (sourceRoles.includes(MERCHANT_ROLE) && getMerchantAvailableItemIds(room).length > 0) {

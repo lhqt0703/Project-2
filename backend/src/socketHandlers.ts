@@ -3414,7 +3414,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!room) return;
     if (clientId !== room.hostId) return;
     if (!room.players.find(p => p.id === targetId)) return;
-    removePlayerFromRoom(roomId, targetId, { source, notifyTarget: true });
+    removePlayerFromRoom(roomId, targetId, { ...(source ? { source } : {}), notifyTarget: true });
   });
 
   socket.on("seerCheck", ({ roomId, targetId }) => {

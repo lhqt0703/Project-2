@@ -20,8 +20,21 @@ export type WolfPhaseStartedPayload = {
 };
 
 export type SeerResultPayload = { playerId: string; isWolf: boolean };
-export type CursedResultPayload = { targetId: string; areaIds: string[]; hasWolf: boolean };
-export type CursedTargetUpdatedPayload = { targetId: string | null; lastTargetId: string | null };
+export type CursedResultPayload = {
+  targetId: string;
+  areaIds: string[];
+  hasWolf: boolean;
+  usesUsed?: number;
+  maxUses?: number;
+  usesRemaining?: number;
+};
+export type CursedTargetUpdatedPayload = {
+  targetId: string | null;
+  lastTargetId: string | null;
+  usesUsed?: number;
+  maxUses?: number;
+  usesRemaining?: number;
+};
 export type GuardianProtectedPayload = string; // targetId
 export type ProtectorTargetUpdatedPayload = { targetId: string | null; hasUsed?: boolean };
 

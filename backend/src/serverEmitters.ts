@@ -27,8 +27,12 @@ import { LOVE_ROLE, emitLoveStateToPlayer, isLovePairMemberAwayAt, isLovePartner
 import {
   CURSED_ROLE,
   MERCHANT_ROLE,
+  canUseCursedSniff,
   getActiveGuardianProtectedTargetIds,
   getActiveMerchantItems,
+  getCursedMaxSniffUses,
+  getCursedSniffUseCount,
+  getCursedSniffUsesRemaining,
   getMerchantAvailableItemIds,
   getVisibleGuardianProtectionTargetId,
 } from "./merchant.js";
@@ -97,6 +101,7 @@ export function toPublicRoom(room: Room) {
     elementalBuffVotesTonight: _elementalBuffVotesTonight,
     cursedTargetTonight: _cursedTargetTonight,
     cursedLastTargetByPlayerId: _cursedLastTargetByPlayerId,
+    cursedSniffUseCountsByPlayerId: _cursedSniffUseCountsByPlayerId,
     merchantTradeOffersTonight: _merchantTradeOffersTonight,
     merchantLastTargetByPlayerId: _merchantLastTargetByPlayerId,
     merchantItemsByPlayerId: _merchantItemsByPlayerId,
@@ -308,7 +313,11 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
     }
 
     if (role === CURSED_ROLE) {
-      setProgress(playerId, room.cursedTargetTonight?.[playerId] ? "done" : "pending", role);
+      if (!canUseCursedSniff(room, playerId)) {
+        setProgress(playerId, "done", role);
+      } else {
+        setProgress(playerId, room.cursedTargetTonight?.[playerId] ? "done" : "pending", role);
+      }
       continue;
     }
 
@@ -514,9 +523,14 @@ export function emitCursedState(roomId: string, playerId: string) {
   if (!ctx) return;
   const room = ctx.rooms[roomId];
   if (!room) return;
+  const usesUsed = getCursedSniffUseCount(room, playerId);
+  const maxUses = getCursedMaxSniffUses(room);
   ctx.io.to(playerId).emit("cursedTargetUpdated", {
     targetId: room.cursedTargetTonight?.[playerId] ?? null,
     lastTargetId: room.cursedLastTargetByPlayerId?.[playerId] ?? null,
+    usesUsed,
+    maxUses,
+    usesRemaining: Math.max(0, maxUses - usesUsed),
   });
 }
 

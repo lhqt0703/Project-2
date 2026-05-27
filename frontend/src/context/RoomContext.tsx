@@ -126,6 +126,8 @@ export interface RoomData {
   elementalBuffQuickMode?: boolean;
   elementalSelectedBuffId?: ElementalBuffId | null;
   nightActionProgressByPlayerId?: Record<string, "pending" | "done">;
+  wolfDeadline?: number | null;
+  scoreResult?: any;
 }
 
 interface PlayerPosition {

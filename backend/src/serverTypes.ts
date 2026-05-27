@@ -187,6 +187,7 @@ export interface Room {
   elementalBuffQuickMode?: boolean;
   cursedTargetTonight?: Record<string, string | null>;
   cursedLastTargetByPlayerId?: Record<string, string | null>;
+  cursedSniffUseCountsByPlayerId?: Record<string, number>;
   merchantTradeOffersTonight?: Record<string, MerchantTradeOffer>;
   merchantLastTargetByPlayerId?: Record<string, string | null>;
   merchantItemsByPlayerId?: Record<string, MerchantItemRecord[]>;
@@ -206,6 +207,7 @@ export interface Room {
   angelReviveRecordsByAngelId?: Record<string, AngelReviveRecord>;
   angelHiddenRevivedPlayerIds?: string[];
   angelOutcomeLoggedPlayerIds?: string[];
+  scoreResult?: any;
 }
 
 const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {

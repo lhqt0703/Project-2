@@ -25,6 +25,8 @@ import { useLoveRole } from "./gameRoles/useLoveRole";
 import { useCursedRole } from "./gameRoles/useCursedRole";
 import { useMerchantRole } from "./gameRoles/useMerchantRole";
 import { useAngelRole } from "./gameRoles/useAngelRole";
+import { ScoreboardModal } from "../components/ScoreboardModal";
+
 
 const WOLF_TEAM_REVEAL_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
 const NIGHT_ACTION_ROLE_SET = new Set([
@@ -96,6 +98,7 @@ export default function Game() {
   const [nightTurnNow, setNightTurnNow] = useState(() => Date.now());
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
+  const [scoreboardOpen, setScoreboardOpen] = useState(false);
   const [hostPlayerActionTargetId, setHostPlayerActionTargetId] = useState<string | null>(null);
   const [targetRoleDisplayOrderByPlayerId, setTargetRoleDisplayOrderByPlayerId] = useState<Record<string, TargetRoleDisplayOrder>>({});
   const [hostRuleEliminateTargetId, setHostRuleEliminateTargetId] = useState<string | null>(null);
@@ -828,6 +831,7 @@ export default function Game() {
     cursedResult: sync.cursedResult,
     cursedTargetId: sync.cursedTargetId,
     cursedLastTargetId: sync.cursedLastTargetId,
+    cursedUsesRemaining: sync.cursedUsesRemaining,
     allNightActionsSimultaneous,
     currentNightTurnRole,
     nightActionDeadline: mySimultaneousDeadline,
@@ -1413,6 +1417,23 @@ export default function Game() {
 
       {(isHost || !!sync.gameEnded || hostDisconnected) && (
         <div className="game-top-actions" style={{ marginTop: "0.75rem" }}>
+          {!!sync.gameEnded && room?.scoreResult && (
+            <button
+              onClick={() => setScoreboardOpen(true)}
+              style={{
+                background: "linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%)",
+                color: "#fff",
+                border: "none",
+                fontWeight: 700,
+                cursor: "pointer",
+                padding: "8px 16px",
+                borderRadius: "8px",
+                boxShadow: "0 4px 12px rgba(155, 89, 182, 0.3)"
+              }}
+            >
+              📊 Xem bảng điểm MVP
+            </button>
+          )}
           {!hostDisconnected && (
             <button onClick={handleBackToRoomClick}>Quay về phòng chờ</button>
           )}
@@ -1842,6 +1863,11 @@ export default function Game() {
         setHostRuleEliminateTargetId(null);
       }}
       onCancel={() => setHostRuleEliminateTargetId(null)}
+    />
+    <ScoreboardModal
+      open={scoreboardOpen}
+      onClose={() => setScoreboardOpen(false)}
+      scoreResult={room?.scoreResult || null}
     />
 
     </div>

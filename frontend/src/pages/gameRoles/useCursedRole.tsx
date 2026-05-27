@@ -14,6 +14,7 @@ export function useCursedRole({
   cursedResult,
   cursedTargetId,
   cursedLastTargetId,
+  cursedUsesRemaining,
   allNightActionsSimultaneous,
   currentNightTurnRole,
   nightActionDeadline,
@@ -27,6 +28,7 @@ export function useCursedRole({
   cursedResult: CursedResultPayload | null;
   cursedTargetId: string | null;
   cursedLastTargetId: string | null;
+  cursedUsesRemaining: number | null;
   allNightActionsSimultaneous: boolean;
   currentNightTurnRole: string | null;
   nightActionDeadline: number | null;
@@ -36,16 +38,18 @@ export function useCursedRole({
   const [selectedNight, setSelectedNight] = useState<number | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const currentNight = nightCount || 0;
+  const hasUsesRemaining = cursedUsesRemaining === null || cursedUsesRemaining > 0;
 
   const canAct = useMemo(() => {
     if (phase !== "night") return false;
     if (role !== CURSED_ROLE) return false;
+    if (!hasUsesRemaining) return false;
     if (cursedTargetId) return false;
     if (clientId && deadPlayers.includes(clientId)) return false;
     if (allNightActionsSimultaneous && nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
     if (!allNightActionsSimultaneous && currentNightTurnRole !== CURSED_ROLE) return false;
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, cursedTargetId, deadPlayers, nightActionDeadline, nightActionNow, phase, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, cursedTargetId, deadPlayers, hasUsesRemaining, nightActionDeadline, nightActionNow, phase, role]);
 
   const isConfirmOpen =
     phase === "night" &&
@@ -57,9 +61,10 @@ export function useCursedRole({
   const isCursedTurnActive = useMemo(() => {
     if (phase !== "night") return false;
     if (role !== CURSED_ROLE) return false;
+    if (!hasUsesRemaining) return false;
     if (allNightActionsSimultaneous) return true;
     return currentNightTurnRole === CURSED_ROLE;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, phase, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, hasUsesRemaining, phase, role]);
 
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;

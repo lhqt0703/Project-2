@@ -207,7 +207,6 @@ export function useMerchantRole({
 
   const targetName = getPlayerName(room, selectedPlayerId);
   const tradeTargetName = getPlayerName(room, currentTrade?.targetId);
-  const tradeActorName = getPlayerName(room, currentTrade?.actorId);
   const protectedName = getPlayerName(room, state.poppyGlassesProtectedTargetId);
   const isOfferModalOpen = phase === "night" && showOfferModal && selectedNight === currentNight;
 

@@ -8,6 +8,9 @@ import { clearLoveStateForPlayers, getLovePairIds } from "./love.js";
 import { MERCHANT_ROLE, resetMerchantRoundState } from "./merchant.js";
 import { shouldDeferEndGameForAngel } from "./angel.js";
 import { appendLogEntry } from "./gameLog.js";
+import { ScoringEngine } from "./scoring/scoringEngine.js";
+import { buildGameSummaryFromRoom } from "./scoring/gameLogMapper.js";
+
 
 const SPIRIT_WOLF_ROLE = "Linh sói";
 
@@ -64,6 +67,15 @@ export function createLifecycleFlow(ctx: ServerContext) {
     room.gameOver = true;
     room.winner = winner;
     appendAngelOutcomes(room, winner);
+
+    try {
+      const summary = buildGameSummaryFromRoom(room);
+      const engine = new ScoringEngine();
+      room.scoreResult = engine.calculateScore(summary);
+    } catch (err) {
+      console.error("Error calculating scoreResult at endGame:", err);
+    }
+
     ctx.io.to(roomId).emit("gameEnded", { winner: room.winner, reason });
     ctx.io.to(roomId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
     ctx.io.to(roomId).emit(

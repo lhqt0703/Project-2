@@ -87,6 +87,9 @@ export function useGameSocketSync({
   const [cursedResult, setCursedResult] = useState<CursedResultPayload | null>(null);
   const [cursedTargetId, setCursedTargetId] = useState<string | null>(null);
   const [cursedLastTargetId, setCursedLastTargetId] = useState<string | null>(null);
+  const [cursedUsesUsed, setCursedUsesUsed] = useState(0);
+  const [cursedMaxUses, setCursedMaxUses] = useState(1);
+  const [cursedUsesRemaining, setCursedUsesRemaining] = useState<number | null>(null);
   const [cursedTargetSeq, setCursedTargetSeq] = useState(0);
   const [merchantPrivateState, setMerchantPrivateState] = useState(EMPTY_MERCHANT_PRIVATE_STATE);
   const [merchantCheeseMarkPlayerIds, setMerchantCheeseMarkPlayerIds] = useState<string[]>([]);
@@ -337,6 +340,9 @@ export function useGameSocketSync({
       setCursedResult(null);
       setCursedTargetId(null);
       setCursedLastTargetId(null);
+      setCursedUsesUsed(0);
+      setCursedMaxUses(1);
+      setCursedUsesRemaining(null);
       setCursedTargetSeq(0);
       setMerchantPrivateState(EMPTY_MERCHANT_PRIVATE_STATE);
       setMerchantCheeseMarkPlayerIds([]);
@@ -536,13 +542,27 @@ export function useGameSocketSync({
       setSeerResult(payload);
     };
 
+    const updateCursedUseState = (payload: CursedResultPayload | CursedTargetUpdatedPayload | null | undefined) => {
+      const usesUsed = typeof payload?.usesUsed === "number" ? payload.usesUsed : 0;
+      const maxUses = typeof payload?.maxUses === "number" ? payload.maxUses : 1;
+      const usesRemaining =
+        typeof payload?.usesRemaining === "number"
+          ? payload.usesRemaining
+          : Math.max(0, maxUses - usesUsed);
+      setCursedUsesUsed(usesUsed);
+      setCursedMaxUses(maxUses);
+      setCursedUsesRemaining(usesRemaining);
+    };
+
     const handleCursedResult = (payload: CursedResultPayload) => {
       setCursedResult(payload);
+      updateCursedUseState(payload);
     };
 
     const handleCursedTargetUpdated = (payload: CursedTargetUpdatedPayload) => {
       setCursedTargetId(payload?.targetId ?? null);
       setCursedLastTargetId(payload?.lastTargetId ?? null);
+      updateCursedUseState(payload);
       setCursedTargetSeq((s) => s + 1);
     };
 
@@ -855,6 +875,9 @@ export function useGameSocketSync({
       cursedResult,
       cursedTargetId,
       cursedLastTargetId,
+      cursedUsesUsed,
+      cursedMaxUses,
+      cursedUsesRemaining,
       cursedTargetSeq,
       merchantPrivateState,
       merchantCheeseMarkPlayerIds,
@@ -919,6 +942,9 @@ export function useGameSocketSync({
       cursedResult,
       cursedTargetId,
       cursedLastTargetId,
+      cursedUsesUsed,
+      cursedMaxUses,
+      cursedUsesRemaining,
       cursedTargetSeq,
       merchantPrivateState,
       merchantCheeseMarkPlayerIds,

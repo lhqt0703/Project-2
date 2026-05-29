@@ -175,6 +175,7 @@ export type GameLogEntry =
   | { type: "elemental_guess_summary"; phase: GameLogEntryPhase; correctCount: number; totalCount: number; correctIds?: string[]; triggeredBuffVote: boolean; nextBuffVoteNight?: number }
   | { type: "elemental_buff_vote"; phase: GameLogEntryPhase; voteBreakdown: { buffId: string; voterIds: string[] }[]; chosenBuffId?: string | null; tier?: number; randomTieBreak?: boolean; tiedBuffIds?: string[]; chosenVoterIds?: string[] }
   | { type: "elemental_buff"; phase: GameLogEntryPhase; buffId: string | null; tier: number; randomTieBreak?: boolean; tiedBuffIds?: string[] }
+  | { type: "custom_log"; phase: GameLogEntryPhase; message: string; timestamp?: number }
   | { type: "host_ended_game"; phase: GameLogEntryPhase };
 
 export type GameLogNight = {

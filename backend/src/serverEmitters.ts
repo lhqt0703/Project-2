@@ -32,7 +32,6 @@ import {
   getActiveMerchantItems,
   getCursedMaxSniffUses,
   getCursedSniffUseCount,
-  getCursedSniffUsesRemaining,
   getMerchantAvailableItemIds,
   getVisibleGuardianProtectionTargetId,
 } from "./merchant.js";
@@ -41,6 +40,17 @@ import { emitAngelPrivateState } from "./angel.js";
 
 export function toPublicRoom(room: Room) {
   ensureRoomGameRules(room);
+  if (room.isReplay) {
+    return {
+      ...room,
+      players: room.players.map((p) => ({
+        id: p.id,
+        name: p.name,
+        connected: p.connected !== false,
+        inGame: p.inGame === true,
+      })),
+    };
+  }
   const {
     wolfTimer: _wolfTimer,
     seerUsedTonight: _seerUsedTonight,
@@ -614,6 +624,7 @@ export function syncPrivateRoleStateForSocket(
     socket.join(`witches_${roomId}`);
     ensureWitchState(room, playerId);
     emitWitchPotions(roomId, playerId);
+    emitWitchPendingDeath(roomId);
   } else {
     socket.leave(`witches_${roomId}`);
   }

@@ -277,6 +277,47 @@ function applyMagnetSnap(
   return { snapped: { ...snapped, ...clamped }, lockedAxis: "y" };
 }
 
+const getRoleBadgeStyle = (role: string) => {
+  const isWolf = ["Sói", "Sói con", "Sói Dại", "Bán sói", "Linh sói"].includes(role);
+  const isSpecialBlue = ["Tiên tri", "Tiên tri tập sự", "Thợ săn", "Hiệp sĩ"].includes(role);
+  const isSpecialGreen = ["Bảo vệ", "Phù thủy", "Già làng", "Sinh đôi"].includes(role);
+  const isSpecialPurple = ["Thổi sáo", "Linh hồn", "Kẻ nguyền rủa"].includes(role);
+
+  let borderGradient = "linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05))";
+  let bgGradient = "linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95))";
+  let textColor = "#e2e8f0";
+  let glow = "rgba(0, 0, 0, 0.4)";
+
+  if (isWolf) {
+    borderGradient = "linear-gradient(135deg, rgba(239, 68, 68, 0.6), rgba(153, 27, 27, 0.3))";
+    bgGradient = "linear-gradient(135deg, rgba(45, 18, 18, 0.95), rgba(20, 10, 10, 0.98))";
+    textColor = "#ff6b6b";
+    glow = "rgba(239, 68, 68, 0.25)";
+  } else if (isSpecialBlue) {
+    borderGradient = "linear-gradient(135deg, rgba(6, 182, 212, 0.6), rgba(8, 145, 178, 0.3))";
+    bgGradient = "linear-gradient(135deg, rgba(12, 34, 45, 0.95), rgba(8, 20, 30, 0.98))";
+    textColor = "#22d3ee";
+    glow = "rgba(6, 182, 212, 0.25)";
+  } else if (isSpecialGreen) {
+    borderGradient = "linear-gradient(135deg, rgba(16, 185, 129, 0.6), rgba(4, 120, 87, 0.3))";
+    bgGradient = "linear-gradient(135deg, rgba(12, 38, 28, 0.95), rgba(6, 20, 15, 0.98))";
+    textColor = "#34d399";
+    glow = "rgba(16, 185, 129, 0.25)";
+  } else if (isSpecialPurple) {
+    borderGradient = "linear-gradient(135deg, rgba(168, 85, 247, 0.6), rgba(109, 40, 217, 0.3))";
+    bgGradient = "linear-gradient(135deg, rgba(28, 18, 45, 0.95), rgba(15, 8, 25, 0.98))";
+    textColor = "#c084fc";
+    glow = "rgba(168, 85, 247, 0.25)";
+  }
+
+  return {
+    background: `${bgGradient} padding-box, ${borderGradient} border-box`,
+    border: "1px solid transparent",
+    color: textColor,
+    boxShadow: `0 3px 8px ${glow}`,
+  };
+};
+
 export default function PlayerPositions({
   onPlayerClick,
   onPlayerDoubleClick,
@@ -309,6 +350,8 @@ export default function PlayerPositions({
   trialOrangePlayerId,
   trialWhitePlayerIds,
   trialGreenPlayerId,
+  replayActorIds,
+  replayTargetIds,
 }: {
   onPlayerClick: (playerId: string) => void;
   onPlayerDoubleClick?: (playerId: string) => void;
@@ -341,6 +384,8 @@ export default function PlayerPositions({
   trialOrangePlayerId?: string | null;
   trialWhitePlayerIds?: string[];
   trialGreenPlayerId?: string | null;
+  replayActorIds?: string[];
+  replayTargetIds?: string[];
 }) {
   const { room: contextRoom } = useRoomContext();
   const room: RoomLike | null = roomOverride ?? (contextRoom as RoomLike | null);
@@ -951,6 +996,107 @@ export default function PlayerPositions({
           80% { transform: translateX(1px); }
           100% { transform: translateX(0); }
         }
+
+        /* PREMIUM REVAMP KEYFRAMES */
+        @keyframes rotateGlow {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        @keyframes rotateGlowCounter {
+          from { transform: rotate(360deg); }
+          to { transform: rotate(0deg); }
+        }
+        @keyframes breatheSoft {
+          0%, 100% { opacity: 0.65; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.03); }
+        }
+        @keyframes warningPulse {
+          0%, 100% { box-shadow: 0 0 10px rgba(220, 38, 38, 0.4), inset 0 0 4px rgba(220, 38, 38, 0.2); border-color: rgba(220, 38, 38, 0.7); }
+          50% { box-shadow: 0 0 20px rgba(220, 38, 38, 0.85), inset 0 0 8px rgba(220, 38, 38, 0.45); border-color: rgba(255, 107, 107, 1); }
+        }
+        @keyframes activeRolePulse {
+          0%, 100% { box-shadow: 0 0 12px rgba(255, 215, 0, 0.4), inset 0 0 6px rgba(255, 215, 0, 0.2); }
+          50% { box-shadow: 0 0 24px rgba(255, 215, 0, 0.75), inset 0 0 10px rgba(255, 215, 0, 0.4); }
+        }
+        @keyframes pulseCaution {
+          0%, 100% { opacity: 0.9; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+          50% { opacity: 1; box-shadow: 0 2px 10px rgba(245, 158, 11, 0.35); }
+        }
+
+        /* CONCENTRIC HALOS */
+        .player-halo {
+          position: absolute;
+          border-radius: 50%;
+          pointer-events: none;
+          z-index: -1;
+          transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .halo-live {
+          box-shadow: 0 0 16px rgba(16, 185, 129, 0.75), inset 0 0 6px rgba(16, 185, 129, 0.35);
+          /* animation: breatheSoft 1.8s ease-in-out infinite; */
+        }
+        .halo-die {
+          box-shadow: 0 0 16px rgba(239, 68, 68, 0.85), inset 0 0 6px rgba(239, 68, 68, 0.4);
+          animation: breatheSoft 2.2s ease-in-out infinite;
+        }
+        .halo-danger {
+          animation: warningPulse 1.2s ease-in-out infinite;
+        }
+        .halo-spotlight {
+          animation: rotateGlow 12s linear infinite;
+          box-shadow: 0 0 14px rgba(255, 152, 0, 0.45);
+        }
+        .halo-secondary {
+          animation: rotateGlowCounter 16s linear infinite;
+          box-shadow: 0 0 10px rgba(46, 204, 113, 0.25);
+        }
+        .halo-cursed {
+          animation: breatheSoft 2.5s ease-in-out infinite;
+        }
+        .halo-active-role {
+          animation: activeRolePulse 2s ease-in-out infinite;
+        }
+        .halo-trial-orange {
+          animation: rotateGlow 8s linear infinite;
+          box-shadow: 0 0 22px rgba(245, 158, 11, 0.75), inset 0 0 10px rgba(245, 158, 11, 0.35);
+        }
+        .halo-trial-white {
+          animation: breatheSoft 2.2s ease-in-out infinite;
+          box-shadow: 0 0 14px rgba(241, 245, 249, 0.5);
+        }
+        .halo-trial-green {
+          animation: breatheSoft 2s ease-in-out infinite;
+          box-shadow: 0 0 20px rgba(52, 211, 153, 0.65);
+        }
+        .halo-night-pending {
+          animation: rotateGlow 14s linear infinite;
+          box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+        }
+        .halo-night-done {
+          box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+        }
+        .halo-seer {
+          animation: breatheSoft 2s ease-in-out infinite;
+          box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
+        }
+
+        /* PREMIUM TOKEN COMPONENT */
+        .player-circle-token {
+          background: linear-gradient(135deg, rgba(31, 36, 48, 0.94), rgba(23, 26, 33, 0.97));
+          box-shadow: 
+            inset 0 1px 2px rgba(255, 255, 255, 0.08),
+            inset 0 -2px 6px rgba(0, 0, 0, 0.45),
+            0 8px 24px rgba(0, 0, 0, 0.35);
+          transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        }
+        .player-circle-token:hover {
+          transform: translateY(-2px) scale(1.03);
+          background: linear-gradient(135deg, rgba(38, 44, 58, 0.96), rgba(28, 32, 41, 0.98));
+          box-shadow: 
+            inset 0 1px 3px rgba(255, 255, 255, 0.14),
+            inset 0 -2px 8px rgba(0, 0, 0, 0.5),
+            0 12px 32px rgba(0, 0, 0, 0.45);
+        }
       `}</style>
       {isEditor && (
         <div className="player-position-toolbar" style={{ marginBottom: 8, justifyContent: "center" }}>
@@ -1042,55 +1188,20 @@ export default function PlayerPositions({
             : 0;
           const isDead = (deadPlayers || []).includes(pos.playerId);
           const isSwapSelected = swapSource === pos.playerId;
+          const isReplayActor = !!replayActorIds && replayActorIds.includes(pos.playerId);
+          const isReplayTarget = !!replayTargetIds && replayTargetIds.includes(pos.playerId);
 
-          let boxShadow = "";
-          if (seerResult && seerResult.playerId === pos.playerId) {
-            boxShadow = seerResult.isWolf
-              ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #d00`
-              : `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #fff`;
-          }
-
+          const isSeerResult = !!seerResult && seerResult.playerId === pos.playerId;
           const isWitchDanger =
             (!!dangerPlayerId && dangerPlayerId === pos.playerId) ||
             (!!dangerPlayerIds && dangerPlayerIds.includes(pos.playerId))
             && !verdictDiePlayerIds?.includes(pos.playerId);
-          const dangerShadow = isWitchDanger ? `0 0 0 ${scalePx(6, 3)}px rgba(220,0,0,0.95), 0 0 ${scalePx(14, 7)}px rgba(220,0,0,0.55)` : "";
           const isHighlighted = !!highlightPlayerId && highlightPlayerId === pos.playerId;
           const isSecondaryHighlighted = !!secondaryHighlightPlayerIds && secondaryHighlightPlayerIds.includes(pos.playerId);
           const isCursedHighlighted = !!cursedHighlightPlayerIds && cursedHighlightPlayerIds.includes(pos.playerId);
           const isVerdictLiveHighlighted = !!verdictLivePlayerIds && verdictLivePlayerIds.includes(pos.playerId);
           const isVerdictDieHighlighted = !!verdictDiePlayerIds && verdictDiePlayerIds.includes(pos.playerId);
-          const highlightShadow = isHighlighted
-            ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #ffa500e6`
-            : isVerdictLiveHighlighted
-              ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #79cd77`
-              : isSecondaryHighlighted
-                ? `0 0 0 ${scalePx(5, 3)}px rgba(46,204,113,0.38), 0 0 ${scalePx(12, 7)}px ${scalePx(4, 2)}px rgba(46,204,113,0.24)`
-                : "";
-          const verdictDieShadow = isVerdictDieHighlighted 
-            ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #d00`
-            : "";
-          const cursedShadow = isCursedHighlighted
-            ? cursedHighlightIsDanger
-              ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #d00`
-              : `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #fff`
-            : "";
-          const trialOrangeShadow = trialOrangePlayerId === pos.playerId
-            ? `0 0 0 ${scalePx(7, 4)}px rgba(255,165,0,0.9), 0 0 ${scalePx(16, 8)}px ${scalePx(6, 3)}px rgba(255,165,0,0.55)`
-            : "";
-          const trialWhiteShadow = (trialWhitePlayerIds || []).includes(pos.playerId)
-            ? `0 0 0 ${scalePx(6, 3)}px rgba(255,255,255,0.95), 0 0 ${scalePx(14, 7)}px ${scalePx(5, 3)}px rgba(255,255,255,0.35)`
-            : "";
-          const trialGreenShadow = trialGreenPlayerId === pos.playerId
-            ? `0 0 0 ${scalePx(7, 4)}px rgba(46,204,113,0.95), 0 0 ${scalePx(16, 8)}px ${scalePx(6, 3)}px rgba(46,204,113,0.45)`
-            : "";
           const nightActionProgress = getVisibleNightActionProgress(pos.playerId);
-          const nightActionShadow =
-            nightActionProgress === "pending"
-              ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #ffa500e6`
-              : nightActionProgress === "done"
-                ? `0 0 0 ${scalePx(8, 4)}px #222, 0 0 ${scalePx(16, 8)}px ${scalePx(8, 4)}px #79cd77`
-                : "";
 
           const showSelectedOutline =
             (!!selectedOutlinePlayerId && selectedOutlinePlayerId === pos.playerId) ||
@@ -1104,10 +1215,6 @@ export default function PlayerPositions({
             (activeNightRole === "Sói" && isWolfBadgeRole) ||
             (activeNightRole !== "Sói" && roleBadgeText === activeNightRole)
           );
-          const activeRoleShadow = isActiveNightRoleBadge 
-            ? `0 0 0 ${scalePx(7, 4)}px rgba(255,215,120,0.38), 0 0 ${scalePx(18, 9)}px ${scalePx(8, 4)}px rgba(255,215,120,0.22)`
-            : "";
-          const mergedBoxShadow = [boxShadow, dangerShadow, highlightShadow, verdictDieShadow, cursedShadow, activeRoleShadow, trialOrangeShadow, trialWhiteShadow, trialGreenShadow, nightActionShadow].filter(Boolean).join(", ");
           // Only show disconnected badge to host by default. Host can broadcast visibility to all clients
           const showDisconnectedBadge =
             p.connected === false && (isHost || (revealDisconnectedToAll && !isDead));
@@ -1236,7 +1343,7 @@ export default function PlayerPositions({
               onDoubleClick={() => {
                 if (!dragging) onPlayerDoubleClick?.(p.id);
               }}
-              className={isWitchDanger && !isVerdictDieHighlighted ? "witch-danger" : undefined}
+              className={`player-circle-token ${isDead ? "is-dead" : ""} ${isSwapSelected ? "is-swap-selected" : ""} ${isWitchDanger && !isVerdictDieHighlighted ? "witch-danger" : ""}`}
               style={{
                 position: "absolute",
                 left,
@@ -1245,34 +1352,92 @@ export default function PlayerPositions({
                 width: circleSizePx,
                 height: circleSizePx,
                 borderRadius: circleRadiusPx,
-                background: "var(--surface)",
-                border: isSwapSelected ? `${selectedBorderPx}px solid #2196F3` : `${circleBorderPx}px solid #333`,
+                border: isReplayTarget 
+                  ? "3px solid rgb(245, 158, 11)" 
+                  : isReplayActor 
+                    ? "2px solid rgb(16, 185, 129)" 
+                    : isSwapSelected 
+                      ? `${selectedBorderPx}px solid #2196F3` 
+                      : isDead 
+                        ? `${circleBorderPx}px solid rgba(239, 68, 68, 0.35)` 
+                        : `${circleBorderPx}px solid rgba(255, 255, 255, 0.08)`,
+                boxShadow: isReplayTarget
+                  ? "0 0 22px rgba(245, 158, 11, 0.75), inset 0 0 10px rgba(245, 158, 11, 0.35)"
+                  : isReplayActor
+                    ? "0 0 12px rgba(16, 185, 129, 0.45)"
+                    : undefined,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 fontSize: playerFontSizePx,
                 cursor: isEditor ? (swapSource ? "crosshair" : "grab") : "pointer",
-                opacity: isDead ? 0.4 : 1,
                 zIndex: dragging === pos.playerId ? 10 : 1,
-                boxShadow: mergedBoxShadow || undefined,
                 outline: showSelectedOutline ? `${selectedBorderPx}px solid rgba(255,165,0,0.9)` : undefined,
                 transition: dragging === pos.playerId
                   ? "none"
-                  : "left 0.2s, top 0.2s, width 220ms ease, height 220ms ease, border-radius 220ms ease, box-shadow 300ms ease", // Smooth move + resize + glow
+                  : "left 0.2s, top 0.2s, width 220ms ease, height 220ms ease, border-radius 220ms ease, box-shadow 300ms ease, transform 0.2s ease", // Smooth move + resize + glow
               }}
             >
+              {/* Concentric Halo Rings */}
+              {isSeerResult && (
+                <div className="player-halo halo-seer" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid ${seerResult!.isWolf ? "#ef4444" : "#f1f5f9"}` }} />
+              )}
+              {isVerdictLiveHighlighted && (
+                <div className="player-halo halo-live" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #10b981` }} />
+              )}
+              {isVerdictDieHighlighted && (
+                <div className="player-halo halo-die" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #ef4444` }} />
+              )}
+              {isWitchDanger && (
+                <div className="player-halo halo-danger" style={{ inset: -scalePx(6, 4), border: `${scalePx(2.5, 1.5)}px solid #dc2626` }} />
+              )}
+              {isCursedHighlighted && (
+                <div className="player-halo halo-cursed" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid ${cursedHighlightIsDanger ? "#dc2626" : "#e2e8f0"}` }} />
+              )}
+              {nightActionProgress === "pending" && (
+                <div className="player-halo halo-night-pending" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px dashed #f59e0b` }} />
+              )}
+              {nightActionProgress === "done" && (
+                <div className="player-halo halo-night-done" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #10b981` }} />
+              )}
+
+              {/* Mid Concentric Rings */}
+              {isSecondaryHighlighted && (
+                <div className="player-halo halo-secondary" /* style={{ inset: -scalePx(8, 5), border: `${scalePx(2, 1)}px dotted rgba(46, 204, 113, 0.7)` }} */ />
+              )}
+              {(trialWhitePlayerIds || []).includes(pos.playerId) && (
+                <div className="player-halo halo-trial-white" style={{ inset: -scalePx(10, 6), border: `${scalePx(2, 1)}px solid #f1f5f9` }} />
+              )}
+
+              {/* Outer Concentric Rings */}
+              {isHighlighted && (
+                <div className="player-halo halo-spotlight" style={{ inset: -scalePx(10, 6), border: `${scalePx(2, 1)}px solid #ff9800` }} />
+              )}
+              {isActiveNightRoleBadge && (
+                <div className="player-halo halo-active-role" style={{ inset: -scalePx(10, 6), border: `${scalePx(2.5, 1.5)}px solid #ffd700` }} />
+              )}
+              {trialOrangePlayerId === pos.playerId && (
+                <div className="player-halo halo-trial-orange" style={{ inset: -scalePx(12, 8), border: `${scalePx(2.5, 2)}px solid #f59e0b` }} />
+              )}
+              {trialGreenPlayerId === pos.playerId && (
+                <div className="player-halo halo-trial-green" style={{ inset: -scalePx(12, 8), border: `${scalePx(2.5, 2)}px solid #34d399` }} />
+              )}
+
+              {/* Badges and Indicators */}
               {showWolfVoteBadges && effectiveWolfCount >= 2 && voteCountForThis > 0 && (
                 <div style={{
                   position: "absolute",
                   top: -badgeOffsetPx,
                   right: -badgeOffsetPx,
-                  background: "#b71c1c",
+                  background: "linear-gradient(135deg, #ef5350, #c62828)",
                   color: "#fff",
                   borderRadius: badgeOffsetPx,
                   padding: badgePadding,
                   fontSize: badgeFontSizePx,
                   fontWeight: "bold",
                   zIndex: 2,
+                  boxShadow: "0 2px 6px rgba(198, 40, 40, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2)",
+                  border: "1px solid rgba(255, 255, 255, 0.15)",
                 }}>
                   {voteCountForThis}/{effectiveWolfCount}
                 </div>
@@ -1298,15 +1463,19 @@ export default function PlayerPositions({
                   position: "absolute",
                   top: -badgeOffsetPx,
                   left: -badgeOffsetPx,
-                  background: "#63381e",
-                  color: "#fff",
+                  background: "linear-gradient(135deg, #422213, #2d1307)",
+                  color: "#ff6b6b",
                   padding: badgePadding,
                   borderRadius: scalePx(6, 3),
                   fontSize: badgeFontSizePx,
                   fontWeight: "bold",
-                  opacity: 0.9,
+                  border: "1px solid rgba(239, 68, 68, 0.35)",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.45), inset 0 1px 1px rgba(255,255,255,0.15)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: scalePx(3, 2),
                 }}>
-                  {wolfBadgeText || "Sói"}
+                  🐺 {wolfBadgeText || "Sói"}
                 </div>
               )}
 
@@ -1330,15 +1499,13 @@ export default function PlayerPositions({
                   bottom: -badgeOffsetPx,
                   left: "50%",
                   transform: "translateX(-50%)",
-                  background: "var(--accent-surface)",
-                  color: "var(--text)",
-                  border: "1px solid var(--border)",
                   padding: badgePadding,
                   borderRadius: scalePx(6, 3),
                   fontSize: badgeFontSizePx,
                   fontWeight: "bold",
-                  opacity: 0.95,
                   width: "max-content",
+                  zIndex: 2,
+                  ...getRoleBadgeStyle(roleBadgeText),
                 }}>
                   {roleBadgeText}
                 </div>
@@ -1350,16 +1517,19 @@ export default function PlayerPositions({
                   bottom: roleBadgeText ? -(badgeOffsetPx + scalePx(24, 12)) : -badgeOffsetPx,
                   left: "50%",
                   transform: "translateX(-50%)",
-                  background: "#555",
-                  color: "#fff",
+                  background: "linear-gradient(135deg, #475569, #334155)",
+                  color: "#cbd5e1",
                   padding: badgePadding,
                   borderRadius: scalePx(6, 3),
                   fontSize: badgeFontSizePx,
                   fontWeight: "bold",
-                  opacity: 0.9,
                   width: "max-content",
+                  border: "1px solid rgba(245, 158, 11, 0.4)",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
+                  animation: "pulseCaution 2s ease-in-out infinite",
+                  zIndex: 3,
                 }}>
-                  Mất kết nối
+                  🔌 Mất kết nối
                 </div>
               )}
 
@@ -1369,16 +1539,18 @@ export default function PlayerPositions({
                   top: -badgeOffsetPx,
                   left: "50%",
                   transform: "translateX(-50%)",
-                  background: "#36506f",
-                  color: "#fff",
+                  background: "linear-gradient(135deg, #1e3a8a, #0f172a)",
+                  color: "#93c5fd",
                   padding: badgePadding,
                   borderRadius: scalePx(6, 3),
                   fontSize: badgeFontSizePx,
                   fontWeight: "bold",
-                  opacity: 0.9,
                   width: "max-content",
+                  border: "1px solid rgba(59, 130, 246, 0.4)",
+                  boxShadow: "0 2px 6px rgba(59, 130, 246, 0.2)",
+                  zIndex: 2,
                 }}>
-                  Trong trận
+                  🎮 Trong trận
                 </div>
               )}
 
@@ -1387,14 +1559,16 @@ export default function PlayerPositions({
                   position: "absolute",
                   top: -hpBadgeTopPx,
                   right: -scalePx(6, 3),
-                  //background: "rgba(170,20,35,0.95)",
-                  color: "#fff",
+                  background: "rgba(15, 17, 21, 0.85)",
+                  backdropFilter: "blur(4px)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
                   padding: hpBadgePadding,
                   borderRadius: 999,
                   fontSize: hpBadgeFontSizePx,
                   fontWeight: "bold",
                   letterSpacing: scaleNum(0.5, 0.25),
-                  boxShadow: "0 0 0 1px rgba(255,255,255,0.35)",
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.45)",
+                  zIndex: 2,
                 }}>
                   {filledHearts.map((_, idx) => (
                     <span
@@ -1402,20 +1576,30 @@ export default function PlayerPositions({
                       style={{
                         display: "inline-block",
                         animation: heartShaking ? "playerHeartShake 850ms ease-in-out infinite" : undefined,
+                        color: "#ef4444",
+                        textShadow: "0 0 6px rgba(239, 68, 68, 0.6)",
                       }}
                     >
                       ♥️
                     </span>
                   ))}
                   {emptyHearts.map((_, idx) => (
-                    <span key={`empty-${idx}`}>♡</span>
+                    <span key={`empty-${idx}`} style={{ opacity: 0.35, color: "#94a3b8" }}>♡</span>
                   ))}
                 </div>
               )}
 
-              <div style={{ textAlign: "center", pointerEvents: "none" }}>
-                <div style={{ fontWeight: "bold" }}>{p.name}</div>
-                <div style={{ opacity: 0.6, fontSize: playerSubFontSizePx }}>
+              <div style={{ textAlign: "center", pointerEvents: "none", zIndex: 1 }}>
+                <div style={{
+                  fontWeight: 600,
+                  textDecoration: isDead ? "line-through" : undefined,
+                  textDecorationColor: isDead ? "rgba(239, 68, 68, 0.5)" : undefined,
+                  opacity: isDead ? 0.45 : 1,
+                  color: isDead ? "#94a3b8" : "#f8fafc",
+                  fontFamily: "'Inter', system-ui, sans-serif",
+                  letterSpacing: "-0.01em",
+                }}>{p.name}</div>
+                <div style={{ opacity: isDead ? 0.3 : 0.5, fontSize: playerSubFontSizePx }}>
                   {p.id === clientId ? "(Bạn)" : ""}
                 </div>
               </div>

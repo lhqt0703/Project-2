@@ -1482,87 +1482,99 @@ export default function Game() {
       )}
       {angel.panel}
       {/* Hiển thị bố cục vị trí người chơi khi có room.positions */}
-      {roomForDisplay?.positions && (
-        <div style={{ margin: "2rem auto" }}>
-          <PlayerPositions
-            mode="view"
-            roomOverride={roomForDisplay}
-            onPlayerClick={handlePlayerClick}
-            onPlayerDoubleClick={handlePlayerDoubleClick}
-            seerResult={isSeerTurnActive ? seer.seerResult : null}
-            deadPlayersOverride={deadPlayersOverrideForRender}
-            bulletAnimation={hunterBulletAnim}
-            highlightPlayerId={highlightPlayerId}
-            secondaryHighlightPlayerIds={secondaryHighlightPlayerIds}
-            cursedHighlightPlayerIds={cursed.playerPositionsProps.cursedHighlightPlayerIds}
-            cursedHighlightIsDanger={cursed.playerPositionsProps.cursedHighlightIsDanger}
-            verdictLivePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.secondaryIds}
-            verdictDiePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.dangerIds}
-            showRoleBadges={!!roleBadgesForDisplay}
-            roleBadges={roleBadgesForDisplay}
-            activeNightRole={isHost && isSequentialNight ? currentNightTurnRole : null}
-            suppressNightActionProgress={autoTrialHighlightSuppressed}
-            selectedOutlinePlayerId={
-              dayVote.playerPositionsProps.selectedOutlinePlayerId ||
-              guardian.playerPositionsProps.selectedOutlinePlayerId ||
-              protector.playerPositionsProps.selectedOutlinePlayerId ||
-              merchant.playerPositionsProps.selectedOutlinePlayerId ||
-              cursed.playerPositionsProps.selectedOutlinePlayerId ||
-              witch.playerPositionsProps.selectedOutlinePlayerId ||
-              elemental.playerPositionsProps.selectedOutlinePlayerId ||
-              hunter.playerPositionsProps.selectedOutlinePlayerId ||
-              love.playerPositionsProps.selectedOutlinePlayerId ||
-              angel.playerPositionsProps.selectedOutlinePlayerId ||
-              null
-            }
-            selectedOutlinePlayerIds={(wolf.playerPositionsProps.selectedOutlinePlayerIds || []).filter(
-              (id): id is string => !!id
-            )}
-            dangerPlayerIds={Array.from(new Set([
-              ...(witch.playerPositionsProps.dangerPlayerIds || []),
-              ...dangerHighlightPlayerIds,
-            ]))}
-            showWolfVoteBadges={dayVote.playerPositionsProps.showWolfVoteBadges || wolf.playerPositionsProps.showWolfVoteBadges}
-            wolfVoteVoterIds={
-              dayVote.playerPositionsProps.showWolfVoteBadges
-                ? dayVote.playerPositionsProps.wolfVoteVoterIds
-                : wolf.playerPositionsProps.wolfVoteVoterIds
-            }
-            voteWeightsByVoterId={dayVote.playerPositionsProps.showWolfVoteBadges ? dayVoteWeightsByVoterId : undefined}
-            showWolfBadges={wolf.playerPositionsProps.showWolfBadges}
-            wolfBadgePlayerIds={wolf.playerPositionsProps.wolfBadgePlayerIds}
-            wolfBadgeRoles={wolf.playerPositionsProps.wolfBadgeRoles}
-            cheesePlayerIds={sync.merchantCheeseMarkPlayerIds}
-            trialOrangePlayerId={dayVote.playerPositionsProps.trialOrangePlayerId}
-            trialWhitePlayerIds={dayVote.playerPositionsProps.trialWhitePlayerIds}
-            trialGreenPlayerId={dayVote.playerPositionsProps.trialGreenPlayerId}
-          />
-          <RoleCharacterPortrait
-            role={shouldShowRolePortrait ? role : null}
-            backgroundAssetOverride={shouldShowRolePortrait ? loveHybridBackgroundAsset : null}
-          />
-          {companionRoleSrc && !(sync.gameEnded && canViewLog) && (
-            <img
-              className="role-companion-overlay"
-              src={companionRoleSrc}
-              alt=""
-              style={{
-                position: "fixed",
-                right: 0,
-                bottom: 0,
-                width: "auto",
-                height: `${playerFrameHeightPx}px`,
-                maxWidth: "min(50vw, 360px)",
-                objectFit: "contain",
-                objectPosition: "right bottom",
-                pointerEvents: "none",
-                userSelect: "none",
-                zIndex: 10,
-              }}
+      {roomForDisplay?.positions && (() => {
+        const activeReplayEvent = roomForDisplay?.isReplay && roomForDisplay?.replayEvents && roomForDisplay?.replayIndex !== undefined
+          ? roomForDisplay.replayEvents[roomForDisplay.replayIndex - 1]
+          : null;
+        const replayActorIds = activeReplayEvent?.actorIds || [];
+        const replayTargetIds = activeReplayEvent?.targetIds || [];
+
+        return (
+          <>
+            <div style={{ margin: "2rem auto" }}>
+              <PlayerPositions
+                mode="view"
+                roomOverride={roomForDisplay}
+                onPlayerClick={handlePlayerClick}
+                onPlayerDoubleClick={handlePlayerDoubleClick}
+                seerResult={isSeerTurnActive ? seer.seerResult : null}
+                deadPlayersOverride={deadPlayersOverrideForRender}
+                bulletAnimation={hunterBulletAnim}
+                highlightPlayerId={highlightPlayerId}
+                secondaryHighlightPlayerIds={secondaryHighlightPlayerIds}
+                cursedHighlightPlayerIds={cursed.playerPositionsProps.cursedHighlightPlayerIds}
+                cursedHighlightIsDanger={cursed.playerPositionsProps.cursedHighlightIsDanger}
+                verdictLivePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.secondaryIds}
+                verdictDiePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.dangerIds}
+                showRoleBadges={!!roleBadgesForDisplay}
+                roleBadges={roleBadgesForDisplay}
+                activeNightRole={isHost && isSequentialNight ? currentNightTurnRole : null}
+                suppressNightActionProgress={autoTrialHighlightSuppressed}
+                selectedOutlinePlayerId={
+                  dayVote.playerPositionsProps.selectedOutlinePlayerId ||
+                  guardian.playerPositionsProps.selectedOutlinePlayerId ||
+                  protector.playerPositionsProps.selectedOutlinePlayerId ||
+                  merchant.playerPositionsProps.selectedOutlinePlayerId ||
+                  cursed.playerPositionsProps.selectedOutlinePlayerId ||
+                  witch.playerPositionsProps.selectedOutlinePlayerId ||
+                  elemental.playerPositionsProps.selectedOutlinePlayerId ||
+                  hunter.playerPositionsProps.selectedOutlinePlayerId ||
+                  love.playerPositionsProps.selectedOutlinePlayerId ||
+                  angel.playerPositionsProps.selectedOutlinePlayerId ||
+                  null
+                }
+                selectedOutlinePlayerIds={(wolf.playerPositionsProps.selectedOutlinePlayerIds || []).filter(
+                  (id): id is string => !!id
+                )}
+                dangerPlayerIds={Array.from(new Set([
+                  ...(witch.playerPositionsProps.dangerPlayerIds || []),
+                  ...dangerHighlightPlayerIds,
+                ]))}
+                showWolfVoteBadges={dayVote.playerPositionsProps.showWolfVoteBadges || wolf.playerPositionsProps.showWolfVoteBadges}
+                wolfVoteVoterIds={
+                  dayVote.playerPositionsProps.showWolfVoteBadges
+                    ? dayVote.playerPositionsProps.wolfVoteVoterIds
+                    : wolf.playerPositionsProps.wolfVoteVoterIds
+                }
+                voteWeightsByVoterId={dayVote.playerPositionsProps.showWolfVoteBadges ? dayVoteWeightsByVoterId : undefined}
+                showWolfBadges={wolf.playerPositionsProps.showWolfBadges}
+                wolfBadgePlayerIds={wolf.playerPositionsProps.wolfBadgePlayerIds}
+                wolfBadgeRoles={wolf.playerPositionsProps.wolfBadgeRoles}
+                cheesePlayerIds={sync.merchantCheeseMarkPlayerIds}
+                trialOrangePlayerId={dayVote.playerPositionsProps.trialOrangePlayerId}
+                trialWhitePlayerIds={dayVote.playerPositionsProps.trialWhitePlayerIds}
+                trialGreenPlayerId={dayVote.playerPositionsProps.trialGreenPlayerId}
+                replayActorIds={replayActorIds}
+                replayTargetIds={replayTargetIds}
+              />
+            </div>
+            <RoleCharacterPortrait
+              role={shouldShowRolePortrait ? role : null}
+              backgroundAssetOverride={shouldShowRolePortrait ? loveHybridBackgroundAsset : null}
             />
-          )}
-        </div>
-      )}
+            {companionRoleSrc && !(sync.gameEnded && canViewLog) && (
+              <img
+                className="role-companion-overlay"
+                src={companionRoleSrc}
+                alt=""
+                style={{
+                  position: "fixed",
+                  right: 0,
+                  bottom: 0,
+                  width: "auto",
+                  height: `${playerFrameHeightPx}px`,
+                  maxWidth: "min(50vw, 360px)",
+                  objectFit: "contain",
+                  objectPosition: "right bottom",
+                  pointerEvents: "none",
+                  userSelect: "none",
+                  zIndex: 10,
+                }}
+              />
+            )}
+          </>
+        );
+      })()}
 
       {canShowConfirmModals && seer.modal}
       {canShowConfirmModals && cursed.modal}

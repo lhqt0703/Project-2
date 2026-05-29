@@ -24,7 +24,9 @@ export function saveMatchHistory(room: Room) {
         name: p.name,
         role: room.playerRoles?.[p.id] || "Dân làng",
       })),
+      positions: room.positions || [],
       gameEventLog: room.gameEventLog || [],
+      gameLog: room.gameLog || [],
     };
 
     const fileName = `match_${room.id}_${Date.now()}.json`;

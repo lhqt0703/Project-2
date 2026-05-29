@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { socket } from "../socket";
+import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
 
 export default function DevSpawn() {
   // Spawner States
@@ -68,10 +69,12 @@ export default function DevSpawn() {
       }
     };
 
+    socket.on("roomCreated", handleRoomUpdated);
     socket.on("roomUpdated", handleRoomUpdated);
     socket.on("gameLogUpdated", handleGameLogUpdated);
 
     return () => {
+      socket.off("roomCreated", handleRoomUpdated);
       socket.off("roomUpdated", handleRoomUpdated);
       socket.off("gameLogUpdated", handleGameLogUpdated);
     };
@@ -114,11 +117,11 @@ export default function DevSpawn() {
     if (!selectedMatch) return;
     setReplayError("");
     socket.emit("startScenarioReplay", { fileName: selectedMatch }, (res: any) => {
-      if (res?.ok && res.roomId) {
+      if (res?.ok && res.roomId && res.room) {
         setActiveReplayRoomId(res.roomId);
-        setReplayIndex(0);
-        setTotalSteps(0);
-        setGameLogs([]);
+        setReplayIndex(res.room.replayIndex || 0);
+        setTotalSteps(res.room.replayEvents?.length || 0);
+        setGameLogs(res.room.gameLog || []);
         setReplayFinished(false);
       } else {
         setReplayError(res?.error || "Không thể khởi tạo replay room.");
@@ -378,6 +381,24 @@ export default function DevSpawn() {
                 Mở Trang Game (Debug Anim)
               </button>
             </div>
+            <button
+              onClick={shootWinnerConfettiFromSides}
+              style={{
+                width: "100%",
+                marginTop: "12px",
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid rgba(250, 204, 21, 0.35)",
+                background: "rgba(250, 204, 21, 0.12)",
+                color: "#fde68a",
+                fontWeight: 700,
+                fontSize: "0.875rem",
+                cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+            >
+              Test hiệu ứng thắng
+            </button>
           </div>
         </div>
 
@@ -551,7 +572,7 @@ export default function DevSpawn() {
                       [Terminal] Đang chờ bước kế tiếp... Bấm &quot;Bước Tiếp Theo&quot; để phát kịch bản.
                     </div>
                   ) : (
-                    allLogEntries.map((log: any, idx: number) => {
+                    allLogEntries.filter((log: any) => log.message).map((log: any, idx: number) => {
                       const isNight = log.phase === "night";
                       return (
                         <div key={idx} style={{

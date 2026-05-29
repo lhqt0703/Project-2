@@ -77,50 +77,17 @@ function recordSocketLog(direction: "in" | "out", event: string, args: unknown[]
 
 let hasDevPlayer = false;
 
-function scanForDevPlayer(obj: any): boolean {
-  if (!obj || typeof obj !== "object") return false;
-  
-  if (typeof obj.id === "string" && obj.id.startsWith("dev-")) {
-    return true;
-  }
-  
-  if (Array.isArray(obj.players)) {
-    for (const p of obj.players) {
-      if (p && typeof p.id === "string" && p.id.startsWith("dev-")) {
-        return true;
-      }
-    }
-  }
-
-  try {
-    for (const key of Object.keys(obj)) {
-      const val = obj[key];
-      if (val && typeof val === "object") {
-        if (scanForDevPlayer(val)) return true;
-      }
-    }
-  } catch {
-    // Avoid any potential cyclic reference exceptions
-  }
-  return false;
-}
-
-function checkHasDevPlayer(args: unknown[]) {
-  if (hasDevPlayer) return true;
-  for (const arg of args) {
-    if (arg && typeof arg === "object") {
-      if (scanForDevPlayer(arg)) {
-        hasDevPlayer = true;
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 socket.onAny((event, ...args) => {
+  if (event === "roomUpdated" || event === "roomJoined") {
+    const room = args[0];
+    if (room && typeof room === "object" && Array.isArray(room.players)) {
+      const containsDev = room.players.some((p: any) => p && typeof p.id === "string" && p.id.startsWith("dev-"));
+      hasDevPlayer = containsDev;
+    }
+  }
+
   recordSocketLog("in", event, args);
-  if (checkHasDevPlayer(args)) {
+  if (hasDevPlayer) {
     console.log(`%c[Socket IN] ${event}`, "color: #10b981; font-weight: bold", args);
   }
 });

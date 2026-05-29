@@ -61,10 +61,9 @@ export function useCursedRole({
   const isCursedTurnActive = useMemo(() => {
     if (phase !== "night") return false;
     if (role !== CURSED_ROLE) return false;
-    if (!hasUsesRemaining) return false;
     if (allNightActionsSimultaneous) return true;
     return currentNightTurnRole === CURSED_ROLE;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, hasUsesRemaining, phase, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, phase, role]);
 
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;

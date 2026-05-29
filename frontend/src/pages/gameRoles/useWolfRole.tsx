@@ -107,6 +107,17 @@ export function useWolfRole({
     }
   }, [isWolfTeam, isWolfTurnActive]);
 
+  useEffect(() => {
+    // If the server says we are unlocked, sync our local lock state.
+    if (clientId && wolfLocked) {
+      const serverLocked = !!wolfLocked[clientId];
+      if (!serverLocked && hasSubmittedLock) {
+        setHasSubmittedLock(false);
+        hasSubmittedLockRef.current = false;
+      }
+    }
+  }, [clientId, wolfLocked, hasSubmittedLock]);
+
   const isLocked = useMemo(() => {
     if (clientId && wolfLocked?.[clientId]) return true;
     return hasSubmittedLock;

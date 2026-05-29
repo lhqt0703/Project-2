@@ -32,6 +32,8 @@ interface GameLogPanelProps {
   targetRoleDisplayOrderByPlayerId?: TargetRoleDisplayOrderByPlayerId;
   onHighlightPlayer: (payload: HighlightPayload) => void;
   canViewNightLogs?: boolean;
+  isHost?: boolean;
+  onAddCustomLog?: (message: string) => void;
 }
 
 function getRoleName(playerId: string, rolesByPlayerId: RolesByPlayerId): string {
@@ -1300,6 +1302,9 @@ function LogEntryLine({
     case "host_ended_game":
       return <LogItem emoji="🛑" style={lineStyle}>Quản trò đã cho ngừng ván chơi</LogItem>;
 
+    case "custom_log":
+      return <LogItem emoji="📝" style={lineStyle}>{entry.message}</LogItem>;
+
     default:
       return <LogItem emoji="📝" style={lineStyle}>(log không rõ)</LogItem>;
   }
@@ -1312,6 +1317,8 @@ export default function GameLogPanel({
   targetRoleDisplayOrderByPlayerId,
   onHighlightPlayer,
   canViewNightLogs = true,
+  isHost = false,
+  onAddCustomLog,
 }: GameLogPanelProps) {
   const [showRolesOnly, setShowRolesOnly] = useState(false);
   const [eliminationFocus, setEliminationFocus] = useState<EliminationFocus | null>(null);
@@ -1499,12 +1506,69 @@ export default function GameLogPanel({
           )}
         </div>
 
+        {isHost && onAddCustomLog && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const form = e.currentTarget;
+              const input = form.elements.namedItem("customLogMsg") as HTMLInputElement;
+              if (input && input.value.trim()) {
+                onAddCustomLog(input.value.trim());
+                input.value = "";
+              }
+            }}
+            style={{
+              display: "flex",
+              gap: "10px",
+              marginBottom: "20px",
+              background: "rgba(255, 255, 255, 0.03)",
+              border: "1px solid rgba(255, 255, 255, 0.08)",
+              padding: "12px 16px",
+              borderRadius: "12px",
+              alignItems: "center"
+            }}
+          >
+            <span style={{ fontSize: "16px" }}>✍️</span>
+            <input
+              name="customLogMsg"
+              type="text"
+              placeholder="Thêm điều cần bổ sung vào nhật ký..."
+              style={{
+                flex: 1,
+                background: "transparent",
+                border: "none",
+                color: "#fff",
+                fontSize: "13.5px",
+                outline: "none"
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                background: "linear-gradient(135deg, #6c5ce7 0%, #4834d4 100%)",
+                border: "none",
+                color: "#fff",
+                padding: "6px 16px",
+                borderRadius: "8px",
+                fontSize: "12px",
+                fontWeight: "bold",
+                cursor: "pointer",
+                boxShadow: "0 4px 12px rgba(108, 92, 231, 0.2)",
+                transition: "all 0.2s ease"
+              }}
+            >
+              Ghi log
+            </button>
+          </form>
+        )}
+
         {(nights || []).map((n) => {
           const nightEntries = canViewNightLogs ? (n.entries || []).filter((e) => e.phase !== "day") : [];
           const displayNightEntries = nightEntries.filter((e) => {
             if (isLegacyAngelReviveLog(e)) return false;
             if (e.type === "saved_by_witch" || e.type === "saved_by_guardian" || e.type === "elemental_buff") return false;
             if (e.type === "wolf_vote" && (e.voteBreakdown?.length || 0) <= 1) return false;
+            if (e.type === "custom_log" && e.message?.startsWith("[Bước ")) return false;
             return true;
           });
           const rawDayEntries = (n.entries || []).filter((e) => e.phase === "day" && !isLegacyAngelReviveLog(e));
@@ -1515,6 +1579,7 @@ export default function GameLogPanel({
             (e) => {
               if (e.type === "saved_by_guardian" || e.type === "saved_by_witch" || e.type === "trial_started") return false;
               if (hasSkippedDayVote && e.type === "day_result" && !e.targetId) return false;
+              if (e.type === "custom_log" && e.message?.startsWith("[Bước ")) return false;
               if (e.type === "eliminated") {
                 const targetIds = e.targetIds || [];
                 const trialVerdictOnly =

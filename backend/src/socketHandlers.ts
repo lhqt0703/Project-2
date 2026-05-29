@@ -45,6 +45,7 @@ import {
   type EliminationCause,
   type Room,
   type RoomGameRules,
+  type NightActionRole,
 } from "./serverTypes.js";
 import {
   appendLogEntry,
@@ -236,6 +237,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     startNightTurnByIndex,
     startNightTurnFlow,
     finishWolfVoting,
+    getEffectiveNightActionOrder,
   } = nightFlow;
 
   const {
@@ -2596,6 +2598,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
       room.wolfBonusBiteThisNight = !!room.wolfExtraBiteNextNight;
       room.wolfExtraBiteNextNight = false;
+      room.killedTonight = null;
       room.killedTonightExtra = null;
 
       if (room.wolfBonusBiteThisNight) {
@@ -3016,45 +3019,35 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const targetRole = room.playerRoles?.[targetId] || null;
     if (!targetRole) return;
 
-    const targetIsCurrentTurn =
-      room.nightTurnRole === "Sói"
-        ? isWolfAlignedPlayer(room, targetId)
-        : room.nightTurnRole === SPIRIT_WOLF_ROLE
-          ? targetRole === SPIRIT_WOLF_ROLE
-          : targetRole === room.nightTurnRole;
-    if (!targetIsCurrentTurn) return;
+    const order = getEffectiveNightActionOrder(room);
+    const targetRoleInOrder =
+      isWolfAlignedPlayer(room, targetId)
+        ? "Sói"
+        : targetRole === SPIRIT_WOLF_ROLE
+          ? SPIRIT_WOLF_ROLE
+          : targetRole;
+    const targetRoleIndex = order.indexOf(targetRoleInOrder as NightActionRole);
 
-    if (room.nightTurnPaused) {
-      room.nightTurnRemainingMs = Math.max(0, (room.nightTurnRemainingMs ?? 0) + extraMs);
+    if (targetRoleIndex >= 0) {
+      // Revert/set the night turn to this role's turn so they can act.
+      room.nightTurnIndex = targetRoleIndex;
+      room.nightTurnRole = targetRoleInOrder as NightActionRole;
+
+      if (room.nightTurnPaused) {
+        room.nightTurnRemainingMs = Math.max(0, (room.nightTurnRemainingMs ?? 0) + extraMs);
+      } else {
+        clearNightTurnTimer(room);
+        clearSpiritWolfDecisionTimer(room);
+        
+        // Give them the full extra 10 seconds to act.
+        const durationMs = extraMs;
+        startNightTurnByIndex(roomId, targetRoleIndex, { durationMs, initializeWolfVotes: false });
+      }
+
       appendExtraTimeLog(targetRole);
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       return;
     }
-
-    room.nightTurnDeadline = Math.max(room.nightTurnDeadline ?? Date.now(), Date.now()) + extraMs;
-    const remainingMs = Math.max(0, room.nightTurnDeadline - Date.now());
-
-    if (room.nightTurnRole === "Sói") {
-      startWolfPhase(roomId, {
-        durationMs: remainingMs,
-        initializeVotes: false,
-      });
-    } else if (room.nightTurnRole === SPIRIT_WOLF_ROLE) {
-      clearNightTurnTimer(room);
-      clearSpiritWolfDecisionTimer(room);
-      room.spiritWolfDecisionDeadline = room.nightTurnDeadline;
-      room.nightTurnTimer = setTimeout(() => {
-        finishSpiritWolfTurn(roomId, true);
-      }, remainingMs);
-    } else {
-      clearNightTurnTimer(room);
-      room.nightTurnTimer = setTimeout(() => {
-        startNightTurnByIndex(roomId, (room.nightTurnIndex ?? 0) + 1);
-      }, remainingMs);
-    }
-
-    appendExtraTimeLog(targetRole);
-    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
   socket.on("hostEliminatePlayerForRules", ({ roomId, targetId }: { roomId: string; targetId: string }) => {

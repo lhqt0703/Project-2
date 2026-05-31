@@ -176,7 +176,7 @@ export default function DevSpawn() {
             Antigravity Dev Center
           </h1>
           <p style={{ margin: "4px 0 0 0", color: "#94a3b8", fontSize: "0.875rem" }}>
-            Quản trị & phát lại kịch bản nâng cao dành cho nhà phát triển Ma Sói
+            Quản trị & phát lại kịch bản nâng cao dành cho nhà phát triển Dạ Nghịch
           </p>
         </div>
         <div style={{

@@ -297,6 +297,7 @@ function ActionSpan({
       {showPopup && (
         <div
           ref={popupRef}
+          className="game-log-tooltip"
           style={{
             position: "absolute",
             top: "100%",
@@ -308,7 +309,10 @@ function ActionSpan({
             padding: "6px 10px",
             boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
             zIndex: 1000,
-            whiteSpace: "nowrap",
+            whiteSpace: "pre-line",
+            wordBreak: "break-word",
+            maxWidth: "min(320px, calc(100vw - 48px))",
+            width: "max-content",
             fontSize: 13,
           }}
         >
@@ -412,6 +416,7 @@ function RoleSpan({
       {showPopup && popupMode !== "none" && (
         <div
           ref={popupRef}
+          className="game-log-tooltip"
           style={{
             position: "absolute",
             top: "100%",
@@ -423,7 +428,10 @@ function RoleSpan({
             padding: "6px 10px",
             boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
             zIndex: 1000,
-            whiteSpace: "nowrap",
+            whiteSpace: "pre-line",
+            wordBreak: "break-word",
+            maxWidth: "min(320px, calc(100vw - 48px))",
+            width: "max-content",
             fontSize: 13,
           }}
         >
@@ -728,7 +736,7 @@ function LogEntryLine({
       const dieVoterIds = entry.dieVoterIds || [];
       const liveNamesText = getPlayerNamesText(liveVoterIds, playerNamesById);
       const dieNamesText = getPlayerNamesText(dieVoterIds, playerNamesById);
-      const allVoteTooltip = `Người chơi sống: ${liveNamesText} | Người chơi chết: ${dieNamesText}`;
+      const allVoteTooltip = `Người chơi sống: ${liveNamesText}\nNgười chơi chết: ${dieNamesText}`;
 
       return (
         <LogItem emoji="⚖️" style={lineStyle}>
@@ -1460,7 +1468,7 @@ export default function GameLogPanel({
         .game-log-night-section, .game-log-day-section {
           margin-bottom: 20px;
           border-radius: 12px;
-          overflow: hidden;
+          /* overflow: hidden; -- Removed to prevent clipping tooltips */
           transition: all 0.3s ease;
           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
         }
@@ -1485,6 +1493,8 @@ export default function GameLogPanel({
           align-items: center;
           gap: 10px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+          border-top-left-radius: 11px;
+          border-top-right-radius: 11px;
         }
 
         .game-log-night-header {
@@ -1507,6 +1517,8 @@ export default function GameLogPanel({
         }
 
         .game-log-item {
+          position: relative;
+          z-index: 1;
           opacity: 0; /* Ẩn mặc định để GSAP trượt hiện dần */
           font-size: 14px;
           line-height: 1.6;
@@ -1526,6 +1538,11 @@ export default function GameLogPanel({
         .game-log-item:hover {
           background: rgba(255, 255, 255, 0.03);
           transform: translateX(2px);
+          z-index: 2;
+        }
+
+        .game-log-item:has(.game-log-tooltip) {
+          z-index: 50;
         }
 
         .game-log-item-icon {

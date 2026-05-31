@@ -1,4 +1,7 @@
 import React, { useState } from "react";
+import firstPlaceSvg from "../assets/1st.svg";
+import secondPlaceSvg from "../assets/2nd.svg";
+import thirdPlaceSvg from "../assets/3rd.svg";
 
 interface ScoreBreakdownEntry {
   category: string;
@@ -210,34 +213,43 @@ export const ScoreboardModal: React.FC<ScoreboardModalProps> = ({ open, onClose,
                     }}
                   >
                     {/* Rank indicator */}
-                    <div
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: "50%",
-                        background: isMVP
-                          ? "#f1c40f"
-                          : index === 1
-                          ? "#silver"
-                          : index === 2
-                          ? "#cd7f32"
-                          : "rgba(255,255,255,0.08)",
-                        color: isMVP ? "#000" : "#fff",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontWeight: 800,
-                        fontSize: 13,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {isMVP ? "👑" : index + 1}
-                    </div>
+                    {index === 0 ? (
+                      <img src={firstPlaceSvg} alt="1st" style={{ width: 30, height: 30, flexShrink: 0 }} />
+                    ) : index === 1 ? (
+                      <img src={secondPlaceSvg} alt="2nd" style={{ width: 30, height: 30, flexShrink: 0 }} />
+                    ) : index === 2 ? (
+                      <img src={thirdPlaceSvg} alt="3rd" style={{ width: 30, height: 30, flexShrink: 0 }} />
+                    ) : (
+                      <div
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: "50%",
+                          background: isMVP
+                            ? "#f1c40f"
+                            : "rgba(255,255,255,0.08)",
+                          color: isMVP ? "#000" : "#fff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontWeight: 800,
+                          fontSize: 13,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {isMVP ? "👑" : index + 1}
+                      </div>
+                    )}
 
                     {/* Name & Role */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ fontWeight: 800, fontSize: 15 }}>{player.name}</span>
+                        {isMVP && (
+                          <span style={{ fontSize: 10, padding: "2px 6px", background: "rgba(241, 196, 15, 0.15)", color: "#f1c40f", borderRadius: 4, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: "2px" }}>
+                            👑 MVP
+                          </span>
+                        )}
                         {player.aliveAtEnd && (
                           <span style={{ fontSize: 10, padding: "2px 6px", background: "rgba(46, 204, 113, 0.2)", color: "#2ecc71", borderRadius: 4, fontWeight: 700 }}>
                             SỐNG

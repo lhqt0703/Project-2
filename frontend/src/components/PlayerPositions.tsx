@@ -3,6 +3,9 @@ import { socket, clientId } from "../socket";
 import { useRoomContext } from "../context/RoomContext";
 import { getDeterministicSlots1to18, getDeterministicSlots19Plus } from "./layouts";
 import ElementalVFX from "./ElementalVFX";
+import BorderGlow from "./BorderGlow";
+import Orb from "./Orb";
+import MagicRings from "./MagicRings";
 
 interface PlayerPosition {
   playerId: string;
@@ -353,6 +356,7 @@ export default function PlayerPositions({
   trialGreenPlayerId,
   replayActorIds,
   replayTargetIds,
+  showActionGlow,
 }: {
   onPlayerClick: (playerId: string) => void;
   onPlayerDoubleClick?: (playerId: string) => void;
@@ -387,6 +391,7 @@ export default function PlayerPositions({
   trialGreenPlayerId?: string | null;
   replayActorIds?: string[];
   replayTargetIds?: string[];
+  showActionGlow?: boolean;
 }) {
   const { room: contextRoom } = useRoomContext();
   const room: RoomLike | null = roomOverride ?? (contextRoom as RoomLike | null);
@@ -1322,79 +1327,24 @@ export default function PlayerPositions({
 
           const circleTransform = `translate(-50%,-50%)${extraDx || extraDy ? ` translate(${extraDx}px, ${extraDy}px)` : ""}`;
 
-          return (
-            <div
-              key={pos.playerId}
-              onPointerDown={(e) => {
-                lastPointerTypeRef.current = e.pointerType || null;
-                if (!isEditor) return;
-                if (swapSource === "SELECTING") {
-                  setSwapSource(pos.playerId);
-                } else if (swapSource) {
-                  onPointerDown(e, pos.playerId); // Trigger swap logic
-                } else {
-                  onPointerDown(e, pos.playerId); // Trigger drag
-                }
-              }}
-              onClick={() => {
-                if (dragging) return;
-                const isTouchTap = lastPointerTypeRef.current === "touch";
-                if (isTouchTap && onPlayerDoubleClick) {
-                  const now = Date.now();
-                  const lastTap = lastTapRef.current;
-                  if (lastTap && lastTap.playerId === p.id && now - lastTap.at <= 360) {
-                    onPlayerDoubleClick(p.id);
-                    lastTapRef.current = null;
-                  } else {
-                    lastTapRef.current = { playerId: p.id, at: now };
-                  }
-                }
-                onPlayerClick(p.id);
-              }}
-              onDoubleClick={() => {
-                if (!dragging) onPlayerDoubleClick?.(p.id);
-              }}
-              className={`player-circle-token ${isDead ? "is-dead" : ""} ${isSwapSelected ? "is-swap-selected" : ""} ${isWitchDanger && !isVerdictDieHighlighted ? "witch-danger" : ""}`}
-              style={{
-                position: "absolute",
-                left,
-                top,
-                transform: circleTransform,
-                width: circleSizePx,
-                height: circleSizePx,
-                borderRadius: circleRadiusPx,
-                border: isReplayTarget 
-                  ? "3px solid rgb(245, 158, 11)" 
-                  : isReplayActor 
-                    ? "2px solid rgb(16, 185, 129)" 
-                    : isSwapSelected 
-                      ? `${selectedBorderPx}px solid #2196F3` 
-                      : isDead 
-                        ? `${circleBorderPx}px solid rgba(239, 68, 68, 0.35)` 
-                        : `${circleBorderPx}px solid rgba(255, 255, 255, 0.08)`,
-                boxShadow: isReplayTarget
-                  ? "0 0 22px rgba(245, 158, 11, 0.75), inset 0 0 10px rgba(245, 158, 11, 0.35)"
-                  : isReplayActor
-                    ? "0 0 12px rgba(16, 185, 129, 0.45)"
-                    : undefined,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: playerFontSizePx,
-                cursor: isEditor ? (swapSource ? "crosshair" : "grab") : "pointer",
-                zIndex: dragging === pos.playerId ? 10 : 1,
-                outline: showSelectedOutline ? `${selectedBorderPx}px solid rgba(255,165,0,0.9)` : undefined,
-                transition: dragging === pos.playerId
-                  ? "none"
-                  : "left 0.2s, top 0.2s, width 220ms ease, height 220ms ease, border-radius 220ms ease, box-shadow 300ms ease, transform 0.2s ease", // Smooth move + resize + glow
-              }}
-            >
+          const isSelfGlow = !!showActionGlow && pos.playerId === clientId;
+
+          const innerContent = (
+            <>
+              {/* WebGL Orb highlight overlay for night phase */}
+              {showSelectedOutline && room.phase === "night" && (
+                <Orb hue={160} />
+              )}
+
               {/* Elemental VFX (Ice, Fire, Thunder, Darkness) */}
               {vfxType && <ElementalVFX type={vfxType} />}
 
               {/* Concentric Halo Rings */}
               {isSeerResult && (
-                <div className="player-halo halo-seer" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid ${seerResult!.isWolf ? "#ef4444" : "#f1f5f9"}` }} />
+                <MagicRings
+                  color={seerResult!.isWolf ? "#f38991" : "#e9e4ff"}
+                  colorTwo={seerResult!.isWolf ? "#e4acb5" : "#acade4"}
+                />
               )}
               {isVerdictLiveHighlighted && (
                 <div className="player-halo halo-live" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #10b981` }} />
@@ -1617,6 +1567,95 @@ export default function PlayerPositions({
                   {p.id === clientId ? "(Bạn)" : ""}
                 </div>
               </div>
+            </>
+          );
+
+          const tokenProps = {
+            key: pos.playerId,
+            onPointerDown: (e: React.PointerEvent) => {
+              lastPointerTypeRef.current = e.pointerType || null;
+              if (!isEditor) return;
+              if (swapSource === "SELECTING") {
+                setSwapSource(pos.playerId);
+              } else if (swapSource) {
+                onPointerDown(e, pos.playerId); // Trigger swap logic
+              } else {
+                onPointerDown(e, pos.playerId); // Trigger drag
+              }
+            },
+            onClick: () => {
+              if (dragging) return;
+              const isTouchTap = lastPointerTypeRef.current === "touch";
+              if (isTouchTap && onPlayerDoubleClick) {
+                const now = Date.now();
+                const lastTap = lastTapRef.current;
+                if (lastTap && lastTap.playerId === p.id && now - lastTap.at <= 360) {
+                  onPlayerDoubleClick(p.id);
+                  lastTapRef.current = null;
+                } else {
+                  lastTapRef.current = { playerId: p.id, at: now };
+                }
+              }
+              onPlayerClick(p.id);
+            },
+            onDoubleClick: () => {
+              if (!dragging) onPlayerDoubleClick?.(p.id);
+            },
+            className: `player-circle-token ${isDead ? "is-dead" : ""} ${isSwapSelected ? "is-swap-selected" : ""} ${isWitchDanger && !isVerdictDieHighlighted ? "witch-danger" : ""}`,
+            style: {
+              position: "absolute" as const,
+              left,
+              top,
+              transform: circleTransform,
+              width: circleSizePx,
+              height: circleSizePx,
+              borderRadius: circleRadiusPx,
+              border: isReplayTarget 
+                ? "3px solid rgb(245, 158, 11)" 
+                : isReplayActor 
+                  ? "2px solid rgb(16, 185, 129)" 
+                  : isSwapSelected 
+                    ? `${selectedBorderPx}px solid #2196F3` 
+                    : isDead 
+                      ? `${circleBorderPx}px solid rgba(239, 68, 68, 0.35)` 
+                      : `${circleBorderPx}px solid rgba(255, 255, 255, 0.08)`,
+              boxShadow: isReplayTarget
+                ? "0 0 22px rgba(245, 158, 11, 0.75), inset 0 0 10px rgba(245, 158, 11, 0.35)"
+                : isReplayActor
+                  ? "0 0 12px rgba(16, 185, 129, 0.45)"
+                  : undefined,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: playerFontSizePx,
+              cursor: isEditor ? (swapSource ? "crosshair" : "grab") : "pointer",
+              zIndex: dragging === pos.playerId ? 10 : 1,
+              outline: showSelectedOutline && room.phase !== "night" ? `${selectedBorderPx}px solid rgba(255,165,0,0.9)` : undefined,
+              transition: dragging === pos.playerId
+                ? "none"
+                : "left 0.2s, top 0.2s, width 220ms ease, height 220ms ease, border-radius 220ms ease, box-shadow 300ms ease, transform 0.2s ease", // Smooth move + resize + glow
+            }
+          };
+
+          if (isSelfGlow) {
+            return (
+              <BorderGlow
+                {...tokenProps}
+                animated={true}
+                borderRadius={circleRadiusPx}
+                glowRadius={circleSizePx / 2 + 10}
+                glowColor="168 85 247"
+                colors={['#c084fc', '#f472b6', '#38bdf8']}
+                backgroundColor="rgba(23, 26, 33, 0.97)"
+              >
+                {innerContent}
+              </BorderGlow>
+            );
+          }
+
+          return (
+            <div {...tokenProps}>
+              {innerContent}
             </div>
           );
         })}

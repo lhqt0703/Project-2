@@ -307,29 +307,27 @@
 }
 
 /* ================= TỐI ƯU HÓA HIỆU NĂNG CHO THIẾT BỊ DI ĐỘNG (iPHONE 11, v.v.) ================= */
-@media (pointer: coarse), (max-width: 768px) {
+.pc-card-wrapper.performance-mode .pc-card {
   /* 1. Thay thế đổ bóng động bằng đổ bóng tĩnh siêu nhẹ cho GPU */
-  .pc-card {
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4) !important;
-    will-change: transform;
-    transform: rotateX(var(--rotate-y)) rotateY(calc(var(--base-rotation-y) + var(--rotate-x))) !important;
-  }
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4) !important;
+  will-change: transform;
+  transform: rotateX(var(--rotate-y)) rotateY(calc(var(--base-rotation-y) + var(--rotate-x))) !important;
+}
 
-  /* 2. Loại bỏ hoàn toàn các lớp phủ blend màu color-dodge cực nặng trên Safari di động */
-  /* .pc-shine,
-  .pc-glare,
-  .pc-front-holo-overlay {
-    display: none !important;
-  } */
+/* 2. Loại bỏ hoàn toàn các lớp phủ blend màu color-dodge cực nặng trên Safari di động */
+.pc-card-wrapper.performance-mode .pc-shine,
+.pc-card-wrapper.performance-mode .pc-glare,
+.pc-card-wrapper.performance-mode .pc-front-holo-overlay {
+  display: none !important;
+}
 
-  /* 3. Đơn giản hóa mặt sau lá bài */
-  /* .pc-card-back {
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  } */
+/* 3. Đơn giản hóa mặt sau lá bài */
+.pc-card-wrapper.performance-mode .pc-card-back {
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
 
-  /* 4. Giảm cường độ đổ bóng phức tạp của Moon SVG trên di động */
-  /* .pc-card-back svg {
-    filter: drop-shadow(0 0 15px rgba(243, 85, 218, 0.4)) !important;
-  } */
+/* 4. Giảm cường độ đổ bóng phức tạp của Moon SVG trên di động */
+.pc-card-wrapper.performance-mode .pc-card-back svg {
+  filter: drop-shadow(0 0 15px rgba(243, 85, 218, 0.4)) !important;
 }
 

@@ -4,10 +4,60 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>Dạ Nghịch</title>
+    <style>
+      html, body {
+        background-color: #0f1115;
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+      }
+      .app-loading-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100vh;
+        background-color: #0f1115;
+        color: #e8e8e8;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      .app-loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(255, 152, 0, 0.1);
+        border-radius: 50%;
+        border-top-color: #ff9800;
+        animation: spin 1s linear infinite;
+        box-shadow: 0 0 15px rgba(255, 152, 0, 0.2);
+      }
+      .app-loading-logo {
+        font-size: 28px;
+        font-weight: 900;
+        letter-spacing: 0.2em;
+        color: #ff9800;
+        margin-bottom: 24px;
+        text-shadow: 0 0 25px rgba(255, 152, 0, 0.4);
+        animation: pulse 2s ease-in-out infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 0.6; transform: scale(0.97); }
+        50% { opacity: 1; transform: scale(1); }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="app-loading-container">
+        <div class="app-loading-logo">DẠ NGHỊCH</div>
+        <div class="app-loading-spinner"></div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

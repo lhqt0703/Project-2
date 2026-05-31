@@ -17,6 +17,7 @@ export function saveMatchHistory(room: Room) {
     const payload = {
       gameId: room.id,
       timestamp: Date.now(),
+      hostId: room.hostId,
       playerCount: room.players.length,
       winner: room.winner || null,
       players: room.players.map((p) => ({

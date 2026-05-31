@@ -404,7 +404,8 @@ export function emitPublicDayGameLogToSocket(roomId: string, socketId: string) {
   if (!ctx) return;
   const room = ctx.rooms[roomId];
   if (!room) return;
-  ctx.io.to(socketId).emit("gameLogUpdated", { roomId, nights: getPublicDayGameLog(room) });
+  const nights = room.isReplay ? (room.gameLog || []) : getPublicDayGameLog(room);
+  ctx.io.to(socketId).emit("gameLogUpdated", { roomId, nights });
 }
 
 export function emitPublicDayGameLogToRoom(roomId: string) {
@@ -412,7 +413,7 @@ export function emitPublicDayGameLogToRoom(roomId: string) {
   if (!ctx) return;
   const room = ctx.rooms[roomId];
   if (!room) return;
-  const nights = getPublicDayGameLog(room);
+  const nights = room.isReplay ? (room.gameLog || []) : getPublicDayGameLog(room);
   for (const player of room.players || []) {
     if (player.id === room.hostId) continue;
     ctx.io.to(player.id).emit("gameLogUpdated", { roomId, nights });

@@ -1,3 +1,28 @@
+@font-face {
+  font-family: 'Segoe UI Mobile';
+  font-style: normal;
+  font-weight: 400;
+  src: url('https://fonts.cdnfonts.com/s/15051/Segoe UI.woff') format('woff');
+}
+@font-face {
+  font-family: 'Segoe UI Mobile';
+  font-style: normal;
+  font-weight: 700;
+  src: url('https://fonts.cdnfonts.com/s/15051/Segoe UI Bold.woff') format('woff');
+}
+@font-face {
+  font-family: 'Segoe UI Mobile';
+  font-style: italic;
+  font-weight: 400;
+  src: url('https://fonts.cdnfonts.com/s/15051/Segoe UI Italic.woff') format('woff');
+}
+@font-face {
+  font-family: 'Segoe UI Mobile';
+  font-style: italic;
+  font-weight: 700;
+  src: url('https://fonts.cdnfonts.com/s/15051/Segoe UI Bold Italic.woff') format('woff');
+}
+
 :root {
   color-scheme: dark;
 
@@ -29,7 +54,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  font-family: "Segoe UI", "Segoe UI Mobile", system-ui, -apple-system, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
 }
 
 button,

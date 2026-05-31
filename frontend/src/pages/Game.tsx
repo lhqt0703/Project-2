@@ -27,7 +27,9 @@ import { useMerchantRole } from "./gameRoles/useMerchantRole";
 import { useAngelRole } from "./gameRoles/useAngelRole";
 import { ScoreboardModal } from "../components/ScoreboardModal";
 import RoleCard3D from "../components/RoleCard3D";
-import PhaseTransitionOverlay from "../components/PhaseTransitionOverlay";
+import DecryptedText from "../components/DecryptedText";
+import medalSvg from "../assets/medal.svg";
+// import PhaseTransitionOverlay from "../components/PhaseTransitionOverlay";
 import GridMotionOverlay from "../components/GridMotionOverlay";
 
 
@@ -116,46 +118,48 @@ export default function Game() {
     key: number;
   } | null>(null);
 
-  // States và Effect cho chuyển cảnh pha Cinematic Đêm / Ngày bằng GSAP
-  const [transitionActive, setTransitionActive] = useState(false);
-  const [transitionPhase, setTransitionPhase] = useState<any>("dusk");
-  const [transitionNumber, setTransitionNumber] = useState(0);
+  // States và Effect cho chuyển cảnh pha Cinematic Đêm / Ngày bằng GSAP (Tạm ẩn)
+  // const [transitionActive, setTransitionActive] = useState(false);
+  // const [transitionPhase, setTransitionPhase] = useState<any>("dusk");
+  // const [transitionNumber, setTransitionNumber] = useState(0);
 
-  const lastPhaseRef = useRef<any>(null);
-  const lastNumberRef = useRef<number>(0);
+  // const lastPhaseRef = useRef<any>(null);
+  // const lastNumberRef = useRef<number>(0);
 
   // States và Effect cho chuyển cảnh pha Hoàng Hôn (GridMotion) khi mới vào game
   const [duskTransitionActive, setDuskTransitionActive] = useState(false);
+  const [lowPerformanceMode, setLowPerformanceMode] = useState(false); // Tự động tắt chế độ hiệu năng thấp trên thiết bị yếu hoặc khi debugAnim=true
+  const [isAnimatingLeaf, setIsAnimatingLeaf] = useState(false);
   const duskPlayedRef = useRef(false);
 
   useEffect(() => {
-    if (phase === "dusk") {
+    if (phase === "dusk" && room?.phase === "dusk") {
       if (!duskPlayedRef.current) {
         setDuskTransitionActive(true);
         duskPlayedRef.current = true;
       }
-    } else {
+    } else if (phase !== "dusk") {
       duskPlayedRef.current = false;
     }
-  }, [phase]);
+  }, [phase, room?.phase]);
 
-  useEffect(() => {
-    if (phase === "dusk") {
-      lastPhaseRef.current = phase;
-      return;
-    }
-    const nightCount = room?.nightCount ?? 0;
-    // Chỉ kích hoạt hiệu ứng khi pha thực sự thay đổi trong thời gian thực (tránh chạy khi mới tải trang)
-    if (phase !== lastPhaseRef.current || nightCount !== lastNumberRef.current) {
-      if (lastPhaseRef.current !== null) {
-        setTransitionPhase(phase);
-        setTransitionNumber(nightCount);
-        setTransitionActive(true);
-      }
-      lastPhaseRef.current = phase;
-      lastNumberRef.current = nightCount;
-    }
-  }, [phase, room?.nightCount]);
+  // useEffect(() => {
+  //   if (phase === "dusk") {
+  //     lastPhaseRef.current = phase;
+  //     return;
+  //   }
+  //   const nightCount = room?.nightCount ?? 0;
+  //   // Chỉ kích hoạt hiệu ứng khi pha thực sự thay đổi trong thời gian thực (tránh chạy khi mới tải trang)
+  //   if (phase !== lastPhaseRef.current || nightCount !== lastNumberRef.current) {
+  //     if (lastPhaseRef.current !== null) {
+  //       setTransitionPhase(phase);
+  //       setTransitionNumber(nightCount);
+  //       setTransitionActive(true);
+  //     }
+  //     lastPhaseRef.current = phase;
+  //     lastNumberRef.current = nightCount;
+  //   }
+  // }, [phase, room?.nightCount]);
 
   const showNotice = useCallback((title: string, message: string, onConfirm?: () => void) => {
     setNoticeModal({ title, message, onConfirm });
@@ -783,32 +787,43 @@ export default function Game() {
     }, HUNTER_BULLET_ANIM_MS);
   }, []);
 
+  const lastPlayedHunterShotSeqRef = useRef<number>(0);
+  const lastPlayedLoveArrowShotSeqRef = useRef<number>(0);
+
   useEffect(() => {
     const shot = sync.hunterShot;
     if (!shot?.hunterId || !shot?.targetId) return;
 
-    lastHunterShotRef.current = { hunterId: shot.hunterId, targetId: shot.targetId };
-    if (phase === "day" && !shouldRevealHunterShotInDay) return;
+    if (lastPlayedHunterShotSeqRef.current !== sync.hunterShotSeq) {
+      lastPlayedHunterShotSeqRef.current = sync.hunterShotSeq;
 
-    const frame = window.requestAnimationFrame(() => {
-      playHunterShotAnim(shot.hunterId, shot.targetId);
-    });
-    return () => window.cancelAnimationFrame(frame);
+      if (phase === "day" && !shouldRevealHunterShotInDay) return;
+
+      lastHunterShotRef.current = { hunterId: shot.hunterId, targetId: shot.targetId };
+      const frame = window.requestAnimationFrame(() => {
+        playHunterShotAnim(shot.hunterId, shot.targetId);
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }
   }, [phase, playHunterShotAnim, shouldRevealHunterShotInDay, sync.hunterShot, sync.hunterShotSeq]);
 
   useEffect(() => {
     const shot = sync.loveArrowShot;
     if (!shot?.cupidId || !shot?.targetId) return;
 
-    const frame = window.requestAnimationFrame(() => {
-      playHunterShotAnim(shot.cupidId, shot.targetId, {
-        assetSrc: encodeURI("/Mũi tên.svg"),
-        alt: "Mũi tên",
-        rotationOffsetDeg: -45,
-        kind: "love",
+    if (lastPlayedLoveArrowShotSeqRef.current !== sync.loveArrowShotSeq) {
+      lastPlayedLoveArrowShotSeqRef.current = sync.loveArrowShotSeq;
+
+      const frame = window.requestAnimationFrame(() => {
+        playHunterShotAnim(shot.cupidId, shot.targetId, {
+          assetSrc: encodeURI("/Mũi tên.svg"),
+          alt: "Mũi tên",
+          rotationOffsetDeg: -45,
+          kind: "love",
+        });
       });
-    });
-    return () => window.cancelAnimationFrame(frame);
+      return () => window.cancelAnimationFrame(frame);
+    }
   }, [playHunterShotAnim, sync.loveArrowShot, sync.loveArrowShotSeq]);
 
   useEffect(() => {
@@ -1051,6 +1066,132 @@ export default function Game() {
     angelState: sync.angelReviveState,
   });
 
+  const isLocalPlayerAbleToAct = useMemo(() => {
+    if (!clientId || !room || room.gameOver) return false;
+    const isDead = deadPlayers.includes(clientId);
+
+    if (isDead) {
+      if (role === "Thiên Sứ") {
+        return sync.angelReviveState?.canRevive === true;
+      }
+      return false;
+    }
+
+    if (phase === "night") {
+      const isMyNightTurnActive = allNightActionsSimultaneous || doesNightTurnMatchMyRole;
+      if (!isMyNightTurnActive) return false;
+
+      if (role === "Phù thủy") {
+        const potions = sync.witchPotions;
+        const hasPoison = potions ? !potions.poisonUsed : true;
+        const hasHeal = potions ? !potions.healUsed : true;
+        const pendingDeaths = sync.witchPendingDeathTargetIds || [];
+        return hasPoison || (hasHeal && pendingDeaths.length > 0);
+      }
+
+      if (role === "Bảo vệ") {
+        return true;
+      }
+
+      if (role === "Tiên tri") {
+        return true;
+      }
+
+      if (role === "Thợ săn") {
+        return true;
+      }
+
+      if (isWolfTeamRole) {
+        return !sync.wolfBiteDisabled;
+      }
+
+      if (role === "Hộ nhân") {
+        return !sync.protectorHasUsed && !sync.protectorTargetId;
+      }
+
+      if (role === "Thần tình yêu") {
+        const currentNight = room.nightCount || 0;
+        const loveChoiceLastNight = room?.gameRules?.loveCanChoosePartnerFirstTwoNights ? 2 : 1;
+        const canChoosePartner = currentNight >= 1 && currentNight <= loveChoiceLastNight && !sync.loveState?.targetId;
+        return canChoosePartner;
+      }
+
+      if (role === "Kẻ nguyền rủa" || role === "Kẻ bị nguyền") {
+        const hasUsesRemaining = sync.cursedUsesRemaining === null || sync.cursedUsesRemaining > 0;
+        return hasUsesRemaining && !sync.cursedTargetId;
+      }
+
+      if (role && ["Băng Giá", "Sấm Sét", "Lửa", "Bóng Tối"].includes(role)) {
+        return true;
+      }
+
+      if (role === "Tay Buôn") {
+        const hasMerchantTradeTonight = !!sync.merchantPrivateState?.trade && sync.merchantPrivateState.trade.actorId === clientId;
+        const availableStockCount = sync.merchantPrivateState?.availableStockIds?.length ?? 0;
+        return !hasMerchantTradeTonight && availableStockCount > 0;
+      }
+    }
+
+    return false;
+  }, [
+    clientId,
+    room,
+    role,
+    phase,
+    deadPlayers,
+    sync.angelReviveState,
+    sync.witchPotions,
+    sync.witchPendingDeathTargetIds,
+    sync.wolfBiteDisabled,
+    sync.protectorHasUsed,
+    sync.protectorTargetId,
+    sync.loveState,
+    sync.cursedUsesRemaining,
+    sync.cursedTargetId,
+    sync.merchantPrivateState,
+    allNightActionsSimultaneous,
+    doesNightTurnMatchMyRole,
+    isWolfTeamRole
+  ]);
+
+  const [showActionGlow, setShowActionGlow] = useState(false);
+  const lastGlowTriggeredKeyRef = useRef("");
+
+  const currentGlowKey = useMemo(() => {
+    if (!isLocalPlayerAbleToAct || !room) return "";
+    const nightCount = room.nightCount || 0;
+    if (phase === "day") {
+      return `${nightCount}-day-revive`;
+    }
+    if (phase === "night") {
+      if (role === "Phù thủy") {
+        const potions = sync.witchPotions;
+        const hasPoison = potions ? !potions.poisonUsed : true;
+        const hasHeal = potions ? !potions.healUsed : true;
+        const pendingDeaths = sync.witchPendingDeathTargetIds || [];
+        if (hasPoison) {
+          return `${nightCount}-night-witch-poison`;
+        }
+        if (hasHeal && pendingDeaths.length > 0) {
+          return `${nightCount}-night-witch-heal`;
+        }
+      }
+      return `${nightCount}-night-action`;
+    }
+    return "";
+  }, [isLocalPlayerAbleToAct, room, phase, role, sync.witchPotions, sync.witchPendingDeathTargetIds]);
+
+  useEffect(() => {
+    if (!currentGlowKey) {
+      setShowActionGlow(false);
+      return;
+    }
+    if (lastGlowTriggeredKeyRef.current !== currentGlowKey) {
+      lastGlowTriggeredKeyRef.current = currentGlowKey;
+      setShowActionGlow(true);
+    }
+  }, [currentGlowKey]);
+
   const canStartVillageChiefExtraVote =
     role === "Trưởng làng" &&
     phase === "day" &&
@@ -1273,6 +1414,17 @@ export default function Game() {
     (!!sync.gameEnded ||
       (!shouldBlockDeadNightRoleReveal &&
         (isRoleRevealLimitedToCurrentNightTurn ? doesNightTurnMatchMyRole : !shouldHidePlayerRoleText)));
+
+  const [cardFlippedToFront, setCardFlippedToFront] = useState(false);
+
+  useEffect(() => {
+    setCardFlippedToFront(shouldRevealMyRole);
+  }, [shouldRevealMyRole]);
+
+  useEffect(() => {
+    // Khi vai trò thực sự thay đổi (chia bài lại), tự động lật úp lá bài xuống mặt sau
+    setCardFlippedToFront(false);
+  }, [role]);
   const shouldShowRolePortrait = shouldRevealMyRole;
   const loveHybridBackgroundAsset =
     clientId && sync.loveState.targetWolfAligned && sync.loveState.pairIds.includes(clientId)
@@ -1378,7 +1530,22 @@ export default function Game() {
       )}
 
       {!isHost && (
-        <h2>Vai trò của bạn là: {shouldRevealMyRole ? role : "********"}</h2>
+        <h2>
+          Vai trò của bạn là:{" "}
+          {cardFlippedToFront && role ? (
+            <DecryptedText
+              text={role}
+              speed={40}
+              maxIterations={8}
+              sequential
+              animateOn="view"
+              className="revealed"
+              encryptedClassName="encrypted"
+            />
+          ) : (
+            <span className="encrypted">********</span>
+          )}
+        </h2>
       )}
       
       {sync.gameEnded && (
@@ -1402,7 +1569,96 @@ export default function Game() {
         <>
           {phase === "dusk" ? (
             <>
-              <h1>🌥️ Hoàng hôn</h1>
+              <style>{`
+                @keyframes gentleBob {
+                  0% {
+                    transform: translateY(0px) rotate(-45deg);
+                  }
+                  50% {
+                    transform: translateY(2.5px) rotate(-45deg);
+                  }
+                  100% {
+                    transform: translateY(0px) rotate(-45deg);
+                  }
+                }
+                @keyframes leaf3DFly {
+                  0% {
+                    transform: translateY(0) rotateY(0deg) rotate(-45deg);
+                  }
+                  50% {
+                    transform: translateY(-4dvh) rotateY(-360deg) rotate(-45deg);
+                  }
+                  100% {
+                    transform: translateY(0) rotateY(0deg) rotate(-45deg);
+                  }
+                }
+              `}</style>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "12px" }}>
+                <h1>🌥️ Hoàng hôn</h1>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setLowPerformanceMode(p => !p);
+                  setIsAnimatingLeaf(true);
+                }}
+                title="Tối ưu hiệu năng di động"
+                style={{
+                  background: "transparent",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "8px",
+                  borderRadius: "50%",
+                  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                  backgroundColor: lowPerformanceMode ? "rgba(16, 185, 129, 0.2)" : "rgba(255, 255, 255, 0.05)",
+                  boxShadow: lowPerformanceMode ? "0 0 15px rgba(16, 185, 129, 0.5), inset 0 0 8px rgba(16, 185, 129, 0.3)" : "none",
+                  border: lowPerformanceMode ? "1px solid rgba(16, 185, 129, 0.5)" : "1px solid rgba(255, 255, 255, 0.1)",
+                  outline: "none",
+                  userSelect: "none",
+                  perspective: "400px",
+                }}
+              >
+                  <svg
+                    height="22"
+                    viewBox="0 0 30 30"
+                    width="22"
+                    xmlns="http://www.w3.org/2000/svg"
+                    style={{
+                      transform: "translateY(0px) rotate(-45deg)",
+                      display: "block",
+                      filter: lowPerformanceMode ? "drop-shadow(0 0 6px rgba(16, 185, 129, 0.8))" : "none",
+                      transition: "all 0.3s ease",
+                      animation: isAnimatingLeaf
+                        ? "leaf3DFly 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards"
+                        : (lowPerformanceMode ? "gentleBob 3.5s ease-in-out infinite" : "none"),
+                      transformStyle: "preserve-3d",
+                    }}
+                    onAnimationEnd={() => setIsAnimatingLeaf(false)}
+                  >
+                    <g fill="none" fillRule="evenodd">
+                      <g transform="translate(-450 -44)">
+                        <g transform="translate(449 40)">
+                          <path
+                            d="m23.6927469 29.6472387c2.6828915-2.2634443 4.2921773-5.3077228 4.2921773-9.0321629 0-.8160058-.0940967-1.6579238-.2767828-2.5232792-.6251216-2.9611024-2.2514506-6.099632-4.5695216-9.27172914-1.0509363-1.43812332-2.1759983-2.78819777-3.3012368-4.01214133-.3940924-.42866192-.7603031-.81118168-1.0893806-1.14273337-.1985344-.20002717-.3413556-.33934047-.4192058-.41309334-.1928481-.18269821-.4948966-.18269821-.6877447 0-.0778502.07375287-.2206714.21306617-.4192059.41309334-.3290774.33155169-.6952882.71407145-1.0893806 1.14273337-1.1252384 1.22394356-2.2503004 2.57401801-3.3012367 4.01214133-2.318071 3.17209714-3.94439999 6.31062674-4.5695216 9.27172914-.18268615.8653554-.27678286 1.7072734-.27678286 2.5232792 0 3.7244401 1.60928585 6.7687186 4.29217726 9.0321629 1.9448996 1.6408312 4.4617414 2.7678371 5.7078227 2.7678371 1.2460814 0 3.7629231-1.1270059 5.7078227-2.7678371z"
+                            fill={lowPerformanceMode ? "#4caf50" : "none"}
+                            stroke="#4caf50"
+                            strokeWidth={lowPerformanceMode ? "0" : "1.8"}
+                            transform="matrix(.707 .707 -.707 .707 17.829 -7.514)"
+                            style={{ transition: "fill 0.3s ease, stroke-width 0.3s ease" }}
+                          />
+                          <path
+                            d="m12.9943854 22.0490888-3.1450267-3.1450267c-.20305299-.203053-.51326456-.1966821-.7085267-.0014199-.18955158.1895515-.19515261.5119541.00024466.7073514l3.85330874 3.8533087v10.7923818c0 .2764249.2319336.5005115.5.5005115.2761424 0 .5-.2269016.5-.5005115v-10.7923818l3.8533087-3.8533087c.1971842-.1971842.1955068-.5120893.0002447-.7073514-.1895516-.1895516-.5124804-.1946265-.7085267.0014199l-3.1450267 3.1450267v-5.5857865l1.8531998-1.8531998c.1926722-.1926721.1956157-.5121982.0003536-.7074603-.1895516-.1895516-.5095255-.1975813-.7019268-.00518l-1.1516266 1.1516266v-4.7935088c0-.283258-.2238576-.49938444-.5-.49938444-.2680664 0-.5.22358205-.5.49938444v4.7935088l-1.1516266-1.1516266c-.1914368-.1914368-.5066647-.1900822-.7019268.00518-.1895516-.1895515-.1951039.5120029.0003535.7074603l1.8531999 1.8531998z"
+                            fill="#607d8b"
+                            transform="matrix(.707 .707 -.707 .707 19.69 -3.024)"
+                          />
+                        </g>
+                      </g>
+                    </g>
+                  </svg>
+              </div>
+              </div>
               {!isHost && !duskTransitionActive && (
                 <>
                   <style>{`
@@ -1419,11 +1675,25 @@ export default function Game() {
                     .float-up-container {
                       animation: floatUp 0.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
                     }
+                    .encrypted {
+                      font-family: 'Courier New', Courier, monospace;
+                      color: #a78bfa;
+                      letter-spacing: 2px;
+                      opacity: 0.7;
+                    }
+                    .revealed {
+                      color: #10b981;
+                      text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+                      font-weight: 800;
+                      transition: all 0.3s ease;
+                    }
                   `}</style>
                   <div className="float-up-container">
                     <RoleCard3D
                       role={role}
-                      revealed={shouldRevealMyRole}
+                      revealed={cardFlippedToFront}
+                      onToggleReveal={() => setCardFlippedToFront(p => !p)}
+                      lowPerformanceMode={lowPerformanceMode}
                     />
                   </div>
                 </>
@@ -1499,10 +1769,14 @@ export default function Game() {
                 cursor: "pointer",
                 padding: "8px 16px",
                 borderRadius: "8px",
-                boxShadow: "0 4px 12px rgba(155, 89, 182, 0.3)"
+                boxShadow: "0 4px 12px rgba(155, 89, 182, 0.3)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px"
               }}
             >
-              📊 Xem điểm
+              <img src={medalSvg} alt="medal" style={{ width: "18px", height: "18px" }} />
+              Xem điểm
             </button>
           )}
           {!hostDisconnected && (
@@ -1566,6 +1840,7 @@ export default function Game() {
               <PlayerPositions
                 mode="view"
                 roomOverride={roomForDisplay}
+                showActionGlow={showActionGlow}
                 onPlayerClick={handlePlayerClick}
                 onPlayerDoubleClick={handlePlayerDoubleClick}
                 seerResult={isSeerTurnActive ? seer.seerResult : null}
@@ -1953,12 +2228,12 @@ export default function Game() {
       scoreResult={room?.scoreResult || null}
     />
 
-    <PhaseTransitionOverlay
+    {/* <PhaseTransitionOverlay
       phase={transitionPhase}
       number={transitionNumber}
       active={transitionActive}
       onComplete={() => setTransitionActive(false)}
-    />
+    /> */}
 
     {duskTransitionActive && (
       <GridMotionOverlay

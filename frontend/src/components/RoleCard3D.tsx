@@ -9,6 +9,7 @@ interface RoleCard3DProps {
   revealed: boolean;
   onToggleReveal?: () => void;
   backgroundAssetOverride?: string | null;
+  lowPerformanceMode?: boolean;
 }
 
 // Khởi tạo glob import toàn bộ các file ảnh mặt trước (F role.png) và ảnh gốc của Gió
@@ -73,6 +74,7 @@ export default function RoleCard3D({
   role,
   revealed,
   onToggleReveal,
+  lowPerformanceMode = false, 
 }: RoleCard3DProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -86,13 +88,34 @@ export default function RoleCard3D({
 
   // State lật nội bộ hỗ trợ lật thủ công
   const [isRevealed, setIsRevealed] = useState(revealed);
+  const [displayedRole, setDisplayedRole] = useState(role);
 
   useEffect(() => {
     setIsRevealed(revealed);
     soundManager.play("cardFlip");
   }, [revealed]);
 
-  const cardFrontImage = getRoleCardImage(role);
+  const prevRoleRef = useRef(role);
+
+  useEffect(() => {
+    if (role !== prevRoleRef.current) {
+      prevRoleRef.current = role;
+
+      // Nếu thẻ bài đang mở (face up), lật úp nó lại trước khi đổi hình ảnh nhân vật
+      if (isRevealed) {
+        setIsRevealed(false);
+        const timer = setTimeout(() => {
+          setDisplayedRole(role);
+        }, 720); // 720ms khớp với transition 0.72s trong CSS
+        return () => clearTimeout(timer);
+      } else {
+        // Nếu thẻ bài đang úp (face down), đổi hình ảnh ngay lập tức
+        setDisplayedRole(role);
+      }
+    }
+  }, [role, isRevealed]);
+
+  const cardFrontImage = getRoleCardImage(displayedRole);
 
   // 1. Khởi tạo bộ máy Easing 3D Spring (Tính toán gia tốc mượt mà 60 FPS)
   const tiltEngine = useMemo(() => {
@@ -103,7 +126,7 @@ export default function RoleCard3D({
 
     // Tự động phát hiện di động/cảm ứng để khóa 30 FPS tiết kiệm pin/CPU, giữ 60 FPS trên desktop
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.matchMedia("(pointer: coarse)").matches;
-    const targetFps = isMobile ?   30 : 60;
+    const targetFps = isMobile ?   60 : 60;
     const frameInterval = 1000 / targetFps;
 
     let currentX = 0;
@@ -377,16 +400,17 @@ export default function RoleCard3D({
   );
 
   const handleClickCard = () => {
-    setIsRevealed(prev => !prev);
     if (onToggleReveal) {
       onToggleReveal();
+    } else {
+      setIsRevealed(prev => !prev);
     }
   };
 
   return (
     <div
       ref={wrapRef}
-      className="pc-card-wrapper"
+      className={`pc-card-wrapper ${lowPerformanceMode ? "performance-mode" : ""}`}
       style={cardStyle}
     >
       {/* Hào quang nền neon lộng lẫy phía sau */}

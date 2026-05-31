@@ -4063,7 +4063,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
   });
 
-  socket.on("startScenarioReplay", ({ fileName }: { fileName: string }, callback?: (res: { ok: boolean; roomId?: string; error?: string }) => void) => {
+  socket.on("startScenarioReplay", ({ fileName }: { fileName: string }, callback?: (res: { ok: boolean; roomId?: string; room?: any; error?: string }) => void) => {
     try {
       const match = loadSavedMatch(fileName);
       if (!match) {
@@ -4074,18 +4074,28 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       }
 
       const replayRoomId = generateRoomId(activeRooms!);
+      const originalHostId = match.hostId || match.players.find((p: any) => !match.positions?.some((pos: any) => pos.playerId === p.id))?.id;
+
       const room: Room = {
         id: replayRoomId,
-        players: match.players.map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          connected: true,
-          inGame: true,
-        })),
+        players: match.players
+          .filter((p: any) => p.id !== originalHostId)
+          .map((p: any) => ({
+            id: p.id,
+            name: p.name,
+            connected: true,
+            inGame: true,
+          })),
         hostId: clientId,
         hidePlayerRoleText: false,
         layoutHeightPx: BASE_FRAME_HEIGHT_PX,
-        positions: ensureNonOverlappingPositions([], undefined, { ...POSITION_LAYOUT, heightPx: BASE_FRAME_HEIGHT_PX }),
+        positions: ensureNonOverlappingPositions(
+          match.players
+            .filter((p: any) => p.id !== originalHostId)
+            .map((p: any) => p.id),
+          match.positions || [],
+          { ...POSITION_LAYOUT, heightPx: BASE_FRAME_HEIGHT_PX }
+        ),
         positionEditors: [],
         autoArrangeUsed: false,
         compactCircles: false,
@@ -4096,22 +4106,25 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         replayIndex: 0,
         playerRoles: {},
         deadPlayers: [],
-        phase: "lobby",
-        gameLog: [],
-        nightCount: 0,
+        phase: match.gameEventLog?.[0]?.phase || "night",
+        gameLog: match.gameLog || [],
+        nightCount: match.gameEventLog?.[0]?.night || 1,
       };
 
       for (const p of match.players) {
-        room.playerRoles![p.id] = p.role;
+        if (p.id !== originalHostId) {
+          room.playerRoles![p.id] = p.role;
+        }
       }
 
       rooms[replayRoomId] = room;
       socket.join(replayRoomId);
       
-      socket.emit("roomCreated", toPublicRoom(room));
+      const publicRoom = toPublicRoom(room);
+      socket.emit("roomCreated", publicRoom);
       
       if (callback) {
-        callback({ ok: true, roomId: replayRoomId });
+        callback({ ok: true, roomId: replayRoomId, room: publicRoom });
       }
     } catch (err: any) {
       console.error("Error starting scenario replay:", err);
@@ -4247,8 +4260,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       case "PLAYER_ELIMINATED": {
         const target = event.targetIds?.[0];
         const targetName = target ? getPlayerNameLocal(target) : "";
-        const cause = event.metadata?.cause || "không rõ";
-        logMessage += `Người chơi ${targetName} đã bị loại do: ${cause}`;
+        const cause = event.metadata?.cause;
+        const causeStr = getCauseDescription(cause);
+        logMessage += `Người chơi ${targetName} đã bị loại do: ${causeStr}`;
         if (target && !room.deadPlayers?.includes(target)) {
           room.deadPlayers = room.deadPlayers || [];
           room.deadPlayers.push(target);
@@ -4307,4 +4321,27 @@ function generateRoomId(activeRooms: Set<string>): string {
   } while (activeRooms.has(roomId));
   activeRooms.add(roomId);
   return roomId;
+}
+
+function getCauseDescription(cause: any): string {
+  if (!cause) return "không rõ";
+  if (typeof cause === "string") return cause;
+  switch (cause.type) {
+    case "wolf":
+      return "Sói cắn";
+    case "witch_poison":
+      return "Phù thủy đầu độc";
+    case "hunter_shot":
+      return "Thợ săn bắn";
+    case "merchant_gunpowder":
+      return "Tay Buôn nổ thùng thuốc súng";
+    case "love_link":
+      return "Cặp đôi chết chùm";
+    case "day_vote":
+      return "Treo cổ ban ngày";
+    case "trial_verdict":
+      return "Tòa án treo cổ";
+    default:
+      return cause.type || "không rõ";
+  }
 }

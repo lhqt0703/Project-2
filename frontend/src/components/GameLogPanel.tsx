@@ -1,6 +1,11 @@
-import { useState, useCallback, useRef, useEffect, createContext, useContext } from "react";
+import { useState, useCallback, useRef, useEffect, createContext, useContext, useMemo } from "react";
 import type { GameLogNight, GameLogEntry, EliminationCause } from "../pages/gameRoles/socketEvents";
 import { MERCHANT_ITEM_LABELS, type MerchantDecision, type MerchantItemId, type MerchantTradeResult } from "../constants/merchant";
+import { gsap } from "gsap";
+import { useGSAP } from "@gsap/react";
+import { soundManager } from "../utils/soundManager";
+
+gsap.registerPlugin(useGSAP);
 import { ELEMENTAL_BUFF_LABELS } from "../constants/elemental";
 
 const ShowRolesOnlyContext = createContext<boolean>(false);
@@ -1322,12 +1327,70 @@ export default function GameLogPanel({
 }: GameLogPanelProps) {
   const [showRolesOnly, setShowRolesOnly] = useState(false);
   const [eliminationFocus, setEliminationFocus] = useState<EliminationFocus | null>(null);
+  
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Hoạt ảnh staggered trượt lên + hiện dần cho các log mới
+  useGSAP(() => {
+    const items = containerRef.current?.querySelectorAll(".game-log-item");
+    if (!items || !items.length) return;
+
+    // Lọc ra các log item mới chưa chạy hoạt ảnh
+    const newItems = Array.from(items).filter(el => !el.classList.contains("has-animated"));
+
+    if (newItems.length > 0) {
+      // Đánh dấu đã chạy để tránh lập lại
+      newItems.forEach(el => el.classList.add("has-animated"));
+
+      // Chỉ phát nhạc log nếu đây là dòng đơn phát sinh mới (tránh ồn khi load lịch sử lúc vào game)
+      if (newItems.length === 1) {
+        soundManager.play("logAdded");
+      }
+
+      gsap.fromTo(
+        newItems,
+        { opacity: 0, y: 15, scale: 0.97 },
+        {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          duration: 0.4,
+          stagger: gsap.utils.clamp(0.01, 0.08, 0.45 / newItems.length), // Tự động giảm trễ khi số lượng log nổ ra lớn
+          ease: "power2.out",
+        }
+      );
+    }
+  }, { dependencies: [nights], scope: containerRef });
   const legacyAngelGuessByPair = Object.fromEntries(
     (nights || [])
       .flatMap((n) => n.entries || [])
       .filter((e) => e.type === "angel_revive_choice")
       .map((e) => [`${e.actorId}:${e.targetId}`, e.guess])
   );
+
+  const rolesByEntry = useMemo(() => {
+    const entryMap = new Map<GameLogEntry, RolesByPlayerId>();
+    const currentRoles = { ...rolesByPlayerId };
+
+    // Walk backwards chronologically through nights and entries
+    for (let i = nights.length - 1; i >= 0; i--) {
+      const n = nights[i];
+      const entries = n.entries || [];
+      for (let j = entries.length - 1; j >= 0; j--) {
+        const entry = entries[j];
+        
+        // If we hit the wild wolf conversion event where the target got successfully transformed,
+        // revert their role in our walking roles state. That way, this log and all earlier logs
+        // will show their original role before transformation.
+        if (entry.type === "wild_wolf_conversion" && entry.success && entry.targetId && entry.previousTargetRole) {
+          currentRoles[entry.targetId] = entry.previousTargetRole;
+        }
+
+        entryMap.set(entry, { ...currentRoles });
+      }
+    }
+    return entryMap;
+  }, [nights, rolesByPlayerId]);
 
   return (
     <ShowRolesOnlyContext.Provider value={showRolesOnly}>
@@ -1444,6 +1507,7 @@ export default function GameLogPanel({
         }
 
         .game-log-item {
+          opacity: 0; /* Ẩn mặc định để GSAP trượt hiện dần */
           font-size: 14px;
           line-height: 1.6;
           color: rgba(232, 232, 232, 0.95);
@@ -1453,6 +1517,10 @@ export default function GameLogPanel({
           padding: 6px 8px;
           border-radius: 8px;
           transition: background 0.2s ease, transform 0.2s ease;
+        }
+
+        .game-log-item.has-animated {
+          opacity: 1; /* Cố định hiển thị cho log cũ đã chạy hoạt ảnh */
         }
 
         .game-log-item:hover {
@@ -1490,7 +1558,7 @@ export default function GameLogPanel({
         }
       `}</style>
 
-      <div className="game-log-panel-container">
+      <div ref={containerRef} className="game-log-panel-container">
         <div className="game-log-panel-header">
           <h3 className="game-log-panel-title">
             <span>📜</span> Nhật ký ván chơi
@@ -1619,7 +1687,7 @@ export default function GameLogPanel({
                           dayVotersByTarget={dayVotersByTarget}
                           legacyAngelGuessByPair={legacyAngelGuessByPair}
                           playerOnlyDayLogs={!canViewNightLogs}
-                          rolesByPlayerId={rolesByPlayerId}
+                          rolesByPlayerId={rolesByEntry.get(entry) || rolesByPlayerId}
                           playerNamesById={playerNamesById}
                           targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
                           eliminationFocus={eliminationFocus}
@@ -1646,7 +1714,7 @@ export default function GameLogPanel({
                         dayVotersByTarget={dayVotersByTarget}
                         legacyAngelGuessByPair={legacyAngelGuessByPair}
                         playerOnlyDayLogs={!canViewNightLogs}
-                        rolesByPlayerId={rolesByPlayerId}
+                        rolesByPlayerId={rolesByEntry.get(entry) || rolesByPlayerId}
                         playerNamesById={playerNamesById}
                         targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
                         eliminationFocus={eliminationFocus}

@@ -420,9 +420,9 @@ export function useWolfRole({
         isWolfTeam && isWolfTurnActive
           ? [localSelectedTarget, localSelectedTarget2].filter(Boolean)
           : [],
-      showWolfVoteBadges: isWolfTeam && isWolfTurnActive,
+      showWolfVoteBadges: isWolfTeam && isWolfTurnActive && !!clientId && !deadPlayers.includes(clientId),
       wolfVoteVoterIds: activeWolvesAlive,
-      showWolfBadges: isWolfTeam && isWolfTurnActive,
+      showWolfBadges: isWolfTeam && isWolfTurnActive && !!clientId && !deadPlayers.includes(clientId),
       wolfBadgePlayerIds: wolves,
       wolfBadgeRoles: wolfBadgeRoles || {},
     },

@@ -26,6 +26,8 @@ import { useCursedRole } from "./gameRoles/useCursedRole";
 import { useMerchantRole } from "./gameRoles/useMerchantRole";
 import { useAngelRole } from "./gameRoles/useAngelRole";
 import { ScoreboardModal } from "../components/ScoreboardModal";
+import RoleCard3D from "../components/RoleCard3D";
+import PhaseTransitionOverlay from "../components/PhaseTransitionOverlay";
 
 
 const WOLF_TEAM_REVEAL_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
@@ -112,6 +114,32 @@ export default function Game() {
     fadeOutMs: number;
     key: number;
   } | null>(null);
+
+  // States và Effect cho chuyển cảnh pha Cinematic Đêm / Ngày bằng GSAP
+  const [transitionActive, setTransitionActive] = useState(false);
+  const [transitionPhase, setTransitionPhase] = useState<any>("dusk");
+  const [transitionNumber, setTransitionNumber] = useState(0);
+
+  const lastPhaseRef = useRef<any>(null);
+  const lastNumberRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (phase === "dusk") {
+      lastPhaseRef.current = phase;
+      return;
+    }
+    const nightCount = room?.nightCount ?? 0;
+    // Chỉ kích hoạt hiệu ứng khi pha thực sự thay đổi trong thời gian thực (tránh chạy khi mới tải trang)
+    if (phase !== lastPhaseRef.current || nightCount !== lastNumberRef.current) {
+      if (lastPhaseRef.current !== null) {
+        setTransitionPhase(phase);
+        setTransitionNumber(nightCount);
+        setTransitionActive(true);
+      }
+      lastPhaseRef.current = phase;
+      lastNumberRef.current = nightCount;
+    }
+  }, [phase, room?.nightCount]);
 
   const showNotice = useCallback((title: string, message: string, onConfirm?: () => void) => {
     setNoticeModal({ title, message, onConfirm });
@@ -1357,7 +1385,15 @@ export default function Game() {
       {!sync.gameEnded && (
         <>
           {phase === "dusk" ? (
-            <h1>🌥️ Hoàng hôn</h1>
+            <>
+              <h1>🌥️ Hoàng hôn</h1>
+              {!isHost && (
+                <RoleCard3D
+                  role={role}
+                  revealed={shouldRevealMyRole}
+                />
+              )}
+            </>
           ) : phase === "day" ? (
             <h1>🌞 Ngày {displayNightNumber}</h1>
           ) : (
@@ -1880,6 +1916,13 @@ export default function Game() {
       open={scoreboardOpen}
       onClose={() => setScoreboardOpen(false)}
       scoreResult={room?.scoreResult || null}
+    />
+
+    <PhaseTransitionOverlay
+      phase={transitionPhase}
+      number={transitionNumber}
+      active={transitionActive}
+      onComplete={() => setTransitionActive(false)}
     />
 
     </div>

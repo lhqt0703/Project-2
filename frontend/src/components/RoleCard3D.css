@@ -1,0 +1,336 @@
+:root {
+  --pointer-x: 50%;
+  --pointer-y: 50%;
+  --pointer-from-center: 0;
+  --pointer-from-top: 0.5;
+  --pointer-from-left: 0.5;
+  --card-opacity: 0;
+  --rotate-x: 0deg;
+  --rotate-y: 0deg;
+  --background-x: 50%;
+  --background-y: 50%;
+  --grain: none;
+  --icon: none;
+  --behind-glow-color: rgba(125, 190, 255, 0.45);
+  --behind-glow-size: 55%;
+  --inner-gradient: none;
+  --base-rotation-y: 0deg;
+
+  /* Bảng màu cầu vồng Holographic Sunpillar cực mạnh */
+  --sunpillar-1: hsl(2, 100%, 73%);
+  --sunpillar-2: hsl(53, 100%, 69%);
+  --sunpillar-3: hsl(93, 100%, 69%);
+  --sunpillar-4: hsl(176, 100%, 76%);
+  --sunpillar-5: hsl(228, 100%, 74%);
+  --sunpillar-6: hsl(283, 100%, 73%);
+  --sunpillar-clr-1: var(--sunpillar-1);
+  --sunpillar-clr-2: var(--sunpillar-2);
+  --sunpillar-clr-3: var(--sunpillar-3);
+  --sunpillar-clr-4: var(--sunpillar-4);
+  --sunpillar-clr-5: var(--sunpillar-5);
+  --sunpillar-clr-6: var(--sunpillar-6);
+  --card-radius: 20px;
+}
+
+.pc-card-wrapper {
+  /*perspective: 1200px;   càng nhỏ thì hiệu ứng 3D càng mạnh và ngược lại */
+  z-index: 10;
+  position: fixed;
+  top: 20dvh;
+  left: 50%;
+  transform: translateX(-50%);
+  touch-action: none;
+  margin: 0;
+}
+
+@media (max-width: 1024px) {
+  .pc-card-wrapper {
+    width: 40dvw;
+    height: 70dvh;
+  }
+}
+
+@media (max-width: 768px) {
+  .pc-card-wrapper {
+    width: 75dvw;
+    height: 65dvh;
+  }
+}
+
+@media (max-width: 480px) {
+  .pc-card-wrapper {
+    width: 80dvw;
+    height: 75dvh;
+  }
+}
+
+/* Hào quang nền phía sau thẻ bài khi hover */
+/* .pc-behind {
+  position: absolute;
+  inset: -15px;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at var(--pointer-x) var(--pointer-y),
+    var(--behind-glow-color) 0%,
+    transparent var(--behind-glow-size)
+  );
+  filter: blur(40px) saturate(1.2);
+  opacity: calc(0.75 * var(--card-opacity));
+  transition: opacity 300ms ease;
+  border-radius: 35px;
+} */
+
+.pc-card-wrapper:hover,
+.pc-card-wrapper.active {
+  --card-opacity: 1;
+}
+
+/* Khung vỏ bọc thẻ bài */
+.pc-card-shell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+}
+
+/* Component thẻ bài chính hỗ trợ 3D Flip và 3D Tilt */
+.pc-card {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--card-radius);
+  position: relative;
+  box-shadow: rgba(0, 0, 0, 0.5) calc((var(--pointer-from-left) * 12px) - 6px)
+    calc((var(--pointer-from-top) * 22px) - 11px) 25px -5px;
+  transform: rotateX(var(--rotate-y)) rotateY(calc(var(--base-rotation-y) + var(--rotate-x)));
+  transform-style: preserve-3d;
+  background: transparent;
+  backface-visibility: hidden;
+  transition: transform 0.72s cubic-bezier(0.175, 0.885, 0.32, 1.15), box-shadow 0.3s ease;
+}
+
+/* Tắt transition tạm thời khi di chuyển chuột để hoạt ảnh JS phản ứng tức thời 60 FPS */
+.pc-card-wrapper:hover .pc-card,
+.pc-card-wrapper.active .pc-card {
+  transition: transform 0.15s ease-out, box-shadow 0.3s ease;
+}
+
+/* Mặt sau và Mặt trước thẻ bài */
+.pc-card-back,
+.pc-card-front {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--card-radius);
+  backface-visibility: hidden;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* ================= CHI TIẾT MẶT SAU (CARD BACK) ================= */
+.pc-card-back {
+  z-index: 2;
+  transform: rotateY(0deg);
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Backdrop tròn màu trắng ngọc trai */
+/* .pc-white-backdrop {
+  width: 106px;
+  height: 106px;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12), inset 0 2px 8px rgba(0,0,0,0.06);
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+} */
+
+/* Đốm sáng xà cừ óng ánh trên backdrop */
+.pc-pearl-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at var(--pointer-x) var(--pointer-y),
+    rgba(255, 255, 255, 0.94) 0%,
+    rgba(0, 242, 254, 0.22) 35%,
+    rgba(243, 85, 218, 0.22) 65%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  pointer-events: none;
+  opacity: calc(0.75 + var(--pointer-from-center) * 0.25);
+  z-index: 1;
+  transition: opacity 250ms ease;
+}
+
+/* Chữ gợi ý lật bài */
+/* .pc-card-back-text {
+  margin-top: 20px;
+  color: #5c546d;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  z-index: 1;
+  opacity: 0.85;
+  text-shadow: 0 1px 2px rgba(255,255,255,0.8);
+} */
+
+/* ================= CHI TIẾT MẶT TRƯỚC (CARD FRONT) ================= */
+.pc-card-front {
+  z-index: 1;
+  transform: rotateY(180deg);
+}
+
+.pc-front-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  display: block;
+}
+
+/* Lớp phủ nhũ cầu vồng mặt trước (Foil Holographic Overlay) */
+.pc-front-holo-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--card-radius);
+  z-index: 2;
+  pointer-events: none;
+  opacity: calc(0.3 + var(--pointer-from-center) * 0.15);
+  mix-blend-mode: color-dodge;
+  transition: opacity 300ms ease;
+}
+
+/* ================= BỘ MÁY PHẢN QUANG HOLOGRAPHIC SHINE ================= */
+.pc-shine {
+  overflow: hidden;
+  z-index: 3;
+  mix-blend-mode: color-dodge;
+  background-position:
+    0 var(--background-y),
+    var(--background-x) var(--background-y),
+    center;
+  background-blend-mode: color, hard-light;
+  background-size:
+    500% 500%,
+    300% 300%,
+    200% 200%;
+  background-repeat: repeat;
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      var(--sunpillar-clr-1) calc(var(--space, 5%) * 1),
+      var(--sunpillar-clr-2) calc(var(--space, 5%) * 2),
+      var(--sunpillar-clr-3) calc(var(--space, 5%) * 3),
+      var(--sunpillar-clr-4) calc(var(--space, 5%) * 4),
+      var(--sunpillar-clr-5) calc(var(--space, 5%) * 5),
+      var(--sunpillar-clr-6) calc(var(--space, 5%) * 6),
+      var(--sunpillar-clr-1) calc(var(--space, 5%) * 7)
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      #0e152e 0%,
+      hsl(180, 10%, 65%) 3.8%,
+      hsl(180, 28%, 70%) 4.5%,
+      hsl(180, 10%, 65%) 5.2%,
+      #0e152e 10%,
+      #0e152e 12%
+    ),
+    radial-gradient(
+      farthest-corner circle at var(--pointer-x) var(--pointer-y),
+      hsla(0, 0%, 0%, 0.1) 12%,
+      hsla(0, 0%, 0%, 0.15) 20%,
+      hsla(0, 0%, 0%, 0.25) 120%
+    );
+  filter: brightness(0.8) contrast(1.3) saturate(0.6);
+}
+/* 
+.pc-shine::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  opacity: calc(0.8 * var(--card-opacity));
+  background-image:
+    linear-gradient(
+      45deg,
+      var(--sunpillar-4),
+      var(--sunpillar-5),
+      var(--sunpillar-6),
+      var(--sunpillar-1),
+      var(--sunpillar-2),
+      var(--sunpillar-3)
+    ),
+    radial-gradient(circle at var(--pointer-x) var(--pointer-y), hsl(0, 0%, 75%) 0%, hsla(0, 0%, 25%, 0.15) 90%),
+    var(--grain);
+  background-size:
+    250% 250%,
+    100% 100%,
+    200px 200px;
+  background-position:
+    var(--pointer-x) var(--pointer-y),
+    center,
+    calc(var(--pointer-x) * 0.01) calc(var(--pointer-y) * 0.01);
+  background-blend-mode: color-dodge;
+  filter: brightness(calc(1.8 - var(--pointer-from-center))) contrast(calc(var(--pointer-from-center) + 1.8))
+    saturate(calc(0.4 + var(--pointer-from-center)));
+  mix-blend-mode: luminosity;
+  transition: opacity 300ms ease;
+} */
+
+/* Hiệu ứng chớp lóa specular reflection cực mạnh của Glare */
+.pc-glare {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--card-radius);
+  overflow: hidden;
+  background-image: radial-gradient(
+    farthest-corner circle at var(--pointer-x) var(--pointer-y),
+    rgba(255, 255, 255, 0.45) 8%,
+    hsla(207, 40%, 30%, 0.65) 90%
+  );
+  mix-blend-mode: overlay;
+  filter: brightness(0.9) contrast(1.3);
+  z-index: 4;
+  pointer-events: none;
+  opacity: calc(0.75 * var(--card-opacity));
+  transition: opacity 300ms ease;
+}
+
+/* ================= TỐI ƯU HÓA HIỆU NĂNG CHO THIẾT BỊ DI ĐỘNG (iPHONE 11, v.v.) ================= */
+@media (pointer: coarse), (max-width: 768px) {
+  /* 1. Thay thế đổ bóng động bằng đổ bóng tĩnh siêu nhẹ cho GPU */
+  .pc-card {
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4) !important;
+    will-change: transform;
+    transform: rotateX(var(--rotate-y)) rotateY(calc(var(--base-rotation-y) + var(--rotate-x))) !important;
+  }
+
+  /* 2. Loại bỏ hoàn toàn các lớp phủ blend màu color-dodge cực nặng trên Safari di động */
+  /* .pc-shine,
+  .pc-glare,
+  .pc-front-holo-overlay {
+    display: none !important;
+  } */
+
+  /* 3. Đơn giản hóa mặt sau lá bài */
+  /* .pc-card-back {
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  } */
+
+  /* 4. Giảm cường độ đổ bóng phức tạp của Moon SVG trên di động */
+  /* .pc-card-back svg {
+    filter: drop-shadow(0 0 15px rgba(243, 85, 218, 0.4)) !important;
+  } */
+}
+

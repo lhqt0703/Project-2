@@ -37,14 +37,21 @@ export function appendLogEntry(room: Room, entry: GameLogEntry) {
   }
 }
 
-export function buildWolfVoteBreakdown(room: Room, votes: Record<string, string | null>): GameLogEntry {
+export function buildWolfVoteBreakdown(
+  room: Room,
+  ...voteMaps: Array<Record<string, string | null> | undefined>
+): GameLogEntry {
   const activeWolves = getActiveWolves(room);
   const map: Record<string, string[]> = {};
   for (const wid of activeWolves) {
-    const t = votes[wid];
-    if (!t) continue;
-    map[t] = map[t] || [];
-    map[t].push(wid);
+    for (const votes of voteMaps) {
+      const t = votes?.[wid];
+      if (!t) continue;
+      map[t] = map[t] || [];
+      if (!map[t].includes(wid)) {
+        map[t].push(wid);
+      }
+    }
   }
   const targets = Object.keys(map);
   targets.sort((a, b) => getPlayerName(room, a).localeCompare(getPlayerName(room, b)));

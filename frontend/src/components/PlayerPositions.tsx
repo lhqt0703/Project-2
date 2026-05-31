@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { socket, clientId } from "../socket";
 import { useRoomContext } from "../context/RoomContext";
 import { getDeterministicSlots1to18, getDeterministicSlots19Plus } from "./layouts";
+import ElementalVFX from "./ElementalVFX";
 
 interface PlayerPosition {
   playerId: string;
@@ -1210,6 +1211,16 @@ export default function PlayerPositions({
           const showCheeseBadge = !!cheesePlayerIds && cheesePlayerIds.includes(p.id);
           const wolfBadgeText = showWolfBadge ? (wolfBadgeRoles?.[p.id] || "Sói") : undefined;
           const roleBadgeText = (showRoleBadges && roleBadges) ? roleBadges[p.id] : undefined;
+          
+          const vfxType = (() => {
+            if (!roleBadgeText) return null;
+            if (roleBadgeText === "Băng Giá") return "ice";
+            if (roleBadgeText === "Sấm Sét") return "thunder";
+            if (roleBadgeText === "Lửa") return "fire";
+            if (roleBadgeText === "Bóng Tối") return "darkness";
+            return null;
+          })();
+
           const isWolfBadgeRole = roleBadgeText === "Sói" || roleBadgeText === "Sói con" || roleBadgeText === "Sói Dại" || roleBadgeText === "Bán sói";
           const isActiveNightRoleBadge = !!activeNightRole && (
             (activeNightRole === "Sói" && isWolfBadgeRole) ||
@@ -1378,6 +1389,9 @@ export default function PlayerPositions({
                   : "left 0.2s, top 0.2s, width 220ms ease, height 220ms ease, border-radius 220ms ease, box-shadow 300ms ease, transform 0.2s ease", // Smooth move + resize + glow
               }}
             >
+              {/* Elemental VFX (Ice, Fire, Thunder, Darkness) */}
+              {vfxType && <ElementalVFX type={vfxType} />}
+
               {/* Concentric Halo Rings */}
               {isSeerResult && (
                 <div className="player-halo halo-seer" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid ${seerResult!.isWolf ? "#ef4444" : "#f1f5f9"}` }} />

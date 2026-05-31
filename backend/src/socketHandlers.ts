@@ -258,6 +258,23 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     return clientId === room.hostId || room.positionEditors?.includes(clientId) === true;
   }
 
+  function clearLobbyHeartBadges(room: Room) {
+    const hadHeartBadges =
+      room.sharedHeartsVisible === true ||
+      Object.keys(room.playerHearts || {}).length > 0 ||
+      Object.keys(room.privatePlayerHearts || {}).length > 0 ||
+      (room.privateHeartVisiblePlayerIds || []).length > 0 ||
+      (room.playerHeartShakeIds || []).length > 0;
+
+    room.sharedHeartsVisible = false;
+    room.playerHearts = {};
+    room.privatePlayerHearts = {};
+    room.privateHeartVisiblePlayerIds = [];
+    room.playerHeartShakeIds = [];
+
+    return hadHeartBadges;
+  }
+
   function setRoomPendingRoleAssignments(room: Room, assignments: PendingRoleAssignments) {
     if (Object.keys(assignments).length > 0) {
       room.pendingRoleAssignments = assignments;
@@ -1342,7 +1359,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     const nextInGame = view === "game";
     const current = room.players[idx];
-    if (!current || current.inGame === nextInGame) return;
+    const heartsChanged = !nextInGame && room.gameOver ? clearLobbyHeartBadges(room) : false;
+    if (!current || (current.inGame === nextInGame && !heartsChanged)) return;
 
     room.players[idx] = { ...current, inGame: nextInGame };
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
@@ -1525,6 +1543,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     const current = room.players[idx];
     if (current) {
+      if (room.gameOver) {
+        clearLobbyHeartBadges(room);
+      }
       room.players[idx] = { ...current, inGame: false };
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     }

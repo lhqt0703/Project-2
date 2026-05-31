@@ -582,10 +582,12 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       (room.nightCount || 0) === 1 &&
       activeWolves.length > 0;
 
-    appendLogEntry(room, buildWolfVoteBreakdown(room, votes));
-    if (room.wolfBonusBiteThisNight) {
-      appendLogEntry(room, buildWolfVoteBreakdown(room, votes2));
-    }
+    appendLogEntry(
+      room,
+      room.wolfBonusBiteThisNight
+        ? buildWolfVoteBreakdown(room, votes, votes2)
+        : buildWolfVoteBreakdown(room, votes)
+    );
 
     const randomFrom = <T,>(items: T[]): T | null => {
       if (!items.length) return null;

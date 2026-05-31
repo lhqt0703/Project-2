@@ -28,6 +28,7 @@ import { useAngelRole } from "./gameRoles/useAngelRole";
 import { ScoreboardModal } from "../components/ScoreboardModal";
 import RoleCard3D from "../components/RoleCard3D";
 import PhaseTransitionOverlay from "../components/PhaseTransitionOverlay";
+import GridMotionOverlay from "../components/GridMotionOverlay";
 
 
 const WOLF_TEAM_REVEAL_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
@@ -122,6 +123,21 @@ export default function Game() {
 
   const lastPhaseRef = useRef<any>(null);
   const lastNumberRef = useRef<number>(0);
+
+  // States và Effect cho chuyển cảnh pha Hoàng Hôn (GridMotion) khi mới vào game
+  const [duskTransitionActive, setDuskTransitionActive] = useState(false);
+  const duskPlayedRef = useRef(false);
+
+  useEffect(() => {
+    if (phase === "dusk") {
+      if (!duskPlayedRef.current) {
+        setDuskTransitionActive(true);
+        duskPlayedRef.current = true;
+      }
+    } else {
+      duskPlayedRef.current = false;
+    }
+  }, [phase]);
 
   useEffect(() => {
     if (phase === "dusk") {
@@ -1387,11 +1403,30 @@ export default function Game() {
           {phase === "dusk" ? (
             <>
               <h1>🌥️ Hoàng hôn</h1>
-              {!isHost && (
-                <RoleCard3D
-                  role={role}
-                  revealed={shouldRevealMyRole}
-                />
+              {!isHost && !duskTransitionActive && (
+                <>
+                  <style>{`
+                    @keyframes floatUp {
+                      0% {
+                        transform: translateY(100vh);
+                        opacity: 0;
+                      }
+                      100% {
+                        transform: translateY(0);
+                        opacity: 1;
+                      }
+                    }
+                    .float-up-container {
+                      animation: floatUp 0.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+                    }
+                  `}</style>
+                  <div className="float-up-container">
+                    <RoleCard3D
+                      role={role}
+                      revealed={shouldRevealMyRole}
+                    />
+                  </div>
+                </>
               )}
             </>
           ) : phase === "day" ? (
@@ -1518,7 +1553,7 @@ export default function Game() {
       )}
       {angel.panel}
       {/* Hiển thị bố cục vị trí người chơi khi có room.positions */}
-      {roomForDisplay?.positions && (() => {
+      {roomForDisplay?.positions && phase !== "dusk" && (() => {
         const activeReplayEvent = roomForDisplay?.isReplay && roomForDisplay?.replayEvents && roomForDisplay?.replayIndex !== undefined
           ? roomForDisplay.replayEvents[roomForDisplay.replayIndex - 1]
           : null;
@@ -1924,6 +1959,13 @@ export default function Game() {
       active={transitionActive}
       onComplete={() => setTransitionActive(false)}
     />
+
+    {duskTransitionActive && (
+      <GridMotionOverlay
+        active={duskTransitionActive}
+        onComplete={() => setDuskTransitionActive(false)}
+      />
+    )}
 
     </div>
   );

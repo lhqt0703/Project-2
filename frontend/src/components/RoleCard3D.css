@@ -36,11 +36,10 @@
   /*perspective: 1200px;   càng nhỏ thì hiệu ứng 3D càng mạnh và ngược lại */
   z-index: 10;
   position: fixed;
-  top: 20dvh;
   left: 50%;
+  top: 1dvh;
   transform: translateX(-50%);
   touch-action: none;
-  margin: 0;
 }
 
 @media (max-width: 1024px) {

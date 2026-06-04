@@ -5,7 +5,6 @@ import { getDeterministicSlots1to18, getDeterministicSlots19Plus } from "./layou
 import ElementalVFX from "./ElementalVFX";
 import BorderGlow from "./BorderGlow";
 import Orb from "./Orb";
-import MagicRings from "./MagicRings";
 
 interface PlayerPosition {
   playerId: string;
@@ -1331,20 +1330,12 @@ export default function PlayerPositions({
 
           const innerContent = (
             <>
-              {/* WebGL Orb highlight overlay for night phase */}
-              {showSelectedOutline && room.phase === "night" && (
-                <Orb hue={160} />
-              )}
-
               {/* Elemental VFX (Ice, Fire, Thunder, Darkness) */}
               {vfxType && <ElementalVFX type={vfxType} />}
 
               {/* Concentric Halo Rings */}
               {isSeerResult && (
-                <MagicRings
-                  color={seerResult!.isWolf ? "#f38991" : "#e9e4ff"}
-                  colorTwo={seerResult!.isWolf ? "#e4acb5" : "#acade4"}
-                />
+                <div className="player-halo halo-seer" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid ${seerResult!.isWolf ? "#ef4444" : "#f1f5f9"}` }} />
               )}
               {isVerdictLiveHighlighted && (
                 <div className="player-halo halo-live" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #10b981` }} />
@@ -1381,7 +1372,7 @@ export default function PlayerPositions({
                 <div className="player-halo halo-active-role" style={{ inset: -scalePx(10, 6), border: `${scalePx(2.5, 1.5)}px solid #ffd700` }} />
               )}
               {trialOrangePlayerId === pos.playerId && (
-                <div className="player-halo halo-trial-orange" style={{ inset: -scalePx(12, 8), border: `${scalePx(2.5, 2)}px solid #f59e0b` }} />
+                <Orb hue={160} />
               )}
               {trialGreenPlayerId === pos.playerId && (
                 <div className="player-halo halo-trial-green" style={{ inset: -scalePx(12, 8), border: `${scalePx(2.5, 2)}px solid #34d399` }} />
@@ -1630,7 +1621,7 @@ export default function PlayerPositions({
               fontSize: playerFontSizePx,
               cursor: isEditor ? (swapSource ? "crosshair" : "grab") : "pointer",
               zIndex: dragging === pos.playerId ? 10 : 1,
-              outline: showSelectedOutline && room.phase !== "night" ? `${selectedBorderPx}px solid rgba(255,165,0,0.9)` : undefined,
+              outline: showSelectedOutline ? `${selectedBorderPx}px solid rgba(255,165,0,0.9)` : undefined,
               transition: dragging === pos.playerId
                 ? "none"
                 : "left 0.2s, top 0.2s, width 220ms ease, height 220ms ease, border-radius 220ms ease, box-shadow 300ms ease, transform 0.2s ease", // Smooth move + resize + glow

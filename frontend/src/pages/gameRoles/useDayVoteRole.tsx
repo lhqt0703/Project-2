@@ -28,6 +28,7 @@ export function useDayVoteRole({
   trialSelectedInteractorIds,
   trialInteractionSelectionLimit,
   trialVotes,
+  serverTimeOffset = 0,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -48,18 +49,19 @@ export function useDayVoteRole({
   trialSelectedInteractorIds: string[];
   trialInteractionSelectionLimit: number;
   trialVotes: TrialVotesUpdatedPayload | null;
+  serverTimeOffset?: number;
 }) {
   const [localSelectedTarget, setLocalSelectedTarget] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now() + serverTimeOffset);
 
   useEffect(() => {
     if (phase !== "day") return;
     const hasAnyTimer = !!dayDiscussionDeadline || !!dayDeadline || !!trialDefenseDeadline || !!trialVerdictDeadline;
     if (!hasAnyTimer) return;
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), 1000);
+    setNow(Date.now() + serverTimeOffset);
+    const t = setInterval(() => setNow(Date.now() + serverTimeOffset), 1000);
     return () => clearInterval(t);
-  }, [phase, dayDiscussionDeadline, dayDeadline, trialDefenseDeadline, trialVerdictDeadline]);
+  }, [phase, dayDiscussionDeadline, dayDeadline, trialDefenseDeadline, trialVerdictDeadline, serverTimeOffset]);
 
   useEffect(() => {
     if (phase !== "day") {
@@ -118,7 +120,7 @@ export function useDayVoteRole({
     if (deadPlayers.includes(playerId)) return true;
 
     if (dayLocked?.[clientId]) return true;
-    if (dayDeadline && Date.now() >= dayDeadline) return true;
+    if (dayDeadline && Date.now() + serverTimeOffset >= dayDeadline) return true;
 
     if (localSelectedTarget === playerId) {
       setLocalSelectedTarget(null);
@@ -129,7 +131,7 @@ export function useDayVoteRole({
     setLocalSelectedTarget(playerId);
     socket.emit("dayChooseTarget", { roomId, targetId: playerId });
     return true;
-  }, [canAct, dayDeadline, dayLocked, deadPlayers, isTrialTarget, localSelectedTarget, roomId, trialInteractionActiveIds, trialStage]);
+  }, [canAct, dayDeadline, dayLocked, deadPlayers, isTrialTarget, localSelectedTarget, roomId, trialInteractionActiveIds, trialStage, serverTimeOffset]);
 
   const activeCountdownDeadline = useMemo(() => {
     if (trialStage === "verdict") return trialVerdictDeadline;

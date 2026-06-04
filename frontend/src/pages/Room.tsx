@@ -553,6 +553,7 @@ export default function Room() {
   const hasInGamePlayers = room.players.some((p) => p.inGame === true);
   const participantCount = room.players.filter((p) => p.id !== room.hostId).length;
   const selectedRoleCount = room.roles?.length ?? 0;
+  const hasElementalRole = (room.roles || []).some((role) => ELEMENTAL_ROLE_SET.has(role));
   const hasEnoughRolesToStart = selectedRoleCount >= participantCount && selectedRoleCount > 0;
   const startGameDisabled = !gameInProgress && hasInGamePlayers;
   const startGameTooltip = hasInGamePlayers
@@ -641,21 +642,25 @@ export default function Room() {
               >
                 Xem luật hiện tại
               </button>
-              <button
-                onClick={() => setElementalInfoModal({
-                  title: "Buff nguyên tố theo tier",
-                  message: formatElementalBuffGuide(),
-                })}
-                title="Xem các buff nguyên tố có thể được chọn"
-              >
-                Xem buff nguyên tố
-              </button>
-              <button
-                onClick={() => setShowElementalEffectGuide(true)}
-                title="Xem hậu quả khi dân làng nguyên tố bị giết"
-              >
-                Xem hiệu ứng nguyên tố
-              </button>
+              {hasElementalRole && (
+                <>
+                  <button
+                    onClick={() => setElementalInfoModal({
+                      title: "Buff nguyên tố theo tier",
+                      message: formatElementalBuffGuide(),
+                    })}
+                    title="Xem các buff nguyên tố có thể được chọn"
+                  >
+                    Xem buff nguyên tố
+                  </button>
+                  <button
+                    onClick={() => setShowElementalEffectGuide(true)}
+                    title="Xem hậu quả khi dân làng nguyên tố bị giết"
+                  >
+                    Xem hiệu ứng nguyên tố
+                  </button>
+                </>
+              )}
               {gameInProgress && (
                 <button
                   onClick={returnToCurrentGame}

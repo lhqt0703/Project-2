@@ -13,6 +13,23 @@
         width: 100%;
         height: 100%;
       }
+</style>
+    <!-- 
+      ==========================================================================
+      [TỐI ƯU HÓA MÀN HÌNH TRẮNG KHI TẢI LẠI TRANG / KHỞI ĐỘNG APP]
+      Để bật hiệu ứng màn hình chờ tối ưu chống màn hình trắng khi tải lại trang, 
+      bạn chỉ cần bỏ comment khối <style> và khối <div class="app-loading-container"> 
+      ở bên dưới.
+      ==========================================================================
+      
+    <style>
+      html, body {
+        background-color: #0f1115;
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+      }
       .app-loading-container {
         display: flex;
         flex-direction: column;
@@ -50,13 +67,17 @@
         50% { opacity: 1; transform: scale(1); }
       }
     </style>
+    -->
   </head>
   <body>
     <div id="root">
+      <!-- 
+      [MÀN HÌNH CHỜ CHỐNG CHỚP TRẮNG - HỦY COMMENT KHI BẬT TỐI ƯU]
       <div class="app-loading-container">
         <div class="app-loading-logo">DẠ NGHỊCH</div>
         <div class="app-loading-spinner"></div>
       </div>
+      -->
     </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

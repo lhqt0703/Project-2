@@ -2407,6 +2407,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     ctx.io.to(roomId).emit("phaseChanged", phase);
 
     if (phase === "day") {
+      room.nightActionExtraTimeMsByPlayerId = {};
       const revealedAngelRevives = revealAngelHiddenRevivesForDay(room);
       for (const record of revealedAngelRevives) {
         emitAngelPrivateState(ctx, roomId, room, record.angelId);

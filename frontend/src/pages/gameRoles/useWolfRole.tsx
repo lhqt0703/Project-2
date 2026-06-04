@@ -34,6 +34,7 @@ export function useWolfRole({
   allNightActionsSimultaneous,
   currentNightTurnRole,
   nightTurnPaused,
+  nightActionNow,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -50,6 +51,7 @@ export function useWolfRole({
   allNightActionsSimultaneous: boolean;
   currentNightTurnRole: string | null;
   nightTurnPaused: boolean;
+  nightActionNow: number;
 }) {
   const [localSelectedTarget, setLocalSelectedTarget] = useState<string | null>(null);
   const [localSelectedTarget2, setLocalSelectedTarget2] = useState<string | null>(null);
@@ -57,7 +59,6 @@ export function useWolfRole({
   const hasSubmittedLockRef = useRef(false);
   const [wildWolfConversionPickerOpen, setWildWolfConversionPickerOpen] = useState(false);
   const [wildWolfLocalConversionTarget, setWildWolfLocalConversionTarget] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
 
   const isBanSoiAligned = room.banSoiWolfAligned === true;
   const isWildWolfConverted = room.wildWolfConvertedSelf === true;
@@ -71,15 +72,6 @@ export function useWolfRole({
     typeof room.gameRules?.wolfNightActionDurationSec === "number"
       ? Math.max(0, room.gameRules.wolfNightActionDurationSec)
       : null;
-
-  useEffect(() => {
-    // Chỉ tick khi cần hiển thị countdown cho sói
-    if (!isWolfTeam || phase !== "night" || !wolfDeadline || nightTurnPaused) return;
-    // Refresh immediately to avoid showing stale remaining seconds when phase switches quickly.
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [isWolfTeam, nightTurnPaused, phase, wolfDeadline]);
 
   const activeWolvesAlive = useMemo(() => {
     const effective = (activeWolves.length ? activeWolves : wolves)
@@ -134,7 +126,7 @@ export function useWolfRole({
     return true;
   }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, isWolfTeam, phase, wolfBiteDisabled]);
 
-  const deadlineReached = !!(wolfDeadline && now >= wolfDeadline && !nightTurnPaused);
+  const deadlineReached = !!(wolfDeadline && nightActionNow >= wolfDeadline && !nightTurnPaused);
   const effectiveSelectedTarget = localSelectedTarget || (clientId ? room.wolfVotes?.[clientId] || null : null);
   const effectiveSelectedTarget2 = localSelectedTarget2 || (clientId ? room.wolfVotes2?.[clientId] || null : null);
   const wildWolfConversionCandidateIds = useMemo(
@@ -158,8 +150,8 @@ export function useWolfRole({
   const wildWolfHalfTimeReached = useMemo(() => {
     if (!wolfDeadline || !wolfDurationSec || wolfDurationSec <= 0) return false;
     const durationMs = Math.floor(wolfDurationSec * 1000);
-    return now >= wolfDeadline - durationMs / 2;
-  }, [now, wolfDeadline, wolfDurationSec]);
+    return nightActionNow >= wolfDeadline - durationMs / 2;
+  }, [nightActionNow, wolfDeadline, wolfDurationSec]);
   const shouldPulseWildWolfConversion =
     isWildWolf &&
     room.wildWolfConvertAvailableTonight === true &&
@@ -405,7 +397,7 @@ export function useWolfRole({
         </button>
         {wolfDeadline && (
           <div style={{ marginTop: 6 }}>
-            Thời gian còn lại: {Math.max(0, Math.ceil((wolfDeadline - now) / 1000))}s {nightTurnPaused ? "(đang tạm ngưng)" : ""}
+            Thời gian còn lại: {Math.max(0, Math.ceil((wolfDeadline - nightActionNow) / 1000))}s {nightTurnPaused ? "(đang tạm ngưng)" : ""}
           </div>
         )}
       </div>

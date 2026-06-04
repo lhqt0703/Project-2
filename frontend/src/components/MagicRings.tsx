@@ -16,6 +16,7 @@ uniform float uTime, uAttenuation, uLineThickness;
 uniform float uBaseRadius, uRadiusStep, uScaleRate;
 uniform float uOpacity, uNoiseAmount, uRotation, uRingGap;
 uniform float uFadeIn, uFadeOut;
+uniform float uBurst;
 uniform vec2 uResolution;
 uniform vec3 uColor, uColorTwo;
 uniform int uRingCount;
@@ -41,6 +42,14 @@ float ring(vec2 p, float ri, float cut, float t0, float px) {
 void main() {
   float px = 1.0 / min(uResolution.x, uResolution.y);
   vec2 p = (gl_FragCoord.xy - 0.5 * uResolution.xy) * px;
+  
+  // Scale down coordinates to prevent the rings from being cut off at the canvas boundaries
+  p *= 2.2;
+
+  // Scale pulse based on uBurst
+  float sc = 1.0 + uBurst * 0.25;
+  p /= sc;
+  
   float cr = cos(uRotation), sr = sin(uRotation);
   p = mat2(cr, -sr, sr, cr) * p;
   vec3 c = vec3(0.0);
@@ -51,6 +60,10 @@ void main() {
     vec3 rc = mix(uColor, uColorTwo, fi / rcf);
     c = mix(c, rc, vec3(ring(p, uBaseRadius + fi * uRadiusStep, pow(uRingGap, fi), i == 0 ? 0.0 : 2.95 * fi, px)));
   }
+
+  // Brightness flash based on uBurst
+  c *= 1.0 + uBurst * 2.5;
+
   float n = fract(sin(dot(gl_FragCoord.xy + uTime * 100.0, vec2(12.9898, 78.233))) * 43758.5453);
   c += (n - 0.5) * uNoiseAmount;
   gl_FragColor = vec4(c, max(c.r, max(c.g, c.b)) * uOpacity);
@@ -74,6 +87,7 @@ interface MagicRingsProps {
   ringGap?: number;
   fadeIn?: number;
   fadeOut?: number;
+  pulse?: boolean;
 }
 
 export default function MagicRings({
@@ -93,6 +107,7 @@ export default function MagicRings({
   ringGap = 1.5,
   fadeIn = 0.7,
   fadeOut = 0.5,
+  pulse = false,
 }: MagicRingsProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const propsRef = useRef<Required<MagicRingsProps> | null>(null);
@@ -100,7 +115,7 @@ export default function MagicRings({
   propsRef.current = {
     color, colorTwo, speed, ringCount, attenuation, lineThickness,
     baseRadius, radiusStep, scaleRate, opacity, blur, noiseAmount,
-    rotation, ringGap, fadeIn, fadeOut,
+    rotation, ringGap, fadeIn, fadeOut, pulse,
   };
 
   useEffect(() => {
@@ -126,12 +141,13 @@ export default function MagicRings({
     const camera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, 0.1, 10);
     camera.position.z = 1;
 
+    // Use initial props for starting colors so there is no black flash on load
     const uniforms = {
       uTime: { value: 0 },
       uAttenuation: { value: 0 },
       uResolution: { value: new THREE.Vector2() },
-      uColor: { value: new THREE.Color() },
-      uColorTwo: { value: new THREE.Color() },
+      uColor: { value: new THREE.Color(color) },
+      uColorTwo: { value: new THREE.Color(colorTwo) },
       uLineThickness: { value: 0 },
       uBaseRadius: { value: 0 },
       uRadiusStep: { value: 0 },
@@ -143,6 +159,7 @@ export default function MagicRings({
       uRingGap: { value: 1.6 },
       uFadeIn: { value: 0.5 },
       uFadeOut: { value: 0.75 },
+      uBurst: { value: 0.0 },
     };
 
     const material = new THREE.ShaderMaterial({ vertexShader, fragmentShader, uniforms, transparent: true });
@@ -164,14 +181,40 @@ export default function MagicRings({
     ro.observe(mount);
 
     let frameId: number;
+    let burstValue = 0.0;
+    let lastBurstTime = 0;
+
     const animate = (t: number) => {
       frameId = requestAnimationFrame(animate);
       const p = propsRef.current!;
 
+      // Interpolate colors smoothly (fade)
+      const lerpSpeed = 0.06;
+      const targetColor = new THREE.Color(p.color);
+      const targetColorTwo = new THREE.Color(p.colorTwo);
+      uniforms.uColor.value.lerp(targetColor, lerpSpeed);
+      uniforms.uColorTwo.value.lerp(targetColorTwo, lerpSpeed);
+
+      // Trigger automatic pulse every 1 second if active
+      if (p.pulse) {
+        const now = performance.now();
+        if (now - lastBurstTime >= 1000) {
+          lastBurstTime = now;
+          burstValue = 1.0;
+        }
+      } else {
+        burstValue = 0.0;
+      }
+
+      // Decay the burst pulse
+      burstValue *= 0.93;
+      if (burstValue < 0.001) {
+        burstValue = 0.0;
+      }
+      uniforms.uBurst.value = burstValue;
+
       uniforms.uTime.value = t * 0.001 * p.speed;
       uniforms.uAttenuation.value = p.attenuation;
-      uniforms.uColor.value.set(p.color);
-      uniforms.uColorTwo.value.set(p.colorTwo);
       uniforms.uLineThickness.value = p.lineThickness;
       uniforms.uBaseRadius.value = p.baseRadius;
       uniforms.uRadiusStep.value = p.radiusStep;

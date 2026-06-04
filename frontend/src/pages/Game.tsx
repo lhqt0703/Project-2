@@ -31,6 +31,7 @@ import DecryptedText from "../components/DecryptedText";
 import medalSvg from "../assets/medal.svg";
 // import PhaseTransitionOverlay from "../components/PhaseTransitionOverlay";
 import GridMotionOverlay from "../components/GridMotionOverlay";
+import RoleCompanionOverlay from "../components/RoleCompanionOverlay";
 
 
 const WOLF_TEAM_REVEAL_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
@@ -100,7 +101,11 @@ export default function Game() {
   const nightTurnPaused = !!room?.nightTurnPaused;
   const nightTurnDeadline = room?.nightTurnDeadline ?? null;
   const nightTurnRemainingMs = room?.nightTurnRemainingMs ?? null;
-  const [nightTurnNow, setNightTurnNow] = useState(() => Date.now());
+  const serverTimeOffset = useMemo(() => {
+    if (!room?.serverTime) return 0;
+    return room.serverTime - Date.now();
+  }, [room?.serverTime]);
+  const [nightTurnNow, setNightTurnNow] = useState(() => Date.now() + serverTimeOffset);
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const [scoreboardOpen, setScoreboardOpen] = useState(false);
@@ -130,18 +135,44 @@ export default function Game() {
   const [duskTransitionActive, setDuskTransitionActive] = useState(false);
   const [lowPerformanceMode, setLowPerformanceMode] = useState(false); // Tự động tắt chế độ hiệu năng thấp trên thiết bị yếu hoặc khi debugAnim=true
   const [isAnimatingLeaf, setIsAnimatingLeaf] = useState(false);
+  const [duskRevealGameUI, setDuskRevealGameUI] = useState(false);
   const duskPlayedRef = useRef(false);
 
+  /* ==========================================================================
+     [HIỆU ỨNG GridMotion CHUYỂN CẢNH HOÀNG HÔN (DUSK TRANSITION)]
+     Bạn có thể chuyển đổi giữa các bản bằng cách comment / uncomment.
+     ========================================================================== */
+
+  /* BẢN TỐI ƯU CỰC CAO (Smooth tuyệt đối: che giao diện bên dưới cho đến khi GridMotion che phủ hoàn toàn rồi mới hiện) */
   useEffect(() => {
     if (phase === "dusk" && room?.phase === "dusk") {
       if (!duskPlayedRef.current) {
         setDuskTransitionActive(true);
         duskPlayedRef.current = true;
+        setDuskRevealGameUI(false);
+        const timer = window.setTimeout(() => {
+          setDuskRevealGameUI(true);
+        }, 1200);
+        return () => window.clearTimeout(timer);
       }
     } else if (phase !== "dusk") {
       duskPlayedRef.current = false;
+      setDuskRevealGameUI(true);
     }
   }, [phase, room?.phase]);
+
+  /* BẢN GỐC CHƯA TỐI ƯU (Sẽ bị chớp giao diện trước khi GridMotion che phủ)
+  useEffect(() => {
+    if (phase === "dusk") {
+      if (!duskPlayedRef.current) {
+        setDuskTransitionActive(true);
+        duskPlayedRef.current = true;
+      }
+    } else {
+      duskPlayedRef.current = false;
+    }
+  }, [phase]);
+  */
 
   // useEffect(() => {
   //   if (phase === "dusk") {
@@ -297,7 +328,7 @@ export default function Game() {
   }, [clearVerdictHighlight, sync.gameLogNights]);
 
   // During dusk, log stays hidden to everyone.
-  const canViewLog = !isDusk && (isHost || phase === "day" || !!sync.gameEnded);
+  const canViewLog = room?.isReplay === true || (!isDusk && (isHost || phase === "day" || !!sync.gameEnded));
   const canViewRoles = isHost || !!sync.gameEnded;
 
   useEffect(() => {
@@ -306,10 +337,10 @@ export default function Game() {
     if (!currentNightTurnRole) return;
     if (!nightTurnDeadline) return;
     if (nightTurnPaused) return;
-    setNightTurnNow(Date.now());
-    const t = setInterval(() => setNightTurnNow(Date.now()), 1000);
+    setNightTurnNow(Date.now() + serverTimeOffset);
+    const t = setInterval(() => setNightTurnNow(Date.now() + serverTimeOffset), 1000);
     return () => clearInterval(t);
-  }, [allNightActionsSimultaneous, currentNightTurnRole, nightTurnDeadline, nightTurnPaused, phase]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, nightTurnDeadline, nightTurnPaused, phase, serverTimeOffset]);
 
   const isSimultaneousNight = phase === "night" && allNightActionsSimultaneous;
 
@@ -390,10 +421,10 @@ export default function Game() {
     if (!isSimultaneousNight) return;
     if (!mySimultaneousDeadline) return;
     if (nightTurnPaused) return;
-    setNightTurnNow(Date.now());
-    const t = setInterval(() => setNightTurnNow(Date.now()), 1000);
+    setNightTurnNow(Date.now() + serverTimeOffset);
+    const t = setInterval(() => setNightTurnNow(Date.now() + serverTimeOffset), 1000);
     return () => clearInterval(t);
-  }, [isSimultaneousNight, mySimultaneousDeadline, nightTurnPaused]);
+  }, [isSimultaneousNight, mySimultaneousDeadline, nightTurnPaused, serverTimeOffset]);
 
   const isSequentialNight = phase === "night" && !allNightActionsSimultaneous;
 
@@ -446,6 +477,17 @@ export default function Game() {
     if (role === "Bán sói" && !isBanSoiOrWildConverted) return false;
     return role === currentNightTurnRole;
   }, [currentNightTurnRole, isBanSoiOrWildConverted, isWolfTeamRole, role]);
+
+  const isNightActionTimeExpired = useMemo(() => {
+    if (phase !== "night" || sync.gameEnded) return false;
+    if (isSequentialNight) {
+      if (!doesNightTurnMatchMyRole) return false;
+      return nightTurnRemainingSec !== null && nightTurnRemainingSec <= 0;
+    } else {
+      if (!mySimultaneousDeadline) return false;
+      return simultaneousRemainingSec !== null && simultaneousRemainingSec <= 0;
+    }
+  }, [phase, sync.gameEnded, isSequentialNight, doesNightTurnMatchMyRole, nightTurnRemainingSec, mySimultaneousDeadline, simultaneousRemainingSec]);
 
   const hasSecretConditionalRolePrompt =
     !!sync.spiritWolfDecisionTargetId &&
@@ -668,7 +710,7 @@ export default function Game() {
       playerNamesById={playerNamesById}
       targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
       onHighlightPlayer={handleLogHighlightPlayer}
-      canViewNightLogs={isHost || !!sync.gameEnded}
+      canViewNightLogs={isHost || !!sync.gameEnded || room?.isReplay === true}
     />
   ) : null;
 
@@ -787,6 +829,41 @@ export default function Game() {
     }, HUNTER_BULLET_ANIM_MS);
   }, []);
 
+  /* ==========================================================================
+     [HOẠT ẢNH PHÁT BẮN (HUNTER SHOT & LOVE ARROW ANIMATIONS)]
+     Bạn có thể chuyển đổi giữa 2 bản dưới đây bằng cách comment / uncomment.
+     ========================================================================== */
+
+  /* BẢN GỐC CHƯA TỐI ƯU (Bị lặp lại hoạt ảnh phát bắn khi đổi phase ngày/đêm) */
+  useEffect(() => {
+    const shot = sync.hunterShot;
+    if (!shot?.hunterId || !shot?.targetId) return;
+
+    lastHunterShotRef.current = { hunterId: shot.hunterId, targetId: shot.targetId };
+    if (phase === "day" && !shouldRevealHunterShotInDay) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      playHunterShotAnim(shot.hunterId, shot.targetId);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [phase, playHunterShotAnim, shouldRevealHunterShotInDay, sync.hunterShot, sync.hunterShotSeq]);
+
+  useEffect(() => {
+    const shot = sync.loveArrowShot;
+    if (!shot?.cupidId || !shot?.targetId) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      playHunterShotAnim(shot.cupidId, shot.targetId, {
+        assetSrc: encodeURI("/Mũi tên.svg"),
+        alt: "Mũi tên",
+        rotationOffsetDeg: -45,
+        kind: "love",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [playHunterShotAnim, sync.loveArrowShot, sync.loveArrowShotSeq]);
+
+  /* BẢN TỐI ƯU (Bảo vệ dùng ref chống lặp lại hoạt ảnh khi đổi phase ngày/đêm)
   const lastPlayedHunterShotSeqRef = useRef<number>(0);
   const lastPlayedLoveArrowShotSeqRef = useRef<number>(0);
 
@@ -825,6 +902,7 @@ export default function Game() {
       return () => window.cancelAnimationFrame(frame);
     }
   }, [playHunterShotAnim, sync.loveArrowShot, sync.loveArrowShotSeq]);
+  */
 
   useEffect(() => {
     if (!debugAnim) return;
@@ -924,6 +1002,7 @@ export default function Game() {
     allNightActionsSimultaneous,
     currentNightTurnRole,
     nightTurnPaused,
+    nightActionNow: nightTurnNow,
   });
   const guardian = useGuardianRole({
     roomId,
@@ -1055,6 +1134,7 @@ export default function Game() {
     trialSelectedInteractorIds: sync.trialSelectedInteractorIds,
     trialInteractionSelectionLimit: sync.trialInteractionSelectionLimit,
     trialVotes: sync.trialVotes,
+    serverTimeOffset,
   });
 
   const angel = useAngelRole({
@@ -1413,6 +1493,7 @@ export default function Game() {
     !!role &&
     (!!sync.gameEnded ||
       (!shouldBlockDeadNightRoleReveal &&
+        !isNightActionTimeExpired &&
         (isRoleRevealLimitedToCurrentNightTurn ? doesNightTurnMatchMyRole : !shouldHidePlayerRoleText)));
 
   const [cardFlippedToFront, setCardFlippedToFront] = useState(false);
@@ -1423,8 +1504,10 @@ export default function Game() {
 
   useEffect(() => {
     // Khi vai trò thực sự thay đổi (chia bài lại), tự động lật úp lá bài xuống mặt sau
-    setCardFlippedToFront(false);
-  }, [role]);
+    if (!shouldRevealMyRole) {
+      setCardFlippedToFront(false);
+    }
+  }, [role, shouldRevealMyRole]);
   const shouldShowRolePortrait = shouldRevealMyRole;
   const loveHybridBackgroundAsset =
     clientId && sync.loveState.targetWolfAligned && sync.loveState.pairIds.includes(clientId)
@@ -1490,8 +1573,42 @@ export default function Game() {
     !sync.gameEnded &&
     (room?.villageChiefDyingFramePlayerIds || []).includes(clientId);
 
+  // Guard clause: Nếu chưa tải xong dữ liệu phòng (room = null) khi F5/reload,
+  // chỉ hiển thị màn hình nền tối tĩnh để tránh chớp trắng hoặc chớp giao diện phase dusk.
+  if (!room) {
+    return (
+      <div 
+        className="page-shell game-page" 
+        style={{ 
+          padding: "1.25rem", 
+          minHeight: "100vh", 
+          backgroundColor: "#0f1115",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }}
+      >
+        {/* Màn hình nền tối tuyệt đối bảo vệ thị giác, khớp 100% với màu nền index.html */}
+      </div>
+    );
+  }
+
+  // Giao diện game chỉ hiển thị khi đã bắt đầu được phủ hoàn toàn bởi GridMotionOverlay
+  const isDuskTransitionPending = room?.phase === "dusk" && !duskRevealGameUI;
+  const gameUIOpacity = isDuskTransitionPending ? 0 : 1;
+  const gameUIPointerEvents = isDuskTransitionPending ? "none" : "auto";
+
   return (
-    <div className={`page-shell game-page${shouldShowRolePortrait ? " has-role-portrait" : ""}`} style={{ padding: "1.25rem"/* , height: "100dvh", overflow: "hidden" */ }}>
+    <div 
+      className={`page-shell game-page${shouldShowRolePortrait ? " has-role-portrait" : ""}`} 
+      style={{ 
+        padding: "1.25rem",
+        opacity: gameUIOpacity,
+        transition: "opacity 0.4s ease-in-out",
+        pointerEvents: gameUIPointerEvents
+        /* height: "100dvh", overflow: "hidden" */ 
+      }}
+    >
       {showVillageChiefDyingFrame && (
         <>
           <style>{`
@@ -1744,13 +1861,13 @@ export default function Game() {
         );
       })()}
 
-      {isSequentialNight && currentNightTurnRole && !isHost && !isCurrentPlayerDeadForNightActions && doesNightTurnMatchMyRole && nightTurnRemainingSec !== null && (
+      {isSequentialNight && currentNightTurnRole && !isHost && !isCurrentPlayerDeadForNightActions && doesNightTurnMatchMyRole && nightTurnRemainingSec !== null && !sync.gameEnded && (
         <div style={{ marginTop: 8, fontWeight: 700 }}>
           Còn {nightTurnRemainingSec}s nữa để thực hiện chức năng{nightTurnPaused ? " (đang tạm ngưng)" : ""}
         </div>
       )}
 
-      {isSimultaneousNight && !isHost && !isCurrentPlayerDeadForNightActions && !isWolfTeamRole && role && mySimultaneousDeadline && simultaneousRemainingSec !== null && (
+      {isSimultaneousNight && !isHost && !isCurrentPlayerDeadForNightActions && !isWolfTeamRole && role && mySimultaneousDeadline && simultaneousRemainingSec !== null && !sync.gameEnded && (
         <div style={{ marginTop: 8, fontWeight: 700 }}>
           Còn {simultaneousRemainingSec}s nữa để thực hiện chức năng
         </div>
@@ -1898,51 +2015,39 @@ export default function Game() {
               role={shouldShowRolePortrait ? role : null}
               backgroundAssetOverride={shouldShowRolePortrait ? loveHybridBackgroundAsset : null}
             />
-            {companionRoleSrc && !(sync.gameEnded && canViewLog) && (
-              <img
-                className="role-companion-overlay"
-                src={companionRoleSrc}
-                alt=""
-                style={{
-                  position: "fixed",
-                  right: 0,
-                  bottom: 0,
-                  width: "auto",
-                  height: `${playerFrameHeightPx}px`,
-                  maxWidth: "min(50vw, 360px)",
-                  objectFit: "contain",
-                  objectPosition: "right bottom",
-                  pointerEvents: "none",
-                  userSelect: "none",
-                  zIndex: 10,
-                }}
-              />
-            )}
+            <RoleCompanionOverlay
+              companionRoleSrc={shouldRevealMyRole && !(sync.gameEnded && canViewLog) ? companionRoleSrc : null}
+              normalizedRole={normalizedRole}
+              playerFrameHeightPx={playerFrameHeightPx}
+              seerResult={sync.seerResult}
+            />
           </>
         );
       })()}
 
-      {canShowConfirmModals && seer.modal}
-      {canShowConfirmModals && cursed.modal}
-      {canShowConfirmModals && merchant.modal}
-      {canShowConfirmModals && angel.modal}
-      {canShowConfirmModals && guardian.modal}
-      {canShowConfirmModals && protector.modal}
-      {canShowConfirmModals && love.modals}
-      {loveActionPlacement === "general" ? love.actionButton : null}
+      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && seer.modal}
+      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && cursed.modal}
+      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && merchant.modal}
+      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && angel.modal}
+      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && guardian.modal}
+      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && protector.modal}
+      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && love.modals}
+      {shouldRevealMyRole && !sync.gameEnded && loveActionPlacement === "general" ? love.actionButton : null}
 
-      {canShowConfirmModals && hunter.modal}
-      {canShowConfirmModals && elemental.modal}
+      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && hunter.modal}
+      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && elemental.modal}
 
-      {canShowConfirmModals && spiritWolf.modal}
+      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && spiritWolf.modal}
 
-      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
-        {witch.panel}
-        {protector.panel}
-        {elemental.panel}
-        {merchant.panel}
-        {loveActionPlacement === "role-actions" ? love.actionButton : null}
-      </div>
+      {shouldRevealMyRole && !sync.gameEnded && (
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+          {witch.panel}
+          {protector.panel}
+          {elemental.panel}
+          {merchant.panel}
+          {loveActionPlacement === "role-actions" ? love.actionButton : null}
+        </div>
+      )}
 
 
     {/* Game controls */}
@@ -2031,10 +2136,12 @@ export default function Game() {
 
     {isHost && logPanel}
 
-    <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
-      {wolf.panel}
-      {loveActionPlacement === "wolf" ? love.actionButton : null}
-    </div>
+    {shouldRevealMyRole && !sync.gameEnded && (
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+        {wolf.panel}
+        {loveActionPlacement === "wolf" ? love.actionButton : null}
+      </div>
+    )}
     {!isHost && dayVote.panel}
     {!isHost && villageChiefExtraVotePanel}
     {!isHost && logPanel}

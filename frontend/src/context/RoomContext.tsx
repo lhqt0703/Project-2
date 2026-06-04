@@ -81,7 +81,9 @@ export interface RoomData {
   id: string;
   players: Player[];
   hostId: string;
+  serverTime?: number;
   hidePlayerRoleText?: boolean;
+  isReplay?: boolean;
   phase?: string;
   gameOver?: boolean;
   roles?: string[];

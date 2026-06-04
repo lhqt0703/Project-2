@@ -136,6 +136,7 @@ export function toPublicRoom(room: Room) {
 
   return {
     ...rest,
+    serverTime: Date.now(),
     players: room.players.map((p) => ({
       id: p.id,
       name: p.name,

@@ -356,6 +356,8 @@ export default function PlayerPositions({
   replayActorIds,
   replayTargetIds,
   showActionGlow,
+  dietQuyOrangeHighlightPlayerIds,
+  dietQuyRedHighlightPlayerIds,
 }: {
   onPlayerClick: (playerId: string) => void;
   onPlayerDoubleClick?: (playerId: string) => void;
@@ -391,6 +393,8 @@ export default function PlayerPositions({
   replayActorIds?: string[];
   replayTargetIds?: string[];
   showActionGlow?: boolean;
+  dietQuyOrangeHighlightPlayerIds?: string[];
+  dietQuyRedHighlightPlayerIds?: string[];
 }) {
   const { room: contextRoom } = useRoomContext();
   const room: RoomLike | null = roomOverride ?? (contextRoom as RoomLike | null);
@@ -1139,6 +1143,8 @@ export default function PlayerPositions({
           position: "relative",
           touchAction: "none",
           overflow: "hidden",
+          transform: "translate3d(0, 0, 0)",
+          isolation: "isolate",
           transition: "height 200ms ease",
         }}
         onPointerMove={handlePointerMove}
@@ -1354,6 +1360,12 @@ export default function PlayerPositions({
               )}
               {nightActionProgress === "done" && (
                 <div className="player-halo halo-night-done" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #10b981` }} />
+              )}
+              {(dietQuyOrangeHighlightPlayerIds || []).includes(pos.playerId) && (
+                <div className="player-halo halo-dietquy-orange" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #ff9800`, boxShadow: "0 0 8px #ff9800" }} />
+              )}
+              {(dietQuyRedHighlightPlayerIds || []).includes(pos.playerId) && (
+                <div className="player-halo halo-dietquy-red" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #ef4444`, boxShadow: "0 0 8px #ef4444" }} />
               )}
 
               {/* Mid Concentric Rings */}

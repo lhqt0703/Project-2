@@ -1,6 +1,7 @@
 import { type Room, type NightActionRole } from "./serverTypes.js";
 import { resetMerchantRoundState } from "./merchant.js";
 
+
 const WOLF_ROLES = new Set(["Sói", "Sói con", "Sói Dại"]);
 const BAN_SOI_ROLE = "Bán sói";
 const SPIRIT_WOLF_ROLE = "Linh sói";
@@ -8,7 +9,7 @@ const WILD_WOLF_ROLE = "Sói Dại";
 const WOLF_CUB_ROLE = "Sói con";
 
 export function isWolfRole(role: string | undefined) {
-  return !!role && WOLF_ROLES.has(role);
+  return !!role && (WOLF_ROLES.has(role) || role === "Ác Quỷ" || role === "Độc thủ" || role === "Gián điệp" || role === "Phò");
 }
 
 export function getParticipantPlayers(room: Room) {
@@ -338,4 +339,35 @@ export function resetRoomFromGameToLobby(room: Room) {
   resetMerchantRoundState(room);
 
   room.players = room.players.map((p) => ({ ...p, inGame: false }));
+}
+
+export function getSeatingOrder(room: Room, clockwise: boolean = true, startingPlayerId?: string | null): string[] {
+  const participants = getParticipantIds(room);
+  const posMap = new Map<string, { x: number; y: number }>();
+  for (const pos of room.positions || []) {
+    posMap.set(pos.playerId, pos);
+  }
+
+  // Calculate angle for each player
+  const playerAngles = participants.map((id) => {
+    const pos = posMap.get(id) || { x: 0.5, y: 0.5 };
+    const angle = Math.atan2(pos.y - 0.5, pos.x - 0.5);
+    return { id, angle };
+  });
+
+  // Sort players by angle (ascending angle goes clockwise)
+  playerAngles.sort((a, b) => a.angle - b.angle);
+
+  let orderedIds = playerAngles.map((x) => x.id);
+
+  if (!clockwise) {
+    orderedIds.reverse();
+  }
+
+  if (startingPlayerId && orderedIds.includes(startingPlayerId)) {
+    const startIdx = orderedIds.indexOf(startingPlayerId);
+    orderedIds = [...orderedIds.slice(startIdx), ...orderedIds.slice(0, startIdx)];
+  }
+
+  return orderedIds;
 }

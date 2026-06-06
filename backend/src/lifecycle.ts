@@ -1,5 +1,5 @@
 import type { ServerContext } from "./serverContext.js";
-import { ensureRoomGameRules, buildRoomGameRules, type Room } from "./serverTypes.js";
+import { ensureRoomGameRules, buildRoomGameRules, type Room, type GameLogEntryPhase } from "./serverTypes.js";
 import { clearGameTimers, clearTrialState, ensureWitchState, getParticipantCount, getParticipantPlayers, getParticipantIds, getBanSoiId, getSpiritWolfId, getWildWolfId, getWitches, isWolfRole, resetNightTurnState, getAlivePlayerIds, isWolfAlignedPlayer } from "./roomState.js";
 import { RULES_RESTART_FADE_IN_MS, RULES_RESTART_FADE_OUT_MS, RULES_RESTART_HOLD_MS, RULES_RESTART_RESTART_AT_MS, TWO_HEARTS_NIGHT_LIMIT, initTwoHeartsForParticipants } from "./gameConfig.js";
 import { emitRolesRevealToSocket, toPublicRoom } from "./serverEmitters.js";
@@ -248,6 +248,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
     room.gameOver = false;
     room.winner = undefined;
     room.phase = "dusk";
+    room.duskCardSelections = {};
     room.nightCount = 0;
     room.gameLog = [];
     room.gameEventLog = [];
@@ -359,6 +360,68 @@ export function createLifecycleFlow(ctx: ServerContext) {
     if (aliveIds.length === 0) {
       if (shouldDeferEndGameForAngel(room)) return;
       endGame(roomId, room, "nobody", reason || "nobody_alive");
+      return;
+    }
+
+    if (room.gameMode === "diet_quy") {
+      const dead = new Set(room.deadPlayers || []);
+      
+      // Check Phò promotion first!
+      const demonAliveBefore = room.players.some((p) => p.id !== room.hostId && room.playerRoles?.[p.id] === "Ác Quỷ" && !dead.has(p.id));
+      if (!demonAliveBefore) {
+        const phòId = room.players.find((p) => p.id !== room.hostId && room.playerRoles?.[p.id] === "Phò" && !dead.has(p.id))?.id;
+        if (phòId) {
+          const nonTravelersAlive = room.players.filter((p) => {
+            if (p.id === room.hostId) return false;
+            if (dead.has(p.id)) return false;
+            const role = room.playerRoles?.[p.id];
+            return role && !["Người ẩn dật", "Thánh nhân"].includes(role);
+          }).length;
+
+          if (nonTravelersAlive >= 4) {
+            room.playerRoles = room.playerRoles || {};
+            room.playerRoles[phòId] = "Ác Quỷ";
+            appendLogEntry(room, {
+              type: "role_conversion",
+              phase: (room.phase || "day") as GameLogEntryPhase,
+              targetId: phòId,
+              metadata: { newRole: "Ác Quỷ", reason: "scarlet_woman_promotion" }
+            });
+            ctx.io.to(phòId).emit("yourRole", "Ác Quỷ");
+            ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+          }
+        }
+      }
+
+      // Check win conditions after potential Phò promotion
+      const latestAliveIds = getAlivePlayerIds(room);
+
+      // 1. Saint executed: evil wins
+      if (room.dietQuySaintExecutedToday) {
+        endGame(roomId, room, "wolves", reason || "saint_executed");
+        return;
+      }
+
+      // 2. Demon dead: good wins
+      const hasDemonAlive = latestAliveIds.some((id) => room.playerRoles?.[id] === "Ác Quỷ");
+      if (!hasDemonAlive) {
+        endGame(roomId, room, "villagers", reason || "demon_dead");
+        return;
+      }
+
+      // 3. Only 2 players left: evil wins
+      if (latestAliveIds.length <= 2) {
+        endGame(roomId, room, "wolves", reason || "demon_survived_top_2");
+        return;
+      }
+
+      // 4. Mayor win condition: 3 players left, Mayor alive, and no execution today
+      const hasMayorAlive = latestAliveIds.some((id) => room.playerRoles?.[id] === "Thị trưởng");
+      if (latestAliveIds.length === 3 && hasMayorAlive && !room.dietQuyExecutedToday) {
+        endGame(roomId, room, "villagers", reason || "mayor_survived_no_execution");
+        return;
+      }
+
       return;
     }
 

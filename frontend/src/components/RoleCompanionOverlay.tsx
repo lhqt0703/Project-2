@@ -76,7 +76,7 @@ export default function RoleCompanionOverlay({
         className={`role-companion-overlay-wrapper ${visible ? "is-visible" : "is-hiding"}`}
         style={{
           position: "fixed",
-          right: "-5dvw",
+          right: "var(--companion-right, -5dvw)",
           bottom: 0,
           height: `${playerFrameHeightPx}px`,
           maxHeight: "calc(50vw * 1.5)",
@@ -88,6 +88,7 @@ export default function RoleCompanionOverlay({
           transition: "opacity 320ms ease, transform 520ms cubic-bezier(0.16, 1, 0.3, 1)",
           opacity: visible ? 1 : 0,
           transform: visible ? "scale(1)" : "scale(1.008)",
+          overflow: "hidden",
         }}
       >
         <img

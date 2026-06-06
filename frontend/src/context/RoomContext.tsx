@@ -81,6 +81,26 @@ export interface RoomData {
   id: string;
   players: Player[];
   hostId: string;
+  gameMode?: "da_nghich" | "diet_quy";
+  dietQuyNightDirection?: "clockwise" | "counter_clockwise";
+  dietQuyNightStartPlayerId?: string | null;
+  dietQuyNightTurnOrder?: string[];
+  nightTurnPlayerId?: string | null;
+  dietQuyPoisonedPlayerId?: string | null;
+  dietQuyPoisonedPrevPlayerId?: string | null;
+  dietQuyRedCharmPlayerId?: string | null;
+  dietQuyMonkProtectedPlayerId?: string | null;
+  dietQuyImpKillPlayerId?: string | null;
+  dietQuyMayorReplacementId?: string | null;
+  dietQuyRavenkeeperTargetId?: string | null;
+  dietQuyWasherwomanSelectedIds?: string[];
+  dietQuyLibrarianSelectedIds?: string[];
+  dietQuyInvestigatorSelectedIds?: string[];
+  dietQuySlayerUsed?: boolean;
+  dietQuyVirginTriggered?: boolean;
+  dietQuyFortuneTellerCheckedIds?: string[];
+  dietQuySaintExecutedToday?: boolean;
+  dietQuyExecutedToday?: boolean;
   serverTime?: number;
   hidePlayerRoleText?: boolean;
   isReplay?: boolean;
@@ -130,6 +150,7 @@ export interface RoomData {
   nightActionProgressByPlayerId?: Record<string, "pending" | "done">;
   wolfDeadline?: number | null;
   scoreResult?: any;
+  duskCardSelections?: Record<string, number>;
 }
 
 interface PlayerPosition {

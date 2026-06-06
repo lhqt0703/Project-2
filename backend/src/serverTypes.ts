@@ -29,7 +29,7 @@ export interface Player {
   inGame?: boolean;
 }
 
-export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | "Kẻ bị nguyền" | "Tay Buôn" | ElementalRole;
+export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | "Kẻ bị nguyền" | "Tay Buôn" | ElementalRole | "Độc thủ" | "Gián điệp" | "Nhà sư" | "Thầy bói" | "Ác Quỷ" | "Thợ giặt" | "Thủ thư" | "Điều tra viên" | "Nuôi quạ" | "Diệt quỷ";
 
 export type NightActionOrderRole = NightActionRole | typeof ELEMENTAL_GROUP_ROLE;
 
@@ -58,6 +58,27 @@ export interface Room {
   id: string;
   players: Player[];
   hostId: string;
+  gameMode?: "da_nghich" | "diet_quy";
+  dietQuyNightDirection?: "clockwise" | "counter_clockwise";
+  dietQuyNightStartPlayerId?: string | null;
+  dietQuyNightTurnOrder?: string[];
+  nightTurnPlayerId?: string | null;
+  dietQuyPoisonedPlayerId?: string | null;
+  dietQuyPoisonedPrevPlayerId?: string | null;
+  dietQuyRedCharmPlayerId?: string | null;
+  dietQuyMonkProtectedPlayerId?: string | null;
+  dietQuyImpKillPlayerId?: string | null;
+  dietQuyMayorReplacementId?: string | null;
+  dietQuyRavenkeeperTargetId?: string | null;
+  dietQuyWasherwomanSelectedIds?: string[];
+  dietQuyLibrarianSelectedIds?: string[];
+  dietQuyInvestigatorSelectedIds?: string[];
+  dietQuySlayerUsed?: boolean;
+  dietQuyVirginTriggered?: boolean;
+  dietQuyFortuneTellerCheckedIds?: string[];
+  dietQuySaintExecutedToday?: boolean;
+  dietQuyExecutedToday?: boolean;
+  dietQuyExecutedPlayerId?: string | null;
   hidePlayerRoleText?: boolean;
   roles?: string[];
   rolesLocked?: boolean;
@@ -212,6 +233,7 @@ export interface Room {
   isReplay?: boolean;
   replayEvents?: GameEvent[];
   replayIndex?: number;
+  duskCardSelections?: Record<string, number>;
 }
 
 const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -397,7 +419,12 @@ export type GameLogEntry =
   | { type: "elemental_guess_summary"; phase: GameLogEntryPhase; correctCount: number; totalCount: number; correctIds?: string[]; triggeredBuffVote: boolean; nextBuffVoteNight?: number }
   | { type: "elemental_buff_vote"; phase: GameLogEntryPhase; voteBreakdown: { buffId: ElementalBuffId; voterIds: string[] }[]; chosenBuffId?: ElementalBuffId | null; tier?: number; randomTieBreak?: boolean; tiedBuffIds?: ElementalBuffId[]; chosenVoterIds?: string[] }
   | { type: "mysterious_force_eliminated"; phase: GameLogEntryPhase; targetId: string }
-  | { type: "host_ended_game"; phase: GameLogEntryPhase };
+  | { type: "host_ended_game"; phase: GameLogEntryPhase }
+  | { type: "role_conversion"; phase: GameLogEntryPhase; targetId: string; metadata?: any }
+  | { type: "poisoner_poison"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "monk_protect"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "imp_attack"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "spy_view"; phase: GameLogEntryPhase; actorId: string };
 
 export type GameLogNight = {
   night: number;

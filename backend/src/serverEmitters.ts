@@ -586,7 +586,19 @@ export function syncPrivateRoleStateForSocket(
     socket.join(`wolves_${roomId}`);
     const rules = ensureRoomGameRules(room);
     const wolves = room.players.filter((p) => isWolfAlignedPlayer(room, p.id));
-    if (room.phase === "night" && room.merchantWolfBiteDisabledTonight) {
+    if (room.gameMode === "diet_quy") {
+      socket.emit("wolfPhaseStarted", {
+        wolves: wolves.map((w) => w.id),
+        activeWolves: [],
+        deadline: null,
+        maxTargets: 0,
+        resetVotes: false,
+        biteDisabled: true,
+        wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
+        wildWolfConvertAvailable: false,
+        wildWolfConvertRequested: false,
+      });
+    } else if (room.phase === "night" && room.merchantWolfBiteDisabledTonight) {
       socket.emit("wolfPhaseStarted", {
         wolves: wolves.map((w) => w.id),
         activeWolves: [],

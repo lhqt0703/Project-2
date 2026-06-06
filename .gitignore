@@ -31,3 +31,6 @@ backend/build
 # Frontend cache (optional)
 .vite-cache/
 .eslintcache
+
+# CodeGraph local index database
+.codegraph/

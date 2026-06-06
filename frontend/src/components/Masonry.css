@@ -1,0 +1,189 @@
+.masonry-selection-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  color: #f3f4f6;
+  min-height: 70vh;
+  box-sizing: border-box;
+  max-height: 100dvh;
+  overflow: hidden;
+}
+
+.masonry-title {
+  font-size: 2.25rem;
+  font-weight: 800;
+  margin-bottom: 2.5rem;
+  text-align: center;
+  background: linear-gradient(135deg, #e9d5ff 0%, #a78bfa 50%, #c084fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 30px rgba(167, 139, 250, 0.2);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 768px) {
+  .masonry-selection-container {
+    padding: 1rem 0.5rem;
+    min-height: auto;
+  }
+  .masonry-title {
+    font-size: 1.5rem;
+    margin-bottom: 1.25rem;
+  }
+}
+
+.masonry-list {
+  position: relative;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+  transition: opacity 0.4s ease;
+}
+
+.masonry-item-wrapper {
+  position: absolute;
+  will-change: transform, width, height, opacity;
+  padding: 8px;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease;
+}
+
+.masonry-item-img {
+  position: relative;
+  background-size: cover;
+  background-position: center center;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+/* Base Card State */
+.normal-card:hover .masonry-item-img {
+  transform: translateY(-8px);
+  border-color: rgba(167, 139, 250, 0.5);
+  box-shadow: 0 15px 35px rgba(167, 139, 250, 0.25), 0 0 15px rgba(167, 139, 250, 0.15);
+}
+
+.normal-card:hover .masonry-moon-logo {
+  filter: drop-shadow(0 0 20px rgba(243, 85, 218, 0.6)) !important;
+}
+
+/* Center Logo positioning and size */
+.masonry-moon-logo {
+  width: 80px;
+  height: 80px;
+  z-index: 2;
+  position: relative;
+}
+
+@media (max-width: 768px) {
+  .masonry-moon-logo {
+    width: 60px;
+    height: 60px;
+  }
+}
+
+/* Dimmed Card (when another card is selected by current player) */
+.dimmed-card {
+  opacity: 0.25 !important;
+}
+
+.dimmed-card .masonry-item-img {
+  transform: scale(0.92);
+  filter: brightness(0.3) saturate(0.2);
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+/* Taken Card (by another player) */
+.taken-card {
+  opacity: 0.35 !important;
+  cursor: not-allowed;
+}
+
+.taken-card .masonry-item-img {
+  transform: scale(0.98);
+  filter: brightness(0.2) saturate(0.1);
+  border-color: rgba(255, 255, 255, 0.04);
+}
+
+.taken-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+}
+
+.taken-overlay span { /* Chữ "ĐÃ CHỌN" trên thẻ */
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  padding: 4px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.1em;
+  transform: rotate(-12deg);
+}
+
+/* Thẻ được chọn */
+.selected-card {
+  z-index: 50;
+  transform: scale(1.05);
+}
+
+.selected-card .masonry-item-img {
+  border-color: rgba(167, 139, 250, 0.8);
+  box-shadow: 0 20px 45px rgba(167, 139, 250, 0.4), 0 0 25px rgba(0, 242, 254, 0.2);
+  animation: pulseSelectBorder 2s infinite ease-in-out;
+}
+
+@keyframes pulseSelectBorder {
+  0%, 100% {
+    border-color: rgba(167, 139, 250, 0.8);
+    box-shadow: 0 20px 45px rgba(167, 139, 250, 0.4), 0 0 25px rgba(0, 242, 254, 0.2);
+  }
+  50% {
+    border-color: rgba(0, 242, 254, 0.8);
+    box-shadow: 0 20px 45px rgba(0, 242, 254, 0.4), 0 0 25px rgba(167, 139, 250, 0.2);
+  }
+}
+
+/* Hover Dimming & Scaling of Siblings */
+.hovered-card {
+  z-index: 45;
+}
+
+.hovered-card .masonry-item-img {
+  transform: scale(1.06);
+  border-color: rgba(167, 139, 250, 0.7);
+  box-shadow: 0 15px 35px rgba(167, 139, 250, 0.4), 0 0 20px rgba(0, 242, 254, 0.25);
+}
+
+.pre-dimmed-card {
+  opacity: 0.35 !important;
+}
+
+.pre-dimmed-card .masonry-item-img {
+  transform: scale(0.94);
+  filter: brightness(0.4) saturate(0.5);
+  border-color: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
+}

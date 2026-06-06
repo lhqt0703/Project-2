@@ -117,6 +117,7 @@ export default function GameRulesModal({
   onClose,
   saveText = "Lưu luật chơi",
   readOnly = false,
+  gameMode = "da_nghich",
 }: {
   open: boolean;
   title?: string;
@@ -127,7 +128,9 @@ export default function GameRulesModal({
   onClose: () => void;
   saveText?: string;
   readOnly?: boolean;
+  gameMode?: "da_nghich" | "diet_quy";
 }) {
+  const isDietQuy = gameMode === "diet_quy";
   const [draftRules, setDraftRules] = useState<RoomGameRules>(initialRules);
   const [draggedRole, setDraggedRole] = useState<NightActionOrderRole | null>(null);
   const [dragOverRole, setDragOverRole] = useState<NightActionOrderRole | null>(null);
@@ -206,6 +209,26 @@ export default function GameRulesModal({
 
   const handleSave = () => {
     if (!onSave) return;
+    if (isDietQuy) {
+      onSave({
+        ...draftRules,
+        allNightActionsSimultaneous: false,
+        witchSeeBiteOnlyIfHasHealPotion: false,
+        witchBonusTimeRequiresUsablePotion: false,
+        witchHideProtectedBiteInSimultaneous: false,
+        witchHideProtectedBiteWhenSequential: false,
+        trialInteractionSelectionLimit: 0,
+        banSoiBecomeWolfEvenIfHealed: false,
+        loveCanChoosePartnerFirstTwoNights: false,
+        villageChiefKnowsWolfBite: false,
+        witchSeeProtectorImmortalBite: false,
+        hunterShotPublicInDay: false,
+        merchantSingleUseItems: false,
+        wolfNightActionDurationSec: draftRules.nonWolfNightActionDurationSec,
+        forceWolfBiteFirstNight: draftRules.twoHeartsFirstTwoNights && draftRules.forceWolfBiteFirstNight,
+      });
+      return;
+    }
     const normalizedDurations = normalizeNightActionDurations({
       allNightActionsSimultaneous: draftRules.allNightActionsSimultaneous,
       nonWolfNightActionDurationSec: draftRules.nonWolfNightActionDurationSec,
@@ -279,386 +302,462 @@ export default function GameRulesModal({
         </div>
 
         <div style={{ padding: 24, display: "grid", gap: 14 }}>
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả nhân vật sẽ có 2 máu trong 2 đêm đầu</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Đêm 1 bị sói cắn sẽ mất 1 máu. Đêm 2 bị sói cắn sẽ mất 2 máu và chết ngay cả khi đã mất 1 máu ở đêm 1.
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={draftRules.twoHeartsFirstTwoNights}
-              disabled={readOnly}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                if (readOnly) return;
-                setDraftRules((prev) => ({
-                  ...prev,
-                  twoHeartsFirstTwoNights: checked,
-                  forceWolfBiteFirstNight: checked ? prev.forceWolfBiteFirstNight : false,
-                }));
-              }}
-              style={{ width: 20, height: 20, marginTop: 2 }}
-            />
-          </label>
-
-          {draftRules.twoHeartsFirstTwoNights && (
-            <label style={rowStyle()}>
-              <div>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>Bắt buộc phe sói cắn trong đêm đầu</div>
-                <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                  Nếu Sói không chọn ai, hệ thống sẽ chọn ngẫu nhiên một mục tiêu hợp lệ. Nếu hòa phiếu, hệ thống chọn ngẫu nhiên trong các mục tiêu đang hòa.
+          {isDietQuy ? (
+            <>
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả nhân vật sẽ có 2 máu trong 2 đêm đầu</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Đêm 1 bị quỷ đâm sẽ mất 1 máu. Đêm 2 bị quỷ đâm sẽ mất 2 máu và chết ngay cả khi đã mất 1 máu ở đêm 1.
+                  </div>
                 </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={draftRules.forceWolfBiteFirstNight}
-                disabled={readOnly}
-                onChange={(e) => updateRule("forceWolfBiteFirstNight", e.target.checked)}
-                style={{ width: 20, height: 20, marginTop: 2 }}
-              />
-            </label>
-          )}
+                <input
+                  type="checkbox"
+                  checked={draftRules.twoHeartsFirstTwoNights}
+                  disabled={readOnly}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    if (readOnly) return;
+                    setDraftRules((prev) => ({
+                      ...prev,
+                      twoHeartsFirstTwoNights: checked,
+                      forceWolfBiteFirstNight: checked ? prev.forceWolfBiteFirstNight : false,
+                    }));
+                  }}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
 
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả người chơi có thể thực hiện chức năng cùng lúc trong đêm</div>
-            </div>
-            <input
-              type="checkbox"
-              checked={draftRules.allNightActionsSimultaneous}
-              disabled={readOnly}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                if (readOnly) return;
-                setDraftRules((prev) => {
-                  const normalizedDurations = normalizeNightActionDurations({
-                    allNightActionsSimultaneous: checked,
-                    nonWolfNightActionDurationSec: prev.nonWolfNightActionDurationSec,
-                    wolfNightActionDurationSec: prev.wolfNightActionDurationSec,
-                  });
-                  return {
-                    ...prev,
-                    allNightActionsSimultaneous: checked,
-                    ...normalizedDurations,
-                  } as RoomGameRules;
-                });
-              }}
-              style={{ width: 20, height: 20, marginTop: 2 }}
-            />
-          </label>
+              {draftRules.twoHeartsFirstTwoNights && (
+                <label style={rowStyle()}>
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>Bắt buộc quỷ phải đâm trong đêm đầu</div>
+                    <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                      Nếu Quỷ không chọn ai, hệ thống sẽ chọn ngẫu nhiên một mục tiêu hợp lệ.
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={draftRules.forceWolfBiteFirstNight}
+                    disabled={readOnly}
+                    onChange={(e) => updateRule("forceWolfBiteFirstNight", e.target.checked)}
+                    style={{ width: 20, height: 20, marginTop: 2 }}
+                  />
+                </label>
+              )}
 
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Thần tình yêu được ghép đôi trong 2 đêm đầu nếu chưa chọn</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Khi bật, nếu đêm 1 Thần tình yêu chưa ghép đôi thì sang đêm 2 vẫn có lượt chọn. Nếu đã chọn rồi thì các đêm sau không mở lại lượt này.
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={draftRules.loveCanChoosePartnerFirstTwoNights === true}
-              disabled={readOnly}
-              onChange={(e) => updateRule("loveCanChoosePartnerFirstTwoNights", e.target.checked)}
-              style={{ width: 20, height: 20, marginTop: 2 }}
-            />
-          </label>
-
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Bán sói / Sói Dại vẫn chuyển phe mục tiêu dù vết cắn được cứu</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Mặc định tắt. Khi bật, nếu Bán sói bị cắn được cứu / được Bảo vệ trúng thì Bán sói vẫn chuyển phe; nếu mục tiêu Sói Dại biến đổi được cứu / được Bảo vệ trúng thì mục tiêu vẫn trở thành Sói thường.
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={draftRules.banSoiBecomeWolfEvenIfHealed}
-              disabled={readOnly}
-              onChange={(e) => updateRule("banSoiBecomeWolfEvenIfHealed", e.target.checked)}
-              style={{ width: 20, height: 20, marginTop: 2 }}
-            />
-          </label>
-
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Trưởng làng biết mình đã bị sói cắn</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Khi bật, Trưởng làng và quản trò sẽ thấy máu còn 1 tim trong đêm bị cắn, rồi tim rung vào đêm kế tiếp trước khi hiệu ứng cắn trễ kết toán.
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={draftRules.villageChiefKnowsWolfBite}
-              disabled={readOnly}
-              onChange={(e) => updateRule("villageChiefKnowsWolfBite", e.target.checked)}
-              style={{ width: 20, height: 20, marginTop: 2 }}
-            />
-          </label>
-
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Mọi người biết Thợ săn bắn ai ban ngày</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Khi bật, hiệu ứng đạn bắn sẽ hiển thị cho tất cả người chơi khi Thợ săn bắn trong ban ngày. Khi tắt sẽ không có animation đạn bắn.
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={draftRules.hunterShotPublicInDay}
-              disabled={readOnly}
-              onChange={(e) => updateRule("hunterShotPublicInDay", e.target.checked)}
-              style={{ width: 20, height: 20, marginTop: 2 }}
-            />
-          </label>
-
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Phù thủy vẫn thấy vết cắn vào người đang được Hộ nhân cho bất tử</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Khi tắt, nếu mục tiêu đang có bất tử của Hộ nhân thì vết cắn sẽ bị ẩn khỏi Phù thủy.
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={draftRules.witchSeeProtectorImmortalBite}
-              disabled={readOnly}
-              onChange={(e) => updateRule("witchSeeProtectorImmortalBite", e.target.checked)}
-              style={{ width: 20, height: 20, marginTop: 2 }}
-            />
-          </label>
-
-          {!draftRules.allNightActionsSimultaneous && (
-            <div style={{ ...rowStyle(), flexDirection: "column" }}>
-              <div style={{ width: "100%" }}>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>Thứ tự hành động ban đêm</div>
-                <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5, marginBottom: 12 }}>
-                  Riêng Dân làng nguyên tố sẽ được kéo thả bằng 1 mục đại diện. Thần tình yêu luôn đứng đầu nếu có, còn Thần tình yêu/Tay Buôn không làm thay đổi cách tính buff nhanh/chậm.
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian hành động trong đêm</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Thời gian giới hạn cho mỗi lượt hành động ban đêm (giây).
+                  </div>
                 </div>
-              </div>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={10}
+                  max={60}
+                  step={10}
+                  value={draftRules.nonWolfNightActionDurationSec}
+                  disabled={readOnly}
+                  onChange={(e) => {
+                    if (readOnly) return;
+                    const val = Number(e.target.value);
+                    setDraftRules(prev => ({
+                      ...prev,
+                      nonWolfNightActionDurationSec: val,
+                      wolfNightActionDurationSec: val
+                    }));
+                  }}
+                  style={{ width: 96, padding: "10px 12px" }}
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả nhân vật sẽ có 2 máu trong 2 đêm đầu</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Đêm 1 bị sói cắn sẽ mất 1 máu. Đêm 2 bị sói cắn sẽ mất 2 máu và chết ngay cả khi đã mất 1 máu ở đêm 1.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.twoHeartsFirstTwoNights}
+                  disabled={readOnly}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    if (readOnly) return;
+                    setDraftRules((prev) => ({
+                      ...prev,
+                      twoHeartsFirstTwoNights: checked,
+                      forceWolfBiteFirstNight: checked ? prev.forceWolfBiteFirstNight : false,
+                    }));
+                  }}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
 
-              <div style={{ display: "grid", gap: 10, width: "100%" }}>
-                {draftRules.nightActionOrder.map((role, index) => {
-                  const pinned = role === "Thần tình yêu";
-                  return (
-                  <div
-                    key={role}
-                    draggable={!readOnly && !pinned}
-                    onDragStart={() => {
-                      if (readOnly || pinned) return;
-                      setDraggedRole(role);
-                      setDragOverRole(role);
-                    }}
-                    onDragOver={(e) => {
-                      if (readOnly || pinned) return;
-                      e.preventDefault();
-                      if (dragOverRole !== role) setDragOverRole(role);
-                    }}
-                    onDrop={(e) => {
-                      if (readOnly || pinned) return;
-                      e.preventDefault();
-                      if (!draggedRole) return;
-                      reorderRoles(draggedRole, role);
-                      setDraggedRole(null);
-                      setDragOverRole(null);
-                    }}
-                    onDragEnd={() => {
-                      setDraggedRole(null);
-                      setDragOverRole(null);
-                    }}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      padding: "12px 14px",
-                      borderRadius: 12,
-                      background: draggedRole === role ? "rgba(246,200,95,0.16)" : "rgba(255,255,255,0.05)",
-                      border: dragOverRole === role ? "1px solid rgba(246,200,95,0.9)" : "1px solid rgba(255,255,255,0.08)",
-                      cursor: readOnly || pinned ? "default" : "grab",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {draftRules.twoHeartsFirstTwoNights && (
+                <label style={rowStyle()}>
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>Bắt buộc phe sói cắn trong đêm đầu</div>
+                    <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                      Nếu Sói không chọn ai, hệ thống sẽ chọn ngẫu nhiên một mục tiêu hợp lệ. Nếu hòa phiếu, hệ thống chọn ngẫu nhiên trong các mục tiêu đang hòa.
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={draftRules.forceWolfBiteFirstNight}
+                    disabled={readOnly}
+                    onChange={(e) => updateRule("forceWolfBiteFirstNight", e.target.checked)}
+                    style={{ width: 20, height: 20, marginTop: 2 }}
+                  />
+                </label>
+              )}
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả người chơi có thể thực hiện chức năng cùng lúc trong đêm</div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.allNightActionsSimultaneous}
+                  disabled={readOnly}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    if (readOnly) return;
+                    setDraftRules((prev) => {
+                      const normalizedDurations = normalizeNightActionDurations({
+                        allNightActionsSimultaneous: checked,
+                        nonWolfNightActionDurationSec: prev.nonWolfNightActionDurationSec,
+                        wolfNightActionDurationSec: prev.wolfNightActionDurationSec,
+                      });
+                      return {
+                        ...prev,
+                        allNightActionsSimultaneous: checked,
+                        ...normalizedDurations,
+                      } as RoomGameRules;
+                    });
+                  }}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Thần tình yêu được ghép đôi trong 2 đêm đầu nếu chưa chọn</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi bật, nếu đêm 1 Thần tình yêu chưa ghép đôi thì sang đêm 2 vẫn có lượt chọn. Nếu đã chọn rồi thì các đêm sau không mở lại lượt này.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.loveCanChoosePartnerFirstTwoNights === true}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("loveCanChoosePartnerFirstTwoNights", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Bán sói / Sói Dại vẫn chuyển phe mục tiêu dù vết cắn được cứu</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Mặc định tắt. Khi bật, nếu Bán sói bị cắn được cứu / được Bảo vệ trúng thì Bán sói vẫn chuyển phe; nếu mục tiêu Sói Dại biến đổi được cứu / được Bảo vệ trúng thì mục tiêu vẫn trở thành Sói thường.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.banSoiBecomeWolfEvenIfHealed}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("banSoiBecomeWolfEvenIfHealed", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Trưởng làng biết mình đã bị sói cắn</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi bật, Trưởng làng và quản trò sẽ thấy máu còn 1 tim trong đêm bị cắn, rồi tim rung vào đêm kế tiếp trước khi hiệu ứng cắn trễ kết toán.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.villageChiefKnowsWolfBite}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("villageChiefKnowsWolfBite", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Mọi người biết Thợ săn bắn ai ban ngày</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi bật, hiệu ứng đạn bắn sẽ hiển thị cho tất cả người chơi khi Thợ săn bắn trong ban ngày. Khi tắt sẽ không có animation đạn bắn.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.hunterShotPublicInDay}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("hunterShotPublicInDay", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Phù thủy vẫn thấy vết cắn vào người đang được Hộ nhân cho bất tử</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi tắt, nếu mục tiêu đang có bất tử của Hộ nhân thì vết cắn sẽ bị ẩn khỏi Phù thủy.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.witchSeeProtectorImmortalBite}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("witchSeeProtectorImmortalBite", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              {!draftRules.allNightActionsSimultaneous && (
+                <div style={{ ...rowStyle(), flexDirection: "column" }}>
+                  <div style={{ width: "100%" }}>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>Thứ tự hành động ban đêm</div>
+                    <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5, marginBottom: 12 }}>
+                      Riêng Dân làng nguyên tố sẽ được kéo thả bằng 1 mục đại diện. Thần tình yêu luôn đứng đầu nếu có, còn Thần tình yêu/Tay Buôn không làm thay đổi cách tính buff nhanh/chậm.
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gap: 10, width: "100%" }}>
+                    {draftRules.nightActionOrder.map((role, index) => {
+                      const pinned = role === "Thần tình yêu";
+                      return (
                       <div
+                        key={role}
+                        draggable={!readOnly && !pinned}
+                        onDragStart={() => {
+                          if (readOnly || pinned) return;
+                          setDraggedRole(role);
+                          setDragOverRole(role);
+                        }}
+                        onDragOver={(e) => {
+                          if (readOnly || pinned) return;
+                          e.preventDefault();
+                          if (dragOverRole !== role) setDragOverRole(role);
+                        }}
+                        onDrop={(e) => {
+                          if (readOnly || pinned) return;
+                          e.preventDefault();
+                          if (!draggedRole) return;
+                          reorderRoles(draggedRole, role);
+                          setDraggedRole(null);
+                          setDragOverRole(null);
+                        }}
+                        onDragEnd={() => {
+                          setDraggedRole(null);
+                          setDragOverRole(null);
+                        }}
                         style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 999,
-                          display: "grid",
-                          placeItems: "center",
-                          background: "rgba(255,255,255,0.1)",
-                          fontWeight: 800,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 12,
+                          padding: "12px 14px",
+                          borderRadius: 12,
+                          background: draggedRole === role ? "rgba(246,200,95,0.16)" : "rgba(255,255,255,0.05)",
+                          border: dragOverRole === role ? "1px solid rgba(246,200,95,0.9)" : "1px solid rgba(255,255,255,0.08)",
+                          cursor: readOnly || pinned ? "default" : "grab",
                         }}
                       >
-                        {index + 1}
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: 700 }}>{NIGHT_ACTION_ROLE_LABELS[role]}</div>
-                        <div style={{ fontSize: 12, color: "rgba(246,247,251,0.62)" }}>
-                          {role === ELEMENTAL_GROUP_ROLE ? includedElementalSummary : role}
+                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                          <div
+                            style={{
+                              width: 32,
+                              height: 32,
+                              borderRadius: 999,
+                              display: "grid",
+                              placeItems: "center",
+                              background: "rgba(255,255,255,0.1)",
+                              fontWeight: 800,
+                            }}
+                          >
+                            {index + 1}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 700 }}>{NIGHT_ACTION_ROLE_LABELS[role]}</div>
+                            <div style={{ fontSize: 12, color: "rgba(246,247,251,0.62)" }}>
+                              {role === ELEMENTAL_GROUP_ROLE ? includedElementalSummary : role}
+                            </div>
+                          </div>
                         </div>
+
+                        {!readOnly && !pinned && <div style={{ fontSize: 18, opacity: 0.6, userSelect: "none" }}>⋮⋮</div>}
                       </div>
-                    </div>
-
-                    {!readOnly && !pinned && <div style={{ fontSize: 18, opacity: 0.6, userSelect: "none" }}>⋮⋮</div>}
+                      );
+                    })}
                   </div>
-                  );
-                })}
-              </div>
-            </div>
+                </div>
+              )}
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Mỗi món đồ của Tay Buôn chỉ giao dịch thành công một lần</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi bật, món đồ đã giao dịch thành công sẽ biến khỏi kho hàng cho những đêm sau.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.merchantSingleUseItems}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("merchantSingleUseItems", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Số giao dịch thành công để Tay Buôn thắng</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi Tay Buôn đạt đủ số giao dịch này, nhật ký sẽ ghi nhận Tay Buôn thắng nhưng ván chơi vẫn tiếp tục.
+                  </div>
+                </div>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={draftRules.merchantWinRequiredSuccessfulTrades}
+                  disabled={readOnly}
+                  onChange={(e) =>
+                    updateRule(
+                      "merchantWinRequiredSuccessfulTrades",
+                      clampMerchantWinRequiredSuccessfulTrades(Number(e.target.value)),
+                    )
+                  }
+                  style={{
+                    width: 76,
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    border: "1px solid var(--border)",
+                    background: "rgba(255,255,255,0.08)",
+                    color: "var(--text)",
+                  }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Phù thủy chỉ có thể thấy được vết cắn nếu còn bình cứu</div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.witchSeeBiteOnlyIfHasHealPotion}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("witchSeeBiteOnlyIfHasHealPotion", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Phù thủy chỉ được cộng thêm 10 giây khi còn ít nhất 1 bình có thể dùng</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi bật, nếu Phù thủy đã dùng cả bình cứu và bình giết thì sẽ không tự động được cộng thêm thời gian.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.witchBonusTimeRequiresUsablePotion}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("witchBonusTimeRequiresUsablePotion", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>{thirdRuleLabel}</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    {thirdRuleDescription}
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={thirdRuleChecked}
+                  disabled={readOnly}
+                  onChange={(e) => {
+                    if (draftRules.allNightActionsSimultaneous) {
+                      updateRule("witchHideProtectedBiteInSimultaneous", e.target.checked);
+                      return;
+                    }
+                    updateRule("witchHideProtectedBiteWhenSequential", e.target.checked);
+                  }}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian hành động trong đêm của phe dân</div>
+                </div>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={draftRules.allNightActionsSimultaneous ? 0 : 10}
+                  max={60}
+                  step={10}
+                  value={draftRules.nonWolfNightActionDurationSec}
+                  disabled={readOnly}
+                  onChange={(e) =>
+                    updateNightActionDuration("nonWolfNightActionDurationSec", Number(e.target.value))
+                  }
+                  style={{ width: 96, padding: "10px 12px" }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian hành động trong đêm của phe sói</div>
+                </div>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={60}
+                  step={10}
+                  value={draftRules.wolfNightActionDurationSec}
+                  disabled={readOnly}
+                  onChange={(e) =>
+                    updateNightActionDuration("wolfNightActionDurationSec", Number(e.target.value))
+                  }
+                  style={{ width: 96, padding: "10px 12px" }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Số lượt tương tác của người bị lên giàn</div>
+                </div>
+                <input
+                  type="number"
+                  min={0}
+                  max={10}
+                  value={draftRules.trialInteractionSelectionLimit}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("trialInteractionSelectionLimit", clampSelectionLimit(Number(e.target.value)))}
+                  style={{ width: 96, padding: "10px 12px" }}
+                />
+              </label>
+            </>
           )}
-
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Mỗi món đồ của Tay Buôn chỉ giao dịch thành công một lần</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Khi bật, món đồ đã giao dịch thành công sẽ biến khỏi kho hàng cho những đêm sau.
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={draftRules.merchantSingleUseItems}
-              disabled={readOnly}
-              onChange={(e) => updateRule("merchantSingleUseItems", e.target.checked)}
-              style={{ width: 20, height: 20, marginTop: 2 }}
-            />
-          </label>
-
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Số giao dịch thành công để Tay Buôn thắng</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Khi Tay Buôn đạt đủ số giao dịch này, nhật ký sẽ ghi nhận Tay Buôn thắng nhưng ván chơi vẫn tiếp tục.
-              </div>
-            </div>
-            <input
-              type="number"
-              min={1}
-              max={10}
-              step={1}
-              value={draftRules.merchantWinRequiredSuccessfulTrades}
-              disabled={readOnly}
-              onChange={(e) =>
-                updateRule(
-                  "merchantWinRequiredSuccessfulTrades",
-                  clampMerchantWinRequiredSuccessfulTrades(Number(e.target.value)),
-                )
-              }
-              style={{
-                width: 76,
-                padding: "8px 10px",
-                borderRadius: 8,
-                border: "1px solid var(--border)",
-                background: "rgba(255,255,255,0.08)",
-                color: "var(--text)",
-              }}
-            />
-          </label>
-
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Phù thủy chỉ có thể thấy được vết cắn nếu còn bình cứu</div>
-            </div>
-            <input
-              type="checkbox"
-              checked={draftRules.witchSeeBiteOnlyIfHasHealPotion}
-              disabled={readOnly}
-              onChange={(e) => updateRule("witchSeeBiteOnlyIfHasHealPotion", e.target.checked)}
-              style={{ width: 20, height: 20, marginTop: 2 }}
-            />
-          </label>
-
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Phù thủy chỉ được cộng thêm 10 giây khi còn ít nhất 1 bình có thể dùng</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                Khi bật, nếu Phù thủy đã dùng cả bình cứu và bình giết thì sẽ không tự động được cộng thêm thời gian.
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={draftRules.witchBonusTimeRequiresUsablePotion}
-              disabled={readOnly}
-              onChange={(e) => updateRule("witchBonusTimeRequiresUsablePotion", e.target.checked)}
-              style={{ width: 20, height: 20, marginTop: 2 }}
-            />
-          </label>
-
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>{thirdRuleLabel}</div>
-              <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                {thirdRuleDescription}
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={thirdRuleChecked}
-              disabled={readOnly}
-              onChange={(e) => {
-                if (draftRules.allNightActionsSimultaneous) {
-                  updateRule("witchHideProtectedBiteInSimultaneous", e.target.checked);
-                  return;
-                }
-                updateRule("witchHideProtectedBiteWhenSequential", e.target.checked);
-              }}
-              style={{ width: 20, height: 20, marginTop: 2 }}
-            />
-          </label>
-
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian hành động trong đêm của phe dân</div>
-            </div>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={draftRules.allNightActionsSimultaneous ? 0 : 10}
-              max={60}
-              step={10}
-              value={draftRules.nonWolfNightActionDurationSec}
-              disabled={readOnly}
-              onChange={(e) =>
-                updateNightActionDuration("nonWolfNightActionDurationSec", Number(e.target.value))
-              }
-              style={{ width: 96, padding: "10px 12px" }}
-            />
-          </label>
-
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian hành động trong đêm của phe sói</div>
-            </div>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={60}
-              step={10}
-              value={draftRules.wolfNightActionDurationSec}
-              disabled={readOnly}
-              onChange={(e) =>
-                updateNightActionDuration("wolfNightActionDurationSec", Number(e.target.value))
-              }
-              style={{ width: 96, padding: "10px 12px" }}
-            />
-          </label>
-
-          <label style={rowStyle()}>
-            <div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Số lượt tương tác của người bị lên giàn</div>
-            </div>
-            <input
-              type="number"
-              min={0}
-              max={10}
-              value={draftRules.trialInteractionSelectionLimit}
-              disabled={readOnly}
-              onChange={(e) => updateRule("trialInteractionSelectionLimit", clampSelectionLimit(Number(e.target.value)))}
-              style={{ width: 96, padding: "10px 12px" }}
-            />
-          </label>
         </div>
 
         <div style={{ padding: 24, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "flex-end", gap: 12 }}>

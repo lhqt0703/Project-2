@@ -25,8 +25,12 @@ import { useLoveRole } from "./gameRoles/useLoveRole";
 import { useCursedRole } from "./gameRoles/useCursedRole";
 import { useMerchantRole } from "./gameRoles/useMerchantRole";
 import { useAngelRole } from "./gameRoles/useAngelRole";
+import { useDietQuyRole } from "./gameRoles/useDietQuyRole";
 import { ScoreboardModal } from "../components/ScoreboardModal";
 import RoleCard3D from "../components/RoleCard3D";
+import Masonry from "../components/Masonry";
+import nenLungAsset from "../assets/nền lưng.avif";
+import { gsap } from "gsap";
 import DecryptedText from "../components/DecryptedText";
 import medalSvg from "../assets/medal.svg";
 // import PhaseTransitionOverlay from "../components/PhaseTransitionOverlay";
@@ -137,6 +141,53 @@ export default function Game() {
   const [isAnimatingLeaf, setIsAnimatingLeaf] = useState(false);
   const [duskRevealGameUI, setDuskRevealGameUI] = useState(false);
   const duskPlayedRef = useRef(false);
+
+  const [masonryComplete, setMasonryComplete] = useState(false);
+  const prevPhaseRef = useRef<string | null>(null);
+  const isSelectingLocally = useRef(false);
+
+  useEffect(() => {
+    if (phase === "dusk") {
+      const hasChosen = room?.duskCardSelections && room.duskCardSelections[clientId] !== undefined;
+      if (hasChosen) {
+        if (!isSelectingLocally.current) {
+          setMasonryComplete(true);
+        }
+      } else {
+        // hasChosen is false!
+        if (prevPhaseRef.current === "dusk") {
+          // Re-entering dusk from dusk without a chosen card (Restart clicked!)
+          const container = document.querySelector(".float-up-container");
+          if (container) {
+            gsap.to(container, {
+              y: window.innerHeight + 300,
+              opacity: 0,
+              duration: 0.6,
+              ease: "power2.in",
+              onComplete: () => {
+                setMasonryComplete(false);
+                setCardFlippedToFront(false);
+                isSelectingLocally.current = false;
+              }
+            });
+          } else {
+            setMasonryComplete(false);
+            setCardFlippedToFront(false);
+            isSelectingLocally.current = false;
+          }
+        } else {
+          // First time entering dusk from lobby/other phase (and no card chosen yet)
+          setMasonryComplete(false);
+          setCardFlippedToFront(false);
+          isSelectingLocally.current = false;
+        }
+      }
+    } else {
+      setMasonryComplete(false);
+      isSelectingLocally.current = false;
+    }
+    prevPhaseRef.current = phase;
+  }, [phase, room?.duskCardSelections, clientId]);
 
   /* ==========================================================================
      [HIỆU ỨNG GridMotion CHUYỂN CẢNH HOÀNG HÔN (DUSK TRANSITION)]
@@ -734,32 +785,6 @@ export default function Game() {
     sync.loveState.rolesByPlayerId,
   ]);
 
-  const roleBadgesForDisplay = useMemo(() => {
-    const loveRoleBadges = visibleLoveRoleBadges;
-    const publicRoleBadges = roomForDisplay?.publicRevealedRolesByPlayerId || {};
-    const hasLoveRoleBadges = Object.keys(loveRoleBadges).length > 0;
-    const hasPublicRoleBadges = Object.keys(publicRoleBadges).length > 0;
-    const allRoleBadges = sync.revealedRolesByPlayerId || {};
-
-    if (isHost) {
-      return { ...allRoleBadges, ...publicRoleBadges };
-    }
-
-    if (!canViewRoles) {
-      const mergedPublic = { ...publicRoleBadges, ...loveRoleBadges };
-      return hasPublicRoleBadges || hasLoveRoleBadges ? mergedPublic : undefined;
-    }
-
-    if (!isSequentialNight || sync.gameEnded) return { ...allRoleBadges, ...publicRoleBadges, ...loveRoleBadges };
-
-    const filteredBadges = Object.fromEntries(
-      Object.entries(allRoleBadges).filter(([, playerRole]) => {
-        if (playerRole === "Bán sói" && !isBanSoiAligned) return false;
-        return doesRoleMatchNightTurn(playerRole, currentNightTurnRole);
-      })
-    );
-    return { ...filteredBadges, ...publicRoleBadges, ...loveRoleBadges };
-  }, [canViewRoles, currentNightTurnRole, isBanSoiAligned, isHost, isSequentialNight, roomForDisplay?.publicRevealedRolesByPlayerId, sync.gameEnded, sync.revealedRolesByPlayerId, visibleLoveRoleBadges]);
 
   const dayVoteWeightsByVoterId = useMemo(() => {
     const publicRoles = roomForDisplay?.publicRevealedRolesByPlayerId || {};
@@ -1146,6 +1171,75 @@ export default function Game() {
     angelState: sync.angelReviveState,
   });
 
+  const [dietQuyNightDirection, setDietQuyNightDirection] = useState<"clockwise" | "counter_clockwise">("clockwise");
+  const [dietQuyNightStartPlayerId, setDietQuyNightStartPlayerId] = useState<string | null>(null);
+  const [slayerSelectMode, setSlayerSelectMode] = useState(false);
+  const [slayerTargetId, setSlayerTargetId] = useState<string | null>(null);
+  const [showSlayerConfirm, setShowSlayerConfirm] = useState(false);
+
+  const dietQuy = useDietQuyRole({
+    roomId,
+    phase,
+    role,
+    room: roomForRoles,
+    deadPlayers: deadPlayersForNightActions,
+  });
+
+  const confirmSlayerAction = () => {
+    if (!roomId || !slayerTargetId) return;
+    socket.emit("dietQuySlayerAbility", { roomId, targetId: slayerTargetId });
+    setSlayerSelectMode(false);
+    setSlayerTargetId(null);
+    setShowSlayerConfirm(false);
+  };
+
+  const roleBadgesForDisplay = useMemo(() => {
+    const loveRoleBadges = visibleLoveRoleBadges;
+    const publicRoleBadges = roomForDisplay?.publicRevealedRolesByPlayerId || {};
+    const hasLoveRoleBadges = Object.keys(loveRoleBadges).length > 0;
+    const hasPublicRoleBadges = Object.keys(publicRoleBadges).length > 0;
+    const allRoleBadges = sync.revealedRolesByPlayerId || {};
+
+    if (isHost) {
+      return { ...allRoleBadges, ...publicRoleBadges };
+    }
+
+    if (roomForDisplay?.gameMode === "diet_quy") {
+      const extraBadges: Record<string, string> = {};
+      const myId = clientId;
+      if (myId) {
+        if (role === "Đầu bếp" && dietQuy.chefInfo !== null) {
+          extraBadges[myId] = `Đầu bếp (${dietQuy.chefInfo})`;
+        }
+        if (role === "Đồng cảm" && dietQuy.empathInfo !== null) {
+          extraBadges[myId] = `Đồng cảm (${dietQuy.empathInfo})`;
+        }
+        if (role === "Chôn cất" && dietQuy.undertakerInfo && roomForDisplay.dietQuyExecutedPlayerId) {
+          extraBadges[roomForDisplay.dietQuyExecutedPlayerId] = dietQuy.undertakerInfo;
+        }
+        if (role === "Nuôi quạ" && dietQuy.ravenkeeperResult && roomForDisplay.dietQuyRavenkeeperTargetId) {
+          extraBadges[roomForDisplay.dietQuyRavenkeeperTargetId] = dietQuy.ravenkeeperResult;
+        }
+      }
+      return { ...publicRoleBadges, ...extraBadges };
+    }
+
+    if (!canViewRoles) {
+      const mergedPublic = { ...publicRoleBadges, ...loveRoleBadges };
+      return hasPublicRoleBadges || hasLoveRoleBadges ? mergedPublic : undefined;
+    }
+
+    if (!isSequentialNight || sync.gameEnded) return { ...allRoleBadges, ...publicRoleBadges, ...loveRoleBadges };
+
+    const filteredBadges = Object.fromEntries(
+      Object.entries(allRoleBadges).filter(([, playerRole]) => {
+        if (playerRole === "Bán sói" && !isBanSoiAligned) return false;
+        return doesRoleMatchNightTurn(playerRole, currentNightTurnRole);
+      })
+    );
+    return { ...filteredBadges, ...publicRoleBadges, ...loveRoleBadges };
+  }, [canViewRoles, currentNightTurnRole, isBanSoiAligned, isHost, isSequentialNight, roomForDisplay?.publicRevealedRolesByPlayerId, sync.gameEnded, sync.revealedRolesByPlayerId, visibleLoveRoleBadges, roomForDisplay?.gameMode, role, dietQuy.chefInfo, dietQuy.empathInfo, dietQuy.undertakerInfo, dietQuy.ravenkeeperResult, roomForDisplay?.dietQuyExecutedPlayerId, roomForDisplay?.dietQuyRavenkeeperTargetId]);
+
   const isLocalPlayerAbleToAct = useMemo(() => {
     if (!clientId || !room || room.gameOver) return false;
     const isDead = deadPlayers.includes(clientId);
@@ -1407,6 +1501,15 @@ export default function Game() {
   // Xử lý click vào avatar người chơi
   const handlePlayerClick = (playerId: string) => {
     if (sync.gameEnded) return;
+    if (room?.gameMode === "diet_quy") {
+      if (slayerSelectMode) {
+        if (deadPlayers.includes(playerId)) return;
+        setSlayerTargetId(playerId);
+        setShowSlayerConfirm(true);
+        return;
+      }
+      if (dietQuy.onPlayerClick(playerId)) return;
+    }
     if (angel.onPlayerClick(playerId)) return;
     // Nếu người chơi đã chết thì không được chọn họ nữa
     if (deadPlayers.includes(playerId) && !(isCurrentPlayerHiddenRevived && playerId === clientId)) return;
@@ -1498,6 +1601,16 @@ export default function Game() {
 
   const [cardFlippedToFront, setCardFlippedToFront] = useState(false);
 
+  const masonryItems = useMemo(() => {
+    const roles = room?.roles || [];
+    return roles.map((roleName, index) => ({
+      id: String(index),
+      img: nenLungAsset,
+      height: 360,
+      roleName
+    }));
+  }, [room?.roles]);
+
   useEffect(() => {
     setCardFlippedToFront(shouldRevealMyRole);
   }, [shouldRevealMyRole]);
@@ -1519,14 +1632,19 @@ export default function Game() {
     () => import.meta.glob<string>("../assets/*.png", { eager: true, import: "default" }),
     []
   );
+  const rolePortraitAvifImagesForGame = useMemo(
+    () => import.meta.glob<string>("../assets/C *.avif", { eager: true, import: "default" }),
+    []
+  );
   const normalizeRoleName = useCallback((value: string) => value.normalize("NFC").trim().toLowerCase(), []);
-  const getAssetNameFromPath = useCallback((path: string) => path.split("/").pop()?.replace(/\.png$/i, "") ?? "", []);
+  const getAssetNameFromPath = useCallback((path: string) => path.split("/").pop()?.replace(/\.(png|avif)$/i, "") ?? "", []);
   const rolePortraitByNameForGame = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(rolePortraitImagesForGame).map(([path, src]) => [normalizeRoleName(getAssetNameFromPath(path)), src])
-      ),
-    [getAssetNameFromPath, normalizeRoleName, rolePortraitImagesForGame]
+    () => {
+      const pngEntries = Object.entries(rolePortraitImagesForGame).map(([path, src]) => [normalizeRoleName(getAssetNameFromPath(path)), src]);
+      const avifEntries = Object.entries(rolePortraitAvifImagesForGame).map(([path, src]) => [normalizeRoleName(getAssetNameFromPath(path)), src]);
+      return Object.fromEntries([...pngEntries, ...avifEntries]);
+    },
+    [getAssetNameFromPath, normalizeRoleName, rolePortraitImagesForGame, rolePortraitAvifImagesForGame]
   );
   const roleCompanionAssetMap = useMemo(
     () =>
@@ -1778,41 +1896,59 @@ export default function Game() {
               </div>
               {!isHost && !duskTransitionActive && (
                 <>
-                  <style>{`
-                    @keyframes floatUp {
-                      0% {
-                        transform: translateY(100vh);
-                        opacity: 0;
-                      }
-                      100% {
-                        transform: translateY(0);
-                        opacity: 1;
-                      }
-                    }
-                    .float-up-container {
-                      animation: floatUp 0.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
-                    }
-                    .encrypted {
-                      font-family: 'Courier New', Courier, monospace;
-                      color: #a78bfa;
-                      letter-spacing: 2px;
-                      opacity: 0.7;
-                    }
-                    .revealed {
-                      color: #10b981;
-                      text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
-                      font-weight: 800;
-                      transition: all 0.3s ease;
-                    }
-                  `}</style>
-                  <div className="float-up-container">
-                    <RoleCard3D
-                      role={role}
-                      revealed={cardFlippedToFront}
-                      onToggleReveal={() => setCardFlippedToFront(p => !p)}
-                      lowPerformanceMode={lowPerformanceMode}
+                  {!masonryComplete ? (
+                    <Masonry
+                      items={masonryItems}
+                      duskCardSelections={room.duskCardSelections || {}}
+                      clientId={clientId}
+                      onSelectCard={(index) => {
+                        isSelectingLocally.current = true;
+                        socket.emit("duskSelectCard", { roomId, cardIndex: index });
+                      }}
+                      onSelectionComplete={() => {
+                        isSelectingLocally.current = false;
+                        setMasonryComplete(true);
+                      }}
                     />
-                  </div>
+                  ) : (
+                    <>
+                      <style>{`
+                        @keyframes floatUp {
+                          0% {
+                            transform: translateY(100vh);
+                            opacity: 0;
+                          }
+                          100% {
+                            transform: translateY(0);
+                            opacity: 1;
+                          }
+                        }
+                        .float-up-container {
+                          animation: floatUp 0.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+                        }
+                        .encrypted {
+                          font-family: 'Courier New', Courier, monospace;
+                          color: #a78bfa;
+                          letter-spacing: 2px;
+                          opacity: 0.7;
+                        }
+                        .revealed {
+                          color: #10b981;
+                          text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+                          font-weight: 800;
+                          transition: all 0.3s ease;
+                        }
+                      `}</style>
+                      <div className="float-up-container">
+                        <RoleCard3D
+                          role={role}
+                          revealed={cardFlippedToFront}
+                          onToggleReveal={() => setCardFlippedToFront((p) => !p)}
+                          lowPerformanceMode={lowPerformanceMode}
+                        />
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </>
@@ -1837,7 +1973,6 @@ export default function Game() {
           🤐 Có vai trò kích hoạt bí mật đang chờ phản ứng
         </div>
       )}
-
       {(() => {
         const buff = sync.elementalBuffResult;
         if (!buff?.buffId) return null;
@@ -1861,15 +1996,244 @@ export default function Game() {
         );
       })()}
 
-      {isSequentialNight && currentNightTurnRole && !isHost && !isCurrentPlayerDeadForNightActions && doesNightTurnMatchMyRole && nightTurnRemainingSec !== null && !sync.gameEnded && (
+      {isSequentialNight && currentNightTurnRole && !isHost && !isCurrentPlayerDeadForNightActions && doesNightTurnMatchMyRole && nightTurnRemainingSec !== null && !sync.gameEnded && room?.gameMode !== "diet_quy" && (
         <div style={{ marginTop: 8, fontWeight: 700 }}>
           Còn {nightTurnRemainingSec}s nữa để thực hiện chức năng{nightTurnPaused ? " (đang tạm ngưng)" : ""}
         </div>
       )}
 
-      {isSimultaneousNight && !isHost && !isCurrentPlayerDeadForNightActions && !isWolfTeamRole && role && mySimultaneousDeadline && simultaneousRemainingSec !== null && !sync.gameEnded && (
+      {isSimultaneousNight && !isHost && !isCurrentPlayerDeadForNightActions && !isWolfTeamRole && role && mySimultaneousDeadline && simultaneousRemainingSec !== null && !sync.gameEnded && room?.gameMode !== "diet_quy" && (
         <div style={{ marginTop: 8, fontWeight: 700 }}>
           Còn {simultaneousRemainingSec}s nữa để thực hiện chức năng
+        </div>
+      )}
+
+      {room?.gameMode === "diet_quy" && phase === "night" && room.nightTurnPlayerId && (
+        <div style={{
+          marginTop: "0.5rem",
+          fontWeight: 700,
+          background: "rgba(231, 76, 60, 0.15)",
+          padding: "8px 16px",
+          borderRadius: 8,
+          border: "1px solid rgba(231, 76, 60, 0.3)",
+          display: "inline-block",
+          color: "#fff"
+        }}>
+          🌙 Lượt của: <span style={{ color: "var(--accent)", textShadow: "0 0 8px var(--accent)" }}>{room.players.find((p: any) => p.id === room.nightTurnPlayerId)?.name || "Người chơi"}</span>
+          {(isHost || room.nightTurnPlayerId === clientId) && room.nightTurnRole && ` (${room.nightTurnRole})`}
+        </div>
+      )}
+
+      {room?.gameMode === "diet_quy" && (
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          maxWidth: 500,
+          margin: "15px auto",
+          textAlign: "left"
+        }}>
+          {/* Chef info */}
+          {role === "Đầu bếp" && dietQuy.chefInfo !== null && (
+            <div style={{
+              background: "rgba(52, 152, 219, 0.15)",
+              border: "1px solid rgba(52, 152, 219, 0.3)",
+              padding: 12,
+              borderRadius: 8,
+              color: "#fff"
+            }}>
+              👨‍🍳 <b>Thông tin Đầu bếp:</b> Có <b>{dietQuy.chefInfo}</b> cặp người chơi phe ác ngồi cạnh nhau.
+            </div>
+          )}
+
+          {/* Empath info */}
+          {role === "Đồng cảm" && dietQuy.empathInfo !== null && (
+            <div style={{
+              background: "rgba(52, 152, 219, 0.15)",
+              border: "1px solid rgba(52, 152, 219, 0.3)",
+              padding: 12,
+              borderRadius: 8,
+              color: "#fff"
+            }}>
+              👁️ <b>Thông tin Đồng cảm:</b> Có <b>{dietQuy.empathInfo}</b> người ngồi cạnh là phe ác.
+            </div>
+          )}
+
+          {/* Undertaker info */}
+          {role === "Chôn cất" && dietQuy.undertakerInfo !== null && (
+            <div style={{
+              background: "rgba(52, 152, 219, 0.15)",
+              border: "1px solid rgba(52, 152, 219, 0.3)",
+              padding: 12,
+              borderRadius: 8,
+              color: "#fff"
+            }}>
+              ⚰️ <b>Thông tin Chôn cất:</b> Người bị treo cổ hôm nay có vai trò thực sự là <b>{dietQuy.undertakerInfo}</b>.
+            </div>
+          )}
+
+          {/* Washerwoman info */}
+          {role === "Thợ giặt" && dietQuy.washerwomanInfo && (
+            <div style={{
+              background: "rgba(52, 152, 219, 0.15)",
+              border: "1px solid rgba(52, 152, 219, 0.3)",
+              padding: 12,
+              borderRadius: 8,
+              color: "#fff"
+            }}>
+              🧺 <b>Thông tin Thợ giặt:</b> Một trong hai người chơi <b>{dietQuy.washerwomanInfo.targetIds.map(id => room.players.find(p => p.id === id)?.name || id).join(" hoặc ")}</b> có vai trò là <b>{dietQuy.washerwomanInfo.townsfolkRole}</b>.
+            </div>
+          )}
+
+          {/* Librarian info */}
+          {role === "Thủ thư" && dietQuy.librarianInfo && (
+            <div style={{
+              background: "rgba(52, 152, 219, 0.15)",
+              border: "1px solid rgba(52, 152, 219, 0.3)",
+              padding: 12,
+              borderRadius: 8,
+              color: "#fff"
+            }}>
+              📖 <b>Thông tin Thủ thư:</b> Một trong hai người chơi <b>{dietQuy.librarianInfo.targetIds.map(id => room.players.find(p => p.id === id)?.name || id).join(" hoặc ")}</b> có vai trò là <b>{dietQuy.librarianInfo.role}</b>.
+            </div>
+          )}
+
+          {/* Investigator info */}
+          {role === "Điều tra viên" && dietQuy.investigatorInfo && (
+            <div style={{
+              background: "rgba(52, 152, 219, 0.15)",
+              border: "1px solid rgba(52, 152, 219, 0.3)",
+              padding: 12,
+              borderRadius: 8,
+              color: "#fff"
+            }}>
+              🕵️‍♂️ <b>Thông tin Điều tra viên:</b> Một trong hai người chơi <b>{dietQuy.investigatorInfo.targetIds.map(id => room.players.find(p => p.id === id)?.name || id).join(" hoặc ")}</b> có vai trò là Tay sai <b>{dietQuy.investigatorInfo.minionRole}</b>.
+            </div>
+          )}
+
+          {/* Fortune Teller result */}
+          {role === "Thầy bói" && dietQuy.fortuneTellerResult !== null && (
+            <div style={{
+              background: "rgba(52, 152, 219, 0.15)",
+              border: "1px solid rgba(52, 152, 219, 0.3)",
+              padding: 12,
+              borderRadius: 8,
+              color: "#fff"
+            }}>
+              🔮 <b>Thông tin Thầy bói:</b> {dietQuy.fortuneTellerResult === "yes" ? "✅ Có ít nhất một người là Quỷ (hoặc Red Charm) trong 2 người bạn đã kiểm tra." : "❌ Không có ai là Quỷ (hoặc Red Charm) trong 2 người bạn đã kiểm tra."}
+            </div>
+          )}
+
+          {/* Ravenkeeper result */}
+          {role === "Nuôi quạ" && dietQuy.ravenkeeperResult !== null && (
+            <div style={{
+              background: "rgba(52, 152, 219, 0.15)",
+              border: "1px solid rgba(52, 152, 219, 0.3)",
+              padding: 12,
+              borderRadius: 8,
+              color: "#fff"
+            }}>
+              🐦 <b>Thông tin Nuôi quạ:</b> Người chơi bạn chọn có vai trò thực sự là <b>{dietQuy.ravenkeeperResult}</b>.
+            </div>
+          )}
+        </div>
+      )}
+
+      {room?.gameMode === "diet_quy" && phase === "day" && role === "Diệt quỷ" && !isCurrentPlayerDead && !room?.dietQuySlayerUsed && (
+        <div style={{ margin: "15px auto", textAlign: "center" }}>
+          <button
+            onClick={() => setSlayerSelectMode(p => !p)}
+            style={{
+              padding: "10px 20px",
+              background: slayerSelectMode ? "#e74c3c" : "var(--accent)",
+              color: "#fff",
+              border: "none",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: "bold",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.2)"
+            }}
+          >
+            {slayerSelectMode ? "❌ Hủy chọn mục tiêu bắn" : "🎯 Diệt Quỷ (Slayer): Bắn một người"}
+          </button>
+          {slayerSelectMode && (
+            <p style={{ color: "#ff9800", marginTop: 8 }}>Hãy click chọn 1 người trên vòng tròn để tiêu diệt.</p>
+          )}
+        </div>
+      )}
+
+      {isHost && room?.gameMode === "diet_quy" && (phase === "day" || phase === "dusk") && !sync.gameEnded && (
+        <div style={{
+          background: "var(--surface-muted)",
+          padding: 16,
+          borderRadius: 12,
+          border: "1px solid var(--accent)",
+          marginTop: 15,
+          color: "#fff",
+          maxWidth: 400,
+          margin: "15px auto"
+        }}>
+          <h3>⚙️ Cấu hình đêm Diệt Quỷ</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, margin: "10px 0", textAlign: "left" }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span>Chiều đi đêm:</span>
+              <select
+                value={dietQuyNightDirection}
+                onChange={(e) => setDietQuyNightDirection(e.target.value as "clockwise" | "counter_clockwise")}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  background: "#1a1f26",
+                  color: "#fff",
+                  border: "1px solid var(--border-strong)"
+                }}
+              >
+                <option value="clockwise">Theo chiều kim đồng hồ ➡️</option>
+                <option value="counter_clockwise">Ngược chiều kim đồng hồ ⬅️</option>
+              </select>
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span>Người bắt đầu đi đêm:</span>
+              <select
+                value={dietQuyNightStartPlayerId || ""}
+                onChange={(e) => setDietQuyNightStartPlayerId(e.target.value || null)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  background: "#1a1f26",
+                  color: "#fff",
+                  border: "1px solid var(--border-strong)"
+                }}
+              >
+                <option value="">-- Chọn người bắt đầu (Ngẫu nhiên) --</option>
+                {room.players.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} {deadPlayers.includes(p.id) ? "(Chết)" : "(Sống)"}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <button
+            onClick={() => {
+              socket.emit("changePhase", {
+                roomId,
+                phase: "night",
+                dietQuyNightDirection,
+                dietQuyNightStartPlayerId
+              });
+            }}
+            style={{
+              width: "100%",
+              padding: "10px",
+              background: "var(--accent)",
+              border: "none",
+              color: "#fff",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 700
+            }}
+          >
+            🌙 Bắt đầu đêm Diệt Quỷ
+          </button>
         </div>
       )}
 
@@ -1943,6 +2307,17 @@ export default function Game() {
         </div>
       )}
       {angel.panel}
+      {room?.gameMode === "diet_quy" && !sync.gameEnded && dietQuy.panel}
+      <ConfirmModal
+        open={showSlayerConfirm && !!slayerTargetId}
+        title="Xác nhận bắn"
+        message={`Bạn chắc chắn muốn sử dụng kỹ năng bắn vào ${room?.players.find((p: any) => p.id === slayerTargetId)?.name}? (Kỹ năng chỉ sử dụng ĐƯỢC 1 LẦN duy nhất cả game)`}
+        onConfirm={confirmSlayerAction}
+        onCancel={() => {
+          setShowSlayerConfirm(false);
+          setSlayerTargetId(null);
+        }}
+      />
       {/* Hiển thị bố cục vị trí người chơi khi có room.positions */}
       {roomForDisplay?.positions && phase !== "dusk" && (() => {
         const activeReplayEvent = roomForDisplay?.isReplay && roomForDisplay?.replayEvents && roomForDisplay?.replayIndex !== undefined
@@ -1974,6 +2349,7 @@ export default function Game() {
                 activeNightRole={isHost && isSequentialNight ? currentNightTurnRole : null}
                 suppressNightActionProgress={autoTrialHighlightSuppressed}
                 selectedOutlinePlayerId={
+                  (roomForDisplay?.gameMode === "diet_quy" ? dietQuy.playerPositionsProps.selectedOutlinePlayerId : null) ||
                   dayVote.playerPositionsProps.selectedOutlinePlayerId ||
                   guardian.playerPositionsProps.selectedOutlinePlayerId ||
                   protector.playerPositionsProps.selectedOutlinePlayerId ||
@@ -1986,6 +2362,8 @@ export default function Game() {
                   angel.playerPositionsProps.selectedOutlinePlayerId ||
                   null
                 }
+                dietQuyOrangeHighlightPlayerIds={roomForDisplay?.gameMode === "diet_quy" ? dietQuy.playerPositionsProps.dietQuyOrangeHighlightPlayerIds : undefined}
+                dietQuyRedHighlightPlayerIds={roomForDisplay?.gameMode === "diet_quy" ? dietQuy.playerPositionsProps.dietQuyRedHighlightPlayerIds : undefined}
                 selectedOutlinePlayerIds={(wolf.playerPositionsProps.selectedOutlinePlayerIds || []).filter(
                   (id): id is string => !!id
                 )}

@@ -7,6 +7,11 @@ import { ELEMENTAL_ROLE_ORDER } from "../constants/elemental";
 const NON_VILLAGER_ROLES = ["Dân làng", "Sói", "Bán sói", "Sói con", "Sói Dại", "Linh sói", "Kẻ bị nguyền", "Tay Buôn", "Thiên Sứ", "Trưởng làng", "Hộ nhân", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Thần tình yêu"] as const;
 type NonVillagerRole = (typeof NON_VILLAGER_ROLES)[number];
 
+const DIET_QUY_TOWNSFOLK = ["Thợ giặt", "Thủ thư", "Điều tra viên", "Đầu bếp", "Đồng cảm", "Thầy bói", "Chôn cất", "Nhà sư", "Nuôi quạ", "Trinh nữ", "Diệt quỷ", "Chiến sĩ", "Thị trưởng"] as const;
+const DIET_QUY_TRAVELERS = ["Người ẩn dật", "Thánh nhân"] as const;
+const DIET_QUY_MINIONS = ["Độc thủ", "Gián điệp", "Phò"] as const;
+const DIET_QUY_DEMON = ["Ác Quỷ"] as const;
+
 export default function RoleSelect() {
   const nav = useNavigate();
   const location = useLocation();
@@ -24,15 +29,18 @@ export default function RoleSelect() {
     roles?: string[];
     phase?: string;
     gameOver?: boolean;
+    gameMode?: "da_nghich" | "diet_quy";
   } | null>(null);
   const [pendingRolesApply, setPendingRolesApply] = useState<string[] | null>(null);
   const didInitFromServer = useRef(false);
+
+  const isDietQuy = roomSnapshot?.gameMode === "diet_quy";
 
   const elementalCount = useMemo(
     () => Object.values(selectedElementalRoles).filter(Boolean).length,
     [selectedElementalRoles]
   );
-  const totalSelected = selectedRoles.length + elementalCount;
+  const totalSelected = isDietQuy ? selectedRoles.length : selectedRoles.length + elementalCount;
 
   useEffect(() => {
     if (!roomId) return;
@@ -42,6 +50,7 @@ export default function RoleSelect() {
       hostId: string;
       players: { id: string; name: string }[];
       roles?: string[];
+      gameMode?: "da_nghich" | "diet_quy";
     }
 
     const handleRoom = (room: Room) => {
@@ -50,14 +59,18 @@ export default function RoleSelect() {
 
       if (!didInitFromServer.current) {
         const roles = room.roles ?? [];
-        const elementalRoleSet = new Set(ELEMENTAL_ROLE_ORDER);
-        const nextElemental = Object.fromEntries(
-          ELEMENTAL_ROLE_ORDER.map((role) => [role, roles.includes(role)])
-        );
-        const nonElemental = roles.filter((role) => !elementalRoleSet.has(role as any));
+        if (room.gameMode === "diet_quy") {
+          setSelectedRoles(roles);
+        } else {
+          const elementalRoleSet = new Set(ELEMENTAL_ROLE_ORDER);
+          const nextElemental = Object.fromEntries(
+            ELEMENTAL_ROLE_ORDER.map((role) => [role, roles.includes(role)])
+          );
+          const nonElemental = roles.filter((role) => !elementalRoleSet.has(role as any));
 
-        setSelectedRoles(nonElemental);
-        setSelectedElementalRoles(nextElemental);
+          setSelectedRoles(nonElemental);
+          setSelectedElementalRoles(nextElemental);
+        }
         didInitFromServer.current = true;
       }
     };
@@ -96,8 +109,8 @@ export default function RoleSelect() {
       if (!roomId) return;
 
       const ok = window.confirm(
-        `Danh sách vai trò hiện tại có ${data.currentWolfCount} sói, vượt quá mức tối đa ${data.maxAllowedWolfCount} cho phòng ${data.playerCount} người.\n\n` +
-        `Hệ thống sẽ tự giảm bớt số lượng sói để tránh phe sói thắng ngay khi bắt đầu.\n` +
+        `Danh sách vai trò hiện tại có ${data.currentWolfCount} sói/quỷ, vượt quá mức tối đa ${data.maxAllowedWolfCount} cho phòng ${data.playerCount} người.\n\n` +
+        `Hệ thống sẽ tự giảm bớt số lượng sói/quỷ để tránh phe ác thắng ngay khi bắt đầu.\n` +
         `Nhấn OK để hệ thống tự điều chỉnh và tiếp tục khởi tạo ván chơi mới.\n` +
         `Nhấn Hủy để ở lại màn hình chọn vai trò.`
       );
@@ -129,7 +142,7 @@ export default function RoleSelect() {
       socket.off("wolfRoleMismatch", handleWolfMismatch);
       socket.off("rolesReady", handleRolesReady);
     };
-  }, [nav, roomId, selectedRoles, selectedElementalRoles]);
+  }, [nav, roomId, selectedRoles, selectedElementalRoles, isDietQuy]);
 
   const removeOne = (arr: string[], role: string) => {
     const idx = arr.indexOf(role);
@@ -152,6 +165,7 @@ export default function RoleSelect() {
   };
 
   const buildFinalRoles = () => {
+    if (isDietQuy) return selectedRoles;
     const elementalRoles = ELEMENTAL_ROLE_ORDER.filter((role) => selectedElementalRoles[role]);
     return [...selectedRoles, ...elementalRoles];
   };
@@ -175,6 +189,33 @@ export default function RoleSelect() {
     socket.emit("rolesSelected", { roomId, roles: currentRoles });
   };
 
+  const renderDietQuyRoleCard = (role: string, borderColor: string, activeBg: string) => {
+    const selected = selectedRoles.includes(role);
+    return (
+      <div
+        className="role-card"
+        key={role}
+        onClick={() => {
+          setSelectedRoles((prev) =>
+            prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
+          );
+        }}
+        style={{
+          padding: "16px 22px",
+          borderRadius: 12,
+          cursor: "pointer",
+          border: selected ? `3px solid ${borderColor}` : "2px solid var(--border-strong)",
+          background: selected ? activeBg : "var(--surface-muted)",
+          transition: "0.2s",
+          fontSize: 18,
+          userSelect: "none",
+        }}
+      >
+        <div>{role}</div>
+      </div>
+    );
+  };
+
   return (
     <div className="page-shell roleselect-page" style={{ padding: 20 }}>
       <h1>Chọn Vai Trò Cho Ván Chơi</h1>
@@ -182,117 +223,146 @@ export default function RoleSelect() {
       <p>Số người chơi: <b>{playerCount}</b></p>
       <p>Đã chọn: <b>{totalSelected}</b></p>
 
-      <div className="roleselect-grid">
-        {(() => {
-          const count = selectedRoles.filter((r) => r === "Dân làng").length;
-          return (
-            <div
-              className="role-card"
-              key="Dân làng"
-              onClick={() => toggleRole("Dân làng")}
-              style={{
-                padding: "16px 22px",
-                borderRadius: 12,
-                cursor: "pointer",
-                border: count > 0 ? "3px solid var(--accent)" : "2px solid var(--border-strong)",
-                background: count > 0 ? "var(--accent-surface)" : "var(--surface-muted)",
-                transition: "0.2s",
-                fontSize: 18,
-                userSelect: "none",
-              }}
-            >
-              <div>Dân làng {count > 1 ? `x${count}` : ""}</div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedRoles((prev) => [...prev, "Dân làng"]);
+      {isDietQuy ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <div>
+            <h2 style={{ color: "#34d399", margin: "10px 0" }}>Phe Dân Làng (Townsfolk)</h2>
+            <div className="roleselect-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+              {DIET_QUY_TOWNSFOLK.map((role) => renderDietQuyRoleCard(role, "#34d399", "rgba(52, 211, 153, 0.16)"))}
+            </div>
+          </div>
+          <div>
+            <h2 style={{ color: "#60a5fa", margin: "10px 0" }}>Phe Lữ Khách (Travelers)</h2>
+            <div className="roleselect-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+              {DIET_QUY_TRAVELERS.map((role) => renderDietQuyRoleCard(role, "#60a5fa", "rgba(96, 165, 250, 0.16)"))}
+            </div>
+          </div>
+          <div>
+            <h2 style={{ color: "#fb923c", margin: "10px 0" }}>Phe Tay Sai (Minions)</h2>
+            <div className="roleselect-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+              {DIET_QUY_MINIONS.map((role) => renderDietQuyRoleCard(role, "#fb923c", "rgba(251, 146, 60, 0.16)"))}
+            </div>
+          </div>
+          <div>
+            <h2 style={{ color: "#f87171", margin: "10px 0" }}>Phe Quỷ (Demons)</h2>
+            <div className="roleselect-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+              {DIET_QUY_DEMON.map((role) => renderDietQuyRoleCard(role, "#f87171", "rgba(248, 113, 113, 0.16)"))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="roleselect-grid">
+          {(() => {
+            const count = selectedRoles.filter((r) => r === "Dân làng").length;
+            return (
+              <div
+                className="role-card"
+                key="Dân làng"
+                onClick={() => toggleRole("Dân làng")}
+                style={{
+                  padding: "16px 22px",
+                  borderRadius: 12,
+                  cursor: "pointer",
+                  border: count > 0 ? "3px solid var(--accent)" : "2px solid var(--border-strong)",
+                  background: count > 0 ? "var(--accent-surface)" : "var(--surface-muted)",
+                  transition: "0.2s",
+                  fontSize: 18,
+                  userSelect: "none",
                 }}
-                style={{ marginLeft: 10 }}
               >
-                + Dân làng
-              </button>
-            </div>
-          );
-        })()}
+                <div>Dân làng {count > 1 ? `x${count}` : ""}</div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedRoles((prev) => [...prev, "Dân làng"]);
+                  }}
+                  style={{ marginLeft: 10 }}
+                >
+                  + Dân làng
+                </button>
+              </div>
+            );
+          })()}
 
-        {(() => {
-          const count = selectedRoles.filter((r) => r === "Sói").length;
-          return (
-            <div
-              className="role-card"
-              key="Sói"
-              onClick={() => toggleRole("Sói")}
-              style={{
-                padding: "16px 22px",
-                borderRadius: 12,
-                cursor: "pointer",
-                border: count > 0 ? "3px solid var(--accent)" : "2px solid var(--border-strong)",
-                background: count > 0 ? "var(--accent-surface)" : "var(--surface-muted)",
-                transition: "0.2s",
-                fontSize: 18,
-                userSelect: "none",
-              }}
-            >
-              <div>Sói {count > 1 ? `x${count}` : ""}</div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedRoles((prev) => [...prev, "Sói"]);
+          {(() => {
+            const count = selectedRoles.filter((r) => r === "Sói").length;
+            return (
+              <div
+                className="role-card"
+                key="Sói"
+                onClick={() => toggleRole("Sói")}
+                style={{
+                  padding: "16px 22px",
+                  borderRadius: 12,
+                  cursor: "pointer",
+                  border: count > 0 ? "3px solid var(--accent)" : "2px solid var(--border-strong)",
+                  background: count > 0 ? "var(--accent-surface)" : "var(--surface-muted)",
+                  transition: "0.2s",
+                  fontSize: 18,
+                  userSelect: "none",
                 }}
-                style={{ marginLeft: 10 }}
               >
-                + Sói
-              </button>
-            </div>
-          );
-        })()}
+                <div>Sói {count > 1 ? `x${count}` : ""}</div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedRoles((prev) => [...prev, "Sói"]);
+                  }}
+                  style={{ marginLeft: 10 }}
+                >
+                  + Sói
+                </button>
+              </div>
+            );
+          })()}
 
-        {ELEMENTAL_ROLE_ORDER.map((role) => {
-          const selected = selectedElementalRoles[role];
-          return (
-            <div
-              className="role-card"
-              key={role}
-              onClick={() => toggleElementalRole(role)}
-              style={{
-                padding: "16px 22px",
-                borderRadius: 12,
-                cursor: "pointer",
-                border: selected ? "3px solid #ED6E7B" : "2px solid var(--border-strong)",
-                background: selected ? "rgba(237,110,123,0.16)" : "var(--surface-muted)",
-                transition: "0.2s",
-                fontSize: 18,
-                userSelect: "none",
-              }}
-            >
-              <div>{role}</div>
-            </div>
-          );
-        })}
+          {ELEMENTAL_ROLE_ORDER.map((role) => {
+            const selected = selectedElementalRoles[role];
+            return (
+              <div
+                className="role-card"
+                key={role}
+                onClick={() => toggleElementalRole(role)}
+                style={{
+                  padding: "16px 22px",
+                  borderRadius: 12,
+                  cursor: "pointer",
+                  border: selected ? "3px solid #ED6E7B" : "2px solid var(--border-strong)",
+                  background: selected ? "rgba(237,110,123,0.16)" : "var(--surface-muted)",
+                  transition: "0.2s",
+                  fontSize: 18,
+                  userSelect: "none",
+                }}
+              >
+                <div>{role}</div>
+              </div>
+            );
+          })}
 
-        {(["Bán sói", "Sói con", "Sói Dại", "Linh sói", "Kẻ bị nguyền", "Tay Buôn", "Thiên Sứ", "Trưởng làng", "Hộ nhân", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Thần tình yêu"] as const).map((role) => {
-          const selected = selectedRoles.includes(role);
-          return (
-            <div
-              className="role-card"
-              key={role}
-              onClick={() => toggleRole(role)}
-              style={{
-                padding: "16px 22px",
-                borderRadius: 12,
-                cursor: "pointer",
-                border: selected ? "3px solid var(--accent)" : "2px solid var(--border-strong)",
-                background: selected ? "var(--accent-surface)" : "var(--surface-muted)",
-                transition: "0.2s",
-                fontSize: 18,
-                userSelect: "none",
-              }}
-            >
-              <div>{role}</div>
-            </div>
-          );
-        })}
-      </div>
+          {(["Bán sói", "Sói con", "Sói Dại", "Linh sói", "Kẻ bị nguyền", "Tay Buôn", "Thiên Sứ", "Trưởng làng", "Hộ nhân", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Thần tình yêu"] as const).map((role) => {
+            const selected = selectedRoles.includes(role);
+            return (
+              <div
+                className="role-card"
+                key={role}
+                onClick={() => toggleRole(role)}
+                style={{
+                  padding: "16px 22px",
+                  borderRadius: 12,
+                  cursor: "pointer",
+                  border: selected ? "3px solid var(--accent)" : "2px solid var(--border-strong)",
+                  background: selected ? "var(--accent-surface)" : "var(--surface-muted)",
+                  transition: "0.2s",
+                  fontSize: 18,
+                  userSelect: "none",
+                }}
+              >
+                <div>{role}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <button
         onClick={handleConfirm}

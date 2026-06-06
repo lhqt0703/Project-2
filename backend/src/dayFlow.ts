@@ -180,6 +180,13 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     }
 
     if (executed && !((room.deadPlayers || []).includes(targetId))) {
+      if (room.gameMode === "diet_quy") {
+        room.dietQuyExecutedPlayerId = targetId;
+        room.dietQuyExecutedToday = true;
+        if (room.playerRoles?.[targetId] === "Thánh nhân") {
+          room.dietQuySaintExecutedToday = true;
+        }
+      }
       const eliminatedIds: string[] = [];
       const causesByTarget: Record<string, EliminationCause[]> = {};
       const loveLinkDeaths: { sourceId: string; targetId: string }[] = [];

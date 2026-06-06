@@ -18,9 +18,13 @@ export default function Home() {
 
   return (
     <div style={{ padding: 20 }}>
-      <h1>Trang Chủ</h1>
-      <button onClick={() => nav("/lobby")}>
-        Tạo phòng / Tham gia phòng (tạm thời)
+      <h2>Mừng bạn đến buổi off của Gummy Bears Force~</h2>
+      <button onClick={() => nav("/lobby?mode=da_nghich")} style={{ marginRight: 10 }}>
+        Dạ Nghịch
+      </button>
+      
+      <button onClick={() => nav("/lobby?mode=diet_quy")}>
+        Diệt Quỷ
       </button>
     </div>
   );

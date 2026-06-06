@@ -7,6 +7,7 @@ import GameRulesModal from "../components/GameRulesModal";
 import ElementalEffectGuideModal from "../components/ElementalEffectGuideModal";
 import { DEFAULT_ROOM_GAME_RULES, type NightActionOrderRole, type Player, type RoomData } from "../context/RoomContext";
 import { useRoomContext } from "../context/RoomContext";
+import ArrowLeft from "../assets/arrow-left.svg";
 import {
   ELEMENTAL_BUFFS,
   ELEMENTAL_GROUP_ROLE,
@@ -606,7 +607,28 @@ export default function Room() {
 
   return (
       <div className="page-shell room-page" style={{ padding: 20, position: "relative" }}>
-        <h1>Phòng: {room.id}</h1>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+          <button
+            onClick={() => setLeaveConfirmOpen(true)}
+            aria-label="Quay về sảnh chờ"
+            title="Rời phòng và về sảnh chờ"
+            style={{
+              border: "none",
+              background: "transparent",
+              padding: 0,
+              width: 28,
+              height: 28,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "left",
+              cursor: "pointer",
+              flexShrink: 0, // tránh bị co lại khi có tên phòng dài
+            }}
+          >
+            <img src={ArrowLeft} alt="Quay về sảnh chờ" style={{ width: 22, height: 22, display: "block" }} />
+          </button>
+          <h1 id="Ma-phong">Phòng: {room.id}</h1>
+        </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
           {(() => {
             const isQuick = isElementalQuickOrder(room.gameRules?.nightActionOrder || DEFAULT_ROOM_GAME_RULES.nightActionOrder);
@@ -669,9 +691,6 @@ export default function Room() {
                   Trở lại trò chơi
                 </button>
               )}
-              <button onClick={() => setLeaveConfirmOpen(true)} title="Rời phòng và về sảnh chờ">
-                Quay về sảnh chờ
-              </button>
             </div>
           )}
 
@@ -696,11 +715,6 @@ export default function Room() {
                   style={{ opacity: startGameDisabled ? 0.6 : 1, cursor: startGameDisabled ? "not-allowed" : "pointer" }}
                 >
                   {startButtonText}
-                </button>
-              </div>
-              <div style={{ marginTop: 8 }}>
-                <button onClick={() => setLeaveConfirmOpen(true)} title="Rời phòng và về sảnh chờ">
-                  Quay về sảnh chờ
                 </button>
               </div>
             </>
@@ -957,6 +971,7 @@ export default function Room() {
         <GameRulesModal
           open={showRulesModal}
           title="Thiết lập luật chơi cho phòng"
+          gameMode={room.gameMode}
           initialRules={room.pendingGameRules || room.gameRules || DEFAULT_ROOM_GAME_RULES}
           availableNightActionRoles={availableNightActionRoles}
           includedElementalRoles={(room.roles || []).filter((role) => ELEMENTAL_ROLE_SET.has(role))}
@@ -979,6 +994,7 @@ export default function Room() {
         <GameRulesModal
           open={showCurrentRulesModal}
           title="Luật hiện tại của phòng"
+          gameMode={room.gameMode}
           initialRules={room.gameRules || DEFAULT_ROOM_GAME_RULES}
           availableNightActionRoles={availableNightActionRoles}
           includedElementalRoles={(room.roles || []).filter((role) => ELEMENTAL_ROLE_SET.has(role))}

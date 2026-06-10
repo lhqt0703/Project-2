@@ -1,11 +1,13 @@
 .orb-container {
   position: absolute;
-  top: -12px;
-  left: -12px;
-  right: -12px;
-  bottom: -12px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: calc(130% + 10px);
+  height: calc(130% + 10px);
   pointer-events: none;
-  z-index: 2;
+  z-index: 0;
+  opacity: 0.75;
 }
 
 .orb-container canvas {

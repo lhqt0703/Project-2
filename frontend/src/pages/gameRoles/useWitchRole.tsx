@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { socket, clientId } from "../../socket";
 import type { GamePhase, WitchPotionsPayload } from "./socketEvents";
 import ConfirmModal from "../../components/ConfirmModal";
+import { AvifIcon } from "../../components/AvifIcon";
+
 
 type Player = { id: string; name: string; connected?: boolean };
 
@@ -22,6 +24,7 @@ export function useWitchRole({
   nightTurnPaused: _nightTurnPaused,
   nightActionDeadline,
   nightActionNow,
+  isNightInfoVisible,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -35,6 +38,7 @@ export function useWitchRole({
   nightTurnPaused: boolean;
   nightActionDeadline: number | null;
   nightActionNow: number;
+  isNightInfoVisible: boolean;
 }) {
   const [poisonMode, setPoisonMode] = useState(false);
   const [poisonSelectedTargetId, setPoisonSelectedTargetId] = useState<string | null>(null);
@@ -76,9 +80,10 @@ export function useWitchRole({
 
   const isWitchTurnActive = useMemo(() => {
     if (phase !== "night") return false;
+    if (!isNightInfoVisible) return false;
     if (allNightActionsSimultaneous) return true;
     return currentNightTurnRole === "Phù thủy";
-  }, [allNightActionsSimultaneous, currentNightTurnRole, phase]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, phase, isNightInfoVisible]);
 
   const healDisabled = useMemo(() => {
     if (!canAct) return true;
@@ -165,7 +170,7 @@ export function useWitchRole({
               opacity: healDisabled ? 0.7 : 1
            }}
         >
-          🧪 {healMode ? "Chọn người để cứu" : "Bình cứu"}
+          <AvifIcon name="🧪" style={{ marginRight: 4 }} /> {healMode ? "Chọn người để cứu" : "Bình cứu"}
         </button>
 
         <button

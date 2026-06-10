@@ -326,8 +326,3 @@
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
-/* 4. Giảm cường độ đổ bóng phức tạp của Moon SVG trên di động */
-.pc-card-wrapper.performance-mode .pc-card-back svg {
-  filter: drop-shadow(0 0 15px rgba(243, 85, 218, 0.4)) !important;
-}
-

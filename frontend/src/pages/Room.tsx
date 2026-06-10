@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { socket, clientId } from "../socket";
-import PlayerPositions from "../components/PlayerPositions";
+import PlayerPositions, { AVA_IMAGES, getAvatarUrlByFileName } from "../components/PlayerPositions";
 import ConfirmModal from "../components/ConfirmModal";
+import nenLungAsset from "../assets/nền lưng.avif";
 import GameRulesModal from "../components/GameRulesModal";
 import ElementalEffectGuideModal from "../components/ElementalEffectGuideModal";
 import { DEFAULT_ROOM_GAME_RULES, type NightActionOrderRole, type Player, type RoomData } from "../context/RoomContext";
 import { useRoomContext } from "../context/RoomContext";
 import ArrowLeft from "../assets/arrow-left.svg";
+import RoomBg from "../assets/Nền phòng.avif";
 import {
-  ELEMENTAL_BUFFS,
   ELEMENTAL_GROUP_ROLE,
   ELEMENTAL_ROLE_SET,
 } from "../constants/elemental";
@@ -51,18 +52,6 @@ function isElementalQuickOrder(order: NightActionRole[]) {
   return firstEffectiveRole === ELEMENTAL_GROUP_ROLE;
 }
 
-function formatElementalBuffGuide() {
-  const byTier = new Map<number, string[]>();
-  for (const buff of ELEMENTAL_BUFFS) {
-    byTier.set(buff.tier, [...(byTier.get(buff.tier) || []), buff.label]);
-  }
-
-  return Array.from(byTier.entries())
-    .sort(([a], [b]) => a - b)
-    .map(([tier, buffs]) => `Tier ${tier}\n${buffs.map((buff) => `- ${buff}`).join("\n")}`)
-    .join("\n\n");
-}
-
 function countRoles(roles?: string[]) {
   const counts = new Map<string, number>();
   for (const role of roles || []) {
@@ -96,6 +85,8 @@ export default function Room() {
     player: Player | null;
   } | null>(null);
   const [roleAssignmentPlayer, setRoleAssignmentPlayer] = useState<Player | null>(null);
+  const [avatarAssignmentPlayer, setAvatarAssignmentPlayer] = useState<Player | null>(null);
+  const [editingAvatar, setEditingAvatar] = useState("");
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const location = useLocation();
   const nav = useNavigate();
@@ -122,6 +113,20 @@ export default function Room() {
       socket.off("connect", syncRoomPresence);
     };
   }, [roomId]);
+
+  // Tải trước (prefetch) component Game tương ứng với chế độ chơi để tránh bị khựng khi chuyển trang
+  useEffect(() => {
+    if (!room?.gameMode) return;
+    if (room.gameMode === "diet_quy") {
+      import("./GameDietQuy").catch((err) => {
+        console.error("Lỗi tải trước GameDietQuy:", err);
+      });
+    } else {
+      import("./GameDaNghich").catch((err) => {
+        console.error("Lỗi tải trước GameDaNghich:", err);
+      });
+    }
+  }, [room?.gameMode]);
 
   useEffect(() => {
     // Khi server gửi cập nhật phòng
@@ -445,6 +450,34 @@ export default function Room() {
     }
   };
 
+  // Xử lý mở modal gán avatar
+  const handleOpenAvatarAssignment = () => {
+    if (!contextMenu?.player) return;
+    setAvatarAssignmentPlayer(contextMenu.player);
+    setEditingAvatar(contextMenu.player.playerAvatar || "");
+    setContextMenu(null);
+  };
+
+  // Tự động đồng bộ ảnh đại diện tùy chỉnh từ localStorage lên server (dành cho Host)
+  useEffect(() => {
+    if (!room || clientId !== room.hostId || !socket) return;
+    try {
+      const customAvatars = JSON.parse(localStorage.getItem("game-custom-avatars") || "{}");
+      room.players.forEach((p) => {
+        const savedAvatar = customAvatars[p.id];
+        if (savedAvatar && p.playerAvatar !== savedAvatar) {
+          socket.emit("hostSetPlayerAvatar", {
+            roomId: room.id,
+            targetId: p.id,
+            playerAvatar: savedAvatar,
+          });
+        }
+      });
+    } catch (e) {
+      console.error("Lỗi đồng bộ avatar từ localStorage:", e);
+    }
+  }, [room?.players, room?.id, clientId, socket]);
+
   // Đóng menu khi click ngoài
   useEffect(() => {
     const closeMenu = () => setContextMenu(null);
@@ -547,7 +580,35 @@ export default function Room() {
     });
   }, [room, roleAssignmentPlayer]);
 
-  if (!room) return <p>Đang tải phòng...</p>;
+  if (!room)
+    return (
+      <div
+        style={{
+          padding: 20,
+          backgroundImage: `url(${RoomBg})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundRepeat: "no-repeat",
+          minHeight: "100vh",
+          position: "fixed",
+          inset: 0,
+          filter: "blur(4px)",
+        }}
+      >
+        <p>Có gì đó sai sai lẽ ra bạn ko nên thấy được những dòng này ...</p>
+        <div style={{ marginTop: 12 }}>
+          <button
+            onClick={() => {
+              setRoom(null);
+              nav("/lobby");
+            }}
+            style={{ padding: "8px 12px", borderRadius: 6, cursor: "pointer" }}
+          >
+            Trở về sảnh chờ
+          </button>
+        </div>
+      </div>
+    );
 
   const amIHost = clientId === room.hostId;
   const gameInProgress = !!room.phase && !room.gameOver;
@@ -606,7 +667,28 @@ export default function Room() {
     : "Bạn có chắc muốn rời phòng và về sảnh chờ không?";
 
   return (
-      <div className="page-shell room-page" style={{ padding: 20, position: "relative" }}>
+      <div
+        className="page-shell room-page"
+        style={{
+          padding: 20,
+          position: "relative",
+          minHeight: "100dvh",
+          isolation: "isolate",
+        }}
+      >
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundImage: `url(${RoomBg})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+            filter: "blur(4px)",
+            zIndex: -1,
+            transform: "scale(1.08)", // Scale nhẹ để che viền trắng mờ do bộ lọc blur tạo ra ở rìa màn hình
+          }}
+        />
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
           <button
             onClick={() => setLeaveConfirmOpen(true)}
@@ -629,30 +711,32 @@ export default function Room() {
           </button>
           <h1 id="Ma-phong">Phòng: {room.id}</h1>
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-          {(() => {
-            const isQuick = isElementalQuickOrder(room.gameRules?.nightActionOrder || DEFAULT_ROOM_GAME_RULES.nightActionOrder);
-            const label = isQuick ? "Hiệu ứng hỗ trợ nhanh 🛼" : "Hiệu ứng hỗ trợ chậm 🕑";
-            const tooltip = isQuick
-              ? "Khi Dân làng nguyên tố thức đầu tiên trước các vai trò khác (không tính Thần tình yêu/Tay Buôn), buff sẽ có hiệu lực ngay trong đêm chọn buff"
-              : "Khi Dân làng nguyên tố thức sau các vai trò khác (không tính Thần tình yêu/Tay Buôn), buff sẽ chỉ có hiệu lực từ đêm tiếp theo";
-            return (
-              <div
-                title={tooltip}
-                style={{
-                  padding: "8px 12px",
-                  borderRadius: 999,
-                  border: `1px solid ${isQuick ? "#ED6E7B" : "#8b8f98"}`,
-                  background: isQuick ? "rgba(237,110,123,0.14)" : "rgba(139,143,152,0.18)",
-                  color: "#fff",
-                  fontWeight: 700,
-                }}
-              >
-                {label}
-              </div>
-            );
-          })()}
-        </div>
+        {room.gameMode !== "diet_quy" && (
+          <div id="Luat-phong" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+            {(() => {
+              const isQuick = isElementalQuickOrder(room.gameRules?.nightActionOrder || DEFAULT_ROOM_GAME_RULES.nightActionOrder);
+              const label = isQuick ? "Hiệu ứng hỗ trợ nhanh 🛼" : "Hiệu ứng hỗ trợ chậm 🕑";
+              const tooltip = isQuick
+                ? "Khi Dân làng nguyên tố thức đầu tiên trước các vai trò khác (không tính Thần tình yêu/Tay Buôn), buff sẽ có hiệu lực ngay trong đêm chọn buff"
+                : "Khi Dân làng nguyên tố thức sau các vai trò khác (không tính Thần tình yêu/Tay Buôn), buff sẽ chỉ có hiệu lực từ đêm tiếp theo";
+              return (
+                <div
+                  title={tooltip}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 999,
+                    border: `1px solid ${isQuick ? "#ED6E7B" : "#8b8f98"}`,
+                    background: isQuick ? "rgba(237,110,123,0.14)" : "rgba(139,143,152,0.18)",
+                    color: "#fff",
+                    fontWeight: 700,
+                  }}
+                >
+                  {label}
+                </div>
+              );
+            })()}
+          </div>
+        )}
         <div className="room-main-layout">
         {/* left: players list */}
 
@@ -664,24 +748,19 @@ export default function Room() {
               >
                 Xem luật hiện tại
               </button>
+              <button
+                onClick={() => nav(`/roleselect?roomId=${room.id}`)}
+                title="Bầu chọn vai trò bạn muốn chơi"
+              >
+                Bầu chọn vai trò
+              </button>
               {hasElementalRole && (
-                <>
-                  <button
-                    onClick={() => setElementalInfoModal({
-                      title: "Buff nguyên tố theo tier",
-                      message: formatElementalBuffGuide(),
-                    })}
-                    title="Xem các buff nguyên tố có thể được chọn"
-                  >
-                    Xem buff nguyên tố
-                  </button>
-                  <button
-                    onClick={() => setShowElementalEffectGuide(true)}
-                    title="Xem hậu quả khi dân làng nguyên tố bị giết"
-                  >
-                    Xem hiệu ứng nguyên tố
-                  </button>
-                </>
+                <button
+                  onClick={() => setShowElementalEffectGuide(true)}
+                  title="Xem hậu quả khi dân làng nguyên tố bị giết"
+                >
+                  Xem hiệu ứng nguyên tố
+                </button>
               )}
               {gameInProgress && (
                 <button
@@ -797,7 +876,200 @@ export default function Room() {
             <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleRevokePosition}>
               Thu lại quyền sắp xếp
             </button>
+            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleOpenAvatarAssignment}>
+              Gắn ảnh đại diện
+            </button>
 
+          </div>
+        )}
+
+        {avatarAssignmentPlayer && (
+          <div
+            onClick={() => setAvatarAssignmentPlayer(null)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 9999,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 20,
+              background: "rgba(0,0,0,0.32)",
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "min(92vw, 480px)",
+                maxHeight: "82vh",
+                overflowY: "auto",
+                padding: 24,
+                borderRadius: 10,
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
+                boxShadow: "0 12px 32px rgba(0,0,0,0.25)",
+              }}
+            >
+              <h2 style={{ marginTop: 0, marginBottom: 16 }}>Đặt ảnh đại diện cho {avatarAssignmentPlayer.name}</h2>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20, border: "1px solid var(--border)", borderRadius: 8, padding: 12 }}>
+                {/* Vòng tròn xem trước (Avatar Preview) */}
+                {(() => {
+                  const previewUrl = getAvatarUrlByFileName(editingAvatar);
+                  const isMaskedPreview = editingAvatar.trim().toUpperCase().startsWith("M ");
+                  return (
+                    <div
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: "50%",
+                        border: "2px solid rgba(255, 255, 255, 0.15)",
+                        background: isMaskedPreview 
+                          ? `url(${nenLungAsset}) center/cover no-repeat` 
+                          : (previewUrl ? `url(${previewUrl}) center/cover no-repeat` : "rgba(255, 255, 255, 0.05)"),
+                        position: "relative",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0,
+                        overflow: isMaskedPreview ? "visible" : "hidden",
+                      }}
+                    >
+                      {isMaskedPreview && previewUrl && (
+                        <>
+                          {/* Thân dưới bo tròn */}
+                          <div style={{ position: "absolute", inset: 0, borderRadius: "50%", overflow: "hidden" }}>
+                            <img
+                              src={previewUrl}
+                              alt=""
+                              style={{
+                                position: "absolute",
+                                bottom: 0,
+                                left: "50%",
+                                transform: "translateX(-50%)",
+                                width: "115%",
+                                height: "115%",
+                                objectFit: "contain",
+                                objectPosition: "bottom center",
+                              }}
+                            />
+                          </div>
+                          {/* Đầu nhô ra ngoài */}
+                          <img
+                            src={previewUrl}
+                            alt=""
+                            style={{
+                              position: "absolute",
+                              bottom: 0,
+                              left: "50%",
+                              transform: "translateX(-50%)",
+                              width: "115%",
+                              height: "115%",
+                              objectFit: "contain",
+                              objectPosition: "bottom center",
+                              clipPath: "inset(0 0 45% 0)",
+                            }}
+                          />
+                        </>
+                      )}
+                      {!previewUrl && (
+                        <span style={{ fontSize: "24px", color: "rgba(255, 255, 255, 0.25)" }}>👤</span>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Dropdown select */}
+                <div style={{ flex: 1, display: "flex", flexDirection: "column" as const, gap: 8 }}>
+                  <select
+                    value={editingAvatar}
+                    onChange={(e) => setEditingAvatar(e.target.value)}
+                    style={{
+                      width: "100%",
+                      background: "rgba(255, 255, 255, 0.05)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 6,
+                      color: "#fff",
+                      padding: "8px 10px",
+                      fontSize: "14px",
+                      outline: "none"
+                    }}
+                  >
+                    <option value="" style={{ background: "#1e1e24", color: "#ccc" }}>-- Chọn ảnh đại diện --</option>
+                    {Object.keys(AVA_IMAGES)
+                      .map((path) => path.split("/").pop() || "")
+                      .filter(Boolean)
+                      .sort()
+                      .map((fileName) => {
+                        let label = fileName;
+                        if (fileName.startsWith("M ")) {
+                          label = `🖼️ [Tách nền] ${fileName.substring(2)}`;
+                        } else if (fileName.startsWith("S ")) {
+                          label = `👤 [Thường] ${fileName.substring(2)}`;
+                        }
+                        return (
+                          <option key={fileName} value={fileName} style={{ background: "#1e1e24", color: "#fff" }}>
+                            {label}
+                          </option>
+                        );
+                      })}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => setAvatarAssignmentPlayer(null)}
+                  style={{
+                    background: "rgba(255, 255, 255, 0.08)",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 6,
+                    padding: "8px 16px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!roomId || !avatarAssignmentPlayer) return;
+                    // 1. Gửi qua socket lên server
+                    socket.emit("hostSetPlayerAvatar", {
+                      roomId,
+                      targetId: avatarAssignmentPlayer.id,
+                      playerAvatar: editingAvatar
+                    });
+                    // 2. Lưu local để F5 không mất
+                    try {
+                      const customAvatars = JSON.parse(localStorage.getItem("game-custom-avatars") || "{}");
+                      if (editingAvatar) {
+                        customAvatars[avatarAssignmentPlayer.id] = editingAvatar;
+                      } else {
+                        delete customAvatars[avatarAssignmentPlayer.id];
+                      }
+                      localStorage.setItem("game-custom-avatars", JSON.stringify(customAvatars));
+                    } catch (e) {
+                      console.error("Lỗi lưu avatar vào localStorage:", e);
+                    }
+                    setAvatarAssignmentPlayer(null);
+                  }}
+                  style={{
+                    background: "var(--accent)",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 6,
+                    padding: "8px 16px",
+                    fontWeight: "bold",
+                    cursor: "pointer"
+                  }}
+                >
+                  Lưu
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

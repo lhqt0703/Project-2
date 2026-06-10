@@ -13,9 +13,10 @@ import {
   type MerchantPrivateState,
 } from "../../constants/merchant";
 import type { GamePhase } from "./socketEvents";
+import type { RoomGameRules } from "../../context/RoomContext";
 
 type Player = { id: string; name: string; connected?: boolean };
-type RoomLike = { players: Player[]; nightCount?: number };
+type RoomLike = { players: Player[]; nightCount?: number; gameRules?: RoomGameRules };
 
 function getPlayerName(room: RoomLike, playerId: string | null | undefined) {
   if (!playerId) return "người này";
@@ -210,7 +211,11 @@ export function useMerchantRole({
   const protectedName = getPlayerName(room, state.poppyGlassesProtectedTargetId);
   const isOfferModalOpen = phase === "night" && showOfferModal && selectedNight === currentNight;
 
-  const inventoryPanel = phase === "night" && !isCurrentMerchantDead && state.items.length > 0 ? (
+  const isMerchant = role === MERCHANT_ROLE;
+  const hideReceivedItems = room.gameRules?.merchantHideReceivedItemName === true;
+  const shouldShowInventory = isMerchant || !hideReceivedItems;
+
+  const inventoryPanel = phase === "night" && !isCurrentMerchantDead && state.items.length > 0 && shouldShowInventory ? (
     <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
       <div style={{ fontWeight: 700 }}>Đồ đang giữ</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

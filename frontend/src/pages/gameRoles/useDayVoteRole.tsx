@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { socket, clientId } from "../../socket";
 import type { DayLockedUpdatedPayload, DayVotesUpdatedPayload, GamePhase, TrialVotesUpdatedPayload } from "./socketEvents";
+import StarBorder from "../../components/StarBorder";
+import { AvifIcon } from "../../components/AvifIcon";
+
 
 type Player = { id: string; name: string; connected?: boolean };
 
@@ -167,7 +170,7 @@ export function useDayVoteRole({
                     style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer" }}
                     disabled={!!dayLocked?.[clientId]}
                   >
-                    🗳️ Khóa phiếu biểu quyết
+                    <AvifIcon name="🗳️" style={{ marginRight: 4 }} /> Khóa phiếu biểu quyết
                   </button>
                   <button
                     onClick={() => {
@@ -194,20 +197,32 @@ export function useDayVoteRole({
               Lượt tương tác còn lại của bị cáo: {remainingInteractionTurns}
             </div>
             {!isTrialTarget && (
-              <button
-                onClick={() => {
-                  if (!canToggleInteraction) return;
-                  socket.emit("trialToggleInteraction", { roomId, active: !hasInteracted });
-                }}
-                style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer" }}
-                disabled={!canToggleInteraction}
-              >
-                {alreadyChosenByTrialTarget
-                  ? "Đã tương tác"
-                  : hasInteracted
-                    ? "Hủy tương tác"
-                    : "Tương tác"}
-              </button>
+              alreadyChosenByTrialTarget || hasInteracted ? (
+                <button
+                  onClick={() => {
+                    if (!canToggleInteraction) return;
+                    socket.emit("trialToggleInteraction", { roomId, active: !hasInteracted });
+                  }}
+                  style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer" }}
+                  disabled={!canToggleInteraction}
+                >
+                  {alreadyChosenByTrialTarget ? "Đã tương tác" : "Hủy tương tác"}
+                </button>
+              ) : (
+                <StarBorder
+                  as="button"
+                  onClick={() => {
+                    if (!canToggleInteraction) return;
+                    socket.emit("trialToggleInteraction", { roomId, active: !hasInteracted });
+                  }}
+                  style={{ marginTop: 8, cursor: "pointer" }}
+                  disabled={!canToggleInteraction}
+                  color="white"
+                  speed="6s"
+                >
+                  Tương tác
+                </StarBorder>
+              )
             )}
             {isTrialTarget && (
               <button

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { socket, clientId } from "../../socket";
 import type { GamePhase } from "./socketEvents";
 import ConfirmModal from "../../components/ConfirmModal";
+import { AvifIcon } from "../../components/AvifIcon";
+
 
 type Player = { id: string; name: string; connected?: boolean };
 
@@ -19,24 +21,25 @@ type RoomLike = {
   dietQuyRedCharmPlayerId?: string | null;
   dietQuyImpKillPlayerId?: string | null;
   dietQuyMayorReplacementId?: string | null;
+  playerRoles?: Record<string, string>;
 };
 
-const DIET_QUY_TOWNSFOLK = [
+export const DIET_QUY_TOWNSFOLK = [
   "Thợ giặt", "Thủ thư", "Điều tra viên", "Đầu bếp", "Đồng cảm", 
   "Thầy bói", "Chôn cất", "Nhà sư", "Nuôi quạ", "Trinh nữ", 
   "Diệt quỷ", "Chiến sĩ", "Thị trưởng"
 ];
-const DIET_QUY_MINIONS = ["Độc thủ", "Gián điệp", "Phò"];
-const DIET_QUY_DEMON = ["Ác Quỷ"];
-const DIET_QUY_TRAVELERS = ["Người ẩn dật", "Thánh nhân"];
-const ALL_ROLES = [...DIET_QUY_TOWNSFOLK, ...DIET_QUY_TRAVELERS, ...DIET_QUY_MINIONS, ...DIET_QUY_DEMON];
+export const DIET_QUY_MINIONS = ["Độc thủ", "Gián điệp", "Phò"];
+export const DIET_QUY_DEMON = ["Ác Quỷ"];
+export const DIET_QUY_TRAVELERS = ["Người ẩn dật", "Thánh nhân"];
+
 
 export function useDietQuyRole({
   roomId,
   phase,
   role,
   room,
-  deadPlayers,
+  deadPlayers: _deadPlayers,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -56,7 +59,6 @@ export function useDietQuyRole({
 
   // Host selections
   const [hostSelectedIds, setHostSelectedIds] = useState<string[]>([]);
-  const [hostSelectedRole, setHostSelectedRole] = useState<string>("");
 
   // Role info received from server
   const [washerwomanInfo, setWasherwomanInfo] = useState<{ targetIds: string[]; townsfolkRole: string } | null>(null);
@@ -108,7 +110,6 @@ export function useDietQuyRole({
       setFtSelectedIds([]);
       setShowFtConfirm(false);
       setHostSelectedIds([]);
-      setHostSelectedRole("");
     }
   }, [phase]);
 
@@ -157,6 +158,11 @@ export function useDietQuyRole({
       // Active player interactions
       if (!isMyNightTurnActive) return false;
 
+      // Washerwoman, Librarian, Investigator do not make selections themselves
+      if (role === "Thợ giặt" || role === "Thủ thư" || role === "Điều tra viên") {
+        return false;
+      }
+
       // Fortune Teller selects 2 targets
       if (role === "Thầy bói") {
         setFtSelectedIds((prev) => {
@@ -196,31 +202,12 @@ export function useDietQuyRole({
 
   const confirmHostAction = useCallback(() => {
     if (!roomId || hostSelectedIds.length !== 2) return;
-    const turnRole = room?.nightTurnRole;
-
-    if (turnRole === "Thợ giặt") {
-      socket.emit("dietQuyHostSelectTargets", {
-        roomId,
-        targetIds: hostSelectedIds,
-        townsfolkRole: hostSelectedRole,
-      });
-    } else if (turnRole === "Thủ thư") {
-      socket.emit("dietQuyHostSelectTargets", {
-        roomId,
-        targetIds: hostSelectedIds,
-        minionRole: hostSelectedRole, // Out of standard Outsider, pass role directly
-      });
-    } else if (turnRole === "Điều tra viên") {
-      socket.emit("dietQuyHostSelectTargets", {
-        roomId,
-        targetIds: hostSelectedIds,
-        minionRole: hostSelectedRole,
-      });
-    }
-
+    socket.emit("dietQuyHostSelectTargets", {
+      roomId,
+      targetIds: hostSelectedIds,
+    });
     setHostSelectedIds([]);
-    setHostSelectedRole("");
-  }, [roomId, hostSelectedIds, hostSelectedRole, room?.nightTurnRole]);
+  }, [roomId, hostSelectedIds]);
 
   // Render Host control panel during night
   const hostPanel = useMemo(() => {
@@ -228,12 +215,7 @@ export function useDietQuyRole({
     const turnRole = room.nightTurnRole;
 
     if (turnRole === "Thợ giặt" || turnRole === "Thủ thư" || turnRole === "Điều tra viên") {
-      // Pick available roles for dropdown
-      let dropdownRoles = ALL_ROLES;
-      if (turnRole === "Thợ giặt") dropdownRoles = DIET_QUY_TOWNSFOLK;
-      else if (turnRole === "Điều tra viên") dropdownRoles = DIET_QUY_MINIONS;
-
-      const isConfirmDisabled = hostSelectedIds.length !== 2 || !hostSelectedRole;
+      const isConfirmDisabled = hostSelectedIds.length !== 2;
 
       return (
         <div style={{
@@ -248,23 +230,6 @@ export function useDietQuyRole({
           <p>Chọn đúng 2 người chơi trên vòng tròn để gửi thông tin:</p>
           <div style={{ margin: "10px 0" }}>
             Đã chọn: <b>{hostSelectedIds.map(id => room.players.find(p => p.id === id)?.name || id).join(", ") || "Chưa chọn"}</b>
-          </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10 }}>
-            <span>Chọn vai trò tiết lộ:</span>
-            <select
-              value={hostSelectedRole}
-              onChange={(e) => setHostSelectedRole(e.target.value)}
-              style={{
-                padding: "6px 12px",
-                borderRadius: 8,
-                background: "#1a1f26",
-                color: "#fff",
-                border: "1px solid var(--border-strong)"
-              }}
-            >
-              <option value="">-- Chọn vai trò --</option>
-              {dropdownRoles.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
           </div>
           <button
             onClick={confirmHostAction}
@@ -326,7 +291,7 @@ export function useDietQuyRole({
     }
 
     return null;
-  }, [isHost, phase, room, hostSelectedIds, hostSelectedRole, confirmHostAction]);
+  }, [isHost, phase, room, hostSelectedIds, confirmHostAction]);
 
   // Render active player control panel
   const playerPanel = useMemo(() => {
@@ -343,7 +308,9 @@ export function useDietQuyRole({
           marginTop: 15,
           color: "#fff"
         }}>
-          <h3>🔮 Lượt kiểm tra của Thầy bói</h3>
+          <h3 style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <AvifIcon name="🔮" /> Lượt kiểm tra của Thầy bói
+          </h3>
           <p>Chọn đúng 2 người trên vòng tròn để kiểm tra xem có ai là Quỷ không:</p>
           <div style={{ margin: "10px 0" }}>
             Đã chọn: <b>{ftSelectedIds.map(id => room.players.find(p => p.id === id)?.name || id).join(", ") || "Chưa chọn"}</b>
@@ -362,6 +329,22 @@ export function useDietQuyRole({
           >
             Xác nhận kiểm tra
           </button>
+        </div>
+      );
+    }
+
+    if (role === "Thợ giặt" || role === "Thủ thư" || role === "Điều tra viên") {
+      return (
+        <div style={{
+          background: "var(--surface-muted)",
+          padding: 12,
+          borderRadius: 12,
+          border: "1px solid var(--accent)",
+          marginTop: 15,
+          color: "#fff"
+        }}>
+          <h3>🌙 Lượt của {role}</h3>
+          <p>Hãy đợi Quản trò chọn và gửi thông tin cho bạn...</p>
         </div>
       );
     }
@@ -397,13 +380,21 @@ export function useDietQuyRole({
     }
 
     // Default 1-target panels (Poisoner, Monk, Imp, Ravenkeeper)
-    let title = "Đêm Diệt Quỷ";
+    let title: React.ReactNode = "Đêm Diệt Quỷ";
     let desc = "Click chọn 1 người trên vòng tròn để thực hiện kỹ năng.";
     if (role === "Độc thủ") {
-      title = "🧪 Độc thủ đầu độc";
+      title = (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <AvifIcon name="🧪" /> Độc thủ đầu độc
+        </span>
+      );
       desc = "Chọn 1 người chơi để đầu độc kỹ năng của họ tối nay.";
     } else if (role === "Nhà sư") {
-      title = "🛡️ Nhà sư bảo vệ";
+      title = (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <AvifIcon name="🛡️" /> Nhà sư bảo vệ
+        </span>
+      );
       desc = "Chọn 1 người chơi khác để bảo vệ họ khỏi sự tấn công của Ác Quỷ đêm nay.";
     } else if (role === "Ác Quỷ") {
       title = "👿 Ác Quỷ tấn công";
@@ -476,7 +467,11 @@ export function useDietQuyRole({
     undertakerInfo,
     playerPositionsProps: {
       selectedOutlinePlayerId: isMyNightTurnActive && role !== "Thầy bói" ? selectedTargetId : null,
-      dietQuyOrangeHighlightPlayerIds: isMyNightTurnActive && role === "Thầy bói" ? ftSelectedIds : (isHost && phase === "night" && room?.nightTurnRole === "Thầy bói" && room?.dietQuyRedCharmPlayerId ? [room.dietQuyRedCharmPlayerId] : []),
+      dietQuyOrangeHighlightPlayerIds: (isMyNightTurnActive && role === "Thầy bói" ? ftSelectedIds : [])
+        .concat(isHost && phase === "night" && room?.nightTurnRole === "Thầy bói" && room?.dietQuyRedCharmPlayerId ? [room.dietQuyRedCharmPlayerId] : [])
+        .concat(role === "Thợ giặt" && washerwomanInfo ? washerwomanInfo.targetIds : [])
+        .concat(role === "Thủ thư" && librarianInfo ? librarianInfo.targetIds : [])
+        .concat(role === "Điều tra viên" && investigatorInfo ? investigatorInfo.targetIds : []),
       dietQuyRedHighlightPlayerIds: isHost && phase === "night" && ["Thợ giặt", "Thủ thư", "Điều tra viên"].includes(room?.nightTurnRole || "") ? hostSelectedIds : (isHost && phase === "night" && room?.nightTurnRole === "Ác Quỷ" && room?.dietQuyMayorReplacementId ? [room.dietQuyMayorReplacementId] : []),
     }
   };

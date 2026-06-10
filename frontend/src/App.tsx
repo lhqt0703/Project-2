@@ -5,8 +5,24 @@ import Game from "./pages/Game";
 import Room from "./pages/Room";
 import RoleSelect from "./pages/RoleSelect";
 import DevSpawn from "./pages/dev";
+import InAppBrowserBlocker from "./components/InAppBrowserBlocker";
+
+const isInsideMessengerOrSocialApp = () => {
+  const ua = navigator.userAgent || navigator.vendor || (window as any).opera;
+  return /FBAN|FBAV|Instagram|Messenger|FB_IAB|FB4A|FBIOS/i.test(ua);
+};
 
 function App() {
+  const query = new URLSearchParams(window.location.search);
+  const forceBlocker = query.get("forceBlocker") === "true";
+  const bypass = query.get("bypass") === "true";
+
+  const isBlocked = (isInsideMessengerOrSocialApp() && !bypass) || forceBlocker;
+
+  if (isBlocked) {
+    return <InAppBrowserBlocker />;
+  }
+
   return (
     <>
       <Routes>

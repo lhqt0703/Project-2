@@ -243,6 +243,14 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     checkAndEndGame,
   } = lifecycle;
 
+  const leaveOtherGameRooms = (targetRoomId: string) => {
+    for (const r of socket.rooms) {
+      if (r !== socket.id && r !== clientId && r !== targetRoomId && typeof r === "string" && r.length === 3) {
+        socket.leave(r);
+      }
+    }
+  };
+
   const {
     buildTrialInteractionUpdatedPayload,
     startTrialVerdictVoting,
@@ -259,6 +267,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     startSpiritWolfDecisionWindow,
     finishSpiritWolfTurn,
     getWolfTurnDurationMs,
+    getNonWolfTurnDurationMs,
     startWolfPhase,
     startNightTurnByIndex,
     startNightTurnFlow,
@@ -418,6 +427,13 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
     if (room.privatePlayerHearts) {
       delete room.privatePlayerHearts[targetId];
+    }
+    if (room.roleVotes) {
+      for (const role in room.roleVotes) {
+        if (room.roleVotes[role]) {
+          room.roleVotes[role] = room.roleVotes[role].filter((id) => id !== targetId);
+        }
+      }
     }
     room.privateHeartVisiblePlayerIds = (room.privateHeartVisiblePlayerIds || []).filter((id) => id !== targetId);
     room.playerHeartShakeIds = (room.playerHeartShakeIds || []).filter((id) => id !== targetId);
@@ -1355,13 +1371,29 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     clearLoveStateForPlayers(ctx, room, roomId);
   }
 
+  const VIP_REAL_NAMES: Record<string, string> = {
+    "046fa88a-a719-47c3-8b97-ddfc8337cf83": "Phúc 🍫",
+    "f7d9652f-ac74-4557-81a2-7c2731a77d37": "Din Phạm",
+    "397d9740-e21b-4ade-941f-25912aefd591": "Hà Việt",
+    "client_1780242307126_pmozg54dmra": "San",
+    "client_1780242348813_swid1tk0trh": "Huythuhai",
+    "8dfc1d63-988f-460d-8569-8a1964be99a0": "Cường",
+    "ec0c6c66-9ce7-4d86-ac12-25824af15b79": "Việt Thắng",
+    "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd": "Duy"
+  };
+
   // Register all socket event handlers
   socket.on("createRoom", ({ name, gameRules, gameMode }) => {
     const roomId = generateRoomId(activeRooms!);
 
+    const initialPlayer: any = { id: clientId, name, connected: true, inGame: false };
+    if (VIP_REAL_NAMES[clientId]) {
+      initialPlayer.playerRealName = VIP_REAL_NAMES[clientId];
+    }
+
     rooms[roomId] = {
       id: roomId,
-      players: [{ id: clientId, name, connected: true, inGame: false }],
+      players: [initialPlayer],
       hostId: clientId,
       hidePlayerRoleText: false,
       layoutHeightPx: BASE_FRAME_HEIGHT_PX,
@@ -1369,13 +1401,14 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       positionEditors: [],
       autoArrangeUsed: false,
       compactCircles: false,
-      gameRules: buildRoomGameRules(gameRules),
+      gameRules: buildRoomGameRules(gameRules, gameMode),
       gameEventLog: [],
       gameMode: gameMode || "da_nghich",
     };
 
+    leaveOtherGameRooms(roomId);
     socket.join(roomId);
-    socket.emit("roomCreated", toPublicRoom(rooms[roomId]));
+    socket.emit("roomCreated", toPublicRoom(rooms[roomId]!));
   });
 
   socket.on("joinRoom", ({ roomId, name }) => {
@@ -1388,16 +1421,26 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     ensureRoomGameRules(room);
     clearDisconnectedCleanup(roomId, clientId);
     const existingPlayerIndex = room.players.findIndex((p) => p.id === clientId);
+    const defaultRealName = VIP_REAL_NAMES[clientId];
     if (existingPlayerIndex >= 0) {
       const current = room.players[existingPlayerIndex]!;
-      room.players[existingPlayerIndex] = {
+      const updatedPlayer: any = {
         ...current,
         name: typeof name === "string" && name.trim() ? name : current.name,
         connected: true,
         inGame: false,
       };
+      const realName = current.playerRealName || defaultRealName;
+      if (realName) {
+        updatedPlayer.playerRealName = realName;
+      }
+      room.players[existingPlayerIndex] = updatedPlayer;
     } else {
-      room.players.push({ id: clientId, name, connected: true, inGame: false });
+      const newPlayer: any = { id: clientId, name, connected: true, inGame: false };
+      if (defaultRealName) {
+        newPlayer.playerRealName = defaultRealName;
+      }
+      room.players.push(newPlayer);
     }
 
     const nextHeightPx = desiredLayoutHeightPx(getParticipantCount(room));
@@ -1405,6 +1448,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     const opts = layoutOptsForRoom(room);
     room.positions = ensureNonOverlappingPositions(getParticipantIds(room), room.positions, opts);
+    leaveOtherGameRooms(roomId);
     socket.join(roomId);
     syncPrivateRoleStateForSocket(socket, roomId, room, clientId);
 
@@ -1416,6 +1460,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const room = rooms[roomId];
     if (room) {
       ensureRoomGameRules(room);
+      leaveOtherGameRooms(roomId);
       socket.join(roomId);
       clearDisconnectedCleanup(roomId, clientId);
       const playerIndex = room.players.findIndex((p) => p.id === clientId);
@@ -1530,7 +1575,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!room) return;
     if (clientId !== room.hostId) return;
 
-    const mergedRules = buildRoomGameRules({ ...(ensureRoomGameRules(room) || {}), ...(rules || {}) });
+    const mergedRules = buildRoomGameRules({ ...(ensureRoomGameRules(room) || {}), ...(rules || {}) }, room.gameMode);
     const gameInProgress = !!room.phase && !room.gameOver;
 
     if (!gameInProgress) {
@@ -1802,6 +1847,35 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
 
     ctx.io.to(roomId).emit("rolesReady", room.roles);
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("voteRole", ({ roomId, role, voted }: { roomId: string; role: string; voted: boolean }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    if (room.roles?.includes(role)) {
+      socket.emit("errorMessage", "Vai trò này đã được chọn bởi quản trò.");
+      return;
+    }
+
+    if (!room.roleVotes) {
+      room.roleVotes = {};
+    }
+
+    const voters = room.roleVotes[role] || [];
+    if (voted) {
+      if (!voters.includes(clientId)) {
+        voters.push(clientId);
+      }
+    } else {
+      const idx = voters.indexOf(clientId);
+      if (idx !== -1) {
+        voters.splice(idx, 1);
+      }
+    }
+    room.roleVotes[role] = voters;
+
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
@@ -2172,7 +2246,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const room = rooms[roomId];
     if (!room) {      return;
     }    if (room.pendingGameRules) {
-      room.gameRules = buildRoomGameRules(room.pendingGameRules);
+      room.gameRules = buildRoomGameRules(room.pendingGameRules, room.gameMode);
       delete room.pendingGameRules;
     }
 
@@ -3049,26 +3123,65 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     advanceDietQuyNightTurn(roomId);
   });
 
-  socket.on("dietQuyHostSelectTargets", ({ roomId, targetIds, townsfolkRole, minionRole }) => {
+  socket.on("dietQuyHostSelectTargets", ({ roomId, targetIds }) => {
     const room = rooms[roomId];
     if (!room) return;
     if (clientId !== room.hostId) return;
 
     const currentRole = room.nightTurnRole;
+
+    const DIET_QUY_TOWNSFOLK = [
+      "Thợ giặt", "Thủ thư", "Điều tra viên", "Đầu bếp", "Đồng cảm", 
+      "Thầy bói", "Chôn cất", "Nhà sư", "Nuôi quạ", "Trinh nữ", 
+      "Diệt quỷ", "Chiến sĩ", "Thị trưởng"
+    ];
+    const DIET_QUY_OUTSIDERS = ["Người ẩn dật", "Thánh nhân"];
+    const DIET_QUY_MINIONS = ["Độc thủ", "Gián điệp", "Phò"];
+
     if ((currentRole as string) === "Thợ giặt") {
       room.dietQuyWasherwomanSelectedIds = targetIds;
+      let townsfolkRole = "";
+      for (const id of targetIds) {
+        const r = room.playerRoles?.[id];
+        if (r && DIET_QUY_TOWNSFOLK.includes(r)) {
+          townsfolkRole = r;
+          break;
+        }
+      }
+      if (!townsfolkRole) townsfolkRole = "Đầu bếp";
+
       const wwId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Thợ giặt");
       if (wwId) {
         ctx.io.to(wwId).emit("dietQuyWasherwomanInfo", { targetIds, townsfolkRole });
       }
     } else if ((currentRole as string) === "Thủ thư") {
       room.dietQuyLibrarianSelectedIds = targetIds;
+      let outsiderRole = "";
+      for (const id of targetIds) {
+        const r = room.playerRoles?.[id];
+        if (r && DIET_QUY_OUTSIDERS.includes(r)) {
+          outsiderRole = r;
+          break;
+        }
+      }
+      if (!outsiderRole) outsiderRole = "Người ẩn dật";
+
       const libId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Thủ thư");
       if (libId) {
-        ctx.io.to(libId).emit("dietQuyLibrarianInfo", { targetIds, role: minionRole || townsfolkRole });
+        ctx.io.to(libId).emit("dietQuyLibrarianInfo", { targetIds, role: outsiderRole });
       }
     } else if ((currentRole as string) === "Điều tra viên") {
       room.dietQuyInvestigatorSelectedIds = targetIds;
+      let minionRole = "";
+      for (const id of targetIds) {
+        const r = room.playerRoles?.[id];
+        if (r && DIET_QUY_MINIONS.includes(r)) {
+          minionRole = r;
+          break;
+        }
+      }
+      if (!minionRole) minionRole = "Độc thủ";
+
       const invId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Điều tra viên");
       if (invId) {
         ctx.io.to(invId).emit("dietQuyInvestigatorInfo", { targetIds, minionRole });
@@ -3197,6 +3310,13 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (rules.allNightActionsSimultaneous) return;
     if (!room.nightTurnRole) return;
 
+    if (room.gameMode === "diet_quy") {
+      clearNightTurnTimer(room);
+      room.nightTurnIndex = (room.nightTurnIndex ?? 0) + 1;
+      advanceDietQuyNightTurn(roomId);
+      return;
+    }
+
     if (room.nightTurnRole === "Sói") {
       if (room.wolfTimer) {
         clearTimeout(room.wolfTimer);
@@ -3311,6 +3431,69 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
 
     if (!room.nightTurnRole) return;
+
+    if (room.gameMode === "diet_quy") {
+      if (!room.nightTurnPaused) {
+        const deadline = room.nightTurnDeadline;
+        const remainingMs = deadline ? Math.max(0, deadline - Date.now()) : null;
+        room.nightTurnRemainingMs = remainingMs;
+        room.nightTurnPaused = true;
+        clearNightTurnTimer(room);
+        ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+        return;
+      }
+
+      room.nightTurnPaused = false;
+      const durationMs = getNonWolfTurnDurationMs(room);
+      if (durationMs > 0) {
+        const actualRemainingMs = Math.max(0, room.nightTurnRemainingMs ?? 0);
+        if (actualRemainingMs <= 0) {
+          const ravenkeeperId = Object.keys(room.playerRoles || {}).find(
+            (id) => room.playerRoles?.[id] === "Nuôi quạ"
+          );
+          if (room.nightTurnPlayerId === ravenkeeperId && ravenkeeperId) {
+            room.nightTurnPlayerId = null;
+            room.nightTurnRole = null;
+            ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+            emitHostNightActionProgress(roomId);
+          } else {
+            room.nightTurnIndex = (room.nightTurnIndex ?? 0) + 1;
+            advanceDietQuyNightTurn(roomId);
+          }
+          return;
+        }
+
+        room.nightTurnDeadline = Date.now() + actualRemainingMs;
+        clearNightTurnTimer(room);
+
+        const activePlayerId = room.nightTurnPlayerId;
+        const activeRole = room.nightTurnRole;
+
+        room.nightTurnTimer = setTimeout(() => {
+          const r = ctx.rooms[roomId];
+          if (r && r.phase === "night" && r.nightTurnPlayerId === activePlayerId && r.nightTurnRole === activeRole) {
+            const ravenkeeperId = Object.keys(r.playerRoles || {}).find(
+              (id) => r.playerRoles?.[id] === "Nuôi quạ"
+            );
+            if (activePlayerId === ravenkeeperId && ravenkeeperId) {
+              r.nightTurnPlayerId = null;
+              r.nightTurnRole = null;
+              ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(r));
+              emitHostNightActionProgress(roomId);
+            } else {
+              r.nightTurnIndex = (r.nightTurnIndex ?? 0) + 1;
+              advanceDietQuyNightTurn(roomId);
+            }
+          }
+        }, actualRemainingMs);
+      } else {
+        room.nightTurnDeadline = null;
+        room.nightTurnRemainingMs = null;
+      }
+
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      return;
+    }
 
     if (!room.nightTurnPaused) {
       const deadline = room.nightTurnDeadline ?? Date.now();
@@ -3555,6 +3738,38 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     emitHostNightActionProgress(roomId);
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     checkAndEndGame(roomId, "host_eliminated_for_rules");
+  });
+
+  socket.on("hostSetPlayerRealName", ({ roomId, targetId, playerRealName }: { roomId: string; targetId: string; playerRealName: string }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+    const player = room.players.find((p) => p.id === targetId);
+    if (!player) return;
+
+    if (typeof playerRealName === "string" && playerRealName.trim()) {
+      player.playerRealName = playerRealName.trim();
+    } else {
+      delete player.playerRealName;
+    }
+
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("hostSetPlayerAvatar", ({ roomId, targetId, playerAvatar }: { roomId: string; targetId: string; playerAvatar: string }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+    const player = room.players.find((p) => p.id === targetId);
+    if (!player) return;
+
+    if (typeof playerAvatar === "string" && playerAvatar.trim()) {
+      player.playerAvatar = playerAvatar.trim();
+    } else {
+      delete player.playerAvatar;
+    }
+
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
   socket.on("angelChooseRevive", ({ roomId, targetId, guess }: { roomId: string; targetId: string; guess: unknown }) => {
@@ -4002,6 +4217,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.cursedTargetTonight[clientId] = targetId;
     room.cursedLastTargetByPlayerId = room.cursedLastTargetByPlayerId || {};
     room.cursedLastTargetByPlayerId[clientId] = targetId;
+
+    room.cursedSniffUseCountsByPlayerId = room.cursedSniffUseCountsByPlayerId || {};
+    room.cursedSniffUseCountsByPlayerId[clientId] = (room.cursedSniffUseCountsByPlayerId[clientId] || 0) + 1;
 
     ctx.io.to(clientId).emit("cursedResult", { targetId, areaIds, hasWolf });
     appendLogEntry(room, {

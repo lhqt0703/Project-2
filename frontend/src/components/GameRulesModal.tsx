@@ -68,8 +68,9 @@ function normalizeDurationSec(value: number, fallback: number, minSec = 0) {
   return Math.max(minSec, Math.min(NIGHT_ACTION_DURATION_MAX_SEC, rounded));
 }
 
-function clampNonWolfNightActionDurationSec(value: number, allNightActionsSimultaneous: boolean) {
-  const minSec = allNightActionsSimultaneous ? 0 : NIGHT_ACTION_DURATION_STEP_SEC;
+function clampNonWolfNightActionDurationSec(value: number, allNightActionsSimultaneous: boolean, isDietQuy = false) {
+  // Chế độ Diệt Quỷ cho phép 0s (không giới hạn thời gian)
+  const minSec = (allNightActionsSimultaneous || isDietQuy) ? 0 : NIGHT_ACTION_DURATION_STEP_SEC;
   return normalizeDurationSec(value, DEFAULT_ROOM_GAME_RULES.nonWolfNightActionDurationSec, minSec);
 }
 
@@ -81,10 +82,11 @@ function normalizeNightActionDurations(input: {
   allNightActionsSimultaneous: boolean;
   nonWolfNightActionDurationSec: number;
   wolfNightActionDurationSec: number;
-}) {
+}, isDietQuy = false) {
   const nonWolf = clampNonWolfNightActionDurationSec(
     input.nonWolfNightActionDurationSec,
-    input.allNightActionsSimultaneous
+    input.allNightActionsSimultaneous,
+    isDietQuy
   );
   let wolf = clampWolfNightActionDurationSec(input.wolfNightActionDurationSec);
   if (wolf > nonWolf) wolf = nonWolf;
@@ -144,7 +146,7 @@ export default function GameRulesModal({
       allNightActionsSimultaneous: initialRules.allNightActionsSimultaneous,
       nonWolfNightActionDurationSec: initialRules.nonWolfNightActionDurationSec,
       wolfNightActionDurationSec: initialRules.wolfNightActionDurationSec,
-    });
+    }, isDietQuy);
     setDraftRules({
       ...DEFAULT_ROOM_GAME_RULES,
       ...initialRules,
@@ -159,7 +161,7 @@ export default function GameRulesModal({
       nonWolfNightActionDurationSec: normalizedDurations.nonWolfNightActionDurationSec,
       wolfNightActionDurationSec: normalizedDurations.wolfNightActionDurationSec,
     });
-  }, [initialRules, open, selectableNightActionRoles]);
+  }, [initialRules, open, selectableNightActionRoles, isDietQuy]);
 
   const includedElementalSummary = useMemo(() => {
     const included = ELEMENTAL_ROLE_ORDER.filter((role) => includedElementalRoles.includes(role));
@@ -186,7 +188,7 @@ export default function GameRulesModal({
           key === "nonWolfNightActionDurationSec" ? value : prev.nonWolfNightActionDurationSec,
         wolfNightActionDurationSec:
           key === "wolfNightActionDurationSec" ? value : prev.wolfNightActionDurationSec,
-      });
+      }, isDietQuy);
       return { ...prev, ...normalizedDurations } as RoomGameRules;
     });
   };
@@ -224,6 +226,7 @@ export default function GameRulesModal({
         witchSeeProtectorImmortalBite: false,
         hunterShotPublicInDay: false,
         merchantSingleUseItems: false,
+        merchantHideReceivedItemName: false,
         wolfNightActionDurationSec: draftRules.nonWolfNightActionDurationSec,
         forceWolfBiteFirstNight: draftRules.twoHeartsFirstTwoNights && draftRules.forceWolfBiteFirstNight,
       });
@@ -356,7 +359,7 @@ export default function GameRulesModal({
                 <input
                   type="number"
                   inputMode="numeric"
-                  min={10}
+                  min={0}
                   max={60}
                   step={10}
                   value={draftRules.nonWolfNightActionDurationSec}
@@ -624,6 +627,22 @@ export default function GameRulesModal({
 
               <label style={rowStyle()}>
                 <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Không tiết lộ tên vật phẩm người nhận được từ Tay Buôn</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi bật, người chơi được Tay Buôn chọn sẽ không biết mình nhận được vật phẩm gì (ẩn mục "Đồ đang giữ" ở giao diện của họ và ẩn log nhận đồ).
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.merchantHideReceivedItemName === true}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("merchantHideReceivedItemName", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>Số giao dịch thành công để Tay Buôn thắng</div>
                   <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
                     Khi Tay Buôn đạt đủ số giao dịch này, nhật ký sẽ ghi nhận Tay Buôn thắng nhưng ván chơi vẫn tiếp tục.
@@ -760,26 +779,26 @@ export default function GameRulesModal({
           )}
         </div>
 
-        <div style={{ padding: 24, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "flex-end", gap: 12 }}>
-          <button onClick={onClose} style={{ padding: "11px 16px", cursor: "pointer" }}>
-            {readOnly ? "Đóng" : "Huỷ"}
-          </button>
-          {!readOnly && (
-          <button
-            onClick={handleSave}
-            style={{
-              padding: "11px 16px",
-              cursor: "pointer",
-              background: "linear-gradient(135deg, #f6c85f, #ff8f42)",
-              color: "#111",
-              border: "none",
-              fontWeight: 800,
-            }}
-          >
-            {saveText}
-          </button>
-          )}
-        </div>
+        {!readOnly && (
+          <div style={{ padding: 24, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "flex-end", gap: 12 }}>
+            <button onClick={onClose} style={{ padding: "11px 16px", cursor: "pointer" }}>
+              Huỷ
+            </button>
+            <button
+              onClick={handleSave}
+              style={{
+                padding: "11px 16px",
+                cursor: "pointer",
+                background: "linear-gradient(135deg, #f6c85f, #ff8f42)",
+                color: "#111",
+                border: "none",
+                fontWeight: 800,
+              }}
+            >
+              {saveText}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

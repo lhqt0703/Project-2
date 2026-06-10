@@ -27,6 +27,8 @@ export interface Player {
   name: string;
   connected?: boolean;
   inGame?: boolean;
+  playerRealName?: string;
+  playerAvatar?: string;
 }
 
 export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | "Kẻ bị nguyền" | "Tay Buôn" | ElementalRole | "Độc thủ" | "Gián điệp" | "Nhà sư" | "Thầy bói" | "Ác Quỷ" | "Thợ giặt" | "Thủ thư" | "Điều tra viên" | "Nuôi quạ" | "Diệt quỷ";
@@ -52,6 +54,7 @@ export interface RoomGameRules {
   hunterShotPublicInDay: boolean;
   merchantSingleUseItems: boolean;
   merchantWinRequiredSuccessfulTrades: number;
+  merchantHideReceivedItemName: boolean;
 }
 
 export interface Room {
@@ -234,6 +237,7 @@ export interface Room {
   replayEvents?: GameEvent[];
   replayIndex?: number;
   duskCardSelections?: Record<string, number>;
+  roleVotes?: Record<string, string[]>;
 }
 
 const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -255,6 +259,7 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   hunterShotPublicInDay: true,
   merchantSingleUseItems: false,
   merchantWinRequiredSuccessfulTrades: 3,
+  merchantHideReceivedItemName: false,
 };
 
 const NIGHT_ACTION_ROLE_SET = new Set<NightActionOrderRole>([
@@ -318,11 +323,11 @@ function clampWolfNightActionDurationSec(value: unknown) {
   return clampNightActionDurationSec(value, DEFAULT_ROOM_GAME_RULES.wolfNightActionDurationSec);
 }
 
-function normalizeNightActionDurations(input?: Partial<RoomGameRules> | null) {
+function normalizeNightActionDurations(input?: Partial<RoomGameRules> | null, gameMode?: string) {
   const allNightActionsSimultaneous =
     input?.allNightActionsSimultaneous ?? DEFAULT_ROOM_GAME_RULES.allNightActionsSimultaneous;
   let nonWolf = clampNonWolfNightActionDurationSec(input?.nonWolfNightActionDurationSec);
-  if (!allNightActionsSimultaneous && nonWolf < NIGHT_ACTION_DURATION_STEP_SEC) {
+  if (gameMode !== "diet_quy" && !allNightActionsSimultaneous && nonWolf < NIGHT_ACTION_DURATION_STEP_SEC) {
     nonWolf = NIGHT_ACTION_DURATION_STEP_SEC;
   }
   let wolf = clampWolfNightActionDurationSec(input?.wolfNightActionDurationSec);
@@ -333,8 +338,8 @@ function normalizeNightActionDurations(input?: Partial<RoomGameRules> | null) {
   };
 }
 
-export function buildRoomGameRules(input?: Partial<RoomGameRules> | null): RoomGameRules {
-  const normalizedDurations = normalizeNightActionDurations(input);
+export function buildRoomGameRules(input?: Partial<RoomGameRules> | null, gameMode?: string): RoomGameRules {
+  const normalizedDurations = normalizeNightActionDurations(input, gameMode);
   const merged = {
     ...DEFAULT_ROOM_GAME_RULES,
     ...(input || {}),
@@ -351,7 +356,7 @@ export function buildRoomGameRules(input?: Partial<RoomGameRules> | null): RoomG
 }
 
 export function ensureRoomGameRules(room: Room): RoomGameRules {
-  room.gameRules = buildRoomGameRules(room.gameRules);
+  room.gameRules = buildRoomGameRules(room.gameRules, room.gameMode);
   return room.gameRules;
 }
 

@@ -48,6 +48,8 @@ export function toPublicRoom(room: Room) {
         name: p.name,
         connected: p.connected !== false,
         inGame: p.inGame === true,
+        playerRealName: p.playerRealName,
+        playerAvatar: p.playerAvatar,
       })),
     };
   }
@@ -142,6 +144,8 @@ export function toPublicRoom(room: Room) {
       name: p.name,
       connected: p.connected !== false,
       inGame: p.inGame === true,
+      playerRealName: p.playerRealName,
+      playerAvatar: p.playerAvatar,
     })),
   };
 }
@@ -611,10 +615,7 @@ export function syncPrivateRoleStateForSocket(
         wildWolfConvertRequested: false,
       });
     }
-    const wolfPhaseActive =
-      room.phase === "night" &&
-      !room.wolfVoteResolvedTonight &&
-      (rules.allNightActionsSimultaneous || room.nightTurnRole === "Sói");
+    const wolfPhaseActive = room.phase === "night";
     if (wolfPhaseActive) {
       socket.emit("wolfPhaseStarted", {
         wolves: wolves.map((w) => w.id),
@@ -641,6 +642,11 @@ export function syncPrivateRoleStateForSocket(
     emitWitchPendingDeath(roomId);
   } else {
     socket.leave(`witches_${roomId}`);
+  }
+
+  if (role === "Bảo vệ") {
+    const targetId = room.protectedTonightBy === playerId ? (room.protectedTonight ?? null) : null;
+    socket.emit("guardianProtected", targetId);
   }
 
   if (role === PROTECTOR_ROLE) {

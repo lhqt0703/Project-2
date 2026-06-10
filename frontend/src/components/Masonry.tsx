@@ -57,6 +57,10 @@ const Masonry: React.FC<MasonryProps> = ({
   const [animatingOut, setAnimatingOut] = useState(false);
   const hasMounted = useRef(false);
 
+  const startY = useMemo(() => {
+    return (typeof window !== "undefined" ? window.innerHeight : 800) + 500;
+  }, []);
+
   // Sync with server selection if any
   const serverSelectedCard = useMemo(() => {
     return Object.entries(duskCardSelections).find(([pid]) => pid === clientId)?.[1] ?? null;
@@ -153,34 +157,26 @@ const Masonry: React.FC<MasonryProps> = ({
   useLayoutEffect(() => {
     if (grid.length === 0 || hasMounted.current) return;
 
-    grid.forEach((item, index) => {
-      const selector = `[data-key="${item.id}"]`;
-      const startY = window.innerHeight + 200;
-
-      gsap.fromTo(
-        selector,
-        {
-          opacity: 0,
-          x: item.x,
-          y: startY,
-          width: item.w,
-          height: item.h,
+    gsap.fromTo(
+      ".masonry-item-wrapper",
+      {
+        opacity: 0,
+        y: startY,
+      },
+      {
+        opacity: 1,
+        y: 0,
+        duration: 0.8,
+        ease: "power3.out",
+        stagger: {
+          each: 0.04,
+          from: "random",
         },
-        {
-          opacity: 1,
-          x: item.x,
-          y: item.y,
-          width: item.w,
-          height: item.h,
-          duration: 0.8,
-          ease: "power3.out",
-          delay: index * 0.05,
-        }
-      );
-    });
+      }
+    );
 
     hasMounted.current = true;
-  }, [grid]);
+  }, [grid, startY]);
 
   // Handle card click
   const handleCardClick = (index: number) => {
@@ -206,7 +202,7 @@ const Masonry: React.FC<MasonryProps> = ({
       });
 
       tl.to(".masonry-item-wrapper", {
-        y: window.innerHeight + 300,
+        y: startY,
         opacity: 0,
         duration: 0.6,
         ease: "power2.in",
@@ -237,9 +233,11 @@ const Masonry: React.FC<MasonryProps> = ({
 
           let cardClass = "masonry-item-wrapper normal-card";
           let style: React.CSSProperties = {
-            transform: `translate(${item.x}px, ${item.y}px)`,
-            width: item.w,
-            height: item.h,
+            left: `${item.x}px`,
+            top: `${item.y}px`,
+            width: `${item.w}px`,
+            height: `${item.h}px`,
+            position: "absolute",
           };
 
           if (isTakenByOther) {

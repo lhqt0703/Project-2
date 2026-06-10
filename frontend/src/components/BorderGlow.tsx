@@ -193,7 +193,7 @@ const BorderGlow: React.FC<BorderGlowProps> = ({
       } as React.CSSProperties}
     >
       <span className="edge-light" />
-      <div className="border-glow-inner">
+      <div className="border-glow-inner" style={{ borderRadius: `${borderRadius}px` }}>
         {children}
       </div>
     </div>

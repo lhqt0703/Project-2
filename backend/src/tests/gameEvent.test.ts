@@ -106,11 +106,13 @@ test("Scoring Exporter: buildGameSummaryFromRoom mappings and scoring output", (
       { id: "p1", name: "Seer", connected: true },
       { id: "p2", name: "Guard", connected: true },
       { id: "p3", name: "Wolf", connected: true },
+      { id: "host_1", name: "Host Player", connected: true },
     ],
     playerRoles: {
       p1: "Tiên tri",
       p2: "Bảo vệ",
       p3: "Sói",
+      host_1: "Dân làng",
     },
     hostId: "host_1",
     deadPlayers: ["p3"],
@@ -158,6 +160,7 @@ test("Scoring Exporter: buildGameSummaryFromRoom mappings and scoring output", (
   assert.strictEqual(summary.gameId, "test_scoring_1");
   assert.strictEqual(summary.playerCount, 3);
   assert.strictEqual(summary.winningTeam, "villagers");
+  assert.ok(!summary.players.some(p => p.id === "host_1"), "Host should be excluded from summary players");
 
   // Verify Seer (p1) role is lowercase mapped and team is villagers
   const p1 = summary.players.find(p => p.id === "p1");

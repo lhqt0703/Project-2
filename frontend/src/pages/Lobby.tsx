@@ -1,7 +1,7 @@
 import { socket, clientId } from "../socket";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { DEFAULT_ROOM_GAME_RULES, type RoomGameRules } from "../context/RoomContext";
+import { DEFAULT_ROOM_GAME_RULES } from "../context/RoomContext";
 import Aurora from "../components/Aurora";
 import ArrowLeft from "../assets/arrow-left.svg";
 
@@ -62,7 +62,6 @@ export default function Lobby() {
       padding: "40px 16px 40px", 
       background: "#04060f",
       color: "#f4f6fb",
-      display: "flex",
       alignItems: "center",
       justifyContent: "center"
     }}>
@@ -130,10 +129,9 @@ export default function Lobby() {
           padding: 32px;
           border-radius: 24px;
           border: 1px solid rgba(255, 255, 255, 0.06);
-          background: rgba(10, 14, 28, 0.75);
+          background: rgba(255, 255, 255, 0.06);
           backdrop-filter: blur(30px);
-          -webkit-backdrop-filter: blur(30px);
-          box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+          box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
           transition: all 0.3s ease;
           display: flex;
           flex-direction: column;
@@ -173,6 +171,7 @@ export default function Lobby() {
               padding: "0 8px",
               cursor: "pointer",
               width: 36,
+              margin: "0 0 -10px",
             }}
           >
             <img src={ArrowLeft} alt="Quay lại" style={{ width: 20, height: 20, filter: "brightness(0.75)", display: "block" }} />

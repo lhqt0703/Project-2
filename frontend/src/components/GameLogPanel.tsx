@@ -6,9 +6,14 @@ import { useGSAP } from "@gsap/react";
 import { soundManager } from "../utils/soundManager";
 
 gsap.registerPlugin(useGSAP);
-import { ELEMENTAL_BUFF_LABELS } from "../constants/elemental";
+import { ELEMENTAL_BUFF_LABELS, ELEMENTAL_ROLE_SET } from "../constants/elemental";
+import { AvifIcon } from "./AvifIcon";
+import type { RoomGameRules } from "../context/RoomContext";
 
-const ShowRolesOnlyContext = createContext<boolean>(false);
+
+type ViewMode = "roles" | "names-roles" | "real-names";
+const ViewModeContext = createContext<ViewMode>("names-roles");
+const RealNamesContext = createContext<Record<string, string>>({});
 
 function getBuffLabel(buffId: string): string {
   return (ELEMENTAL_BUFF_LABELS as Record<string, string>)[buffId] || buffId;
@@ -30,6 +35,124 @@ type HighlightPayload = {
   dangerIds?: string[];
 };
 
+function filterAndNormalizeNightEntries(
+  entries: GameLogEntry[],
+  myPlayerId: string | undefined,
+  myRole: string | undefined,
+  wolves: string[] = [],
+  loveState: any = {},
+  gameRules: RoomGameRules | undefined
+): GameLogEntry[] {
+  if (!myPlayerId) return [];
+
+  const isWolf = wolves.includes(myPlayerId);
+  const isElemental = ELEMENTAL_ROLE_SET.has(myRole || "");
+  const isCupid = myRole === "Thần tình yêu";
+  const isLover = loveState?.pairIds?.includes(myPlayerId);
+
+  const filtered: GameLogEntry[] = [];
+
+  for (const entry of entries) {
+    if (entry.phase === "day") continue;
+
+    // 1. Mysterious force
+    if (entry.type === "mysterious_force_eliminated") {
+      filtered.push(entry);
+      continue;
+    }
+
+    // 2. Angel revive
+    if (entry.type === "angel_revive_activated") {
+      filtered.push(entry);
+      continue;
+    }
+
+    // 3. Phe sói
+    if (isWolf) {
+      if (
+        entry.type === "wolf_vote" ||
+        entry.type === "wolf_result" ||
+        entry.type === "bonus_bite" ||
+        entry.type === "ban_soi_aligned" ||
+        entry.type === "wild_wolf_conversion"
+      ) {
+        filtered.push(entry);
+        continue;
+      }
+    }
+
+    // 4. Phe dân làng nguyên tố
+    if (isElemental && entry.type === "elemental_buff_vote") {
+      filtered.push(entry);
+      continue;
+    }
+
+    // 5. Thần tình yêu và Cặp đôi
+    if (isCupid && entry.type === "love_pair") {
+      filtered.push(entry);
+      continue;
+    }
+    if (isLover) {
+      if (
+        entry.type === "love_pair" ||
+        entry.type === "love_escape_vote" ||
+        entry.type === "love_escape_missed" ||
+        entry.type === "love_escape"
+      ) {
+        filtered.push(entry);
+        continue;
+      }
+    }
+
+    // 6. Tay buôn và Người nhận
+    if (myRole === "Tay Buôn" && entry.type === "merchant_trade_offer" && entry.actorId === myPlayerId) {
+      filtered.push(entry);
+      continue;
+    }
+    if (entry.type === "merchant_trade_offer" && entry.targetId === myPlayerId) {
+      filtered.push(entry);
+      continue;
+    }
+    if (entry.type === "merchant_item_received" && entry.targetId === myPlayerId) {
+      const hideItem = gameRules?.merchantHideReceivedItemName === true;
+      if (!hideItem) {
+        filtered.push(entry);
+      }
+      continue;
+    }
+    if (entry.type === "merchant_item_used" && entry.itemId === "poppy-glasses" && entry.actorId === myPlayerId) {
+      filtered.push(entry);
+      continue;
+    }
+    if (entry.type === "merchant_item_used" && entry.itemId === "gunpowder-barrel" && entry.sourceId === myPlayerId) {
+      const hideItem = gameRules?.merchantHideReceivedItemName === true;
+      if (!hideItem) {
+        filtered.push(entry);
+      }
+      continue;
+    }
+
+    // 7. Extra time
+    if (entry.type === "night_action_extra_time" && entry.targetId === myPlayerId) {
+      filtered.push(entry);
+      continue;
+    }
+
+    // 8. Các hành động đêm khác mà bản thân là actor
+    if ("actorId" in entry && entry.actorId === myPlayerId) {
+      if (
+        entry.type !== "merchant_trade_response" &&
+        entry.type !== "merchant_win_condition_completed"
+      ) {
+        filtered.push(entry);
+        continue;
+      }
+    }
+  }
+
+  return filtered;
+}
+
 interface GameLogPanelProps {
   nights: GameLogNight[];
   rolesByPlayerId: RolesByPlayerId;
@@ -39,6 +162,17 @@ interface GameLogPanelProps {
   canViewNightLogs?: boolean;
   isHost?: boolean;
   onAddCustomLog?: (message: string) => void;
+  viewMode?: ViewMode;
+  onViewModeChange?: (mode: ViewMode) => void;
+  playerRealNamesById?: Record<string, string>;
+  myPlayerId?: string;
+  myRole?: string;
+  loveState?: any;
+  wolves?: string[];
+  wolfBadgeRoles?: Record<string, string>;
+  gameRules?: RoomGameRules;
+  gameEnded?: boolean;
+  isReplay?: boolean;
 }
 
 function getRoleName(playerId: string, rolesByPlayerId: RolesByPlayerId): string {
@@ -49,15 +183,33 @@ function getPlayerName(playerId: string, playerNamesById: PlayerNamesById): stri
   return playerNamesById[playerId] || playerId.slice(0, 8) + "...";
 }
 
-function getRolePlayerText(playerId: string, rolesByPlayerId: RolesByPlayerId, playerNamesById: PlayerNamesById, roleOverride?: string | null, showRolesOnly?: boolean): string {
+function getRolePlayerText(
+  playerId: string,
+  rolesByPlayerId: RolesByPlayerId,
+  playerNamesById: PlayerNamesById,
+  roleOverride?: string | null,
+  showRolesOnly?: boolean,
+  realNamesById?: Record<string, string>,
+  isRealNamesMode?: boolean
+): string {
   const roleName = roleOverride || getRoleName(playerId, rolesByPlayerId);
   if (showRolesOnly) return roleName;
-  return `${getPlayerName(playerId, playerNamesById)} ${roleName}`;
+  const name = (isRealNamesMode && realNamesById?.[playerId])
+    ? realNamesById[playerId]
+    : getPlayerName(playerId, playerNamesById);
+  return `${name} ${roleName}`;
 }
 
-function getRolePlayersText(playerIds: string[] | undefined, rolesByPlayerId: RolesByPlayerId, playerNamesById: PlayerNamesById, showRolesOnly?: boolean): string {
+function getRolePlayersText(
+  playerIds: string[] | undefined,
+  rolesByPlayerId: RolesByPlayerId,
+  playerNamesById: PlayerNamesById,
+  showRolesOnly?: boolean,
+  realNamesById?: Record<string, string>,
+  isRealNamesMode?: boolean
+): string {
   if (!playerIds || playerIds.length === 0) return "(không rõ)";
-  return playerIds.map((id) => getRolePlayerText(id, rolesByPlayerId, playerNamesById, null, showRolesOnly)).join(", ");
+  return playerIds.map((id) => getRolePlayerText(id, rolesByPlayerId, playerNamesById, null, showRolesOnly, realNamesById, isRealNamesMode)).join(", ");
 }
 
 function getDefaultTargetRoleDisplayOrder(playerId: string, playerNamesById: PlayerNamesById): TargetRoleDisplayOrder {
@@ -74,13 +226,20 @@ function getTargetRoleDisplayOrder(
   return overrides?.[playerId] || getDefaultTargetRoleDisplayOrder(playerId, playerNamesById);
 }
 
-function getPlayerNamesText(playerIds: string[] | undefined, playerNamesById: PlayerNamesById, rolesByPlayerId?: RolesByPlayerId, showRolesOnly?: boolean): string {
+function getPlayerNamesText(
+  playerIds: string[] | undefined,
+  playerNamesById: PlayerNamesById,
+  rolesByPlayerId?: RolesByPlayerId,
+  showRolesOnly?: boolean,
+  realNamesById?: Record<string, string>,
+  isRealNamesMode?: boolean
+): string {
   if (!playerIds || playerIds.length === 0) return "(không ai)";
   return playerIds.map((id) => {
     if (showRolesOnly && rolesByPlayerId) {
       return getRoleName(id, rolesByPlayerId);
     }
-    return getPlayerName(id, playerNamesById);
+    return (isRealNamesMode && realNamesById?.[id]) ? realNamesById[id] : getPlayerName(id, playerNamesById);
   }).join(", ");
 }
 
@@ -105,14 +264,21 @@ function getPlayerIdByRole(rolesByPlayerId: RolesByPlayerId, roleName: string | 
   return Object.entries(rolesByPlayerId).find(([, role]) => role === roleName)?.[0] || null;
 }
 
-function getElementalBuffLogText(buffId: string, rolesByPlayerId: RolesByPlayerId, playerNamesById: PlayerNamesById, showRolesOnly?: boolean) {
+function getElementalBuffLogText(
+  buffId: string,
+  rolesByPlayerId: RolesByPlayerId,
+  playerNamesById: PlayerNamesById,
+  showRolesOnly?: boolean,
+  realNamesById?: Record<string, string>,
+  isRealNamesMode?: boolean
+) {
   const targetRole = ELEMENTAL_BUFF_TARGET_ROLE_BY_ID[buffId];
   const actionText = ELEMENTAL_BUFF_ACTION_BY_ID[buffId];
   if (!targetRole || !actionText) return getBuffLabel(buffId);
 
   const targetPlayerId = getPlayerIdByRole(rolesByPlayerId, targetRole);
   const targetText = targetPlayerId
-    ? getRolePlayerText(targetPlayerId, rolesByPlayerId, playerNamesById, null, showRolesOnly)
+    ? getRolePlayerText(targetPlayerId, rolesByPlayerId, playerNamesById, null, showRolesOnly, realNamesById, isRealNamesMode)
     : targetRole;
   return `${targetText} ${actionText}`;
 }
@@ -161,26 +327,33 @@ function isLegacyAngelReviveLog(entry: GameLogEntry) {
   return entry.type === "angel_revive_choice" || entry.type === "angel_revive_revealed";
 }
 
-function getEliminationCauseText(causes: EliminationCause[] | undefined, rolesByPlayerId: RolesByPlayerId, playerNamesById: PlayerNamesById, showRolesOnly?: boolean): string {
+function getEliminationCauseText(
+  causes: EliminationCause[] | undefined,
+  rolesByPlayerId: RolesByPlayerId,
+  playerNamesById: PlayerNamesById,
+  showRolesOnly?: boolean,
+  realNamesById?: Record<string, string>,
+  isRealNamesMode?: boolean
+): string {
   if (!causes || causes.length === 0) return "Bị loại";
   const parts = causes.map((cause) => {
     if (cause.type === "wolf") {
-      const attackersText = getRolePlayersText(cause.attackerIds, rolesByPlayerId, playerNamesById, showRolesOnly);
+      const attackersText = getRolePlayersText(cause.attackerIds, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode);
       return `Bị ${attackersText} cắn`;
     }
     if (cause.type === "witch_poison") return "Phù thủy quăng bình giết";
     if (cause.type === "merchant_gunpowder") {
-      return `Nổ thuốc súng từ ${getRolePlayerText(cause.sourceId, rolesByPlayerId, playerNamesById, null, showRolesOnly)}`;
+      return `Nổ thuốc súng từ ${getRolePlayerText(cause.sourceId, rolesByPlayerId, playerNamesById, null, showRolesOnly, realNamesById, isRealNamesMode)}`;
     }
     if (cause.type === "love_link") {
-      return `Chết theo cặp đôi với ${getRolePlayerText(cause.sourceId, rolesByPlayerId, playerNamesById, null, showRolesOnly)}`;
+      return `Chết theo cặp đôi với ${getRolePlayerText(cause.sourceId, rolesByPlayerId, playerNamesById, null, showRolesOnly, realNamesById, isRealNamesMode)}`;
     }
     if (cause.type === "day_vote") {
-      const votersText = getPlayerNamesText(cause.voterIds, playerNamesById, rolesByPlayerId, showRolesOnly);
+      const votersText = getPlayerNamesText(cause.voterIds, playerNamesById, rolesByPlayerId, showRolesOnly, realNamesById, isRealNamesMode);
       return `Bị biểu quyết bởi: ${votersText}`;
     }
     if (cause.type === "trial_verdict") {
-      const votersText = getPlayerNamesText(cause.voterIds, playerNamesById, rolesByPlayerId, showRolesOnly);
+      const votersText = getPlayerNamesText(cause.voterIds, playerNamesById, rolesByPlayerId, showRolesOnly, realNamesById, isRealNamesMode);
       return `Bị biểu quyết sống/chết bởi: ${votersText}`;
     }
     return "Thợ săn đã bắn trúng";
@@ -358,11 +531,17 @@ function RoleSpan({
   const spanRef = useRef<HTMLSpanElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
 
-  const showRolesOnlyContext = useContext(ShowRolesOnlyContext);
-  const showRolesOnly = showRolesOnlyProp ?? showRolesOnlyContext;
+  const viewModeContext = useContext(ViewModeContext);
+  const realNamesById = useContext(RealNamesContext);
+  
+  const viewMode = viewModeContext;
+  const isRealNamesMode = viewMode === "real-names";
+  const showRolesOnly = showRolesOnlyProp ?? (viewMode === "roles");
 
   const roleName = roleOverride || getRoleName(playerId, rolesByPlayerId);
-  const playerName = getPlayerName(playerId, playerNamesById);
+  const playerName = (isRealNamesMode && realNamesById[playerId])
+    ? realNamesById[playerId]
+    : getPlayerName(playerId, playerNamesById);
   const displayText =
     showRolesOnly
       ? roleName
@@ -480,8 +659,8 @@ function RolesListSpan({
   onHighlightPlayer: (payload: HighlightPayload) => void;
   showRolesOnly?: boolean;
 }) {
-  const showRolesOnlyContext = useContext(ShowRolesOnlyContext);
-  const showRolesOnly = showRolesOnlyProp ?? showRolesOnlyContext;
+  const viewMode = useContext(ViewModeContext);
+  const showRolesOnly = showRolesOnlyProp ?? (viewMode === "roles");
 
   return (
     <>
@@ -520,7 +699,9 @@ function LogItem({
 }) {
   return (
     <li className="game-log-item" style={style}>
-      <span className="game-log-item-icon">{emoji}</span>
+      <span className="game-log-item-icon">
+        <AvifIcon name={emoji} />
+      </span>
       <span className="game-log-item-content">{children}</span>
     </li>
   );
@@ -538,6 +719,12 @@ function LogEntryLine({
   eliminationFocus,
   onEliminationFocusChange,
   onHighlightPlayer,
+  myPlayerId,
+  loveState,
+  wolves,
+  wolfBadgeRoles,
+  gameEnded,
+  isHost,
 }: {
   night: number;
   entry: GameLogEntry;
@@ -550,8 +737,17 @@ function LogEntryLine({
   eliminationFocus: EliminationFocus | null;
   onEliminationFocusChange: (focus: EliminationFocus | null) => void;
   onHighlightPlayer: (payload: HighlightPayload) => void;
+  myPlayerId?: string;
+  loveState?: any;
+  wolves?: string[];
+  wolfBadgeRoles?: Record<string, string>;
+  gameEnded?: boolean;
+  isHost?: boolean;
 }) {
-  const showRolesOnly = useContext(ShowRolesOnlyContext);
+  const viewMode = useContext(ViewModeContext);
+  const realNamesById = useContext(RealNamesContext);
+  const showRolesOnly = viewMode === "roles";
+  const isRealNamesMode = viewMode === "real-names";
   const isDayPhase = entry.phase === "day";
   const getTargetDisplayMode = (playerId: string) =>
     playerOnlyDayLogs && isDayPhase
@@ -563,8 +759,8 @@ function LogEntryLine({
       : displayMode;
   const getVotersText = (playerIds: string[] | undefined) =>
     isDayPhase
-      ? getPlayerNamesText(playerIds, playerNamesById, rolesByPlayerId, showRolesOnly)
-      : getRolePlayersText(playerIds, rolesByPlayerId, playerNamesById, showRolesOnly);
+      ? getPlayerNamesText(playerIds, playerNamesById, rolesByPlayerId, showRolesOnly, realNamesById, isRealNamesMode)
+      : getRolePlayersText(playerIds, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode);
 
   const isCauseLineForFocus = (f: EliminationFocus) => {
     const causeTypes = new Set((f.causes || []).map((c) => c.type));
@@ -586,15 +782,88 @@ function LogEntryLine({
   };
 
   switch (entry.type) {
-    case "wolf_vote":
+    case "wolf_vote": {
+      const isPlayerView = !isHost && !gameEnded;
+      if (isPlayerView && myPlayerId && wolves && wolves.includes(myPlayerId)) {
+        const lines: React.ReactNode[] = [];
+        const renderWolfVotersList = (voterIds: string[]) => {
+          return (
+            <RolesListSpan
+              playerIds={voterIds}
+              rolesByPlayerId={rolesByPlayerId}
+              playerNamesById={playerNamesById}
+              getRoleOverride={(pid) => wolfBadgeRoles?.[pid] || rolesByPlayerId[pid]}
+              displayMode="role-player"
+              onHighlightPlayer={onHighlightPlayer}
+            />
+          );
+        };
+        (entry.voteBreakdown || []).forEach((v) => {
+          const hasMe = v.voterIds.includes(myPlayerId);
+          if (hasMe) {
+            lines.push(
+              <div key={`me-${v.targetId}`} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <span>bạn nhắm đến:</span>{" "}
+                <RoleSpan
+                  playerId={v.targetId}
+                  rolesByPlayerId={rolesByPlayerId}
+                  playerNamesById={playerNamesById}
+                  displayMode={getTargetDisplayMode(v.targetId)}
+                  onHighlightPlayer={onHighlightPlayer}
+                />
+              </div>
+            );
+            const others = v.voterIds.filter(id => id !== myPlayerId);
+            if (others.length > 0) {
+              lines.push(
+                <div key={`others-co-${v.targetId}`} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  {renderWolfVotersList(others)} nhắm đến:{" "}
+                  <RoleSpan
+                    playerId={v.targetId}
+                    rolesByPlayerId={rolesByPlayerId}
+                    playerNamesById={playerNamesById}
+                    displayMode={getTargetDisplayMode(v.targetId)}
+                    onHighlightPlayer={onHighlightPlayer}
+                  />
+                </div>
+              );
+            }
+          } else {
+            lines.push(
+              <div key={`others-${v.targetId}`} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                {renderWolfVotersList(v.voterIds)} nhắm đến:{" "}
+                <RoleSpan
+                  playerId={v.targetId}
+                  rolesByPlayerId={rolesByPlayerId}
+                  playerNamesById={playerNamesById}
+                  displayMode={getTargetDisplayMode(v.targetId)}
+                  onHighlightPlayer={onHighlightPlayer}
+                />
+              </div>
+            );
+          }
+        });
+
+        if (lines.length === 0) {
+          return <LogItem emoji="🐺" style={lineStyle}>Các sói nhắm đến: (không ai cả)</LogItem>;
+        }
+        return (
+          <LogItem emoji="🐺" style={lineStyle}>
+            <div style={{ display: "grid", gap: 4 }}>
+              {lines}
+            </div>
+          </LogItem>
+        );
+      }
+
       if (!entry.voteBreakdown || entry.voteBreakdown.length === 0) {
-        return <LogItem emoji="🐺" style={lineStyle}>Phe sói nhắm đến: (không ai cả)</LogItem>;
+        return <LogItem emoji="🐺" style={lineStyle}>Các sói nhắm đến: (không ai cả)</LogItem>;
       }
       return (
         <LogItem emoji="🐺" style={lineStyle}>
-          Phe sói nhắm đến:{" "}
+          Các sói nhắm đến:{" "}
           {entry.voteBreakdown.map((v, idx) => {
-            const selectedByText = `Bị chọn bởi: ${getRolePlayersText(v.voterIds, rolesByPlayerId, playerNamesById, showRolesOnly)}`;
+            const selectedByText = `Bị chọn bởi: ${getRolePlayersText(v.voterIds, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode)}`;
             return (
               <span key={v.targetId}>
                 <RoleSpan
@@ -614,6 +883,7 @@ function LogEntryLine({
           })}
         </LogItem>
       );
+    }
 
     case "day_vote":
       if (!entry.voteBreakdown || entry.voteBreakdown.length === 0) {
@@ -649,29 +919,46 @@ function LogEntryLine({
 
     case "wolf_result":
       if (!entry.targetIds || entry.targetIds.length === 0) {
-        return <LogItem emoji="🐺" style={lineStyle}>Phe sói không thống nhất được sẽ cắn ai</LogItem>;
+        return <LogItem emoji="🐺" style={lineStyle}>Các sói không thống nhất được sẽ cắn ai</LogItem>;
       }
       {
-        const villageChiefDelayedIds = (entry.villageChiefDelayedTargetIds || []).filter((pid) => entry.targetIds.includes(pid));
-        const villageChiefDelayedSet = new Set(villageChiefDelayedIds);
-        const normalTargetIds = entry.targetIds.filter((pid) => !villageChiefDelayedSet.has(pid));
+        const isPlayerView = !isHost && !gameEnded;
+        const targetIdsToRender = isPlayerView
+          ? entry.targetIds.filter(id => !(entry.villageChiefDelayedTargetIds || []).includes(id))
+          : entry.targetIds;
+
+        if (targetIdsToRender.length === 0) return null;
+
         const renderTargetList = (playerIds: string[]) => (
           <RolesListSpan
             playerIds={playerIds}
             rolesByPlayerId={rolesByPlayerId}
             playerNamesById={playerNamesById}
-            getTooltipDetail={(pid) => {
+            getTooltipDetail={isPlayerView ? undefined : (pid) => {
               const selectedBy = entry.selectedByByTarget?.[pid] || [];
               if (!selectedBy.length) return undefined;
-              return `Bị chọn bởi: ${getRolePlayersText(selectedBy, rolesByPlayerId, playerNamesById, showRolesOnly)}`;
+              return `Bị chọn bởi: ${getRolePlayersText(selectedBy, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode)}`;
             }}
-            getSecondaryHighlightIds={(pid) => entry.selectedByByTarget?.[pid] || []}
-            getDisplayMode={getTargetDisplayMode}
-            popupMode="none"
+            getSecondaryHighlightIds={isPlayerView ? undefined : (pid) => entry.selectedByByTarget?.[pid] || []}
+            getDisplayMode={isPlayerView ? () => "player" : getTargetDisplayMode}
+            popupMode={isPlayerView ? "none" : "tooltipOnly"}
             onEliminationFocusChange={onEliminationFocusChange}
             onHighlightPlayer={onHighlightPlayer}
           />
         );
+
+        if (isPlayerView) {
+          return (
+            <LogItem emoji="🩸" style={lineStyle}>
+              {renderTargetList(targetIdsToRender)}
+              {" đã bị cắn"}
+            </LogItem>
+          );
+        }
+
+        const villageChiefDelayedIds = (entry.villageChiefDelayedTargetIds || []).filter((pid) => entry.targetIds.includes(pid));
+        const villageChiefDelayedSet = new Set(villageChiefDelayedIds);
+        const normalTargetIds = entry.targetIds.filter((pid) => !villageChiefDelayedSet.has(pid));
 
         return (
           <LogItem emoji="🩸" style={lineStyle}>
@@ -957,19 +1244,38 @@ function LogEntryLine({
       return (
         <LogItem emoji="🐺" style={lineStyle}>
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đánh hơi quanh{" "}
-          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> và thấy{" "}
-          <span style={{ fontWeight: 700, color: entry.hasWolf ? "#e74c3c" : "#27ae60" }}>{entry.hasWolf ? "có mùi sói" : "không có mùi sói"}</span>
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> và{" "}
+          <span style={{ fontWeight: 700, color: entry.hasWolf ? "#e74c3c" : "#27ae60" }}>{entry.hasWolf ? "thấy có mùi sói" : "không thấy có mùi sói"}</span>
         </LogItem>
       );
     }
 
-    case "merchant_trade_offer":
+    case "merchant_trade_offer": {
+      const isPlayerView = !isHost && !gameEnded;
+      if (isPlayerView && myPlayerId) {
+        if (myPlayerId === entry.actorId) {
+          return (
+            <LogItem emoji="💼" style={lineStyle}>
+              Bạn đã đề nghị giao dịch với{" "}
+              <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+            </LogItem>
+          );
+        }
+        if (myPlayerId === entry.targetId) {
+          return (
+            <LogItem emoji="💼" style={lineStyle}>
+              Tay Buôn đã đề nghị giao dịch với bạn
+            </LogItem>
+          );
+        }
+      }
       return (
         <LogItem emoji="💼" style={lineStyle}>
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đề nghị giao dịch với{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />: {getMerchantItemText(entry.itemId)} / {getMerchantChoiceText(entry.merchantChoice)}
         </LogItem>
       );
+    }
 
     case "merchant_trade_response":
       return (
@@ -979,21 +1285,40 @@ function LogEntryLine({
         </LogItem>
       );
 
-    case "merchant_item_received":
+    case "merchant_item_received": {
+      const isPlayerView = !isHost && !gameEnded;
+      if (isPlayerView && myPlayerId && myPlayerId === entry.targetId) {
+        return (
+          <LogItem emoji="🎁" style={lineStyle}>
+            Đã nhận {getMerchantItemText(entry.itemId)}
+            <span style={{ opacity: 0.72 }}> (hiệu lực đêm {entry.appliesNight})</span>
+          </LogItem>
+        );
+      }
       return (
         <LogItem emoji="🎁" style={lineStyle}>
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> nhận {getMerchantItemText(entry.itemId)}
           <span style={{ opacity: 0.72 }}> (hiệu lực đêm {entry.appliesNight})</span>
         </LogItem>
       );
+    }
 
     case "merchant_item_expired":
       return (
         null
       );
 
-    case "merchant_item_used":
+    case "merchant_item_used": {
+      const isPlayerView = !isHost && !gameEnded;
       if (entry.itemId === "poppy-glasses" && entry.actorId && entry.targetId) {
+        if (isPlayerView && myPlayerId && myPlayerId === entry.actorId) {
+          return (
+            <LogItem emoji="✨" style={lineStyle}>
+              Bạn đã thấy{" "}
+              <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> được bảo vệ
+            </LogItem>
+          );
+        }
         return (
           <LogItem emoji="✨" style={lineStyle}>
             <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã thấy{" "}
@@ -1002,6 +1327,13 @@ function LogEntryLine({
         );
       }
       if (entry.itemId === "gunpowder-barrel" && entry.sourceId) {
+        if (isPlayerView && myPlayerId && myPlayerId === entry.sourceId) {
+          return (
+            <LogItem emoji="✨" style={lineStyle}>
+              Thùng thuốc súng đã phát nổ
+            </LogItem>
+          );
+        }
         return (
           <LogItem emoji="✨" style={lineStyle}>
             {getMerchantItemText(entry.itemId)} trên{" "}
@@ -1024,6 +1356,7 @@ function LogEntryLine({
         );
       }
       return null;
+    }
 
     case "merchant_win_condition_completed":
       return (
@@ -1042,8 +1375,17 @@ function LogEntryLine({
 
     case "angel_revive_activated":
       {
+        const isPlayerView = !isHost && !gameEnded;
         const legacyGuess = legacyAngelGuessByPair[`${entry.actorId}:${entry.targetId}`];
         const resolvedGuess = entry.guess ?? legacyGuess;
+        if (isPlayerView) {
+          return (
+            <LogItem emoji="👼" style={lineStyle}>
+              Đã quyết định theo {getAngelGuessText(resolvedGuess)} và hồi sinh{" "}
+              <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+            </LogItem>
+          );
+        }
         return (
           <LogItem emoji="👼" style={lineStyle}>
             Thiên sứ{" "}
@@ -1054,7 +1396,7 @@ function LogEntryLine({
         );
       }
 
-    case "angel_outcome":
+    case "angel_outcome": // kiểm tra lại cái này❓
       return (
         <LogItem emoji="🌟" style={lineStyle}>
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> {getAngelOutcomeText(entry)} với lựa chọn hồi sinh{" "}
@@ -1062,7 +1404,34 @@ function LogEntryLine({
         </LogItem>
       );
 
-    case "love_pair":
+    case "love_pair": {
+      const isPlayerView = !isHost && !gameEnded;
+      if (isPlayerView && myPlayerId) {
+        if (myPlayerId === entry.actorId) {
+          return (
+            <LogItem emoji="💖" style={lineStyle}>
+              Đã bắn tên vào{" "}
+              <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player-role" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+              {entry.targetWolfAligned ? (
+                <ActionSpan
+                  highlightPayload={{ primaryId: null }}
+                  tooltipDetail="sẽ có thể thể thắng riêng khi cả hai còn sống đến khi trong làng chỉ còn lại x người khác"
+                  onHighlightPlayer={onHighlightPlayer}
+                >
+                  <span style={{ opacity: 0.75, cursor: "pointer", textDecoration: "underline dotted" }}> - tình yêu sóng gió</span>
+                </ActionSpan>
+              ) : null}
+            </LogItem>
+          );
+        }
+        if (myPlayerId === entry.targetId) {
+          return (
+            <LogItem emoji="💖" style={lineStyle}>
+              <strong>*pặc~*</strong>
+            </LogItem>
+          );
+        }
+      }
       return (
         <LogItem emoji="💖" style={lineStyle}>
           <RoleSpan
@@ -1076,27 +1445,83 @@ function LogEntryLine({
             onHighlightPlayer={onHighlightPlayer}
           />{" "}ghép đôi với{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
-          {entry.targetWolfAligned ? <span style={{ opacity: 0.75 }}> - tình yêu trái phe</span> : null}
+          {entry.targetWolfAligned ? (
+            <ActionSpan
+              highlightPayload={{ primaryId: null }}
+              tooltipDetail="sẽ có thể thể thắng riêng khi cả hai còn sống đến khi trong làng chỉ còn lại x người khác"
+              onHighlightPlayer={onHighlightPlayer}
+            >
+              <span style={{ opacity: 0.75, cursor: "pointer", textDecoration: "underline dotted" }}> - tình yêu sóng gió</span>
+            </ActionSpan>
+          ) : null}
         </LogItem>
       );
+    }
 
-    case "love_escape_vote":
+    case "love_escape_vote": {
+      const isPlayerView = !isHost && !gameEnded;
+      if (isPlayerView && myPlayerId) {
+        if (myPlayerId === entry.actorId) {
+          return (
+            <LogItem emoji="🕊️" style={lineStyle}>
+              Bạn muốn ra khỏi làng, đang chờ{" "}
+              <RoleSpan playerId={entry.partnerId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />{" "} phản hồi
+            </LogItem>
+          );
+        }
+        if (myPlayerId === entry.partnerId) {
+          return (
+            <LogItem emoji="🕊️" style={lineStyle}>
+              <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.partnerId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />{" "}
+              muốn ra khỏi làng, đang chờ bạn phản hồi
+            </LogItem>
+          );
+        }
+      }
       return (
         <LogItem emoji="🕊️" style={lineStyle}>
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.partnerId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> muốn ra khỏi làng, đang chờ{" "}
-          <RoleSpan playerId={entry.partnerId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
+          <RoleSpan playerId={entry.partnerId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />{" "} phản hồi
         </LogItem>
       );
+    }
 
-    case "love_escape_missed":
+    case "love_escape_missed": {
+      const isPlayerView = !isHost && !gameEnded;
+      if (isPlayerView && myPlayerId) {
+        if (myPlayerId === entry.partnerId) {
+          return (
+            <LogItem emoji="🕊️" style={lineStyle}>
+              bạn không đồng ý ra khỏi làng
+            </LogItem>
+          );
+        }
+        if (myPlayerId === entry.actorId) {
+          return (
+            <LogItem emoji="🕊️" style={lineStyle}>
+              <RoleSpan playerId={entry.partnerId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> không đồng ý ra khỏi làng
+            </LogItem>
+          );
+        }
+      }
       return (
         <LogItem emoji="🕊️" style={lineStyle}>
           <RoleSpan playerId={entry.partnerId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> không đồng ý ra khỏi làng
         </LogItem>
       );
+    }
 
-    case "love_escape": {
-      const pairNames = (entry.targetIds || []).map((id) => showRolesOnly ? getRoleName(id, rolesByPlayerId) : getPlayerName(id, playerNamesById)).join(" và ") || "(không ai)";
+    case "love_escape": 
+    {
+      const isPlayerView = !isHost && !gameEnded;
+      const pairNames = (entry.targetIds || []).map((id) => showRolesOnly ? getRoleName(id, rolesByPlayerId) : ((isRealNamesMode && realNamesById[id]) ? realNamesById[id] : getPlayerName(id, playerNamesById))).join(" và ") || "(không ai)";
+      if (isPlayerView && myPlayerId && loveState?.pairIds?.includes(myPlayerId)) {
+        return (
+          <LogItem emoji="🕊️" style={lineStyle}>
+            Đã cùng nhau ra khỏi làng
+          </LogItem>
+        );
+      }
       return (
         <LogItem emoji="🕊️" style={lineStyle}>
           <ActionSpan
@@ -1118,7 +1543,15 @@ function LogEntryLine({
         </LogItem>
       );
 
-    case "spirit_wolf_decision":
+    case "spirit_wolf_decision": {
+      const isPlayerView = !isHost && !gameEnded;
+      if (isPlayerView && myPlayerId) {
+        return (
+          <LogItem emoji="🐺" style={lineStyle}>
+            Đã quyết định: <span style={{ fontWeight: 600 }}>{entry.saved ? "CỨU" : "KHÔNG CỨU"}</span>
+          </LogItem>
+        );
+      }
       return (
         <LogItem emoji="🐺" style={lineStyle}>
           {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Linh sói"} quyết định: <span style={{ fontWeight: 600 }}>{entry.saved ? "CỨU" : "KHÔNG CỨU"}</span>
@@ -1127,6 +1560,7 @@ function LogEntryLine({
           ) : null}
         </LogItem>
       );
+    }
 
     case "ban_soi_aligned":
       return (
@@ -1199,7 +1633,7 @@ function LogEntryLine({
               playerIds={entry.targetIds}
               rolesByPlayerId={rolesByPlayerId}
               playerNamesById={playerNamesById}
-              getTooltipDetail={hideEliminationDetails ? undefined : (pid) => getEliminationCauseText(entry.causesByTarget?.[pid], rolesByPlayerId, playerNamesById, showRolesOnly)}
+              getTooltipDetail={hideEliminationDetails ? undefined : (pid) => getEliminationCauseText(entry.causesByTarget?.[pid], rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode)}
               getSecondaryHighlightIds={hideEliminationDetails ? undefined : (pid) => {
                 const causes = entry.causesByTarget?.[pid] || [];
                 const wolfCause = causes.find((c) => c.type === "wolf");
@@ -1232,7 +1666,25 @@ function LogEntryLine({
       return <LogItem emoji="☮️" style={lineStyle}>Đêm qua không ai bị loại</LogItem>;
 
     case "elemental_guess": {
+      const isPlayerView = !isHost && !gameEnded;
       const targetRoleTooltip = `${getPlayerName(entry.targetId, playerNamesById)} là ${getRoleName(entry.targetId, rolesByPlayerId)}`;
+      if (isPlayerView && myPlayerId && entry.actorId === myPlayerId) {
+        return (
+          <LogItem emoji="🌪️" style={lineStyle}>
+            Đã nghĩ{" "}
+            <RoleSpan
+              playerId={entry.targetId}
+              rolesByPlayerId={rolesByPlayerId}
+              playerNamesById={playerNamesById}
+              displayMode="player"
+              popupMode="none"
+              secondaryHighlightIds={[entry.actorId]}
+              onEliminationFocusChange={onEliminationFocusChange}
+              onHighlightPlayer={onHighlightPlayer}
+            />{" cũng là dân làng nguyên tố"}
+          </LogItem>
+        );
+      }
       return (
         <LogItem emoji="🌪️" style={lineStyle}>
           <RoleSpan
@@ -1255,7 +1707,7 @@ function LogEntryLine({
             secondaryHighlightIds={[entry.actorId]}
             onEliminationFocusChange={onEliminationFocusChange}
             onHighlightPlayer={onHighlightPlayer}
-          />{" là dân làng nguyên tố"} - {entry.isCorrect ? "✅" : "❌"}{" "}
+          />{" cũng là dân làng nguyên tố"} - {entry.isCorrect ? "✅" : "❌"}{" "}
         </LogItem>
       );
     }
@@ -1270,7 +1722,7 @@ function LogEntryLine({
           Có{" "}
           <ActionSpan
             highlightPayload={{ primaryId: null, secondaryIds: correctIds, dangerIds: [] }}
-            tooltipDetail={getRolePlayersText(correctIds, rolesByPlayerId, playerNamesById, showRolesOnly)}
+            tooltipDetail={getRolePlayersText(correctIds, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode)}
             onHighlightPlayer={onHighlightPlayer}
           >
             <span style={{ fontWeight: 600 }}>{entry.correctCount}</span>
@@ -1293,7 +1745,7 @@ function LogEntryLine({
         [];
       const targetRole = ELEMENTAL_BUFF_TARGET_ROLE_BY_ID[entry.chosenBuffId];
       const targetPlayerId = getPlayerIdByRole(rolesByPlayerId, targetRole);
-      const tooltipDetail = `${entry.randomTieBreak ? "Được chọn ngẫu nhiên do hòa phiếu | " : ""}Người chọn hiệu ứng này: ${getRolePlayersText(chosenVoterIds, rolesByPlayerId, playerNamesById, showRolesOnly)}`;
+      const tooltipDetail = `${entry.randomTieBreak ? "Được chọn ngẫu nhiên do hòa phiếu | " : ""}Người chọn hiệu ứng này: ${getRolePlayersText(chosenVoterIds, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode)}`;
       return (
         <LogItem emoji="⚡" style={lineStyle}>
           Hiệu ứng hỗ trợ từ dân làng nguyên tố:{" "}
@@ -1302,7 +1754,7 @@ function LogEntryLine({
             tooltipDetail={tooltipDetail}
             onHighlightPlayer={onHighlightPlayer}
           >
-            <span style={{ fontWeight: 600 }}>{getElementalBuffLogText(entry.chosenBuffId, rolesByPlayerId, playerNamesById, showRolesOnly)}</span>
+            <span style={{ fontWeight: 600 }}>{getElementalBuffLogText(entry.chosenBuffId, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode)}</span>
           </ActionSpan>
         </LogItem>
       );
@@ -1332,8 +1784,36 @@ export default function GameLogPanel({
   canViewNightLogs = true,
   isHost = false,
   onAddCustomLog,
+  viewMode: viewModeProp,
+  onViewModeChange,
+  playerRealNamesById,
+  myPlayerId,
+  myRole,
+  loveState,
+  wolves,
+  wolfBadgeRoles,
+  gameRules,
+  gameEnded = false,
+  isReplay = false,
 }: GameLogPanelProps) {
-  const [showRolesOnly, setShowRolesOnly] = useState(false);
+  const [localViewMode, setLocalViewMode] = useState<ViewMode>("names-roles");
+  const viewMode = viewModeProp ?? localViewMode;
+  const setViewMode = onViewModeChange ?? setLocalViewMode;
+
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [dropdownOpen]);
+
   const [eliminationFocus, setEliminationFocus] = useState<EliminationFocus | null>(null);
   
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1401,7 +1881,8 @@ export default function GameLogPanel({
   }, [nights, rolesByPlayerId]);
 
   return (
-    <ShowRolesOnlyContext.Provider value={showRolesOnly}>
+    <ViewModeContext.Provider value={viewMode}>
+      <RealNamesContext.Provider value={playerRealNamesById || {}}>
       <style>{`
         .game-log-panel-container {
           margin-top: 24px;
@@ -1578,16 +2059,93 @@ export default function GameLogPanel({
       <div ref={containerRef} className="game-log-panel-container">
         <div className="game-log-panel-header">
           <h3 className="game-log-panel-title">
-            <span>📜</span> Nhật ký ván chơi
+            <AvifIcon name="📜" style={{ marginRight: 6 }} /> Nhật ký ván chơi
           </h3>
           {canViewNightLogs && (
-            <button
-              type="button"
-              className="game-log-toggle-btn"
-              onClick={() => setShowRolesOnly((prev) => !prev)}
-            >
-              <span>🎭</span> Chế độ xem: {showRolesOnly ? "Chỉ hiện Vai trò" : "Tên & Vai trò"}
-            </button>
+            <div ref={dropdownRef} style={{ position: "relative" }}>
+              <button
+                type="button"
+                className="game-log-toggle-btn"
+                onClick={() => setDropdownOpen(prev => !prev)}
+              >
+                <span>🎭</span> Chế độ xem: {
+                  viewMode === "roles"
+                    ? "Chỉ hiện Vai trò"
+                    : viewMode === "real-names"
+                      ? "Chỉ hiện tên thật"
+                      : "Tên & Vai trò"
+                }
+              </button>
+              {dropdownOpen && (
+                <div style={{
+                  position: "absolute",
+                  top: "calc(100% + 6px)",
+                  right: 0,
+                  background: "rgba(30, 27, 57, 0.95)",
+                  backdropFilter: "blur(12px)",
+                  border: "1px solid rgba(108, 92, 231, 0.4)",
+                  borderRadius: 12,
+                  boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                  padding: "6px 0",
+                  zIndex: 200,
+                  minWidth: 160,
+                  display: "flex",
+                  flexDirection: "column",
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => { setViewMode("names-roles"); setDropdownOpen(false); }}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: viewMode === "names-roles" ? "#a29bfe" : "#cbd5e1",
+                      padding: "8px 16px",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      fontWeight: viewMode === "names-roles" ? "bold" : "normal",
+                      fontSize: "13px",
+                      backgroundColor: viewMode === "names-roles" ? "rgba(108, 92, 231, 0.15)" : "transparent",
+                    }}
+                  >
+                    Tên & Vai trò
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setViewMode("roles"); setDropdownOpen(false); }}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: viewMode === "roles" ? "#a29bfe" : "#cbd5e1",
+                      padding: "8px 16px",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      fontWeight: viewMode === "roles" ? "bold" : "normal",
+                      fontSize: "13px",
+                      backgroundColor: viewMode === "roles" ? "rgba(108, 92, 231, 0.15)" : "transparent",
+                    }}
+                  >
+                    Chỉ hiện Vai trò
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setViewMode("real-names"); setDropdownOpen(false); }}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: viewMode === "real-names" ? "#a29bfe" : "#cbd5e1",
+                      padding: "8px 16px",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      fontWeight: viewMode === "real-names" ? "bold" : "normal",
+                      fontSize: "13px",
+                      backgroundColor: viewMode === "real-names" ? "rgba(108, 92, 231, 0.15)" : "transparent",
+                    }}
+                  >
+                    Chỉ hiện tên thật
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
@@ -1649,10 +2207,22 @@ export default function GameLogPanel({
 
         {(nights || []).map((n) => {
           const nightEntries = canViewNightLogs ? (n.entries || []).filter((e) => e.phase !== "day") : [];
-          const displayNightEntries = nightEntries.filter((e) => {
+          const isPlayerView = !isHost && !gameEnded && !isReplay;
+          const processedNightEntries = isPlayerView
+            ? filterAndNormalizeNightEntries(
+                nightEntries,
+                myPlayerId,
+                myRole,
+                wolves,
+                loveState,
+                gameRules
+              )
+            : nightEntries;
+
+          const displayNightEntries = processedNightEntries.filter((e) => {
             if (isLegacyAngelReviveLog(e)) return false;
             if (e.type === "saved_by_witch" || e.type === "saved_by_guardian" || e.type === "elemental_buff") return false;
-            if (e.type === "wolf_vote" && (e.voteBreakdown?.length || 0) <= 1) return false;
+            if (!isPlayerView && e.type === "wolf_vote" && (e.voteBreakdown?.length || 0) <= 1) return false;
             if (e.type === "custom_log" && e.message?.startsWith("[Bước ")) return false;
             return true;
           });
@@ -1690,10 +2260,10 @@ export default function GameLogPanel({
               {canViewNightLogs && (
                 <div className="game-log-night-section">
                   <div className="game-log-phase-header game-log-night-header">
-                    <span>🌙</span> Đêm {n.night}
+                    <AvifIcon name="🌙" style={{ marginRight: 6 }} /> Đêm {n.night}
                   </div>
                   {displayNightEntries.length === 0 ? (
-                    <div className="game-log-empty-msg">Không có sự kiện đêm.</div>
+                    <div className="game-log-empty-msg">Không có hành động nào đã xảy ra</div>
                   ) : (
                     <ul className="game-log-list">
                       {displayNightEntries.map((entry, idx) => (
@@ -1703,13 +2273,19 @@ export default function GameLogPanel({
                           entry={entry}
                           dayVotersByTarget={dayVotersByTarget}
                           legacyAngelGuessByPair={legacyAngelGuessByPair}
-                          playerOnlyDayLogs={!canViewNightLogs}
+                          playerOnlyDayLogs={!isHost && !gameEnded && !isReplay}
                           rolesByPlayerId={rolesByEntry.get(entry) || rolesByPlayerId}
                           playerNamesById={playerNamesById}
                           targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
                           eliminationFocus={eliminationFocus}
                           onEliminationFocusChange={setEliminationFocus}
                           onHighlightPlayer={onHighlightPlayer}
+                          myPlayerId={myPlayerId}
+                          loveState={loveState}
+                          wolves={wolves}
+                          wolfBadgeRoles={wolfBadgeRoles}
+                          gameEnded={gameEnded}
+                          isHost={isHost}
                         />
                       ))}
                     </ul>
@@ -1720,7 +2296,7 @@ export default function GameLogPanel({
               {dayEntries.length > 0 && (
                 <div className="game-log-day-section">
                   <div className="game-log-phase-header game-log-day-header">
-                    <span>🌞</span> Ngày {n.night}
+                    <AvifIcon name="🌞" style={{ marginRight: 6 }} /> Ngày {n.night}
                   </div>
                   <ul className="game-log-list">
                     {dayEntries.map((entry, idx) => (
@@ -1730,13 +2306,19 @@ export default function GameLogPanel({
                         entry={entry}
                         dayVotersByTarget={dayVotersByTarget}
                         legacyAngelGuessByPair={legacyAngelGuessByPair}
-                        playerOnlyDayLogs={!canViewNightLogs}
+                        playerOnlyDayLogs={!isHost && !gameEnded && !isReplay}
                         rolesByPlayerId={rolesByEntry.get(entry) || rolesByPlayerId}
                         playerNamesById={playerNamesById}
                         targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
                         eliminationFocus={eliminationFocus}
                         onEliminationFocusChange={setEliminationFocus}
                         onHighlightPlayer={onHighlightPlayer}
+                        myPlayerId={myPlayerId}
+                        loveState={loveState}
+                        wolves={wolves}
+                        wolfBadgeRoles={wolfBadgeRoles}
+                        gameEnded={gameEnded}
+                        isHost={isHost}
                       />
                     ))}
                   </ul>
@@ -1746,6 +2328,7 @@ export default function GameLogPanel({
           );
         })}
       </div>
-    </ShowRolesOnlyContext.Provider>
+      </RealNamesContext.Provider>
+    </ViewModeContext.Provider>
   );
 }

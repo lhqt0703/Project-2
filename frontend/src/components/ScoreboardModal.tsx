@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import firstPlaceSvg from "../assets/1st.svg";
 import secondPlaceSvg from "../assets/2nd.svg";
 import thirdPlaceSvg from "../assets/3rd.svg";
+import { AvifIcon } from "./AvifIcon";
+
 
 interface ScoreBreakdownEntry {
   category: string;
@@ -65,16 +67,34 @@ export const ScoreboardModal: React.FC<ScoreboardModalProps> = ({ open, onClose,
 
   const getRoleDisplay = (role: string) => {
     const r = role.toLowerCase();
-    if (r === "seer" || r === "tiên tri") return "🔮 Tiên Tri";
-    if (r === "witch" || r === "phù thủy") return "🧪 Phù Thủy";
-    if (r === "guard" || r === "bảo vệ") return "🛡️ Bảo Vệ";
-    if (r === "hunter" || r === "thợ săn") return "🏹 Thợ Săn";
-    if (r === "merchant" || r === "tay buôn") return "⚖️ Tay Buôn";
-    if (r === "love_god" || r === "thần tình yêu") return "💘 Thần Tình Yêu";
-    if (r === "wolf" || r === "sói") return "🐺 Sói Thường";
-    if (r === "spirit_wolf" || r === "linh sói") return "👻 Linh Sói";
-    if (r === "cursed" || r === "kẻ bị nguyền") return "💀 Kẻ Bị Nguyền";
-    return `🎭 ${role}`;
+    let emoji = "🎭";
+    if (r === "seer" || r === "tiên tri") emoji = "🔮";
+    else if (r === "witch" || r === "phù thủy") emoji = "🧪";
+    else if (r === "guard" || r === "bảo vệ") emoji = "🛡️";
+    else if (r === "hunter" || r === "thợ săn") emoji = "🏹";
+    else if (r === "merchant" || r === "tay buôn") emoji = "⚖️";
+    else if (r === "love_god" || r === "thần tình yêu") emoji = "💘";
+    else if (r === "wolf" || r === "sói") emoji = "🐺";
+    else if (r === "spirit_wolf" || r === "linh sói") emoji = "👻";
+    else if (r === "cursed" || r === "kẻ bị nguyền") emoji = "💀";
+
+    let label = role;
+    if (r === "seer" || r === "tiên tri") label = "Tiên Tri";
+    else if (r === "witch" || r === "phù thủy") label = "Phù Thủy";
+    else if (r === "guard" || r === "bảo vệ") label = "Bảo Vệ";
+    else if (r === "hunter" || r === "thợ săn") label = "Thợ Săn";
+    else if (r === "merchant" || r === "tay buôn") label = "Tay Buôn";
+    else if (r === "love_god" || r === "thần tình yêu") label = "Thần Tình Yêu";
+    else if (r === "wolf" || r === "sói") label = "Sói Thường";
+    else if (r === "spirit_wolf" || r === "linh sói") label = "Linh Sói";
+    else if (r === "cursed" || r === "kẻ bị nguyền") label = "Kẻ Bị Nguyền";
+
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+        <AvifIcon name={emoji} style={{ width: "1.15em", height: "1.15em" }} />
+        {label}
+      </span>
+    );
   };
 
   const getTeamBadge = (team: string) => {

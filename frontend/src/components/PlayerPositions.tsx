@@ -3,8 +3,41 @@ import { socket, clientId } from "../socket";
 import { useRoomContext } from "../context/RoomContext";
 import { getDeterministicSlots1to18, getDeterministicSlots19Plus } from "./layouts";
 import ElementalVFX from "./ElementalVFX";
-import BorderGlow from "./BorderGlow";
 import Orb from "./Orb";
+import { AvifIcon } from "./AvifIcon";
+
+import nenLungAsset from "../assets/nền lưng.avif";
+import avaPhucMasked from "../assets/Ava/M 046fa88a-a719-47c3-8b97-ddfc8337cf83.avif";
+import avaDinMasked from "../assets/Ava/M f7d9652f-ac74-4557-81a2-7c2731a77d37.avif";
+import avaHaVietMasked from "../assets/Ava/M 397d9740-e21b-4ade-941f-25912aefd591.png"; // chú ý .png
+import avaSanMasked from "../assets/Ava/M client_1780242307126_pmozg54dmra.avif";
+import avaCuongMasked from "../assets/Ava/M 8dfc1d63-988f-460d-8569-8a1964be99a0.avif";
+import avaVietThangMasked from "../assets/Ava/M ec0c6c66-9ce7-4d86-ac12-25824af15b79.avif";
+import avaDuyMasked from "../assets/Ava/M 9bc9009c-13b3-4ba6-bbdd-a7189b477ccd.avif";
+
+export const AVA_IMAGES = import.meta.glob<string>("../assets/Ava/*", {
+  eager: true,
+  import: "default",
+});
+
+export function getAvatarUrlByFileName(fileName: string | undefined): string | null {
+  if (!fileName) return null;
+  const cleanName = fileName.trim();
+  const entry = Object.entries(AVA_IMAGES).find(([path]) => path.endsWith(cleanName));
+  return entry ? entry[1] : null;
+}
+
+
+export const MASKED_AVATAR_MAP: Record<string, string> = {
+  "046fa88a-a719-47c3-8b97-ddfc8337cf83": avaPhucMasked,
+  "f7d9652f-ac74-4557-81a2-7c2731a77d37": avaDinMasked,
+  "397d9740-e21b-4ade-941f-25912aefd591": avaHaVietMasked,
+  "client_1780242307126_pmozg54dmra": avaSanMasked,
+  "8dfc1d63-988f-460d-8569-8a1964be99a0": avaCuongMasked,
+  "ec0c6c66-9ce7-4d86-ac12-25824af15b79": avaVietThangMasked,
+  "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd": avaDuyMasked
+};
+
 
 interface PlayerPosition {
   playerId: string;
@@ -15,7 +48,7 @@ interface PlayerPosition {
 interface RoomLike {
   id: string;
   hostId: string;
-  players: Array<{ id: string; name: string; connected?: boolean; inGame?: boolean }>;
+  players: Array<{ id: string; name: string; connected?: boolean; inGame?: boolean; playerRealName?: string; playerAvatar?: string }>;
   positions?: PlayerPosition[];
   positionEditors?: string[];
   autoArrangeUsed?: boolean;
@@ -355,9 +388,9 @@ export default function PlayerPositions({
   trialGreenPlayerId,
   replayActorIds,
   replayTargetIds,
-  showActionGlow,
   dietQuyOrangeHighlightPlayerIds,
   dietQuyRedHighlightPlayerIds,
+  viewMode = "names-roles",
 }: {
   onPlayerClick: (playerId: string) => void;
   onPlayerDoubleClick?: (playerId: string) => void;
@@ -392,9 +425,9 @@ export default function PlayerPositions({
   trialGreenPlayerId?: string | null;
   replayActorIds?: string[];
   replayTargetIds?: string[];
-  showActionGlow?: boolean;
   dietQuyOrangeHighlightPlayerIds?: string[];
   dietQuyRedHighlightPlayerIds?: string[];
+  viewMode?: "roles" | "names-roles" | "real-names";
 }) {
   const { room: contextRoom } = useRoomContext();
   const room: RoomLike | null = roomOverride ?? (contextRoom as RoomLike | null);
@@ -1015,6 +1048,20 @@ export default function PlayerPositions({
           from { transform: rotate(360deg); }
           to { transform: rotate(0deg); }
         }
+        @keyframes badgeFadeIn {
+          0% {
+            opacity: 0;
+            transform: translate(-50%, 12px) scale(0.8);
+          }
+          70% {
+            opacity: 0.9;
+            transform: translate(-50%, -2px) scale(1.05);
+          }
+          100% {
+            opacity: 1;
+            transform: translate(-50%, 0) scale(1);
+          }
+        }
         @keyframes breatheSoft {
           0%, 100% { opacity: 0.65; transform: scale(1); }
           50% { opacity: 1; transform: scale(1.03); }
@@ -1180,6 +1227,44 @@ export default function PlayerPositions({
           const p = room.players.find((x) => x.id === pos.playerId);
           if (!p) return null;
 
+          let avatarUrl: string | undefined = undefined;
+          let maskedAvatarUrl: string | undefined = undefined;
+
+          if (p.playerAvatar) {
+            const customUrl = getAvatarUrlByFileName(p.playerAvatar);
+            if (customUrl) {
+              if (p.playerAvatar.trim().toUpperCase().startsWith("M ")) {
+                maskedAvatarUrl = customUrl;
+              } else {
+                avatarUrl = customUrl;
+              }
+            }
+          }
+
+          if (!avatarUrl && !maskedAvatarUrl) {
+            
+            maskedAvatarUrl = MASKED_AVATAR_MAP[pos.playerId];
+            if (pos.playerId.startsWith("dev-")) {
+              const parts = pos.playerId.split("-");
+              const lastPart = parts[parts.length - 1];
+              const idx = parseInt(lastPart, 10);
+              if (!isNaN(idx) && idx >= 1 && idx <= 7) {
+                const VIP_IDS = [
+                  "046fa88a-a719-47c3-8b97-ddfc8337cf83",
+                  "f7d9652f-ac74-4557-81a2-7c2731a77d37",
+                  "397d9740-e21b-4ade-941f-25912aefd591",
+                  "client_1780242307126_pmozg54dmra",
+                  "8dfc1d63-988f-460d-8569-8a1964be99a0",
+                  "ec0c6c66-9ce7-4d86-ac12-25824af15b79",
+                  "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd"
+                ];
+                const vipId = VIP_IDS[idx - 1];
+                if (!maskedAvatarUrl) maskedAvatarUrl = MASKED_AVATAR_MAP[vipId];
+              }
+            }
+          }
+          const displayName = (viewMode === "real-names" && p.playerRealName) ? p.playerRealName : p.name;
+
           const left = `${pos.x * 100}%`;
           const top = `${pos.y * 100}%`;
 
@@ -1332,10 +1417,74 @@ export default function PlayerPositions({
 
           const circleTransform = `translate(-50%,-50%)${extraDx || extraDy ? ` translate(${extraDx}px, ${extraDy}px)` : ""}`;
 
-          const isSelfGlow = !!showActionGlow && pos.playerId === clientId;
-
           const innerContent = (
             <>
+              {maskedAvatarUrl ? (
+                <>
+                  {/* 1. Phần thân nhân vật được bo tròn theo vòng tròn */}
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      borderRadius: "inherit",
+                      overflow: "hidden",
+                      pointerEvents: "none",
+                      zIndex: 0,
+                    }}
+                  >
+                    <img
+                      src={maskedAvatarUrl}
+                      alt=""
+                      style={{
+                        position: "absolute",
+                        bottom: 0,
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        width: "115%",
+                        height: "115%",
+                        objectFit: "contain",
+                        objectPosition: "bottom center",
+                      }}
+                    />
+                    {/* Overlay tối nhẹ lên thân nhân vật */}
+                    <div style={{
+                      position: "absolute",
+                      inset: 0,
+                      borderRadius: "inherit",
+                      zIndex: 1
+                    }} />
+                  </div>
+
+                  {/* 2. Phần đầu nhân vật nhô lên ngoài vòng tròn */}
+                  <img
+                    src={maskedAvatarUrl}
+                    alt=""
+                    style={{
+                      position: "absolute",
+                      bottom: 0,
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      width: "115%",
+                      height: "115%",
+                      objectFit: "contain",
+                      objectPosition: "bottom center",
+                      clipPath: "inset(0 0 20% 0)",
+                      pointerEvents: "none",
+                      zIndex: 0,
+                    }}
+                  />
+                </>
+              ) : (
+                avatarUrl && (
+                  <div style={{
+                    position: "absolute",
+                    inset: 0,
+                    background: "rgba(0, 0, 0, 0.15)",
+                    borderRadius: "inherit",
+                    zIndex: 0
+                  }} />
+                )
+              )}
               {/* Elemental VFX (Ice, Fire, Thunder, Darkness) */}
               {vfxType && <ElementalVFX type={vfxType} />}
 
@@ -1384,7 +1533,7 @@ export default function PlayerPositions({
                 <div className="player-halo halo-active-role" style={{ inset: -scalePx(10, 6), border: `${scalePx(2.5, 1.5)}px solid #ffd700` }} />
               )}
               {trialOrangePlayerId === pos.playerId && (
-                <Orb hue={160} />
+                <Orb hue={210} />
               )}
               {trialGreenPlayerId === pos.playerId && (
                 <div className="player-halo halo-trial-green" style={{ inset: -scalePx(12, 8), border: `${scalePx(2.5, 2)}px solid #34d399` }} />
@@ -1428,8 +1577,9 @@ export default function PlayerPositions({
               {showWolfBadge && (
                 <div style={{
                   position: "absolute",
-                  top: -badgeOffsetPx,
-                  left: -badgeOffsetPx,
+                  bottom: -badgeOffsetPx,
+                  left: "50%",
+                  transform: "translateX(-50%)",
                   background: "linear-gradient(135deg, #422213, #2d1307)",
                   color: "#ff6b6b",
                   padding: badgePadding,
@@ -1441,8 +1591,11 @@ export default function PlayerPositions({
                   display: "flex",
                   alignItems: "center",
                   gap: scalePx(3, 2),
+                  width: "max-content",
+                  zIndex: 2,
+                  animation: "badgeFadeIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
                 }}>
-                  🐺 {wolfBadgeText || "Sói"}
+                  <AvifIcon name="🐺" style={{ width: "1.15em", height: "1.15em" }} /> {wolfBadgeText || "Sói"}
                 </div>
               )}
 
@@ -1472,6 +1625,7 @@ export default function PlayerPositions({
                   fontWeight: "bold",
                   width: "max-content",
                   zIndex: 2,
+                  animation: "badgeFadeIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
                   ...getRoleBadgeStyle(roleBadgeText),
                 }}>
                   {roleBadgeText}
@@ -1525,7 +1679,7 @@ export default function PlayerPositions({
                 <div style={{
                   position: "absolute",
                   top: -hpBadgeTopPx,
-                  right: -scalePx(6, 3),
+                  left: -scalePx(6, 3),
                   background: "rgba(15, 17, 21, 0.85)",
                   backdropFilter: "blur(4px)",
                   border: "1px solid rgba(255, 255, 255, 0.08)",
@@ -1535,7 +1689,7 @@ export default function PlayerPositions({
                   fontWeight: "bold",
                   letterSpacing: scaleNum(0.5, 0.25),
                   boxShadow: "0 4px 12px rgba(0, 0, 0, 0.45)",
-                  zIndex: 2,
+                  zIndex: -1,
                 }}>
                   {filledHearts.map((_, idx) => (
                     <span
@@ -1543,11 +1697,9 @@ export default function PlayerPositions({
                       style={{
                         display: "inline-block",
                         animation: heartShaking ? "playerHeartShake 850ms ease-in-out infinite" : undefined,
-                        color: "#ef4444",
-                        textShadow: "0 0 6px rgba(239, 68, 68, 0.6)",
                       }}
                     >
-                      ♥️
+                      <AvifIcon name="♥️" style={{ width: scalePx(14, 10), height: scalePx(14, 10) }} />
                     </span>
                   ))}
                   {emptyHearts.map((_, idx) => (
@@ -1556,20 +1708,38 @@ export default function PlayerPositions({
                 </div>
               )}
 
-              <div style={{ textAlign: "center", pointerEvents: "none", zIndex: 1 }}>
-                <div style={{
-                  fontWeight: 600,
-                  textDecoration: isDead ? "line-through" : undefined,
-                  textDecorationColor: isDead ? "rgba(239, 68, 68, 0.5)" : undefined,
-                  opacity: isDead ? 0.45 : 1,
-                  color: isDead ? "#94a3b8" : "#f8fafc",
-                  fontFamily: "'Inter', system-ui, sans-serif",
-                  letterSpacing: "-0.01em",
-                }}>{p.name}</div>
-                <div style={{ opacity: isDead ? 0.3 : 0.5, fontSize: playerSubFontSizePx }}>
-                  {p.id === clientId ? "(Bạn)" : ""}
-                </div>
-              </div>
+              {(() => {
+                const hasAvatar = !!(avatarUrl || maskedAvatarUrl);
+                const hasRoleBadge = !!(roleBadgeText || showWolfBadge);
+                const isNameAtBottom = hasAvatar && !hasRoleBadge;
+                return (
+                  <div style={{ 
+                    position: "absolute",
+                    left: "50%",
+                    top: "50%",
+                    transform: isNameAtBottom ? "translate(-50%, 2.5em)" : "translate(-50%, -50%)",
+                    textAlign: "center", 
+                    pointerEvents: "none", 
+                    zIndex: 1,
+                    width: "max-content",
+                    transition: "transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)"
+                  }}>
+                    <div style={{
+                      fontWeight: 600,
+                      textDecoration: isDead ? "line-through" : undefined,
+                      textDecorationColor: isDead ? "rgba(239, 68, 68, 0.5)" : undefined,
+                      opacity: isDead ? 0.45 : 1,
+                      color: isDead ? "#94a3b8" : "#f8fafc",
+                      fontFamily: "'Inter', system-ui, sans-serif",
+                      letterSpacing: "-0.01em",
+                      textShadow: (avatarUrl || maskedAvatarUrl) ? "0 2px 4px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95)" : "0 1px 2px rgba(0,0,0,0.6)",
+                    }}>{displayName}</div>
+                    <div style={{ opacity: isDead ? 0.3 : 0.5, fontSize: playerSubFontSizePx, textShadow: (avatarUrl || maskedAvatarUrl) ? "0 1px 2px rgba(0,0,0,0.9)" : undefined }}>
+                      {p.id === clientId ? "(Bạn)" : ""}
+                    </div>
+                  </div>
+                );
+              })()}
             </>
           );
 
@@ -1613,6 +1783,13 @@ export default function PlayerPositions({
               width: circleSizePx,
               height: circleSizePx,
               borderRadius: circleRadiusPx,
+              backgroundImage: maskedAvatarUrl 
+                ? `url(${nenLungAsset})` 
+                : (avatarUrl ? `url(${avatarUrl})` : undefined),
+              backgroundPosition: (maskedAvatarUrl || avatarUrl) ? "center" : undefined,
+              backgroundSize: (maskedAvatarUrl || avatarUrl) ? "cover" : undefined,
+              backgroundRepeat: (maskedAvatarUrl || avatarUrl) ? "no-repeat" : undefined,
+              backgroundOrigin: (maskedAvatarUrl || avatarUrl) ? "border-box" : undefined,
               border: isReplayTarget 
                 ? "3px solid rgb(245, 158, 11)" 
                 : isReplayActor 
@@ -1636,25 +1813,10 @@ export default function PlayerPositions({
               outline: showSelectedOutline ? `${selectedBorderPx}px solid rgba(255,165,0,0.9)` : undefined,
               transition: dragging === pos.playerId
                 ? "none"
-                : "left 0.2s, top 0.2s, width 220ms ease, height 220ms ease, border-radius 220ms ease, box-shadow 300ms ease, transform 0.2s ease", // Smooth move + resize + glow
+                : "left 0.2s, top 0.2s, width 220ms ease, height 220ms ease, border-radius 220ms ease, box-shadow 300ms ease, transform 0.2s ease, filter 0.5s ease",
+              filter: isDead ? "grayscale(0.94)" : undefined,
             }
           };
-
-          if (isSelfGlow) {
-            return (
-              <BorderGlow
-                {...tokenProps}
-                animated={true}
-                borderRadius={circleRadiusPx}
-                glowRadius={circleSizePx / 2 + 10}
-                glowColor="168 85 247"
-                colors={['#c084fc', '#f472b6', '#38bdf8']}
-                backgroundColor="rgba(23, 26, 33, 0.97)"
-              >
-                {innerContent}
-              </BorderGlow>
-            );
-          }
 
           return (
             <div {...tokenProps}>

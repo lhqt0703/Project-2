@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { socket, clientId } from "../../socket";
 import type { GamePhase } from "./socketEvents";
+import { AvifIcon } from "../../components/AvifIcon";
+
 
 type Player = { id: string; name: string; connected?: boolean };
 
@@ -393,7 +395,7 @@ export function useWolfRole({
             opacity: isLocked || !canAct || deadlineReached ? 0.7 : 1,
           }}
         >
-          🐺 CẮN!
+          <AvifIcon name="🐺" style={{ marginRight: 4 }} /> CẮN!
         </button>
         {wolfDeadline && (
           <div style={{ marginTop: 6 }}>

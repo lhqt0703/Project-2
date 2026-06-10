@@ -7,6 +7,8 @@ export interface Player {
   name: string;
   connected?: boolean;
   inGame?: boolean;
+  playerRealName?: string;
+  playerAvatar?: string;
 }
 
 export type NightActionRole =
@@ -54,6 +56,7 @@ export interface RoomGameRules {
   hunterShotPublicInDay: boolean;
   merchantSingleUseItems: boolean;
   merchantWinRequiredSuccessfulTrades: number;
+  merchantHideReceivedItemName: boolean;
 }
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -75,6 +78,7 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   hunterShotPublicInDay: true,
   merchantSingleUseItems: false,
   merchantWinRequiredSuccessfulTrades: 3,
+  merchantHideReceivedItemName: false,
 };
 
 export interface RoomData {

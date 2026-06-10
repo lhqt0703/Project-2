@@ -7,7 +7,7 @@
   --text: #e8e8e8;
 
   --surface: #171a21;
-  --surface-muted: #1f2430;
+  --surface-muted: rgb(22 25 35 / 88%);
 
   --border: #2c3442;
   --border-strong: #7a8394;
@@ -438,7 +438,7 @@ input {
   .room-page h1,
   .game-page h1,
   .roleselect-page h1 {
-    font-size: clamp(26px, 8vw, 34px) !important;
+    font-size: 1.5rem !important;
     line-height: 1.12;
     overflow-wrap: anywhere;
   }
@@ -452,7 +452,7 @@ input {
   .room-page,
   .game-page,
   .roleselect-page {
-    padding: 14px !important;
+    padding: 1rem !important; /* chỉnh padding tổng */
   }
 
   .room-main-layout {
@@ -544,3 +544,486 @@ input {
     padding: 12px;
   }
 }
+
+/* Button Gradient Style */
+@keyframes circularMotion {
+    0% {
+        transform: rotate(0) translate(15px) rotate(0)
+    }
+
+    to {
+        transform: rotate(1turn) translate(15px) rotate(-1turn)
+    }
+}
+
+.con-load {
+    align-items: center;
+    display: flex;
+    height: 40px;
+    justify-content: center;
+    overflow: hidden;
+    width: 40px
+}
+
+.con-load,.con-load .bg-load {
+    border-radius: 50%;
+    position: absolute
+}
+
+.con-load .bg-load {
+    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(5px);
+    background: rgba(var(--bg),.1);
+    height: calc(100% - 4px);
+    width: calc(100% - 4px);
+    z-index: 10
+}
+
+.con-load .load {
+    align-items: center;
+    background: transparent;
+    border-radius: 50%;
+    display: flex;
+    height: 30px;
+    justify-content: center;
+    position: relative;
+    width: 30px
+}
+
+.con-load .load .color1 {
+    animation: circularMotion .5s linear infinite;
+    background: #02defc
+}
+
+.con-load .load .color1,.con-load .load .color2 {
+    border-radius: 50%;
+    height: 20px;
+    position: absolute;
+    width: 20px
+}
+
+.con-load .load .color2 {
+    animation: circularMotion .8s linear infinite;
+    background: #7ffe00
+}
+
+.con-load .load .color3 {
+    animation: circularMotion 1.1s linear infinite;
+    background: #fdf301
+}
+
+.con-load .load .color3,.con-load .load .color4 {
+    border-radius: 50%;
+    height: 20px;
+    position: absolute;
+    width: 20px
+}
+
+.con-load .load .color4 {
+    animation: circularMotion 1.5s linear infinite;
+    background: #f66315
+}
+
+.con-load .load .color5 {
+    animation: circularMotion 1.8s linear infinite;
+    background: #fc0197
+}
+
+.con-load .load .color5,.con-load .load .color6 {
+    border-radius: 50%;
+    height: 20px;
+    position: absolute;
+    width: 20px
+}
+
+.con-load .load .color6 {
+    animation: circularMotion 2.1s linear infinite;
+    background: #fe9efb
+}
+
+.button-gradient {
+    --bg: 15, 17, 21;
+    --color: 255, 255, 255;
+    align-items: center;
+    background: rgba(var(--bg),1);
+    border: 0;
+    border-radius: 25px;
+    box-sizing: border-box;
+    color: rgba(var(--color),1);
+    cursor: pointer;
+    display: flex;
+    font-size: 15px;
+    height: 46px;
+    justify-content: center;
+    min-height: 46px;
+    outline: none;
+    overflow: hidden;
+    padding: 10px 25px;
+    position: relative;
+    transition: all .3s ease;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+    z-index: 10
+}
+
+.button-gradient.visible:hover .gradient-2 {
+    transform: scale(1.1)!important
+}
+
+.button-gradient.visible:hover .gradient-0 {
+    filter: blur(0);
+    opacity: 1;
+    transform: scale(1)
+}
+
+.button-gradient.visible.border .gradient-2 {
+    transform: scale(1.1)!important
+}
+
+.button-gradient.visible.border .gradient-0 {
+    filter: blur(0);
+    opacity: 1;
+    transform: scale(1)
+}
+
+.button-gradient.visible.border:hover .gradient-2 {
+    transform: scale(.8)!important
+}
+
+.button-gradient.visible.border:hover .gradient-0 {
+    filter: blur(10px);
+    opacity: 0;
+    transform: scale(.95)
+}
+
+.button-gradient.disabled {
+    pointer-events: none
+}
+
+.button-gradient.disabled .color {
+    opacity: .15
+}
+
+.button-gradient.loading {
+    border: 1px dashed var(--border);
+    min-width: 46px;
+    opacity: 1!important;
+    padding: 0;
+    width: 46px
+}
+
+.button-gradient.visible .glass,.button-gradient.visible .gradient-1,.button-gradient:hover .glass,.button-gradient:hover .gradient-1 {
+    opacity: 1
+}
+
+.button-gradient.visible .gradient-2,.button-gradient:hover .gradient-2 {
+    opacity: 1;
+    transform: scale(1)
+}
+
+.button-gradient .btn-content {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    position: relative;
+    text-shadow: 0 0 8px rgba(0,0,0,.5);
+    z-index: 20
+}
+
+.button-gradient svg {
+    filter: drop-shadow(0 0 8px rgba(0,0,0,.5));
+    min-width: 30px
+}
+
+.button-gradient .glass {
+    height: 130%;
+    opacity: 1;
+    position: absolute;
+    width: 130%;
+    z-index: 10;
+    background: transparent;
+}
+
+.button-gradient .gradient-1 {
+    background: radial-gradient(103.46% 134.6% at 64.66% 50%,#d9d9d900 27.37%,#d9d9d94d);
+    border-radius: inherit;
+    height: 100%;
+    opacity: 1;
+    position: absolute;
+    transition: all .4s ease;
+    width: 100%;
+    z-index: 12
+}
+
+.button-gradient .gradient-0 {
+    background: rgba(var(--bg),1);
+    border-radius: inherit;
+    filter: blur(10px);
+    height: calc(100% - 4px);
+    opacity: 0;
+    position: absolute;
+    transform: scale(.95);
+    transition: all .5s ease;
+    width: calc(100% - 4px);
+    z-index: 12
+}
+
+.button-gradient .gradient-2 {
+    align-items: center;
+    display: flex;
+    height: 100%;
+    justify-content: center;
+    opacity: 0;
+    position: absolute;
+    transform: scale(3);
+    transition: all .5s ease;
+    width: 100%;
+    z-index: 5
+}
+
+@keyframes moveColor1 {
+  0% { transform: translate(3%, 54%) scale(1); }
+  50% { transform: translate(-30%, -20%) scale(1.2); }
+  100% { transform: translate(20%, -40%) scale(0.85); }
+}
+@keyframes moveColor2 {
+  0% { transform: translate(-5%, 64%) scale(1.1); }
+  50% { transform: translate(40%, -10%) scale(0.9); }
+  100% { transform: translate(-40%, -30%) scale(1.25); }
+}
+@keyframes moveColor3 {
+  0% { transform: translate(-100%, -60%) scale(0.9); }
+  50% { transform: translate(10%, 50%) scale(1.15); }
+  100% { transform: translate(-50%, 20%) scale(1); }
+}
+@keyframes moveColor4 {
+  0% { transform: translate(-98%, 86%) scale(1.2); }
+  50% { transform: translate(-20%, -50%) scale(0.8); }
+  100% { transform: translate(50%, 30%) scale(1.1); }
+}
+@keyframes moveColor5 {
+  0% { transform: translate(-13%, -27%) scale(0.85); }
+  50% { transform: translate(-80%, 40%) scale(1.1); }
+  100% { transform: translate(30%, 60%) scale(1); }
+}
+@keyframes moveColor6 {
+  0% { transform: translate(6%, -39%) scale(1); }
+  50% { transform: translate(-60%, 10%) scale(1.2); }
+  100% { transform: translate(-10%, -80%) scale(0.9); }
+}
+
+.button-gradient .gradient-2 div {
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-direction: alternate;
+}
+
+.button-gradient .gradient-2 .color-1 {
+    background: #02defc;
+    animation-name: moveColor1;
+    animation-duration: 8s;
+}
+
+.button-gradient .gradient-2 .color-1,.button-gradient .gradient-2 .color-2 {
+    border-radius: 50%;
+    filter: blur(12px);
+    height: 100px;
+    position: absolute;
+    transition: all 2s ease;
+    width: 100px
+}
+
+.button-gradient .gradient-2 .color-2 {
+    background: #7ffe00;
+    animation-name: moveColor2;
+    animation-duration: 10s;
+}
+
+.button-gradient .gradient-2 .color-3 {
+    background: #fdf301;
+    animation-name: moveColor3;
+    animation-duration: 12s;
+}
+
+.button-gradient .gradient-2 .color-3,.button-gradient .gradient-2 .color-4 {
+    border-radius: 50%;
+    filter: blur(12px);
+    height: 100px;
+    position: absolute;
+    transition: all 2s ease;
+    width: 100px
+}
+
+.button-gradient .gradient-2 .color-4 {
+    background: #f66315;
+    animation-name: moveColor4;
+    animation-duration: 9s;
+}
+
+.button-gradient .gradient-2 .color-5 {
+    background: #fc0197;
+    animation-name: moveColor5;
+    animation-duration: 11s;
+}
+
+.button-gradient .gradient-2 .color-5,.button-gradient .gradient-2 .color-6 {
+    border-radius: 50%;
+    filter: blur(12px);
+    height: 100px;
+    position: absolute;
+    transition: all 2s ease;
+    width: 100px
+}
+
+.button-gradient .gradient-2 .color-6 {
+    background: #fe9efb;
+    animation-name: moveColor6;
+    animation-duration: 13s;
+}
+
+/* Custom premium card style for RoleSelect */
+.role-card-premium {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1.4;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 2px solid var(--border);
+  background: var(--surface-muted);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+.role-card-premium:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 20px rgba(0,0,0,0.5);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.role-card-premium .card-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  z-index: 1;
+  transition: filter 0.3s ease;
+  filter: brightness(0.55) grayscale(0.15); /* standard dim when not selected */
+}
+
+.role-card-premium:hover .card-image {
+  filter: brightness(0.75) grayscale(0);
+}
+
+/* Brighten card when host has selected it */
+.role-card-premium.host-selected .card-image {
+  filter: brightness(1.05) grayscale(0) contrast(1.05);
+}
+
+/* Border glow animation */
+.role-card-premium.host-selected {
+  animation: cardPremiumGlow 2.2s infinite ease-in-out;
+}
+
+@keyframes cardPremiumGlow {
+  0% {
+    box-shadow: 0 0 6px var(--glow-color, var(--accent)), 0 0 3px var(--glow-color, var(--accent));
+    border-color: var(--glow-color, var(--accent));
+  }
+  50% {
+    box-shadow: 0 0 16px var(--glow-color, var(--accent)), 0 0 8px var(--glow-color, var(--accent));
+    border-color: var(--glow-color, var(--accent));
+    filter: brightness(1.1);
+  }
+  100% {
+    box-shadow: 0 0 6px var(--glow-color, var(--accent)), 0 0 3px var(--glow-color, var(--accent));
+    border-color: var(--glow-color, var(--accent));
+  }
+}
+
+.role-card-premium .card-gradient-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60%;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.4) 50%, transparent 100%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.role-name-banner {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(15, 17, 21, 0.82);
+  backdrop-filter: blur(4px);
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  z-index: 3;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  max-width: calc(100% - 16px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Badge for vote count */
+.role-card-premium .vote-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: linear-gradient(135deg, #ff9800, #f57c00);
+  color: #fff;
+  padding: 3px 7px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 800;
+  z-index: 3;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.voters-container {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  z-index: 3;
+}
+
+/* Micro animations */
+.role-card-premium:active {
+  transform: scale(0.97);
+}
+
+/* Upgrade grid for card list */
+@media (min-width: 769px) {
+  .roleselect-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+  }
+}
+@media (max-width: 768px) {
+  .roleselect-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important;
+    gap: 10px !important;
+  }
+}
+

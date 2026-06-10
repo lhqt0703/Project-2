@@ -16,6 +16,7 @@ export function buildGameSummaryFromRoom(room: Room): GameSummary {
   const isCoupleWinner = room.winner === "lovers";
 
   room.players.forEach((p) => {
+    if (p.id === room.hostId) return;
     const role = room.playerRoles?.[p.id] || "Dân làng";
     let originalTeam = "villagers";
     if (isWolfRole(role)) {
@@ -303,7 +304,7 @@ export function buildGameSummaryFromRoom(room: Room): GameSummary {
     pushEvent({
       type: "LOVE_COUPLE_SPECIAL_WIN",
       actorIds: [loveGodId, partnerId],
-      metadata: { playerCount: room.players.length },
+      metadata: { playerCount: players.length },
     });
   }
 
@@ -328,7 +329,7 @@ export function buildGameSummaryFromRoom(room: Room): GameSummary {
 
   return {
     gameId: room.id,
-    playerCount: room.players.length,
+    playerCount: players.length,
     winningTeam,
     players,
     couples,

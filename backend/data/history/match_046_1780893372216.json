@@ -1,0 +1,40 @@
+{
+  "gameId": "046",
+  "timestamp": 1780893372215,
+  "hostId": "16ab4278-4d7a-40e5-a856-c9bf490d5fc3",
+  "playerCount": 2,
+  "winner": "villagers",
+  "players": [
+    {
+      "id": "16ab4278-4d7a-40e5-a856-c9bf490d5fc3",
+      "name": "Thắng",
+      "role": "Dân làng"
+    },
+    {
+      "id": "84bcb975-46ec-4be3-87bb-cd1b4d976633",
+      "name": "Tofu",
+      "role": "Phù thủy"
+    }
+  ],
+  "positions": [
+    {
+      "playerId": "84bcb975-46ec-4be3-87bb-cd1b4d976633",
+      "x": 0.11125000000000002,
+      "y": 0.8936170212765957
+    }
+  ],
+  "gameEventLog": [
+    {
+      "id": "ev_1780893372212_iy6ppzj",
+      "timestamp": 1780893372212,
+      "night": 0,
+      "type": "GAME_OVER",
+      "phase": "dusk",
+      "metadata": {
+        "winner": "villagers",
+        "reason": "after_game_start"
+      }
+    }
+  ],
+  "gameLog": []
+}

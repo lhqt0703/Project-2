@@ -188,7 +188,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
     const room = ctx.rooms[roomId];
     if (!room) return false;
 
-    const rules = room.pendingGameRules ? buildRoomGameRules(room.pendingGameRules) : ensureRoomGameRules(room);
+    const rules = room.pendingGameRules ? buildRoomGameRules(room.pendingGameRules, room.gameMode) : ensureRoomGameRules(room);
     room.gameRules = rules;
     delete room.pendingGameRules;
 

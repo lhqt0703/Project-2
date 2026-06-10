@@ -74,7 +74,12 @@ export default function RoleCard3D({
   role,
   revealed,
   onToggleReveal,
-  lowPerformanceMode = false, 
+  lowPerformanceMode = (() => {
+    if (typeof window !== "undefined") {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.matchMedia("(pointer: coarse)").matches;
+    }
+    return false;
+  })(),
 }: RoleCard3DProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);

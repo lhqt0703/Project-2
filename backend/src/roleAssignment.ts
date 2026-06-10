@@ -193,11 +193,18 @@ export function pickRolesForParticipants(allRoles: string[], participantCount: n
   const selectedRoles: string[] = [];
   const pool = shuffle(normalizedRoles);
 
-  // 1. Ensure at least one wolf role is picked (if any exists)
-  const firstWolfIndex = pool.findIndex(isWolfRole);
-  if (firstWolfIndex >= 0) {
-    selectedRoles.push(pool[firstWolfIndex]!);
-    pool.splice(firstWolfIndex, 1);
+  // 1. Ensure "Ác Quỷ" (Demon) is picked first if it exists in the pool (mandatory for diet_quy mode)
+  const demonIndex = pool.indexOf("Ác Quỷ");
+  if (demonIndex >= 0) {
+    selectedRoles.push(pool[demonIndex]!);
+    pool.splice(demonIndex, 1);
+  } else {
+    // Otherwise, ensure at least one wolf role is picked (if any exists)
+    const firstWolfIndex = pool.findIndex(isWolfRole);
+    if (firstWolfIndex >= 0) {
+      selectedRoles.push(pool[firstWolfIndex]!);
+      pool.splice(firstWolfIndex, 1);
+    }
   }
 
   // 2. Ensure each high priority role is picked (if any exists in pool)

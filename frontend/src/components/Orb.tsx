@@ -7,7 +7,7 @@ interface OrbProps {
   hue?: number;
 }
 
-export default function Orb({ hue = 160 }: OrbProps) {
+export default function Orb({ hue = 210 }: OrbProps) {
   const ctnDom = useRef<HTMLDivElement>(null);
 
   const vert = /* glsl */ `

@@ -42,6 +42,7 @@ interface MasonryProps {
   clientId: string;
   onSelectCard: (index: number) => void;
   onSelectionComplete: () => void;
+  skipExitAnimation?: boolean;
 }
 
 const Masonry: React.FC<MasonryProps> = ({
@@ -50,6 +51,7 @@ const Masonry: React.FC<MasonryProps> = ({
   clientId,
   onSelectCard,
   onSelectionComplete,
+  skipExitAnimation = false,
 }) => {
   const [containerRef, { width }] = useMeasure<HTMLDivElement>();
   const [localSelectedCard, setLocalSelectedCard] = useState<number | null>(null);
@@ -191,6 +193,10 @@ const Masonry: React.FC<MasonryProps> = ({
     // Set local choice immediately and emit selection
     setLocalSelectedCard(index);
     onSelectCard(index);
+
+    if (skipExitAnimation) {
+      return;
+    }
 
     // Wait 2 seconds, then trigger exit slide down animation
     setAnimatingOut(true);

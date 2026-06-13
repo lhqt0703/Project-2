@@ -140,6 +140,8 @@ export function useGameSocketSync({
   const [dayLocked, setDayLocked] = useState<DayLockedUpdatedPayload | null>(null);
   const [dayDiscussionDeadline, setDayDiscussionDeadline] = useState<number | null>(null);
   const [dayDeadline, setDayDeadline] = useState<number | null>(null);
+  const [dayPaused, setDayPaused] = useState(false);
+  const [dayRemainingMs, setDayRemainingMs] = useState<number | null>(null);
   const [dayVoters, setDayVoters] = useState<string[]>([]);
   const [dayPhaseSeq, setDayPhaseSeq] = useState(0);
   const [dayVoteFinishedSeq, setDayVoteFinishedSeq] = useState(0);
@@ -183,6 +185,8 @@ export function useGameSocketSync({
         setDayLocked(null);
         setDayDiscussionDeadline(null);
         setDayDeadline(null);
+        setDayPaused(false);
+        setDayRemainingMs(null);
         setDayVoters([]);
         setDayVoteFinished(null);
         setTrialTargetId(null);
@@ -297,6 +301,8 @@ export function useGameSocketSync({
         if (typeof data?.dayDiscussionDeadline === "number" || data?.dayDiscussionDeadline === null) {
           setDayDiscussionDeadline(data.dayDiscussionDeadline ?? null);
         }
+        setDayPaused(!!data?.dayPaused);
+        setDayRemainingMs(typeof data?.dayRemainingMs === "number" ? data.dayRemainingMs : null);
         if (Array.isArray(data?.dayVoters)) {
           setDayVoters(data.dayVoters.filter(Boolean));
         }
@@ -315,6 +321,23 @@ export function useGameSocketSync({
         if (data?.trialVotes && typeof data.trialVotes === "object") {
           setTrialVotes(data.trialVotes);
         }
+      }
+      if (data?.gameOver) {
+        setGameEnded((prev) => {
+          const winner = data.winner || "nobody";
+          const reason = data.scoreResult?.reason || "game_ended";
+          if (prev && prev.winner === winner && prev.reason === reason) {
+            return prev;
+          }
+          return {
+            winner,
+            reason,
+          };
+        });
+        setSpiritWolfDecisionTargetId(null);
+        setSpiritWolfDecisionDeadline(null);
+      } else if (data && !data.gameOver) {
+        setGameEnded(null);
       }
     };
 
@@ -358,6 +381,8 @@ export function useGameSocketSync({
       setDayLocked(null);
       setDayDiscussionDeadline(null);
       setDayDeadline(null);
+      setDayPaused(false);
+      setDayRemainingMs(null);
       setDayVoters([]);
       setDayPhaseSeq(0);
       setDayVoteFinished(null);
@@ -916,6 +941,8 @@ export function useGameSocketSync({
       dayLocked,
       dayDiscussionDeadline,
       dayDeadline,
+      dayPaused,
+      dayRemainingMs,
       dayVoters,
       dayPhaseSeq,
       dayVoteFinished,
@@ -983,6 +1010,8 @@ export function useGameSocketSync({
       dayLocked,
       dayDiscussionDeadline,
       dayDeadline,
+      dayPaused,
+      dayRemainingMs,
       dayVoters,
       dayPhaseSeq,
       dayVoteFinished,

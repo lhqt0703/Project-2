@@ -342,6 +342,17 @@ export function createLifecycleFlow(ctx: ServerContext) {
     room.angelOutcomeLoggedPlayerIds = [];
     resetMerchantRoundState(room);
 
+    // Reset Soi Mu state
+    room.soiMuTargets = {};
+    room.soiMuThumbDecisions = {};
+    room.soiMuLocked = {};
+    room.soiMuInvestigatedPlayerId = null;
+    room.soiMuInvestigatedPrevTargetId = null;
+    room.soiMuInvestigationResolved = true;
+    room.soiMuDaySelectedTargetId = null;
+    room.soiMuInvestigationResult = null;
+    room.soiMuHasMerchant = room.gameMode === "soi_mu" && Object.values(room.playerRoles || {}).includes("Tay Buôn");
+
     ctx.io.to(roomId).emit("phaseChanged", "dusk");
     clearLoveStateForPlayers(ctx, room, roomId);
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
@@ -360,6 +371,22 @@ export function createLifecycleFlow(ctx: ServerContext) {
     if (aliveIds.length === 0) {
       if (shouldDeferEndGameForAngel(room)) return;
       endGame(roomId, room, "nobody", reason || "nobody_alive");
+      return;
+    }
+
+    if (room.gameMode === "soi_mu") {
+      const wolvesCount = aliveIds.filter((id) => room.playerRoles?.[id] === "Sói").length;
+      const villagersCount = aliveIds.filter((id) => room.playerRoles?.[id] !== "Sói").length;
+
+      if (wolvesCount === 0) {
+        endGame(roomId, room, "villagers", reason || "soi_mu_wolves_dead");
+        return;
+      }
+
+      if (wolvesCount >= villagersCount) {
+        endGame(roomId, room, "wolves", reason || "soi_mu_wolves_ge_villagers");
+        return;
+      }
       return;
     }
 

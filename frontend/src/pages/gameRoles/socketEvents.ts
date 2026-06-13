@@ -176,7 +176,12 @@ export type GameLogEntry =
   | { type: "elemental_buff_vote"; phase: GameLogEntryPhase; voteBreakdown: { buffId: string; voterIds: string[] }[]; chosenBuffId?: string | null; tier?: number; randomTieBreak?: boolean; tiedBuffIds?: string[]; chosenVoterIds?: string[] }
   | { type: "elemental_buff"; phase: GameLogEntryPhase; buffId: string | null; tier: number; randomTieBreak?: boolean; tiedBuffIds?: string[] }
   | { type: "custom_log"; phase: GameLogEntryPhase; message: string; timestamp?: number }
-  | { type: "host_ended_game"; phase: GameLogEntryPhase };
+  | { type: "host_ended_game"; phase: GameLogEntryPhase }
+  | { type: "soi_mu_villager_choose"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "soi_mu_wolf_bite"; phase: GameLogEntryPhase; actorId: string; targetId: string; wolfLabel: string }
+  | { type: "soi_mu_wolf_suicide"; phase: GameLogEntryPhase; actorId: string; wolfLabel: string }
+  | { type: "soi_mu_wolf_inactive_choose"; phase: GameLogEntryPhase; actorId: string; targetId: string; wolfLabel: string; activeWolfLabel: string }
+  | { type: "soi_mu_ariana_trade"; phase: GameLogEntryPhase; actorId: string; targetId: string; actorThumb: "up" | "down"; targetThumb: "up" | "down" | null };
 
 export type GameLogNight = {
   night: number;

@@ -8,7 +8,9 @@ import ArrowLeft from "../assets/arrow-left.svg";
 const PLAYER_NAME_STORAGE_KEY = "werewolfPlayerName";
 const ALLOWED_CREATOR_IDS = [
   "16ab4278-4d7a-40e5-a856-c9bf490d5fc3",
-  "84bcb975-46ec-4be3-87bb-cd1b4d976633"
+  "84bcb975-46ec-4be3-87bb-cd1b4d976633",
+  //"046fa88a-a719-47c3-8b97-ddfc8337cf83", // Sicula 
+  //"79b02851-1b5d-46fb-8935-5d8031dc9a7f" // mẹ
 ];
 
 export default function Lobby() {
@@ -56,10 +58,10 @@ export default function Lobby() {
   };
 
   return (
-    <div className="page-shell lobby-page" style={{ 
+    <div className="page-shell lobby-page" style={{
       position: "relative",
-      minHeight: "100vh", 
-      padding: "40px 16px 40px", 
+      minHeight: "100vh",
+      padding: "40px 16px 40px",
       background: "#04060f",
       color: "#f4f6fb",
       alignItems: "center",
@@ -146,45 +148,45 @@ export default function Lobby() {
       {/* Stunning Aurora Component Background */}
       <div style={{ position: "absolute", inset: 0, zIndex: 0, opacity: 0.45, pointerEvents: "none" }}>
         <Aurora
-          colorStops={gameMode === "diet_quy" ? ["#ff8f42", "#EF4444", "#5227FF"] : ["#7cff67", "#EF4444", "#5227FF"]}
+          colorStops={gameMode === "soi_mu" ? ["#9333ea", "#0c9170", "#118aec"] : gameMode === "diet_quy" ? ["#ff8f42", "#EF4444", "#5227FF"] : ["#7cff67", "#EF4444", "#5227FF"]}
           blend={0.6}
           amplitude={1.1}
           speed={1.4}
         />
       </div>
-      <div style={{ 
+      <div style={{
         position: "relative",
         zIndex: 1,
         width: "100%",
-        maxWidth: 800, 
-        margin: "0 auto", 
-        display: "grid", 
-        gap: 24 
+        maxWidth: 800,
+        margin: "0 auto",
+        display: "grid",
+        gap: 24
       }}>
-        
-          <button
-            onClick={() => nav('/')}
-            aria-label="Quay lại"
-            style={{
-              border: "none",
-              background: "transparent",
-              padding: "0 8px",
-              cursor: "pointer",
-              width: 36,
-              margin: "0 0 -10px",
-            }}
-          >
-            <img src={ArrowLeft} alt="Quay lại" style={{ width: 20, height: 20, filter: "brightness(0.75)", display: "block" }} />
-          </button>
+
+        <button
+          onClick={() => nav('/')}
+          aria-label="Quay lại"
+          style={{
+            border: "none",
+            background: "transparent",
+            padding: "0 8px",
+            cursor: "pointer",
+            width: 36,
+            margin: "0 0 -10px",
+          }}
+        >
+          <img src={ArrowLeft} alt="Quay lại" style={{ width: 20, height: 20, filter: "brightness(0.75)", display: "block" }} />
+        </button>
 
         {/* Lobby Header Card */}
         <div className="lobby-card" style={{ position: "relative", padding: "32px 36px" }}>
-          
-          <h1 style={{ 
-            margin: 0, 
-            fontSize: 42, 
+
+          <h1 style={{
+            margin: 0,
+            fontSize: 42,
             fontWeight: 900,
-            letterSpacing: "-0.03em", 
+            letterSpacing: "-0.03em",
             background: "linear-gradient(135deg, #ffffff 30%, #a5b4fc 100%)",
             WebkitBackgroundClip: "text",
             WebkitTextFillColor: "transparent"
@@ -197,21 +199,18 @@ export default function Lobby() {
         </div>
 
         {/* Action Sections Grid */}
-        <div style={{ 
-          display: "grid", 
-          gridTemplateColumns: isDev ? "repeat(auto-fit, minmax(320px, 1fr))" : "1fr", 
-          gap: 24 
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isDev ? "repeat(auto-fit, minmax(320px, 1fr))" : "1fr",
+          gap: 24
         }}>
           {/* Create Room Section */}
           {isDev && (
-            <section className="lobby-card" style={{ 
-              border: "1px solid rgba(255, 143, 66, 0.15)",
-              background: "rgba(12, 12, 34, 0.8)" 
-            }}>
+            <section className="lobby-card">
               <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "#a5b4fc" }}>Tạo phòng mới</h2>
               <div style={{ display: "grid", gap: 16, height: "100%", justifyContent: "space-between" }}>
                 <p style={{ fontSize: 14, color: "rgba(255,255,255,0.6)", margin: 0 }}>
-                  Trở thành chủ phòng để mời bạn bè tham gia ván chơi {gameMode === "diet_quy" ? "Diệt Quỷ" : "Dạ Nghịch"}.
+                  Trở thành chủ phòng để mời bạn bè tham gia ván chơi {gameMode === "soi_mu" ? "Sói Mù" : gameMode === "diet_quy" ? "Diệt Quỷ" : "Dạ Nghịch"}.
                 </p>
                 <button onClick={createRoom} className="lobby-btn lobby-btn-primary" style={{ alignSelf: "flex-end", width: "100%" }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -237,7 +236,7 @@ export default function Lobby() {
                   className="lobby-input"
                 />
               </div>
-              
+
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.5)" }}>Mã phòng</span>
                 <input

@@ -62,6 +62,11 @@ function countRoles(roles?: string[]) {
 
 export default function Room() {
   const { room, setRoom, setRole } = useRoomContext();
+  const getRoleDisplayName = (roleName: string | undefined | null) => {
+    if (!roleName) return "";
+    if (room?.gameMode === "soi_mu" && roleName === "Tay Buôn") return "Ariana";
+    return roleName;
+  };
   const [pendingKickByDoubleClick, setPendingKickByDoubleClick] = useState<Player | null>(null);
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [showRulesModal, setShowRulesModal] = useState(false);
@@ -120,6 +125,10 @@ export default function Room() {
     if (room.gameMode === "diet_quy") {
       import("./GameDietQuy").catch((err) => {
         console.error("Lỗi tải trước GameDietQuy:", err);
+      });
+    } else if (room.gameMode === "soi_mu") {
+      import("./GameSoiMu").catch((err) => {
+        console.error("Lỗi tải trước GameSoiMu:", err);
       });
     } else {
       import("./GameDaNghich").catch((err) => {
@@ -711,7 +720,7 @@ export default function Room() {
           </button>
           <h1 id="Ma-phong">Phòng: {room.id}</h1>
         </div>
-        {room.gameMode !== "diet_quy" && (
+        {room.gameMode !== "diet_quy" && room.gameMode !== "soi_mu" && (
           <div id="Luat-phong" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
             {(() => {
               const isQuick = isElementalQuickOrder(room.gameRules?.nightActionOrder || DEFAULT_ROOM_GAME_RULES.nightActionOrder);
@@ -826,12 +835,12 @@ export default function Room() {
                   {p.name} {p.id === room.hostId && "(Quản trò)"} {room.positionEditors?.includes(p.id) && " • (Quyền sắp xếp)"}
                   {pendingRole && (
                     <span style={{ color: "var(--accent)", fontWeight: 700 }}>
-                      {" • "}(Phát trước: {pendingRole})
+                      {" • "}(Phát trước: {getRoleDisplayName(pendingRole)})
                     </span>
                   )}
                   {blockedRoles.length > 0 && (
                     <span style={{ color: "var(--danger)", fontWeight: 700 }}>
-                      {" • "}(Chặn: {blockedRoles.join(", ")})
+                      {" • "}(Chặn: {blockedRoles.map(getRoleDisplayName).join(", ")})
                     </span>
                   )}
                 </li>
@@ -1130,7 +1139,7 @@ export default function Room() {
                           gap: 8,
                         }}
                       >
-                        <span>{option.role}</span>
+                        <span>{getRoleDisplayName(option.role)}</span>
                         {option.total > 1 && (
                           <span style={{ fontSize: 12, opacity: 0.72 }}>
                             {option.remaining}/{option.total}
@@ -1160,7 +1169,7 @@ export default function Room() {
                           gap: 8,
                         }}
                       >
-                        <span>{option.role}</span>
+                        <span>{getRoleDisplayName(option.role)}</span>
                         {option.blocked && <span style={{ fontSize: 12, opacity: 0.78 }}>Đang chặn</span>}
                       </button>
                     ))}

@@ -63,6 +63,10 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     if (room.phase !== "day") return;
     if (!room.trialTargetId) return;
 
+    room.dayPaused = false;
+    room.dayRemainingMs = null;
+    room.dayPausedType = null;
+
     if (room.trialDefenseTimer) {
       clearTimeout(room.trialDefenseTimer);
       room.trialDefenseTimer = null;
@@ -244,6 +248,10 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
 
     clearTrialState(room);
 
+    room.dayPaused = false;
+    room.dayRemainingMs = null;
+    room.dayPausedType = null;
+
     room.trialTargetId = targetId;
     room.trialStage = "defense";
     room.trialDefenseDeadline = Date.now() + 120_000;
@@ -275,6 +283,10 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     const room = ctx.rooms[roomId];
     if (!room) return;
     if (room.gameOver) return;
+
+    room.dayPaused = false;
+    room.dayRemainingMs = null;
+    room.dayPausedType = null;
 
     if (room.dayDiscussionTimer) {
       clearTimeout(room.dayDiscussionTimer);
@@ -321,6 +333,10 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     if (!room) return;
     if (room.phase !== "day") return;
     if (room.gameOver) return;
+
+    room.dayPaused = false;
+    room.dayRemainingMs = null;
+    room.dayPausedType = null;
 
     if (room.dayTimer) {
       clearTimeout(room.dayTimer);

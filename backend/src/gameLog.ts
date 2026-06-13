@@ -1,7 +1,7 @@
 import { getServerContext } from "./serverContext.js";
 import type { GameLogEntry, Room } from "./serverTypes.js";
-import { getActiveDayVoters, getActiveWolves } from "./roomState.js";
-import { emitGameLogToSocket, emitPublicDayGameLogToRoom } from "./serverEmitters.js";
+import { getActiveDayVoters, getActiveWolves, getAlivePlayerIds } from "./roomState.js";
+import { emitGameLogToSocket, emitPublicDayGameLogToRoom, isPublicGameLogEntry } from "./serverEmitters.js";
 
 function getPlayerName(room: Room, playerId: string | null | undefined) {
   if (!playerId) return "(không rõ)";
@@ -30,7 +30,7 @@ export function appendLogEntry(room: Room, entry: GameLogEntry) {
     const ctx = getServerContext();
     if (ctx) {
       emitGameLogToSocket(room.id, room.hostId);
-      if (entry.phase === "day") {
+      if (isPublicGameLogEntry(entry)) {
         emitPublicDayGameLogToRoom(room.id);
       }
     }
@@ -88,4 +88,109 @@ export function buildDayVoteBreakdown(room: Room, votes: Record<string, string |
     phase: "day",
     voteBreakdown,
   };
+}
+
+export function updateSoiMuActionLog(room: Room, actorId: string) {
+  const nightLog = ensureNightLog(room);
+  if (!nightLog) return;
+
+  const targetId = room.soiMuTargets?.[actorId] || null;
+  const role = room.playerRoles?.[actorId];
+  if (!role) return;
+
+  // HÀM REMOVE LOG CŨ CỦA ACTOR NÀY
+  const removeOldActorLogs = () => {
+    nightLog.entries = nightLog.entries.filter((e) => {
+      if (
+        (e.type === "guardian_protect" && e.actorId === actorId) ||
+        (e.type === "soi_mu_villager_choose" && e.actorId === actorId) ||
+        (e.type === "soi_mu_wolf_bite" && e.actorId === actorId) ||
+        (e.type === "soi_mu_wolf_suicide" && e.actorId === actorId) ||
+        (e.type === "soi_mu_wolf_inactive_choose" && e.actorId === actorId) ||
+        (e.type === "soi_mu_ariana_trade" && e.actorId === actorId)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  };
+
+  // Nếu targetId là null, tức là người chơi bỏ chọn -> chỉ cần xóa log cũ của họ là xong
+  if (!targetId) {
+    removeOldActorLogs();
+    if (room.id && room.hostId) {
+      const ctx = getServerContext();
+      if (ctx) {
+        emitGameLogToSocket(room.id, room.hostId);
+      }
+    }
+    return;
+  }
+
+  // Nếu có targetId, chúng ta sẽ tạo log mới cho người này tùy theo role
+  let newEntry: GameLogEntry | null = null;
+
+  if (role === "Bảo vệ") {
+    newEntry = { type: "guardian_protect", phase: "night", actorId, targetId };
+  } else if (role === "Dân làng" || role === "Trưởng làng") {
+    newEntry = { type: "soi_mu_villager_choose", phase: "night", actorId, targetId };
+  } else if (role === "Sói") {
+    // Sói
+    const aliveIds = getAlivePlayerIds(room).filter(id => id !== room.hostId);
+    const dead = new Set(room.deadPlayers || []);
+    // Xác định active wolf
+    const aliveWolves = (room.wolves || []).filter(wid => !dead.has(wid));
+    const activeWolfId = aliveWolves[0] || "";
+    const isActive = (actorId === activeWolfId);
+
+    // Xác định nhãn của sói này
+    const wolfIndex = (room.wolves || []).indexOf(actorId);
+    const wolfLabel = `Sói ${wolfIndex !== -1 ? wolfIndex + 1 : 1}`;
+
+    if (isActive) {
+      if (targetId === actorId) {
+        newEntry = { type: "soi_mu_wolf_suicide", phase: "night", actorId, wolfLabel };
+      } else {
+        newEntry = { type: "soi_mu_wolf_bite", phase: "night", actorId, targetId, wolfLabel };
+      }
+    } else {
+      // Sói không hoạt động
+      const activeWolfIndex = (room.wolves || []).indexOf(activeWolfId);
+      const activeWolfLabel = `Sói ${activeWolfIndex !== -1 ? activeWolfIndex + 1 : 1}`;
+      newEntry = {
+        type: "soi_mu_wolf_inactive_choose",
+        phase: "night",
+        actorId,
+        targetId,
+        wolfLabel,
+        activeWolfLabel,
+      };
+    }
+  } else if (role === "Tay Buôn") {
+    // Ariana (Tay Buôn)
+    const actorThumb = room.soiMuThumbDecisions?.[actorId] || null;
+    if (actorThumb) {
+      const targetThumb = room.soiMuThumbDecisions?.[targetId] || null;
+      newEntry = {
+        type: "soi_mu_ariana_trade",
+        phase: "night",
+        actorId,
+        targetId,
+        actorThumb,
+        targetThumb,
+      };
+    }
+  }
+
+  if (newEntry) {
+    removeOldActorLogs();
+    nightLog.entries.push(newEntry);
+  }
+
+  if (room.id && room.hostId) {
+    const ctx = getServerContext();
+    if (ctx) {
+      emitGameLogToSocket(room.id, room.hostId);
+    }
+  }
 }

@@ -61,7 +61,7 @@ export interface Room {
   id: string;
   players: Player[];
   hostId: string;
-  gameMode?: "da_nghich" | "diet_quy";
+  gameMode?: "da_nghich" | "diet_quy" | "soi_mu";
   dietQuyNightDirection?: "clockwise" | "counter_clockwise";
   dietQuyNightStartPlayerId?: string | null;
   dietQuyNightTurnOrder?: string[];
@@ -82,6 +82,15 @@ export interface Room {
   dietQuySaintExecutedToday?: boolean;
   dietQuyExecutedToday?: boolean;
   dietQuyExecutedPlayerId?: string | null;
+  soiMuTargets?: Record<string, string>;
+  soiMuThumbDecisions?: Record<string, "up" | "down">;
+  soiMuLocked?: Record<string, boolean>;
+  soiMuInvestigatedPlayerId?: string | null;
+  soiMuInvestigatedPrevTargetId?: string | null;
+  soiMuInvestigationResolved?: boolean;
+  soiMuDaySelectedTargetId?: string | null;
+  soiMuInvestigationResult?: "success" | "fail" | null;
+  soiMuHasMerchant?: boolean;
   hidePlayerRoleText?: boolean;
   roles?: string[];
   rolesLocked?: boolean;
@@ -164,6 +173,9 @@ export interface Room {
   nightTurnRemainingMs?: number | null;
   wolfTurnRemainingMs?: number | null;
   spiritWolfDecisionRemainingMs?: number | null;
+  dayPaused?: boolean;
+  dayRemainingMs?: number | null;
+  dayPausedType?: "discussion" | "voting" | "defense" | "verdict" | null;
   nightActionExtraTimeMsByPlayerId?: Record<string, number>;
   nightTurnTimer?: NodeJS.Timeout | null;
   nightTurnOrderSnapshot?: NightActionRole[];
@@ -326,11 +338,13 @@ function clampWolfNightActionDurationSec(value: unknown) {
 function normalizeNightActionDurations(input?: Partial<RoomGameRules> | null, gameMode?: string) {
   const allNightActionsSimultaneous =
     input?.allNightActionsSimultaneous ?? DEFAULT_ROOM_GAME_RULES.allNightActionsSimultaneous;
-  let nonWolf = clampNonWolfNightActionDurationSec(input?.nonWolfNightActionDurationSec);
-  if (gameMode !== "diet_quy" && !allNightActionsSimultaneous && nonWolf < NIGHT_ACTION_DURATION_STEP_SEC) {
+  const fallback = gameMode === "soi_mu" ? 30 : DEFAULT_ROOM_GAME_RULES.nonWolfNightActionDurationSec;
+  let nonWolf = clampNightActionDurationSec(input?.nonWolfNightActionDurationSec, fallback);
+  if (gameMode !== "diet_quy" && gameMode !== "soi_mu" && !allNightActionsSimultaneous && nonWolf < NIGHT_ACTION_DURATION_STEP_SEC) {
     nonWolf = NIGHT_ACTION_DURATION_STEP_SEC;
   }
-  let wolf = clampWolfNightActionDurationSec(input?.wolfNightActionDurationSec);
+  const wolfFallback = gameMode === "soi_mu" ? 30 : DEFAULT_ROOM_GAME_RULES.wolfNightActionDurationSec;
+  let wolf = clampNightActionDurationSec(input?.wolfNightActionDurationSec, wolfFallback);
   if (wolf > nonWolf) wolf = nonWolf;
   return {
     nonWolfNightActionDurationSec: nonWolf,
@@ -349,6 +363,29 @@ export function buildRoomGameRules(input?: Partial<RoomGameRules> | null, gameMo
     wolfNightActionDurationSec: normalizedDurations.wolfNightActionDurationSec,
     nightActionOrder: normalizeNightActionOrder(input?.nightActionOrder),
   };
+  if (gameMode === "soi_mu") {
+    return {
+      twoHeartsFirstTwoNights: merged.twoHeartsFirstTwoNights,
+      forceWolfBiteFirstNight: merged.twoHeartsFirstTwoNights && merged.forceWolfBiteFirstNight,
+      allNightActionsSimultaneous: true,
+      witchSeeBiteOnlyIfHasHealPotion: false,
+      witchBonusTimeRequiresUsablePotion: false,
+      witchHideProtectedBiteInSimultaneous: false,
+      witchHideProtectedBiteWhenSequential: false,
+      trialInteractionSelectionLimit: 0,
+      nonWolfNightActionDurationSec: merged.nonWolfNightActionDurationSec,
+      wolfNightActionDurationSec: merged.nonWolfNightActionDurationSec,
+      nightActionOrder: [],
+      banSoiBecomeWolfEvenIfHealed: false,
+      loveCanChoosePartnerFirstTwoNights: false,
+      villageChiefKnowsWolfBite: merged.villageChiefKnowsWolfBite,
+      witchSeeProtectorImmortalBite: false,
+      hunterShotPublicInDay: false,
+      merchantSingleUseItems: false,
+      merchantWinRequiredSuccessfulTrades: 3,
+      merchantHideReceivedItemName: false,
+    };
+  }
   return {
     ...merged,
     forceWolfBiteFirstNight: merged.twoHeartsFirstTwoNights && merged.forceWolfBiteFirstNight,
@@ -429,7 +466,12 @@ export type GameLogEntry =
   | { type: "poisoner_poison"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "monk_protect"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "imp_attack"; phase: GameLogEntryPhase; actorId: string; targetId: string }
-  | { type: "spy_view"; phase: GameLogEntryPhase; actorId: string };
+  | { type: "spy_view"; phase: GameLogEntryPhase; actorId: string }
+  | { type: "soi_mu_villager_choose"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "soi_mu_wolf_bite"; phase: GameLogEntryPhase; actorId: string; targetId: string; wolfLabel: string }
+  | { type: "soi_mu_wolf_suicide"; phase: GameLogEntryPhase; actorId: string; wolfLabel: string }
+  | { type: "soi_mu_wolf_inactive_choose"; phase: GameLogEntryPhase; actorId: string; targetId: string; wolfLabel: string; activeWolfLabel: string }
+  | { type: "soi_mu_ariana_trade"; phase: GameLogEntryPhase; actorId: string; targetId: string; actorThumb: "up" | "down"; targetThumb: "up" | "down" | null };
 
 export type GameLogNight = {
   night: number;

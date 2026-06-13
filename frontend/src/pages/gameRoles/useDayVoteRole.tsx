@@ -32,6 +32,8 @@ export function useDayVoteRole({
   trialInteractionSelectionLimit,
   trialVotes,
   serverTimeOffset = 0,
+  dayPaused = false,
+  dayRemainingMs = null,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -53,18 +55,21 @@ export function useDayVoteRole({
   trialInteractionSelectionLimit: number;
   trialVotes: TrialVotesUpdatedPayload | null;
   serverTimeOffset?: number;
+  dayPaused?: boolean;
+  dayRemainingMs?: number | null;
 }) {
   const [localSelectedTarget, setLocalSelectedTarget] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now() + serverTimeOffset);
 
   useEffect(() => {
     if (phase !== "day") return;
+    if (dayPaused) return;
     const hasAnyTimer = !!dayDiscussionDeadline || !!dayDeadline || !!trialDefenseDeadline || !!trialVerdictDeadline;
     if (!hasAnyTimer) return;
     setNow(Date.now() + serverTimeOffset);
     const t = setInterval(() => setNow(Date.now() + serverTimeOffset), 1000);
     return () => clearInterval(t);
-  }, [phase, dayDiscussionDeadline, dayDeadline, trialDefenseDeadline, trialVerdictDeadline, serverTimeOffset]);
+  }, [phase, dayDiscussionDeadline, dayDeadline, trialDefenseDeadline, trialVerdictDeadline, serverTimeOffset, dayPaused]);
 
   useEffect(() => {
     if (phase !== "day") {
@@ -143,16 +148,20 @@ export function useDayVoteRole({
     return dayDiscussionDeadline;
   }, [dayDeadline, dayDiscussionDeadline, trialDefenseDeadline, trialStage, trialVerdictDeadline]);
 
+  const remainingSec = useMemo(() => {
+    if (dayPaused) {
+      if (dayRemainingMs == null) return 0;
+      return Math.max(0, Math.ceil(dayRemainingMs / 1000));
+    }
+    if (!activeCountdownDeadline) return null;
+    return Math.max(0, Math.ceil((activeCountdownDeadline - now) / 1000));
+  }, [dayPaused, dayRemainingMs, activeCountdownDeadline, now]);
+
   const panel =
     phase === "day" && clientId && !deadPlayers.includes(clientId) ? (
       <div style={{ marginTop: 12 }}>
         {trialStage === "none" && (
           <>
-            {!dayDeadline && !!dayDiscussionDeadline && (
-              <div style={{ marginTop: 6, opacity: 0.9 }}>
-                Đang thảo luận, chưa đến giai đoạn biểu quyết.
-              </div>
-            )}
             {dayDeadline && (
               <>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -251,18 +260,14 @@ export function useDayVoteRole({
             </button>
           </div>
         )}
-
-        {activeCountdownDeadline && (
-          <div style={{ marginTop: 6 }}>
-            {trialStage === "none" && !dayDeadline ? "Thời gian thảo luận còn lại" : "Thời gian còn lại"}: {Math.max(0, Math.ceil((activeCountdownDeadline - now) / 1000))}s
-          </div>
-        )}
       </div>
     ) : null;
 
   return {
     onPlayerClick,
     panel,
+    remainingSec,
+    dayPaused,
     playerPositionsProps: {
       selectedOutlinePlayerId:
         phase === "day" && trialStage === "none" && !!dayDeadline

@@ -1,4 +1,5 @@
 import { getServerContext } from "./serverContext.js";
+import type { GameLogEntry } from "./serverTypes.js";
 import {
   ELEMENTAL_BUFF_LABELS,
   ELEMENTAL_GROUP_ROLE,
@@ -201,6 +202,18 @@ function getWolfTurnDurationMs(room: Room) {
 }
 
 export function getHostNightActionProgressByPlayerId(room: Room): Record<string, "pending" | "done"> {
+  if (room.gameMode === "soi_mu") {
+    if (room.phase !== "night" || room.gameOver) return {};
+    const dead = new Set(room.deadPlayers || []);
+    const progress: Record<string, "pending" | "done"> = {};
+    for (const player of room.players) {
+      if (player.id === room.hostId) continue;
+      if (dead.has(player.id)) continue;
+      progress[player.id] = room.soiMuLocked?.[player.id] ? "done" : "pending";
+    }
+    return progress;
+  }
+
   const rules = ensureRoomGameRules(room);
   if (!rules.allNightActionsSimultaneous) return {};
   if (room.phase !== "night") return {};
@@ -395,11 +408,21 @@ export function emitGameLogToSocket(roomId: string, socketId: string) {
   ctx.io.to(socketId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
 }
 
+const PUBLIC_NIGHT_GAME_LOG_TYPES = new Set<GameLogEntry["type"]>([
+  "saved_by_guardian",
+  "saved_by_witch",
+  "eliminated",
+]);
+
+export function isPublicGameLogEntry(entry: GameLogEntry) {
+  return entry.phase === "day" || PUBLIC_NIGHT_GAME_LOG_TYPES.has(entry.type);
+}
+
 function getPublicDayGameLog(room: Room): GameLogNight[] {
   return (room.gameLog || [])
     .map((nightLog) => ({
       ...nightLog,
-      entries: (nightLog.entries || []).filter((entry) => entry.phase === "day"),
+      entries: (nightLog.entries || []).filter((entry) => isPublicGameLogEntry(entry)),
     }))
     .filter((nightLog) => nightLog.entries.length > 0);
 }

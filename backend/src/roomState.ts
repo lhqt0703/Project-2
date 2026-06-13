@@ -283,6 +283,9 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.dayVoteKind = "main";
   room.dayDiscussionDeadline = null;
   room.dayDeadline = null;
+  room.dayPaused = false;
+  room.dayRemainingMs = null;
+  room.dayPausedType = null;
 
   room.deadPlayers = [];
   room.sharedHeartsVisible = false;

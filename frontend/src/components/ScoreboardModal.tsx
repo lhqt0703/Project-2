@@ -111,16 +111,15 @@ export const ScoreboardModal: React.FC<ScoreboardModalProps> = ({ open, onClose,
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 9999,
+        zIndex: 100,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding: 20,
-        background: "rgba(10, 12, 18, 0.86)",
         backdropFilter: "blur(12px)",
       }}
     >
-      <div
+      <div //chỉnh giao diện bảng điểm
         style={{
           width: "min(720px, 100%)",
           maxHeight: "min(90vh, 840px)",
@@ -128,7 +127,7 @@ export const ScoreboardModal: React.FC<ScoreboardModalProps> = ({ open, onClose,
           color: "#f8fbff",
           border: "1px solid rgba(255, 255, 255, 0.12)",
           borderRadius: 16,
-          background: "linear-gradient(180deg, #131722 0%, #0c0f16 100%)",
+          background: "linear-gradient(#131722b3 0%, #0c0f16e6 100%)",
           boxShadow: "0 24px 64px rgba(0, 0, 0, 0.65)",
           display: "flex",
           flexDirection: "column",

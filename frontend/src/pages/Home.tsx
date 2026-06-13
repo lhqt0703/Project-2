@@ -23,6 +23,10 @@ export default function Home() {
         Dạ Nghịch
       </button>
       
+      <button onClick={() => nav("/lobby?mode=soi_mu")} style={{ marginRight: 10 }}>
+        Sói Mù
+      </button>
+      
       <button onClick={() => nav("/lobby?mode=diet_quy")}>
         Diệt Quỷ
       </button>

@@ -85,7 +85,7 @@ export interface RoomData {
   id: string;
   players: Player[];
   hostId: string;
-  gameMode?: "da_nghich" | "diet_quy";
+  gameMode?: "da_nghich" | "diet_quy" | "soi_mu";
   dietQuyNightDirection?: "clockwise" | "counter_clockwise";
   dietQuyNightStartPlayerId?: string | null;
   dietQuyNightTurnOrder?: string[];
@@ -145,6 +145,9 @@ export interface RoomData {
   spiritWolfDecisionDeadline?: number | null;
   nightTurnPaused?: boolean;
   nightTurnRemainingMs?: number | null;
+  dayPaused?: boolean;
+  dayRemainingMs?: number | null;
+  dayPausedType?: "discussion" | "voting" | "defense" | "verdict" | null;
   wolfTurnRemainingMs?: number | null;
   spiritWolfDecisionRemainingMs?: number | null;
   nightActionExtraTimeMsByPlayerId?: Record<string, number>;
@@ -155,6 +158,33 @@ export interface RoomData {
   wolfDeadline?: number | null;
   scoreResult?: any;
   duskCardSelections?: Record<string, number>;
+  playerRoles?: Record<string, string>;
+  wolves?: string[];
+  winner?: string;
+  soiMuTargets?: Record<string, string>;
+  soiMuThumbDecisions?: Record<string, "up" | "down">;
+  soiMuLocked?: Record<string, boolean>;
+  soiMuInvestigatedPlayerId?: string | null;
+  soiMuInvestigatedPrevTargetId?: string | null;
+  soiMuInvestigationResolved?: boolean;
+  soiMuDaySelectedTargetId?: string | null;
+  soiMuInvestigationResult?: "success" | "fail" | null;
+  soiMuHasMerchant?: boolean;
+  dayVotes?: Record<string, string | null>;
+  dayLocked?: Record<string, boolean>;
+  dayVoters?: string[];
+  trialStage?: "none" | "defense" | "verdict";
+  trialTargetId?: string | null;
+  trialVotes?: Record<string, "live" | "die" | null>;
+  trialInteractionCut?: boolean;
+  trialInteractionActiveIds?: string[];
+  trialSelectedInteractorId?: string | null;
+  trialSelectedInteractorIds?: string[];
+  trialInteractionSelectionLimit?: number;
+  trialDefenseDeadline?: number | null;
+  trialVerdictDeadline?: number | null;
+  dayDeadline?: number | null;
+  dayDiscussionDeadline?: number | null;
 }
 
 interface PlayerPosition {

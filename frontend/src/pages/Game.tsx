@@ -7,6 +7,7 @@ import ConfirmModal from "../components/ConfirmModal";
 // Lazy-load the mode-specific game pages
 const GameDaNghich = lazy(() => import("./GameDaNghich"));
 const GameDietQuy = lazy(() => import("./GameDietQuy"));
+const GameSoiMu = lazy(() => import("./GameSoiMu"));
 
 export default function Game() {
   const { room, setRoom } = useRoomContext();
@@ -82,8 +83,6 @@ export default function Game() {
     );
   }
 
-  const isDietQuy = room.gameMode === "diet_quy";
-
   return (
     <Suspense 
       fallback={
@@ -103,7 +102,13 @@ export default function Game() {
         </div>
       }
     >
-      {isDietQuy ? <GameDietQuy /> : <GameDaNghich />}
+      {room.gameMode === "diet_quy" ? (
+        <GameDietQuy />
+      ) : room.gameMode === "soi_mu" ? (
+        <GameSoiMu />
+      ) : (
+        <GameDaNghich />
+      )}
     </Suspense>
   );
 }

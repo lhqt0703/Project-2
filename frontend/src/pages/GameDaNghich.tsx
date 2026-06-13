@@ -35,6 +35,7 @@ import medalSvg from "../assets/medal.svg";
 import GridMotionOverlay from "../components/GridMotionOverlay";
 import RoleCompanionOverlay from "../components/RoleCompanionOverlay";
 import { AvifIcon } from "../components/AvifIcon";
+import { CountdownButton } from "../components/CountdownButton";
 
 
 const VIP_REAL_NAMES: Record<string, string> = {
@@ -389,14 +390,11 @@ export default function GameDaNghich() {
 
   useEffect(() => {
     if (phase !== "night") return;
-    if (allNightActionsSimultaneous) return;
-    if (!currentNightTurnRole) return;
-    if (!nightTurnDeadline) return;
     if (nightTurnPaused) return;
     setNightTurnNow(Date.now() + serverTimeOffset);
     const t = setInterval(() => setNightTurnNow(Date.now() + serverTimeOffset), 1000);
     return () => clearInterval(t);
-  }, [allNightActionsSimultaneous, currentNightTurnRole, nightTurnDeadline, nightTurnPaused, phase, serverTimeOffset]);
+  }, [nightTurnPaused, phase, serverTimeOffset]);
 
   const isSimultaneousNight = phase === "night" && allNightActionsSimultaneous;
 
@@ -428,9 +426,10 @@ export default function GameDaNghich() {
 
   const myWolfDeadline = useMemo(() => {
     if (!isSimultaneousNight) return baseWolfDeadline;
-    if (!baseWolfDeadline) return null;
-    return baseWolfDeadline + myNightActionExtraMs;
-  }, [baseWolfDeadline, isSimultaneousNight, myNightActionExtraMs]);
+    const activeBaseDeadline = baseWolfDeadline ?? nightTurnDeadline ?? null;
+    if (!activeBaseDeadline) return null;
+    return activeBaseDeadline + myNightActionExtraMs;
+  }, [baseWolfDeadline, isSimultaneousNight, myNightActionExtraMs, nightTurnDeadline]);
 
   const mySimultaneousDeadline = useMemo(() => {
     if (!isSimultaneousNight) return null;
@@ -473,14 +472,6 @@ export default function GameDaNghich() {
     witchHasUsablePotion,
   ]);
 
-  useEffect(() => {
-    if (!isSimultaneousNight) return;
-    if (!mySimultaneousDeadline) return;
-    if (nightTurnPaused) return;
-    setNightTurnNow(Date.now() + serverTimeOffset);
-    const t = setInterval(() => setNightTurnNow(Date.now() + serverTimeOffset), 1000);
-    return () => clearInterval(t);
-  }, [isSimultaneousNight, mySimultaneousDeadline, nightTurnPaused, serverTimeOffset]);
 
   const isSequentialNight = phase === "night" && !allNightActionsSimultaneous;
 
@@ -496,9 +487,13 @@ export default function GameDaNghich() {
 
   const simultaneousRemainingSec = useMemo(() => {
     if (!isSimultaneousNight) return null;
+    if (nightTurnPaused) {
+      if (nightTurnRemainingMs == null) return null;
+      return Math.max(0, Math.ceil(nightTurnRemainingMs / 1000));
+    }
     if (!mySimultaneousDeadline) return null;
     return Math.max(0, Math.ceil((mySimultaneousDeadline - nightTurnNow) / 1000));
-  }, [isSimultaneousNight, mySimultaneousDeadline, nightTurnNow]);
+  }, [isSimultaneousNight, mySimultaneousDeadline, nightTurnNow, nightTurnPaused, nightTurnRemainingMs]);
 
   const canHostToggleNightTimer = useMemo(() => {
     if (phase !== "night" || !!sync.gameEnded) return false;
@@ -729,7 +724,7 @@ export default function GameDaNghich() {
   }, [roomId, sync.gameEnded]);
 
   useEffect(() => {
-    if (sync.gameEnded || isHost || !room) return;
+    if (!sync.gameEnded || isHost || !room) return;
     if (frozenRoomSnapshot) return;
     setFrozenRoomSnapshot({
       ...room,
@@ -1135,20 +1130,22 @@ export default function GameDaNghich() {
     deadPlayers,
     dayVotes: sync.dayVotes,
     dayLocked: sync.dayLocked,
-    dayDiscussionDeadline: sync.dayDiscussionDeadline,
-    dayDeadline: sync.dayDeadline,
+    dayDiscussionDeadline: room?.dayDiscussionDeadline ?? sync.dayDiscussionDeadline,
+    dayDeadline: room?.dayDeadline ?? sync.dayDeadline,
     dayVoters: sync.dayVoters,
-    trialTargetId: sync.trialTargetId,
-    trialStage: sync.trialStage,
-    trialDefenseDeadline: sync.trialDefenseDeadline,
-    trialVerdictDeadline: sync.trialVerdictDeadline,
-    trialInteractionCut: sync.trialInteractionCut,
-    trialInteractionActiveIds: sync.trialInteractionActiveIds,
-    trialSelectedInteractorId: sync.trialSelectedInteractorId,
-    trialSelectedInteractorIds: sync.trialSelectedInteractorIds,
-    trialInteractionSelectionLimit: sync.trialInteractionSelectionLimit,
+    trialTargetId: room?.trialTargetId ?? sync.trialTargetId,
+    trialStage: room?.trialStage ?? sync.trialStage,
+    trialDefenseDeadline: room?.trialDefenseDeadline ?? sync.trialDefenseDeadline,
+    trialVerdictDeadline: room?.trialVerdictDeadline ?? sync.trialVerdictDeadline,
+    trialInteractionCut: room?.trialInteractionCut ?? sync.trialInteractionCut,
+    trialInteractionActiveIds: room?.trialInteractionActiveIds ?? sync.trialInteractionActiveIds,
+    trialSelectedInteractorId: room?.trialSelectedInteractorId ?? sync.trialSelectedInteractorId,
+    trialSelectedInteractorIds: room?.trialSelectedInteractorIds ?? sync.trialSelectedInteractorIds,
+    trialInteractionSelectionLimit: room?.trialInteractionSelectionLimit ?? sync.trialInteractionSelectionLimit,
     trialVotes: sync.trialVotes,
     serverTimeOffset,
+    dayPaused: !!(room?.dayPaused ?? sync.dayPaused),
+    dayRemainingMs: room?.dayRemainingMs ?? sync.dayRemainingMs,
   });
 
   const angel = useAngelRole({
@@ -1642,36 +1639,52 @@ export default function GameDaNghich() {
   const gameUIOpacity = isDuskTransitionPending ? 0 : 1;
   const gameUIPointerEvents = isDuskTransitionPending ? "none" : "auto";
 
-  const showCountdown = !sync.gameEnded && !isHost && !isCurrentPlayerDeadForNightActions && (
-    (isSequentialNight && currentNightTurnRole && doesNightTurnMatchMyRole && nightTurnRemainingSec !== null) ||
-    (isSimultaneousNight && !isWolfTeamRole && role && mySimultaneousDeadline && simultaneousRemainingSec !== null)
+  const hasNightAction = useMemo(() => {
+    if (!role) return false;
+    if (role === "Bán sói" && !isBanSoiOrWildConverted) return false;
+    if (isWolfTeamRole) return true;
+    if (role === "Linh sói") return !!sync.spiritWolfDecisionTargetId;
+    return NIGHT_ACTION_ROLE_SET.has(role) || ELEMENTAL_ROLE_SET.has(role);
+  }, [role, isBanSoiOrWildConverted, isWolfTeamRole, sync.spiritWolfDecisionTargetId]);
+
+  const hostNightRemainingSec = useMemo(() => {
+    if (phase !== "night") return null;
+    if (nightTurnPaused) {
+      if (nightTurnRemainingMs == null) return null;
+      return Math.max(0, Math.ceil(nightTurnRemainingMs / 1000));
+    }
+    if (!nightTurnDeadline) return null;
+    return Math.max(0, Math.ceil((nightTurnDeadline - nightTurnNow) / 1000));
+  }, [phase, nightTurnPaused, nightTurnRemainingMs, nightTurnDeadline, nightTurnNow]);
+
+  const countdownSeconds = isHost
+    ? hostNightRemainingSec
+    : (isSequentialNight ? nightTurnRemainingSec : simultaneousRemainingSec);
+
+  const showCountdown = !sync.gameEnded && (
+    isHost ? (phase === "night" && countdownSeconds !== null) : (
+      !isCurrentPlayerDeadForNightActions && (
+        (isSequentialNight && currentNightTurnRole && doesNightTurnMatchMyRole && nightTurnRemainingSec !== null) ||
+        (isSimultaneousNight && hasNightAction && simultaneousRemainingSec !== null)
+      )
+    )
   );
 
-  const countdownSeconds = isSequentialNight ? nightTurnRemainingSec : simultaneousRemainingSec;
+
 
   return (
     <div 
       className={`page-shell game-page${shouldShowRolePortrait ? " has-role-portrait" : ""}`} 
       style={{ 
-        padding: "1.25rem",
-        opacity: gameUIOpacity,
-        transition: "opacity 0.4s ease-in-out",
         pointerEvents: gameUIPointerEvents,
-        isolation: "isolate"
+        opacity: gameUIOpacity,
       }}
     >
       {(phase === "day" || phase === "dusk") && (
         <div
+          className="game-bg-layer"
           style={{
-            position: "fixed",
-            inset: 0,
-            backgroundImage: `url(${phase === "day" ? RoomBg : ChieuBg})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            backgroundRepeat: "no-repeat",
-            filter: "blur(4px)",
-            zIndex: -1,
-            transform: "scale(1.08)",
+            backgroundImage: `url(${phase === "day" ? RoomBg : ChieuBg})`
           }}
         />
       )}
@@ -1898,7 +1911,7 @@ export default function GameDaNghich() {
               )}
             </>
           ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: "2rem", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.9rem", flexWrap: "wrap" }}>
               {phase === "day" ? (
                 <h1 style={{ margin: 0, display: "flex", alignItems: "center" }}><AvifIcon name="🌞" style={{ marginRight: 8 }} /> Ngày {displayNightNumber}</h1>
               ) : (
@@ -1928,35 +1941,26 @@ export default function GameDaNghich() {
                   <div className="btn-content" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                     {isNightInfoVisible ? (
                       <>
-                        <span>👁️</span> Ẩn thông tin đêm
+                        <span>👁️</span> Ẩn màn hình
                       </>
                     ) : (
                       <>
-                        <span>👁️‍🗨️</span> Hiện thông tin đêm
+                        <span>👁️‍🗨️</span> Hiện màn hình
                       </>
                     )}
                   </div>
                 </button>
               )}
-              {showCountdown && (
-                <button className="visible border button-gradient" style={{ cursor: "default" }}>
-                  <div className="btn-content">
-                    Còn {countdownSeconds}s
-                  </div>
-                  <div className="border"></div>
-                  <div className="gradient-0"></div>
-                  <div className="gradient-1"></div>
-                  <div className="glass"></div>
-                  <div className="gradient-2">
-                    <div className="color-1 color" style={{ transform: "translate(3%, 54%)" }}></div>
-                    <div className="color-2 color" style={{ transform: "translate(-5%, 64%)" }}></div>
-                    <div className="color-3 color" style={{ transform: "translate(-100%, -60%)" }}></div>
-                    <div className="color-4 color" style={{ transform: "translate(-98%, 86%)" }}></div>
-                    <div className="color-5 color" style={{ transform: "translate(-13%, -27%)" }}></div>
-                    <div className="color-6 color" style={{ transform: "translate(6%, -39%)" }}></div>
-                  </div>
-                </button>
-              )}
+              <CountdownButton
+                showCountdown={!!showCountdown}
+                countdownSeconds={countdownSeconds}
+                isPaused={!!nightTurnPaused}
+              />
+              <CountdownButton
+                showCountdown={phase === "day" && !sync.gameEnded && dayVote.remainingSec !== null}
+                countdownSeconds={dayVote.remainingSec}
+                isPaused={!!dayVote.dayPaused}
+              />
             </div>
           )}
         </>
@@ -2219,12 +2223,29 @@ export default function GameDaNghich() {
             </button>
           )}
           {canHostToggleNightTimer && (
+            countdownSeconds !== null && countdownSeconds <= 0 ? (
+              <button
+                onClick={() => socket.emit("hostAddAllNightTurnTime", { roomId })}
+                disabled={isSequentialNight ? !currentNightTurnRole : false}
+                style={{ opacity: isSequentialNight && !currentNightTurnRole ? 0.6 : 1 }}
+              >
+                Cộng thêm thời gian
+              </button>
+            ) : (
+              <button
+                onClick={() => socket.emit("hostToggleNightTurnPause", { roomId })}
+                disabled={isSequentialNight ? !currentNightTurnRole : false}
+                style={{ opacity: isSequentialNight && !currentNightTurnRole ? 0.6 : 1 }}
+              >
+                {nightTurnPaused ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
+              </button>
+            )
+          )}
+          {phase === "day" && !sync.gameEnded && dayVote.remainingSec !== null && (
             <button
-              onClick={() => socket.emit("hostToggleNightTurnPause", { roomId })}
-              disabled={isSequentialNight ? !currentNightTurnRole : false}
-              style={{ opacity: isSequentialNight && !currentNightTurnRole ? 0.6 : 1 }}
+              onClick={() => socket.emit("hostToggleDayPause", { roomId })}
             >
-              {nightTurnPaused ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
+              {!!(room?.dayPaused ?? sync.dayPaused) ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
             </button>
           )}
           {canShowStartDayVotingControl && (

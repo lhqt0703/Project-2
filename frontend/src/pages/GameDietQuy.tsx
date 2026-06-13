@@ -24,6 +24,7 @@ import angleCircleRightSvg from "../assets/angle-circle-right.svg";
 import GridMotionOverlay from "../components/GridMotionOverlay";
 import RoleCompanionOverlay from "../components/RoleCompanionOverlay";
 import { AvifIcon } from "../components/AvifIcon";
+import { CountdownButton } from "../components/CountdownButton";
 
 
 const VIP_REAL_NAMES: Record<string, string> = {
@@ -523,7 +524,7 @@ export default function GameDietQuy() {
   }, [roomId, sync.gameEnded]);
 
   useEffect(() => {
-    if (sync.gameEnded || isHost || !room) return;
+    if (!sync.gameEnded || isHost || !room) return;
     if (frozenRoomSnapshot) return;
     setFrozenRoomSnapshot({
       ...room,
@@ -596,12 +597,11 @@ export default function GameDietQuy() {
 
   useEffect(() => {
     if (phase !== "night") return;
-    if (!currentNightTurnPlayerId) return;
     if (nightTurnPaused) return;
     setNightTurnNow(Date.now() + serverTimeOffset);
     const t = setInterval(() => setNightTurnNow(Date.now() + serverTimeOffset), 1000);
     return () => clearInterval(t);
-  }, [currentNightTurnPlayerId, nightTurnPaused, phase, serverTimeOffset]);
+  }, [nightTurnPaused, phase, serverTimeOffset]);
 
   const nightTurnRemainingSec = useMemo(() => {
     if (phase !== "night" || !currentNightTurnPlayerId) return null;
@@ -699,20 +699,22 @@ export default function GameDietQuy() {
     deadPlayers,
     dayVotes: sync.dayVotes,
     dayLocked: sync.dayLocked,
-    dayDiscussionDeadline: sync.dayDiscussionDeadline,
-    dayDeadline: sync.dayDeadline,
+    dayDiscussionDeadline: room?.dayDiscussionDeadline ?? sync.dayDiscussionDeadline,
+    dayDeadline: room?.dayDeadline ?? sync.dayDeadline,
     dayVoters: sync.dayVoters,
-    trialTargetId: sync.trialTargetId,
-    trialStage: sync.trialStage,
-    trialDefenseDeadline: sync.trialDefenseDeadline,
-    trialVerdictDeadline: sync.trialVerdictDeadline,
-    trialInteractionCut: sync.trialInteractionCut,
-    trialInteractionActiveIds: sync.trialInteractionActiveIds,
-    trialSelectedInteractorId: sync.trialSelectedInteractorId,
-    trialSelectedInteractorIds: sync.trialSelectedInteractorIds,
-    trialInteractionSelectionLimit: sync.trialInteractionSelectionLimit,
+    trialTargetId: room?.trialTargetId ?? sync.trialTargetId,
+    trialStage: room?.trialStage ?? sync.trialStage,
+    trialDefenseDeadline: room?.trialDefenseDeadline ?? sync.trialDefenseDeadline,
+    trialVerdictDeadline: room?.trialVerdictDeadline ?? sync.trialVerdictDeadline,
+    trialInteractionCut: room?.trialInteractionCut ?? sync.trialInteractionCut,
+    trialInteractionActiveIds: room?.trialInteractionActiveIds ?? sync.trialInteractionActiveIds,
+    trialSelectedInteractorId: room?.trialSelectedInteractorId ?? sync.trialSelectedInteractorId,
+    trialSelectedInteractorIds: room?.trialSelectedInteractorIds ?? sync.trialSelectedInteractorIds,
+    trialInteractionSelectionLimit: room?.trialInteractionSelectionLimit ?? sync.trialInteractionSelectionLimit,
     trialVotes: sync.trialVotes,
     serverTimeOffset,
+    dayPaused: !!(room?.dayPaused ?? sync.dayPaused),
+    dayRemainingMs: room?.dayRemainingMs ?? sync.dayRemainingMs,
   });
 
   const lastDayVoteNoticeSeqRef = useRef(0);
@@ -988,8 +990,14 @@ export default function GameDietQuy() {
   const gameUIPointerEvents = isDuskTransitionPending ? "none" : "auto";
   const deadPlayersOverrideForRender = displayDeadPlayers;
 
-  const showCountdown = phase === "night" && currentNightTurnPlayerId === clientId && !isHost && !isCurrentPlayerDeadForNightActions && nightTurnRemainingSec !== null && !sync.gameEnded;
   const countdownSeconds = nightTurnRemainingSec;
+  const showCountdown = !sync.gameEnded && (
+    isHost ? (phase === "night" && countdownSeconds !== null) : (
+      phase === "night" && currentNightTurnPlayerId === clientId && !isCurrentPlayerDeadForNightActions && countdownSeconds !== null
+    )
+  );
+
+
 
   return (
     <div
@@ -1211,25 +1219,16 @@ export default function GameDietQuy() {
               ) : (
                 <h1 style={{ margin: 0, display: "flex", alignItems: "center" }}><AvifIcon name="🌙" style={{ marginRight: 8 }} /> Đêm {displayNightNumber}</h1>
               )}
-              {showCountdown && (
-                <button className="visible border button-gradient" style={{ cursor: "default" }}>
-                  <div className="btn-content">
-                    Còn {countdownSeconds}s
-                  </div>
-                  <div className="border"></div>
-                  <div className="gradient-0"></div>
-                  <div className="gradient-1"></div>
-                  <div className="glass"></div>
-                  <div className="gradient-2">
-                    <div className="color-1 color" style={{ transform: "translate(3%, 54%)" }}></div>
-                    <div className="color-2 color" style={{ transform: "translate(-5%, 64%)" }}></div>
-                    <div className="color-3 color" style={{ transform: "translate(-100%, -60%)" }}></div>
-                    <div className="color-4 color" style={{ transform: "translate(-98%, 86%)" }}></div>
-                    <div className="color-5 color" style={{ transform: "translate(-13%, -27%)" }}></div>
-                    <div className="color-6 color" style={{ transform: "translate(6%, -39%)" }}></div>
-                  </div>
-                </button>
-              )}
+              <CountdownButton
+                showCountdown={!!showCountdown}
+                countdownSeconds={countdownSeconds}
+                isPaused={!!nightTurnPaused}
+              />
+              <CountdownButton
+                showCountdown={phase === "day" && !sync.gameEnded && dayVote.remainingSec !== null}
+                countdownSeconds={dayVote.remainingSec}
+                isPaused={!!dayVote.dayPaused}
+              />
             </div>
           )}
         </>
@@ -1634,12 +1633,29 @@ export default function GameDietQuy() {
             </button>
           )}
           {phase === "night" && !sync.gameEnded && (
+            countdownSeconds !== null && countdownSeconds <= 0 ? (
+              <button
+                onClick={() => socket.emit("hostAddAllNightTurnTime", { roomId })}
+                disabled={!currentNightTurnPlayerId}
+                style={{ opacity: currentNightTurnPlayerId ? 1 : 0.6 }}
+              >
+                Cộng thêm thời gian
+              </button>
+            ) : (
+              <button
+                onClick={() => socket.emit("hostToggleNightTurnPause", { roomId })}
+                disabled={!currentNightTurnPlayerId}
+                style={{ opacity: currentNightTurnPlayerId ? 1 : 0.6 }}
+              >
+                {nightTurnPaused ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
+              </button>
+            )
+          )}
+          {phase === "day" && !sync.gameEnded && dayVote.remainingSec !== null && (
             <button
-              onClick={() => socket.emit("hostToggleNightTurnPause", { roomId })}
-              disabled={!currentNightTurnPlayerId}
-              style={{ opacity: currentNightTurnPlayerId ? 1 : 0.6 }}
+              onClick={() => socket.emit("hostToggleDayPause", { roomId })}
             >
-              {nightTurnPaused ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
+              {!!(room?.dayPaused ?? sync.dayPaused) ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
             </button>
           )}
           {canShowStartDayVotingControl && (

@@ -68,27 +68,30 @@ function normalizeDurationSec(value: number, fallback: number, minSec = 0) {
   return Math.max(minSec, Math.min(NIGHT_ACTION_DURATION_MAX_SEC, rounded));
 }
 
-function clampNonWolfNightActionDurationSec(value: number, allNightActionsSimultaneous: boolean, isDietQuy = false) {
-  // Chế độ Diệt Quỷ cho phép 0s (không giới hạn thời gian)
-  const minSec = (allNightActionsSimultaneous || isDietQuy) ? 0 : NIGHT_ACTION_DURATION_STEP_SEC;
-  return normalizeDurationSec(value, DEFAULT_ROOM_GAME_RULES.nonWolfNightActionDurationSec, minSec);
+function clampNonWolfNightActionDurationSec(value: number, allNightActionsSimultaneous: boolean, isDietQuy = false, isSoiMu = false) {
+  // Chế độ Diệt Quỷ hoặc Sói Mù cho phép 0s (không giới hạn thời gian)
+  const minSec = (allNightActionsSimultaneous || isDietQuy || isSoiMu) ? 0 : NIGHT_ACTION_DURATION_STEP_SEC;
+  const fallback = isSoiMu ? 30 : DEFAULT_ROOM_GAME_RULES.nonWolfNightActionDurationSec;
+  return normalizeDurationSec(value, fallback, minSec);
 }
 
-function clampWolfNightActionDurationSec(value: number) {
-  return normalizeDurationSec(value, DEFAULT_ROOM_GAME_RULES.wolfNightActionDurationSec);
+function clampWolfNightActionDurationSec(value: number, isSoiMu = false) {
+  const fallback = isSoiMu ? 30 : DEFAULT_ROOM_GAME_RULES.wolfNightActionDurationSec;
+  return normalizeDurationSec(value, fallback);
 }
 
 function normalizeNightActionDurations(input: {
   allNightActionsSimultaneous: boolean;
   nonWolfNightActionDurationSec: number;
   wolfNightActionDurationSec: number;
-}, isDietQuy = false) {
+}, isDietQuy = false, isSoiMu = false) {
   const nonWolf = clampNonWolfNightActionDurationSec(
     input.nonWolfNightActionDurationSec,
     input.allNightActionsSimultaneous,
-    isDietQuy
+    isDietQuy,
+    isSoiMu
   );
-  let wolf = clampWolfNightActionDurationSec(input.wolfNightActionDurationSec);
+  let wolf = clampWolfNightActionDurationSec(input.wolfNightActionDurationSec, isSoiMu);
   if (wolf > nonWolf) wolf = nonWolf;
   return {
     nonWolfNightActionDurationSec: nonWolf,
@@ -130,9 +133,10 @@ export default function GameRulesModal({
   onClose: () => void;
   saveText?: string;
   readOnly?: boolean;
-  gameMode?: "da_nghich" | "diet_quy";
+  gameMode?: "da_nghich" | "diet_quy" | "soi_mu";
 }) {
   const isDietQuy = gameMode === "diet_quy";
+  const isSoiMu = gameMode === "soi_mu";
   const [draftRules, setDraftRules] = useState<RoomGameRules>(initialRules);
   const [draggedRole, setDraggedRole] = useState<NightActionOrderRole | null>(null);
   const [dragOverRole, setDragOverRole] = useState<NightActionOrderRole | null>(null);
@@ -146,7 +150,7 @@ export default function GameRulesModal({
       allNightActionsSimultaneous: initialRules.allNightActionsSimultaneous,
       nonWolfNightActionDurationSec: initialRules.nonWolfNightActionDurationSec,
       wolfNightActionDurationSec: initialRules.wolfNightActionDurationSec,
-    }, isDietQuy);
+    }, isDietQuy, isSoiMu);
     setDraftRules({
       ...DEFAULT_ROOM_GAME_RULES,
       ...initialRules,
@@ -161,7 +165,7 @@ export default function GameRulesModal({
       nonWolfNightActionDurationSec: normalizedDurations.nonWolfNightActionDurationSec,
       wolfNightActionDurationSec: normalizedDurations.wolfNightActionDurationSec,
     });
-  }, [initialRules, open, selectableNightActionRoles, isDietQuy]);
+  }, [initialRules, open, selectableNightActionRoles, isDietQuy, isSoiMu]);
 
   const includedElementalSummary = useMemo(() => {
     const included = ELEMENTAL_ROLE_ORDER.filter((role) => includedElementalRoles.includes(role));
@@ -188,7 +192,7 @@ export default function GameRulesModal({
           key === "nonWolfNightActionDurationSec" ? value : prev.nonWolfNightActionDurationSec,
         wolfNightActionDurationSec:
           key === "wolfNightActionDurationSec" ? value : prev.wolfNightActionDurationSec,
-      }, isDietQuy);
+      }, isDietQuy, isSoiMu);
       return { ...prev, ...normalizedDurations } as RoomGameRules;
     });
   };
@@ -223,6 +227,26 @@ export default function GameRulesModal({
         banSoiBecomeWolfEvenIfHealed: false,
         loveCanChoosePartnerFirstTwoNights: false,
         villageChiefKnowsWolfBite: false,
+        witchSeeProtectorImmortalBite: false,
+        hunterShotPublicInDay: false,
+        merchantSingleUseItems: false,
+        merchantHideReceivedItemName: false,
+        wolfNightActionDurationSec: draftRules.nonWolfNightActionDurationSec,
+        forceWolfBiteFirstNight: draftRules.twoHeartsFirstTwoNights && draftRules.forceWolfBiteFirstNight,
+      });
+      return;
+    }
+    if (isSoiMu) {
+      onSave({
+        ...draftRules,
+        allNightActionsSimultaneous: true,
+        witchSeeBiteOnlyIfHasHealPotion: false,
+        witchBonusTimeRequiresUsablePotion: false,
+        witchHideProtectedBiteInSimultaneous: false,
+        witchHideProtectedBiteWhenSequential: false,
+        trialInteractionSelectionLimit: 0,
+        banSoiBecomeWolfEvenIfHealed: false,
+        loveCanChoosePartnerFirstTwoNights: false,
         witchSeeProtectorImmortalBite: false,
         hunterShotPublicInDay: false,
         merchantSingleUseItems: false,
@@ -284,7 +308,7 @@ export default function GameRulesModal({
           overflowY: "auto",
           borderRadius: 24,
           border: "1px solid rgba(255,255,255,0.14)",
-          background: "linear-gradient(180deg, rgba(15,20,36,0.98), rgba(8,12,24,0.98))",
+          background: "linear-gradient(180deg, rgba(15,20,36,0.4), rgba(8,12,24,0.6))",
           boxShadow: "0 24px 80px rgba(0,0,0,0.45)",
           color: "#f6f7fb",
         }}
@@ -354,6 +378,94 @@ export default function GameRulesModal({
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian hành động trong đêm</div>
                   <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
                     Thời gian giới hạn cho mỗi lượt hành động ban đêm (giây).
+                  </div>
+                </div>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={60}
+                  step={10}
+                  value={draftRules.nonWolfNightActionDurationSec}
+                  disabled={readOnly}
+                  onChange={(e) => {
+                    if (readOnly) return;
+                    const val = Number(e.target.value);
+                    setDraftRules(prev => ({
+                      ...prev,
+                      nonWolfNightActionDurationSec: val,
+                      wolfNightActionDurationSec: val
+                    }));
+                  }}
+                  style={{ width: 96, padding: "10px 12px" }}
+                />
+              </label>
+            </>
+          ) : isSoiMu ? (
+            <>
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả nhân vật sẽ có 2 máu trong 2 đêm đầu</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Đêm 1 bị sói cắn sẽ mất 1 máu. Đêm 2 bị sói cắn sẽ mất 2 máu và chết ngay cả khi đã mất 1 máu ở đêm 1.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.twoHeartsFirstTwoNights}
+                  disabled={readOnly}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    if (readOnly) return;
+                    setDraftRules((prev) => ({
+                      ...prev,
+                      twoHeartsFirstTwoNights: checked,
+                      forceWolfBiteFirstNight: checked ? prev.forceWolfBiteFirstNight : false,
+                    }));
+                  }}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              {draftRules.twoHeartsFirstTwoNights && (
+                <label style={rowStyle()}>
+                  <div>
+                    <div style={{ fontWeight: 700, marginBottom: 4 }}>Bắt buộc phe sói cắn trong đêm đầu</div>
+                    <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                      Nếu Sói không chọn ai, hệ thống sẽ chọn ngẫu nhiên một mục tiêu hợp lệ. Nếu hòa phiếu, hệ thống chọn ngẫu nhiên trong các mục tiêu đang hòa.
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={draftRules.forceWolfBiteFirstNight}
+                    disabled={readOnly}
+                    onChange={(e) => updateRule("forceWolfBiteFirstNight", e.target.checked)}
+                    style={{ width: 20, height: 20, marginTop: 2 }}
+                  />
+                </label>
+              )}
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Trưởng làng biết mình đã bị sói cắn</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi bật, Trưởng làng và quản trò sẽ thấy máu còn 1 tim trong đêm bị cắn, rồi tim rung vào đêm kế tiếp trước khi hiệu ứng cắn trễ kết toán.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.villageChiefKnowsWolfBite}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("villageChiefKnowsWolfBite", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian hành động trong đêm</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Thời gian giới hạn cho lượt hành động ban đêm (giây) của tất cả mọi người chơi.
                   </div>
                 </div>
                 <input
@@ -542,67 +654,67 @@ export default function GameRulesModal({
                     {draftRules.nightActionOrder.map((role, index) => {
                       const pinned = role === "Thần tình yêu";
                       return (
-                      <div
-                        key={role}
-                        draggable={!readOnly && !pinned}
-                        onDragStart={() => {
-                          if (readOnly || pinned) return;
-                          setDraggedRole(role);
-                          setDragOverRole(role);
-                        }}
-                        onDragOver={(e) => {
-                          if (readOnly || pinned) return;
-                          e.preventDefault();
-                          if (dragOverRole !== role) setDragOverRole(role);
-                        }}
-                        onDrop={(e) => {
-                          if (readOnly || pinned) return;
-                          e.preventDefault();
-                          if (!draggedRole) return;
-                          reorderRoles(draggedRole, role);
-                          setDraggedRole(null);
-                          setDragOverRole(null);
-                        }}
-                        onDragEnd={() => {
-                          setDraggedRole(null);
-                          setDragOverRole(null);
-                        }}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 12,
-                          padding: "12px 14px",
-                          borderRadius: 12,
-                          background: draggedRole === role ? "rgba(246,200,95,0.16)" : "rgba(255,255,255,0.05)",
-                          border: dragOverRole === role ? "1px solid rgba(246,200,95,0.9)" : "1px solid rgba(255,255,255,0.08)",
-                          cursor: readOnly || pinned ? "default" : "grab",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                          <div
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 999,
-                              display: "grid",
-                              placeItems: "center",
-                              background: "rgba(255,255,255,0.1)",
-                              fontWeight: 800,
-                            }}
-                          >
-                            {index + 1}
-                          </div>
-                          <div>
-                            <div style={{ fontWeight: 700 }}>{NIGHT_ACTION_ROLE_LABELS[role]}</div>
-                            <div style={{ fontSize: 12, color: "rgba(246,247,251,0.62)" }}>
-                              {role === ELEMENTAL_GROUP_ROLE ? includedElementalSummary : role}
+                        <div
+                          key={role}
+                          draggable={!readOnly && !pinned}
+                          onDragStart={() => {
+                            if (readOnly || pinned) return;
+                            setDraggedRole(role);
+                            setDragOverRole(role);
+                          }}
+                          onDragOver={(e) => {
+                            if (readOnly || pinned) return;
+                            e.preventDefault();
+                            if (dragOverRole !== role) setDragOverRole(role);
+                          }}
+                          onDrop={(e) => {
+                            if (readOnly || pinned) return;
+                            e.preventDefault();
+                            if (!draggedRole) return;
+                            reorderRoles(draggedRole, role);
+                            setDraggedRole(null);
+                            setDragOverRole(null);
+                          }}
+                          onDragEnd={() => {
+                            setDraggedRole(null);
+                            setDragOverRole(null);
+                          }}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            padding: "12px 14px",
+                            borderRadius: 12,
+                            background: draggedRole === role ? "rgba(246,200,95,0.16)" : "rgba(255,255,255,0.05)",
+                            border: dragOverRole === role ? "1px solid rgba(246,200,95,0.9)" : "1px solid rgba(255,255,255,0.08)",
+                            cursor: readOnly || pinned ? "default" : "grab",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <div
+                              style={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: 999,
+                                display: "grid",
+                                placeItems: "center",
+                                background: "rgba(255,255,255,0.1)",
+                                fontWeight: 800,
+                              }}
+                            >
+                              {index + 1}
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 700 }}>{NIGHT_ACTION_ROLE_LABELS[role]}</div>
+                              <div style={{ fontSize: 12, color: "rgba(246,247,251,0.62)" }}>
+                                {role === ELEMENTAL_GROUP_ROLE ? includedElementalSummary : role}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {!readOnly && !pinned && <div style={{ fontSize: 18, opacity: 0.6, userSelect: "none" }}>⋮⋮</div>}
-                      </div>
+                          {!readOnly && !pinned && <div style={{ fontSize: 18, opacity: 0.6, userSelect: "none" }}>⋮⋮</div>}
+                        </div>
                       );
                     })}
                   </div>

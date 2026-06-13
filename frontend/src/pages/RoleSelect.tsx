@@ -10,6 +10,8 @@ import ArrowLeft from "../assets/arrow-left.svg";
 const NON_VILLAGER_ROLES = ["Dân làng", "Sói", "Bán sói", "Sói con", "Sói Dại", "Linh sói", "Kẻ bị nguyền", "Tay Buôn", "Thiên Sứ", "Trưởng làng", "Hộ nhân", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Thần tình yêu"] as const;
 type NonVillagerRole = (typeof NON_VILLAGER_ROLES)[number];
 
+const SOI_MU_ROLES = ["Dân làng", "Sói", "Bảo vệ", "Phù thủy", "Tiên tri", "Trưởng làng", "Tay Buôn"] as const;
+
 const DIET_QUY_TOWNSFOLK = ["Thợ giặt", "Thủ thư", "Điều tra viên", "Đầu bếp", "Đồng cảm", "Thầy bói", "Chôn cất", "Nhà sư", "Nuôi quạ", "Trinh nữ", "Diệt quỷ", "Chiến sĩ", "Thị trưởng"] as const;
 const DIET_QUY_TRAVELERS = ["Người ẩn dật", "Thánh nhân"] as const;
 const DIET_QUY_MINIONS = ["Độc thủ", "Gián điệp", "Phò"] as const;
@@ -170,7 +172,7 @@ export default function RoleSelect() {
     roles?: string[];
     phase?: string;
     gameOver?: boolean;
-    gameMode?: "da_nghich" | "diet_quy";
+    gameMode?: "da_nghich" | "diet_quy" | "soi_mu";
     roleVotes?: Record<string, string[]>;
   } | null>(null);
   const [pendingRolesApply, setPendingRolesApply] = useState<string[] | null>(null);
@@ -199,7 +201,7 @@ export default function RoleSelect() {
       hostId: string;
       players: PlayerInfo[];
       roles?: string[];
-      gameMode?: "da_nghich" | "diet_quy";
+      gameMode?: "da_nghich" | "diet_quy" | "soi_mu";
       roleVotes?: Record<string, string[]>;
     }
 
@@ -401,7 +403,7 @@ export default function RoleSelect() {
         <div className="card-gradient-overlay" />
 
         <div className="role-name-banner" title={role}>
-          {role} {isCountable && isSelected && amIHost && `x${count}`}
+          {roomSnapshot?.gameMode === "soi_mu" && role === "Tay Buôn" ? "Ariana" : role} {isCountable && isSelected && amIHost && `x${count}`}
         </div>
 
         {!isSelected && hasVotes && (
@@ -525,6 +527,10 @@ export default function RoleSelect() {
               {DIET_QUY_DEMON.map((role) => renderRoleCard(role))}
             </div>
           </div>
+        </div>
+      ) : roomSnapshot?.gameMode === "soi_mu" ? (
+        <div className="roleselect-grid">
+          {SOI_MU_ROLES.map((role) => renderRoleCard(role))}
         </div>
       ) : (
         <div className="roleselect-grid">

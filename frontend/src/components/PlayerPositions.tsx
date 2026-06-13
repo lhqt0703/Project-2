@@ -1185,7 +1185,8 @@ export default function PlayerPositions({
         style={{
           width: "100%",
           height: frameHeightPx,
-          background: "var(--player-position-frame-bg, var(--surface-muted))",
+          background: "rgb(21 24 33 / 67%)",
+          backdropFilter: "blur(8px)",
           borderRadius: 10,
           position: "relative",
           touchAction: "none",
@@ -1468,7 +1469,7 @@ export default function PlayerPositions({
                       height: "115%",
                       objectFit: "contain",
                       objectPosition: "bottom center",
-                      clipPath: "inset(0 0 20% 0)",
+                      clipPath: "inset(0 0 40% 0)",
                       pointerEvents: "none",
                       zIndex: 0,
                     }}
@@ -1732,7 +1733,7 @@ export default function PlayerPositions({
                       color: isDead ? "#94a3b8" : "#f8fafc",
                       fontFamily: "'Inter', system-ui, sans-serif",
                       letterSpacing: "-0.01em",
-                      textShadow: (avatarUrl || maskedAvatarUrl) ? "0 2px 4px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.95)" : "0 1px 2px rgba(0,0,0,0.6)",
+                      textShadow: (avatarUrl || maskedAvatarUrl) ? "0 2px 4px rgba(0,0,0,0.95), 0 0 6px rgba(0,0,0,0.95)" : "0 1px 2px rgba(0,0,0,0.6)",
                     }}>{displayName}</div>
                     <div style={{ opacity: isDead ? 0.3 : 0.5, fontSize: playerSubFontSizePx, textShadow: (avatarUrl || maskedAvatarUrl) ? "0 1px 2px rgba(0,0,0,0.9)" : undefined }}>
                       {p.id === clientId ? "(Bạn)" : ""}
@@ -1744,7 +1745,6 @@ export default function PlayerPositions({
           );
 
           const tokenProps = {
-            key: pos.playerId,
             onPointerDown: (e: React.PointerEvent) => {
               lastPointerTypeRef.current = e.pointerType || null;
               if (!isEditor) return;
@@ -1819,7 +1819,7 @@ export default function PlayerPositions({
           };
 
           return (
-            <div {...tokenProps}>
+            <div key={pos.playerId} {...tokenProps}>
               {innerContent}
             </div>
           );

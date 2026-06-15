@@ -24,7 +24,7 @@ import {
   canPlayerActAtNight,
   isWolfAlignedPlayer,
 } from "./roomState.js";
-import { LOVE_ROLE, emitLoveStateToPlayer, isLovePairMemberAwayAt, isLovePartnerChoiceNight } from "./love.js";
+import { LOVE_ROLE, emitLoveStateToPlayer, isLovePairMemberAwayAt, isLovePartnerChoiceNight, getLovePairIds } from "./love.js";
 import {
   CURSED_ROLE,
   MERCHANT_ROLE,
@@ -418,13 +418,117 @@ export function isPublicGameLogEntry(entry: GameLogEntry) {
   return entry.phase === "day" || PUBLIC_NIGHT_GAME_LOG_TYPES.has(entry.type);
 }
 
-function getPublicDayGameLog(room: Room): GameLogNight[] {
-  return (room.gameLog || [])
-    .map((nightLog) => ({
+function getGameLogForPlayer(room: Room, playerId: string): GameLogNight[] {
+  if (room.isReplay || room.gameOver) {
+    return room.gameLog || [];
+  }
+  
+  const myRole = room.playerRoles?.[playerId];
+  const wolves = room.wolves || [];
+  const isWolf = wolves.includes(playerId);
+  const isElemental = ELEMENTAL_ROLE_SET.has(myRole || "");
+  const isCupid = myRole === "Thần tình yêu";
+  const pair = getLovePairIds(room);
+  const isLover = pair ? pair.includes(playerId) : false;
+
+  return (room.gameLog || []).map((nightLog) => {
+    const filteredEntries = (nightLog.entries || []).filter((entry) => {
+      if (entry.phase === "day") return true;
+
+      // 1. Mysterious force
+      if (entry.type === "mysterious_force_eliminated") {
+        return true;
+      }
+
+      // 2. Angel revive
+      if (entry.type === "angel_revive_activated") {
+        return true;
+      }
+
+      // 3. Phe sói
+      if (isWolf) {
+        if (
+          entry.type === "wolf_vote" ||
+          entry.type === "wolf_result" ||
+          entry.type === "bonus_bite" ||
+          entry.type === "ban_soi_aligned" ||
+          entry.type === "wild_wolf_conversion"
+        ) {
+          return true;
+        }
+      }
+
+      // 4. Phe dân làng nguyên tố
+      if (isElemental && entry.type === "elemental_buff_vote") {
+        return true;
+      }
+
+      // 5. Thần tình yêu và Cặp đôi
+      if (isCupid && entry.type === "love_pair") {
+        return true;
+      }
+      if (isLover) {
+        if (
+          entry.type === "love_pair" ||
+          entry.type === "love_escape_vote" ||
+          entry.type === "love_escape_missed" ||
+          entry.type === "love_escape"
+        ) {
+          return true;
+        }
+      }
+
+      // 6. Tay buôn và Người nhận
+      if (myRole === "Tay Buôn" && entry.type === "merchant_trade_offer" && "actorId" in entry && entry.actorId === playerId) {
+        return true;
+      }
+      if (entry.type === "merchant_trade_offer" && "targetId" in entry && entry.targetId === playerId) {
+        return true;
+      }
+      if (entry.type === "merchant_item_received" && "targetId" in entry && entry.targetId === playerId) {
+        const hideItem = room.gameRules?.merchantHideReceivedItemName === true;
+        if (!hideItem) {
+          return true;
+        }
+      }
+      if (entry.type === "merchant_item_used" && entry.itemId === "poppy-glasses" && "actorId" in entry && entry.actorId === playerId) {
+        return true;
+      }
+      if (entry.type === "merchant_item_used" && entry.itemId === "gunpowder-barrel" && "sourceId" in entry && entry.sourceId === playerId) {
+        const hideItem = room.gameRules?.merchantHideReceivedItemName === true;
+        if (!hideItem) {
+          return true;
+        }
+      }
+
+      // 7. Extra time
+      if (entry.type === "night_action_extra_time" && "targetId" in entry && entry.targetId === playerId) {
+        return true;
+      }
+
+      // 8. Các hành động đêm khác mà bản thân là actor
+      if ("actorId" in entry && entry.actorId === playerId) {
+        if (
+          entry.type !== "merchant_trade_response" &&
+          entry.type !== "merchant_win_condition_completed"
+        ) {
+          return true;
+        }
+      }
+
+      // 9. Public night events (như saved_by_guardian, saved_by_witch, eliminated)
+      if (PUBLIC_NIGHT_GAME_LOG_TYPES.has(entry.type)) {
+        return true;
+      }
+
+      return false;
+    });
+
+    return {
       ...nightLog,
-      entries: (nightLog.entries || []).filter((entry) => isPublicGameLogEntry(entry)),
-    }))
-    .filter((nightLog) => nightLog.entries.length > 0);
+      entries: filteredEntries,
+    };
+  });
 }
 
 export function emitPublicDayGameLogToSocket(roomId: string, socketId: string) {
@@ -432,7 +536,7 @@ export function emitPublicDayGameLogToSocket(roomId: string, socketId: string) {
   if (!ctx) return;
   const room = ctx.rooms[roomId];
   if (!room) return;
-  const nights = room.isReplay ? (room.gameLog || []) : getPublicDayGameLog(room);
+  const nights = getGameLogForPlayer(room, socketId);
   ctx.io.to(socketId).emit("gameLogUpdated", { roomId, nights });
 }
 
@@ -441,9 +545,9 @@ export function emitPublicDayGameLogToRoom(roomId: string) {
   if (!ctx) return;
   const room = ctx.rooms[roomId];
   if (!room) return;
-  const nights = room.isReplay ? (room.gameLog || []) : getPublicDayGameLog(room);
   for (const player of room.players || []) {
     if (player.id === room.hostId) continue;
+    const nights = getGameLogForPlayer(room, player.id);
     ctx.io.to(player.id).emit("gameLogUpdated", { roomId, nights });
   }
 }
@@ -678,6 +782,11 @@ export function syncPrivateRoleStateForSocket(
 
   if (role === CURSED_ROLE) {
     emitCursedState(roomId, playerId);
+  }
+
+  if (role === "Tiên tri") {
+    const results = room.seerResultsTonight?.[playerId] || [];
+    socket.emit("seerResults", results);
   }
 
   emitMerchantPrivateState(roomId, playerId);

@@ -11,8 +11,8 @@ import { AvifIcon } from "./AvifIcon";
 import type { RoomGameRules } from "../context/RoomContext";
 
 
-type ViewMode = "roles" | "names-roles" | "real-names";
-const ViewModeContext = createContext<ViewMode>("names-roles");
+type ViewMode = "real-names" | "nick-names" | "real-names-roles" | "nick-names-roles";
+const ViewModeContext = createContext<ViewMode>("nick-names");
 const RealNamesContext = createContext<Record<string, string>>({});
 
 function getBuffLabel(buffId: string): string {
@@ -190,14 +190,15 @@ function getRolePlayerText(
   roleOverride?: string | null,
   showRolesOnly?: boolean,
   realNamesById?: Record<string, string>,
-  isRealNamesMode?: boolean
+  isRealNamesMode?: boolean,
+  showRoles?: boolean
 ): string {
   const roleName = roleOverride || getRoleName(playerId, rolesByPlayerId);
   if (showRolesOnly) return roleName;
   const name = (isRealNamesMode && realNamesById?.[playerId])
     ? realNamesById[playerId]
     : getPlayerName(playerId, playerNamesById);
-  return `${name} ${roleName}`;
+  return showRoles ? `${name} ${roleName}` : name;
 }
 
 function getRolePlayersText(
@@ -206,10 +207,11 @@ function getRolePlayersText(
   playerNamesById: PlayerNamesById,
   showRolesOnly?: boolean,
   realNamesById?: Record<string, string>,
-  isRealNamesMode?: boolean
+  isRealNamesMode?: boolean,
+  showRoles?: boolean
 ): string {
   if (!playerIds || playerIds.length === 0) return "(không rõ)";
-  return playerIds.map((id) => getRolePlayerText(id, rolesByPlayerId, playerNamesById, null, showRolesOnly, realNamesById, isRealNamesMode)).join(", ");
+  return playerIds.map((id) => getRolePlayerText(id, rolesByPlayerId, playerNamesById, null, showRolesOnly, realNamesById, isRealNamesMode, showRoles)).join(", ");
 }
 
 function getDefaultTargetRoleDisplayOrder(playerId: string, playerNamesById: PlayerNamesById): TargetRoleDisplayOrder {
@@ -543,8 +545,9 @@ function RoleSpan({
   const realNamesById = useContext(RealNamesContext);
   
   const viewMode = viewModeContext;
-  const isRealNamesMode = viewMode === "real-names";
-  const showRolesOnly = showRolesOnlyProp ?? (viewMode === "roles");
+  const isRealNamesMode = viewMode === "real-names" || viewMode === "real-names-roles";
+  const showRoles = viewMode === "real-names-roles" || viewMode === "nick-names-roles";
+  const showRolesOnly = showRolesOnlyProp ?? false;
 
   const roleName = roleOverride || getRoleName(playerId, rolesByPlayerId);
   const playerName = (isRealNamesMode && realNamesById[playerId])
@@ -553,13 +556,15 @@ function RoleSpan({
   const displayText =
     showRolesOnly
       ? roleName
-      : displayMode === "player"
+      : !showRoles
         ? playerName
-        : displayMode === "player-role"
-          ? `${playerName} ${roleName}`
-          : displayMode === "role-player"
-            ? `${roleName} ${playerName}`
-            : roleName;
+        : displayMode === "player"
+          ? playerName
+          : displayMode === "player-role"
+            ? `${playerName} ${roleName}`
+            : displayMode === "role-player"
+              ? `${roleName} ${playerName}`
+              : roleName;
 
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -595,7 +600,8 @@ function RoleSpan({
           color: "var(--accent, #6c5ce7)",
           textDecorationStyle: "dotted",
           opacity: dimmed ? 0.28 : 1,
-          transition: "opacity 180ms ease",
+          transition: "opacity 280ms ease",
+          filter: dimmed ? "blur(4px)" : "none",
         }}
       >
         {displayText}
@@ -667,8 +673,7 @@ function RolesListSpan({
   onHighlightPlayer: (payload: HighlightPayload) => void;
   showRolesOnly?: boolean;
 }) {
-  const viewMode = useContext(ViewModeContext);
-  const showRolesOnly = showRolesOnlyProp ?? (viewMode === "roles");
+  const showRolesOnly = showRolesOnlyProp ?? false;
 
   return (
     <>
@@ -754,8 +759,9 @@ function LogEntryLine({
 }) {
   const viewMode = useContext(ViewModeContext);
   const realNamesById = useContext(RealNamesContext);
-  const showRolesOnly = viewMode === "roles";
-  const isRealNamesMode = viewMode === "real-names";
+  const showRolesOnly = false;
+  const isRealNamesMode = viewMode === "real-names" || viewMode === "real-names-roles";
+  const showRoles = viewMode === "real-names-roles" || viewMode === "nick-names-roles";
   const isDayPhase = entry.phase === "day";
   const getTargetDisplayMode = (playerId: string) =>
     playerOnlyDayLogs && isDayPhase
@@ -768,7 +774,7 @@ function LogEntryLine({
   const getVotersText = (playerIds: string[] | undefined) =>
     isDayPhase
       ? getPlayerNamesText(playerIds, playerNamesById, rolesByPlayerId, showRolesOnly, realNamesById, isRealNamesMode)
-      : getRolePlayersText(playerIds, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode);
+      : getRolePlayersText(playerIds, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode, showRoles);
 
   const isCauseLineForFocus = (f: EliminationFocus) => {
     const causeTypes = new Set((f.causes || []).map((c) => c.type));
@@ -786,7 +792,8 @@ function LogEntryLine({
   const dimmed = !!eliminationFocus && (eliminationFocus.night !== night || !isCauseLineForFocus(eliminationFocus));
   const lineStyle: React.CSSProperties = {
     opacity: dimmed ? 0.28 : 1,
-    transition: "opacity 180ms ease",
+    transition: "opacity 280ms ease",
+    filter: dimmed ? "blur(4px)" : "none",
   };
 
   switch (entry.type) {
@@ -871,7 +878,7 @@ function LogEntryLine({
         <LogItem emoji="🐺" style={lineStyle}>
           Các sói nhắm đến:{" "}
           {entry.voteBreakdown.map((v, idx) => {
-            const selectedByText = `Bị chọn bởi: ${getRolePlayersText(v.voterIds, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode)}`;
+            const selectedByText = `Bị chọn bởi: ${getRolePlayersText(v.voterIds, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode, showRoles)}`;
             return (
               <span key={v.targetId}>
                 <RoleSpan
@@ -945,7 +952,7 @@ function LogEntryLine({
             getTooltipDetail={isPlayerView ? undefined : (pid) => {
               const selectedBy = entry.selectedByByTarget?.[pid] || [];
               if (!selectedBy.length) return undefined;
-              return `Bị chọn bởi: ${getRolePlayersText(selectedBy, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode)}`;
+              return `Bị chọn bởi: ${getRolePlayersText(selectedBy, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode, showRoles)}`;
             }}
             getSecondaryHighlightIds={isPlayerView ? undefined : (pid) => entry.selectedByByTarget?.[pid] || []}
             getDisplayMode={isPlayerView ? () => "player" : getTargetDisplayMode}
@@ -1666,11 +1673,18 @@ function LogEntryLine({
       );
 
     case "eliminated": {
-      const hideEliminationDetails = playerOnlyDayLogs && isDayPhase;
+      const hideEliminationDetails = playerOnlyDayLogs;
       const targetIds = entry.targetIds || [];
       const renderEliminatedTarget = (pid: string, idx: number) => {
         const causes = entry.causesByTarget?.[pid] || [];
-        const causeText = getEliminationCauseText(causes, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode);
+        const elimFocus: EliminationFocus = {
+          night,
+          targetId: pid,
+          causes,
+        };
+        const causeText = hideEliminationDetails
+          ? ""
+          : getEliminationCauseText(causes, rolesByPlayerId, playerNamesById, showRolesOnly, realNamesById, isRealNamesMode);
         const secondaryHighlightIds = hideEliminationDetails ? [] : getEliminationSecondaryHighlightIds(causes);
         return (
           <span key={pid}>
@@ -1678,10 +1692,11 @@ function LogEntryLine({
               playerId={pid}
               rolesByPlayerId={rolesByPlayerId}
               playerNamesById={playerNamesById}
-              tooltipDetail={hideEliminationDetails ? undefined : causeText}
+              tooltipDetail={undefined}
               secondaryHighlightIds={secondaryHighlightIds}
               displayMode={getTargetDisplayMode(pid)}
-              popupMode={hideEliminationDetails ? "none" : "tooltipOnly"}
+              popupMode="none"
+              eliminationFocus={elimFocus}
               onEliminationFocusChange={onEliminationFocusChange}
               onHighlightPlayer={onHighlightPlayer}
             />
@@ -1902,23 +1917,70 @@ export default function GameLogPanel({
   gameEnded = false,
   isReplay = false,
 }: GameLogPanelProps) {
-  const [localViewMode, setLocalViewMode] = useState<ViewMode>("names-roles");
+  const [localViewMode, setLocalViewMode] = useState<ViewMode>("nick-names");
   const viewMode = viewModeProp ?? localViewMode;
   const setViewMode = onViewModeChange ?? setLocalViewMode;
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isGlowing, setIsGlowing] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const selectModeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [hideNightLogs, setHideNightLogs] = useState(() => {
+    return localStorage.getItem("game-hide-night-logs") === "true";
+  });
+  const handleHideNightLogsChange = (val: boolean) => {
+    setHideNightLogs(val);
+    localStorage.setItem("game-hide-night-logs", String(val));
+  };
+
+  useEffect(() => {
+    if (gameEnded && !isHost && hideNightLogs) {
+      handleHideNightLogsChange(false);
+    }
+  }, [gameEnded, isHost, hideNightLogs]);
 
   useEffect(() => {
     if (!dropdownOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
+        setIsExpanded(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [dropdownOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (selectModeTimerRef.current) {
+        clearTimeout(selectModeTimerRef.current);
+      }
+    };
+  }, []);
+
+  const selectMode = useCallback((newMode: ViewMode) => {
+    if (selectModeTimerRef.current) {
+      clearTimeout(selectModeTimerRef.current);
+    }
+    
+    if (newMode !== viewMode) {
+      setViewMode(newMode);
+      setDropdownOpen(false);
+      setIsGlowing(true);
+      
+      selectModeTimerRef.current = setTimeout(() => {
+        setIsGlowing(false);
+        setIsExpanded(false);
+        selectModeTimerRef.current = null;
+      }, 1000);
+    } else {
+      setDropdownOpen(false);
+      setIsExpanded(false);
+    }
+  }, [viewMode, setViewMode]);
 
   const [eliminationFocus, setEliminationFocus] = useState<EliminationFocus | null>(null);
   
@@ -2009,25 +2071,68 @@ export default function GameLogPanel({
           padding-bottom: 16px;
           margin-bottom: 24px;
           gap: 16px;
-          flex-wrap: wrap;
+          flex-wrap: nowrap;
+          position: relative;
+          min-height: 38px;
         }
 
         .game-log-panel-title {
           font-size: 20px;
           font-weight: 800;
-          background: linear-gradient(135deg, #ffffff 0%, #a29bfe 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
           margin: 0;
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 0px;
+        }
+
+        .title-icon {
+          display: flex;
+          align-items: center;
+          z-index: 2;
+          position: relative;
+        }
+
+        .title-text-wrapper {
+          display: inline-block;
+          max-width: 200px;
+          opacity: 1;
+          overflow: hidden;
+          white-space: nowrap;
+          margin-left: -4px;
+          z-index: 1;
+          position: relative;
+          transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+        }
+
+        .title-text-wrapper.collapsed {
+          max-width: 0;
+          opacity: 0;
+        }
+
+        .title-text {
+          display: inline-block;
+          padding-left: 10px;
+          background: linear-gradient(135deg, #ffffff 0%, #a29bfe 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .title-text-wrapper.collapsed .title-text {
+          transform: translateX(-100%);
+        }
+
+        .game-log-toggle-wrapper {
+          position: absolute;
+          right: 0;
+          z-index: 10;
+          display: flex;
+          align-items: center;
         }
 
         .game-log-toggle-btn {
           display: flex;
           align-items: center;
-          gap: 8px;
           background: linear-gradient(135deg, rgba(108, 92, 231, 0.18) 0%, rgba(109, 68, 232, 0.12) 100%);
           border: 1px solid rgba(108, 92, 231, 0.4);
           color: #a29bfe;
@@ -2036,16 +2141,58 @@ export default function GameLogPanel({
           font-size: 13px;
           font-weight: 700;
           cursor: pointer;
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           box-shadow: 0 4px 12px rgba(108, 92, 231, 0.08);
           user-select: none;
+          white-space: nowrap;
+          overflow: hidden;
+        }
+
+        .btn-base-text {
+          display: inline-block;
+        }
+
+        .btn-suffix-wrapper {
+          display: inline-block;
+          max-width: 0;
+          opacity: 0;
+          overflow: hidden;
+          white-space: nowrap;
+          transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease, margin-left 0.35s ease;
+        }
+
+        .game-log-toggle-btn.expanded {
+          background: linear-gradient(135deg, rgba(30, 27, 57, 0.98) 0%, rgba(20, 18, 41, 0.95) 100%);
+          border-color: rgba(108, 92, 231, 0.6);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .game-log-toggle-btn.glowing {
+          border-color: rgba(162, 155, 254, 0.9) !important;
+          box-shadow: 0 0 20px rgba(162, 155, 254, 0.8), inset 0 0 10px rgba(162, 155, 254, 0.5) !important;
+          animation: pulse-glow 1s infinite alternate;
+        }
+
+        @keyframes pulse-glow {
+          0% {
+            box-shadow: 0 0 8px rgba(162, 155, 254, 0.4), inset 0 0 4px rgba(162, 155, 254, 0.2);
+          }
+          100% {
+            box-shadow: 0 0 22px rgba(162, 155, 254, 0.9), inset 0 0 12px rgba(162, 155, 254, 0.6);
+          }
+        }
+
+        .game-log-toggle-btn.expanded .btn-suffix-wrapper {
+          max-width: 180px;
+          opacity: 1;
+          margin-left: 2px;
+          transition: max-width 0.35s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.35s ease, opacity 0.2s ease 0.1s;
         }
 
         .game-log-toggle-btn:hover {
           background: linear-gradient(135deg, rgba(108, 92, 231, 0.28) 0%, rgba(109, 68, 232, 0.22) 100%);
           border-color: rgba(108, 92, 231, 0.7);
           box-shadow: 0 6px 16px rgba(108, 92, 231, 0.15);
-          transform: translateY(-1px);
         }
 
         .game-log-toggle-btn:active {
@@ -2063,6 +2210,19 @@ export default function GameLogPanel({
         .game-log-night-section {
           background: rgba(108, 92, 231, 0.03);
           border: 1px solid rgba(108, 92, 231, 0.1);
+          max-height: 1200px;
+          transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, margin 0.35s ease, border-color 0.35s ease;
+        }
+
+        .game-log-night-section.collapsed-night {
+          max-height: 0 !important;
+          opacity: 0 !important;
+          margin-bottom: 0 !important;
+          border-top-width: 0 !important;
+          border-bottom-width: 0 !important;
+          border-color: transparent !important;
+          overflow: hidden !important;
+          pointer-events: none;
         }
 
         .game-log-day-section {
@@ -2160,81 +2320,481 @@ export default function GameLogPanel({
           align-items: center;
           gap: 8px;
         }
+
+        /* Dropdown Menu Animation Styles */
+        .game-log-dropdown-menu {
+          position: absolute;
+          top: calc(100% + 6px);
+          right: 0;
+          background: rgba(30, 27, 57, 0.95);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1px solid rgba(108, 92, 231, 0.4);
+          border-radius: 12px;
+          box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+          padding: 0;
+          z-index: 200;
+          min-width: 170px;
+          display: flex;
+          flex-direction: column;
+          opacity: 0;
+          max-height: 0;
+          overflow: hidden;
+          pointer-events: none;
+          transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, padding 0.35s ease;
+        }
+
+        .game-log-dropdown-menu.open {
+          opacity: 1;
+          max-height: 250px;
+          padding: 6px 0;
+          pointer-events: auto;
+        }
+
+        /* Neon Checkbox Styles */
+        .neon-checkbox {
+          --primary: #00ffaa;
+          --primary-dark: #00cc88;
+          --primary-light: #88ffdd;
+          --size: 20px;
+          position: relative;
+          width: var(--size);
+          height: var(--size);
+          cursor: pointer;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        .neon-checkbox input {
+          display: none;
+        }
+
+        .neon-checkbox__frame {
+          position: relative;
+          width: 100%;
+          height: 100%;
+        }
+
+        .neon-checkbox__box {
+          position: absolute;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.8);
+          border-radius: 4px;
+          border: 2px solid var(--primary-dark);
+          transition: all 0.4s ease;
+        }
+
+        .neon-checkbox__check-container {
+          position: absolute;
+          inset: 1px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .neon-checkbox__check {
+          width: 90%;
+          height: 90%;
+          fill: none;
+          stroke: var(--primary);
+          stroke-width: 3;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          stroke-dasharray: 40;
+          stroke-dashoffset: 40;
+          transform-origin: center;
+          transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .neon-checkbox__glow {
+          position: absolute;
+          inset: -2px;
+          border-radius: 6px;
+          background: var(--primary);
+          opacity: 0;
+          transform: scale(1.2);
+          transition: all 0.4s ease;
+        }
+
+        .neon-checkbox__borders {
+          position: absolute;
+          inset: 0;
+          border-radius: 4px;
+          overflow: hidden;
+        }
+
+        .neon-checkbox__borders span {
+          position: absolute;
+          width: 25px;
+          height: 1px;
+          background: var(--primary);
+          opacity: 0;
+          transition: opacity 0.4s ease;
+        }
+
+        .neon-checkbox__borders span:nth-child(1) {
+          top: 0;
+          left: -100%;
+          animation: borderFlow1 2s linear infinite;
+        }
+
+        .neon-checkbox__borders span:nth-child(2) {
+          top: -100%;
+          right: 0;
+          width: 1px;
+          height: 25px;
+          animation: borderFlow2 2s linear infinite;
+        }
+
+        .neon-checkbox__borders span:nth-child(3) {
+          bottom: 0;
+          right: -100%;
+          animation: borderFlow3 2s linear infinite;
+        }
+
+        .neon-checkbox__borders span:nth-child(4) {
+          bottom: -100%;
+          left: 0;
+          width: 1px;
+          height: 25px;
+          animation: borderFlow4 2s linear infinite;
+        }
+
+        .neon-checkbox__particles span {
+          position: absolute;
+          width: 3px;
+          height: 3px;
+          background: var(--primary);
+          border-radius: 50%;
+          opacity: 0;
+          pointer-events: none;
+          top: 50%;
+          left: 50%;
+          box-shadow: 0 0 6px var(--primary);
+        }
+
+        .neon-checkbox__rings {
+          position: absolute;
+          inset: -15px;
+          pointer-events: none;
+        }
+
+        .neon-checkbox__rings .ring {
+          position: absolute;
+          inset: 0;
+          border-radius: 50%;
+          border: 1px solid var(--primary);
+          opacity: 0;
+          transform: scale(0);
+        }
+
+        .neon-checkbox__sparks span {
+          position: absolute;
+          width: 15px;
+          height: 1px;
+          background: linear-gradient(90deg, var(--primary), transparent);
+          opacity: 0;
+        }
+
+        /* Hover Effects */
+        .neon-checkbox:hover .neon-checkbox__box {
+          border-color: var(--primary);
+          transform: scale(1.05);
+        }
+
+        /* Checked State */
+        .neon-checkbox input:checked ~ .neon-checkbox__frame .neon-checkbox__box {
+          border-color: var(--primary);
+          background: rgba(0, 255, 170, 0.1);
+        }
+
+        .neon-checkbox input:checked ~ .neon-checkbox__frame .neon-checkbox__check {
+          stroke-dashoffset: 0;
+          transform: scale(1.1);
+        }
+
+        .neon-checkbox input:checked ~ .neon-checkbox__frame .neon-checkbox__glow {
+          opacity: 0.2;
+          filter: blur(8px);
+        }
+
+        .neon-checkbox input:checked ~ .neon-checkbox__frame .neon-checkbox__borders span {
+          opacity: 1;
+        }
+
+        /* Particle Animations */
+        .neon-checkbox input:checked ~ .neon-checkbox__frame .neon-checkbox__particles span {
+          animation: particleExplosion 0.6s ease-out forwards;
+        }
+
+        .neon-checkbox input:checked ~ .neon-checkbox__frame .neon-checkbox__rings .ring {
+          animation: ringPulse 0.6s ease-out forwards;
+        }
+
+        .neon-checkbox input:checked ~ .neon-checkbox__frame .neon-checkbox__sparks span {
+          animation: sparkFlash 0.6s ease-out forwards;
+        }
+
+        /* Animations */
+        @keyframes borderFlow1 {
+          0% {
+            transform: translateX(0);
+          }
+          100% {
+            transform: translateX(200%);
+          }
+        }
+
+        @keyframes borderFlow2 {
+          0% {
+            transform: translateY(0);
+          }
+          100% {
+            transform: translateY(200%);
+          }
+        }
+
+        @keyframes borderFlow3 {
+          0% {
+            transform: translateX(0);
+          }
+          100% {
+            transform: translateX(-200%);
+          }
+        }
+
+        @keyframes borderFlow4 {
+          0% {
+            transform: translateY(0);
+          }
+          100% {
+            transform: translateY(-200%);
+          }
+        }
+
+        @keyframes particleExplosion {
+          0% {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 0;
+          }
+          20% {
+            opacity: 1;
+          }
+          100% {
+            transform: translate(
+                calc(-50% + var(--x, 15px)),
+                calc(-50% + var(--y, 15px))
+              )
+              scale(0);
+            opacity: 0;
+          }
+        }
+
+        @keyframes ringPulse {
+          0% {
+            transform: scale(0);
+            opacity: 1;
+          }
+          100% {
+            transform: scale(2);
+            opacity: 0;
+          }
+        }
+
+        @keyframes sparkFlash {
+          0% {
+            transform: rotate(var(--r, 0deg)) translateX(0) scale(1);
+            opacity: 1;
+          }
+          100% {
+            transform: rotate(var(--r, 0deg)) translateX(20px) scale(0);
+            opacity: 0;
+          }
+        }
+
+        /* Particle Positions */
+        .neon-checkbox__particles span:nth-child(1) {
+          --x: 18px;
+          --y: -18px;
+        }
+        .neon-checkbox__particles span:nth-child(2) {
+          --x: -18px;
+          --y: -18px;
+        }
+        .neon-checkbox__particles span:nth-child(3) {
+          --x: 18px;
+          --y: 18px;
+        }
+        .neon-checkbox__particles span:nth-child(4) {
+          --x: -18px;
+          --y: 18px;
+        }
+        .neon-checkbox__particles span:nth-child(5) {
+          --x: 25px;
+          --y: 0px;
+        }
+        .neon-checkbox__particles span:nth-child(6) {
+          --x: -25px;
+          --y: 0px;
+        }
+        .neon-checkbox__particles span:nth-child(7) {
+          --x: 0px;
+          --y: 25px;
+        }
+        .neon-checkbox__particles span:nth-child(8) {
+          --x: 0px;
+          --y: -25px;
+        }
+        .neon-checkbox__particles span:nth-child(9) {
+          --x: 15px;
+          --y: -22px;
+        }
+        .neon-checkbox__particles span:nth-child(10) {
+          --x: -15px;
+          --y: 22px;
+        }
+        .neon-checkbox__particles span:nth-child(11) {
+          --x: 22px;
+          --y: 15px;
+        }
+        .neon-checkbox__particles span:nth-child(12) {
+          --x: -22px;
+          --y: -15px;
+        }
+
+        /* Spark Rotations */
+        .neon-checkbox__sparks span:nth-child(1) {
+          --r: 0deg;
+          top: 50%;
+          left: 50%;
+        }
+        .neon-checkbox__sparks span:nth-child(2) {
+          --r: 90deg;
+          top: 50%;
+          left: 50%;
+        }
+        .neon-checkbox__sparks span:nth-child(3) {
+          --r: 180deg;
+          top: 50%;
+          left: 50%;
+        }
+        .neon-checkbox__sparks span:nth-child(4) {
+          --r: 270deg;
+          top: 50%;
+          left: 50%;
+        }
+
+        /* Ring Delays */
+        .neon-checkbox__rings .ring:nth-child(1) {
+          animation-delay: 0s;
+        }
+        .neon-checkbox__rings .ring:nth-child(2) {
+          animation-delay: 0.1s;
+        }
+        .neon-checkbox__rings .ring:nth-child(3) {
+          animation-delay: 0.2s;
+        }
       `}</style>
 
       <div ref={containerRef} className="game-log-panel-container">
-        <div className="game-log-panel-header">
+        <div className="game-log-panel-header" style={{ paddingRight: canViewNightLogs ? 130 : undefined }}>
           <h3 className="game-log-panel-title">
-            <AvifIcon name="📜" style={{ marginRight: 6 }} /> Diễn biến sự kiện
+            <span className="title-icon">
+              <AvifIcon name="📜" style={{ marginRight: 0 }} />
+            </span>
+            <span className={`title-text-wrapper ${isExpanded ? "collapsed" : ""}`}>
+              <span className="title-text">Diễn biến sự kiện</span>
+            </span>
           </h3>
           {canViewNightLogs && (
-            <div ref={dropdownRef} style={{ position: "relative" }}>
-              <button
-                type="button"
-                className="game-log-toggle-btn"
-                onClick={() => setDropdownOpen(prev => !prev)}
+            <div ref={dropdownRef} className="game-log-toggle-wrapper">
+              <div
+                className={`game-log-toggle-btn ${isExpanded ? "expanded" : ""} ${isGlowing ? "glowing" : ""}`}
+                onClick={() => {
+                  if (dropdownOpen) {
+                    setDropdownOpen(false);
+                    setIsExpanded(false);
+                  } else {
+                    setDropdownOpen(true);
+                    setIsExpanded(true);
+                  }
+                }}
               >
-                <span>🎭</span> Chế độ xem: {
-                  viewMode === "roles"
-                    ? "Chỉ hiện Vai trò"
-                    : viewMode === "real-names"
-                      ? "Chỉ hiện tên thật"
-                      : "Tên & Vai trò"
-                }
-              </button>
-              {dropdownOpen && (
-                <div style={{
-                  position: "absolute",
-                  top: "calc(100% + 6px)",
-                  right: 0,
-                  background: "rgba(30, 27, 57, 0.95)",
-                  backdropFilter: "blur(12px)",
-                  border: "1px solid rgba(108, 92, 231, 0.4)",
-                  borderRadius: 12,
-                  boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
-                  padding: "6px 0",
-                  zIndex: 200,
-                  minWidth: 160,
-                  display: "flex",
-                  flexDirection: "column",
-                }}>
-                  <button
-                    type="button"
-                    onClick={() => { setViewMode("names-roles"); setDropdownOpen(false); }}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      color: viewMode === "names-roles" ? "#a29bfe" : "#cbd5e1",
-                      padding: "8px 16px",
-                      textAlign: "left",
-                      cursor: "pointer",
-                      fontWeight: viewMode === "names-roles" ? "bold" : "normal",
+                <span className="btn-base-text">Chế độ xem</span>
+                <span className="btn-suffix-wrapper">
+                  <span className="btn-suffix-text">
+                    hiện tại: {
+                      viewMode === "real-names"
+                        ? "Chỉ hiện tên thật"
+                        : viewMode === "nick-names"
+                          ? "Chỉ hiện nghệ danh"
+                          : viewMode === "real-names-roles"
+                            ? "Tên thật & vai trò"
+                            : "Nghệ danh & vai trò"
+                    }
+                  </span>
+                </span>
+              </div>
+              <div className={`game-log-dropdown-menu ${dropdownOpen ? "open" : ""}`}>
+                {!isHost && !gameEnded && (
+                  <div style={{
+                    padding: "8px 16px",
+                    borderBottom: "1px solid rgba(108, 92, 231, 0.2)",
+                    marginBottom: 4,
+                    display: "flex",
+                    alignItems: "center"
+                  }}>
+                    <label style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 10,
                       fontSize: "13px",
-                      backgroundColor: viewMode === "names-roles" ? "rgba(108, 92, 231, 0.15)" : "transparent",
-                    }}
-                  >
-                    Tên & Vai trò
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setViewMode("roles"); setDropdownOpen(false); }}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      color: viewMode === "roles" ? "#a29bfe" : "#cbd5e1",
-                      padding: "8px 16px",
-                      textAlign: "left",
+                      color: "#cbd5e1",
                       cursor: "pointer",
-                      fontWeight: viewMode === "roles" ? "bold" : "normal",
-                      fontSize: "13px",
-                      backgroundColor: viewMode === "roles" ? "rgba(108, 92, 231, 0.15)" : "transparent",
-                    }}
-                  >
-                    Chỉ hiện Vai trò
-                  </button>
+                      userSelect: "none",
+                      width: "100%"
+                    }}>
+                      <span>Ẩn diễn biến đêm</span>
+                      <div className="neon-checkbox" style={{ flexShrink: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={hideNightLogs}
+                          onChange={(e) => handleHideNightLogsChange(e.target.checked)}
+                        />
+                        <div className="neon-checkbox__frame">
+                          <div className="neon-checkbox__box">
+                            <div className="neon-checkbox__check-container">
+                              <svg viewBox="0 0 24 24" className="neon-checkbox__check">
+                                <path d="M3,12.5l7,7L21,5" />
+                              </svg>
+                            </div>
+                            <div className="neon-checkbox__glow" />
+                            <div className="neon-checkbox__borders">
+                              <span /><span /><span /><span />
+                            </div>
+                          </div>
+                          <div className="neon-checkbox__effects">
+                            <div className="neon-checkbox__particles">
+                              <span /><span /><span /><span /> <span /><span /><span /><span /> <span /><span /><span /><span />
+                            </div>
+                            <div className="neon-checkbox__rings">
+                              <div className="ring" />
+                              <div className="ring" />
+                              <div className="ring" />
+                            </div>
+                            <div className="neon-checkbox__sparks">
+                              <span /><span /><span /><span />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                )}
+                {(isHost || !gameEnded) && (
                   <button
                     type="button"
-                    onClick={() => { setViewMode("real-names"); setDropdownOpen(false); }}
+                    onClick={() => selectMode("real-names")}
                     style={{
                       background: "transparent",
                       border: "none",
@@ -2249,8 +2809,65 @@ export default function GameLogPanel({
                   >
                     Chỉ hiện tên thật
                   </button>
-                </div>
-              )}
+                )}
+                {(isHost || !gameEnded) && (
+                  <button
+                    type="button"
+                    onClick={() => selectMode("nick-names")}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: viewMode === "nick-names" ? "#a29bfe" : "#cbd5e1",
+                      padding: "8px 16px",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      fontWeight: viewMode === "nick-names" ? "bold" : "normal",
+                      fontSize: "13px",
+                      backgroundColor: viewMode === "nick-names" ? "rgba(108, 92, 231, 0.15)" : "transparent",
+                    }}
+                  >
+                    Chỉ hiện nghệ danh
+                  </button>
+                )}
+                {(isHost || gameEnded) && (
+                  <button
+                    type="button"
+                    onClick={() => selectMode("real-names-roles")}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: viewMode === "real-names-roles" ? "#a29bfe" : "#cbd5e1",
+                      padding: "8px 16px",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      fontWeight: viewMode === "real-names-roles" ? "bold" : "normal",
+                      fontSize: "13px",
+                      backgroundColor: viewMode === "real-names-roles" ? "rgba(108, 92, 231, 0.15)" : "transparent",
+                    }}
+                  >
+                    Tên thật & vai trò
+                  </button>
+                )}
+                {(isHost || gameEnded) && (
+                  <button
+                    type="button"
+                    onClick={() => selectMode("nick-names-roles")}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: viewMode === "nick-names-roles" ? "#a29bfe" : "#cbd5e1",
+                      padding: "8px 16px",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      fontWeight: viewMode === "nick-names-roles" ? "bold" : "normal",
+                      fontSize: "13px",
+                      backgroundColor: viewMode === "nick-names-roles" ? "rgba(108, 92, 231, 0.15)" : "transparent",
+                    }}
+                  >
+                    Nghệ danh & vai trò
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -2364,7 +2981,7 @@ export default function GameLogPanel({
           return (
             <div key={n.night} style={{ opacity: dimBucket ? 0.42 : 1, transition: "all 240ms ease", marginTop: 14 }}>
               {canViewNightLogs && (
-                <div className="game-log-night-section">
+                <div className={`game-log-night-section ${hideNightLogs ? "collapsed-night" : ""}`}>
                   <div className="game-log-phase-header game-log-night-header">
                     <AvifIcon name="🌙" style={{ marginRight: 6 }} /> Đêm {n.night}
                   </div>

@@ -888,11 +888,11 @@ input {
 
 .button-gradient .gradient-2 .color-1,.button-gradient .gradient-2 .color-2 {
     border-radius: 50%;
-    filter: blur(12px);
-    height: 100px;
+    filter: blur(20px);
+    height: 180px;
     position: absolute;
     transition: all 2s ease;
-    width: 100px
+    width: 180px
 }
 
 .button-gradient .gradient-2 .color-2 {
@@ -909,11 +909,11 @@ input {
 
 .button-gradient .gradient-2 .color-3,.button-gradient .gradient-2 .color-4 {
     border-radius: 50%;
-    filter: blur(12px);
-    height: 100px;
+    filter: blur(20px);
+    height: 180px;
     position: absolute;
     transition: all 2s ease;
-    width: 100px
+    width: 180px
 }
 
 .button-gradient .gradient-2 .color-4 {
@@ -930,11 +930,11 @@ input {
 
 .button-gradient .gradient-2 .color-5,.button-gradient .gradient-2 .color-6 {
     border-radius: 50%;
-    filter: blur(12px);
-    height: 100px;
+    filter: blur(20px);
+    height: 180px;
     position: absolute;
     transition: all 2s ease;
-    width: 100px
+    width: 180px
 }
 
 .button-gradient .gradient-2 .color-6 {

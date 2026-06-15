@@ -83,7 +83,7 @@ export function useGameSocketSync({
   const wildWolfConversionRef = useRef({ available: false, requested: false });
 
   const [deadPlayers, setDeadPlayers] = useState<string[]>([]);
-  const [seerResult, setSeerResult] = useState<SeerResultPayload | null>(null);
+  const [seerResults, setSeerResults] = useState<SeerResultPayload[]>([]);
   const [cursedResult, setCursedResult] = useState<CursedResultPayload | null>(null);
   const [cursedTargetId, setCursedTargetId] = useState<string | null>(null);
   const [cursedLastTargetId, setCursedLastTargetId] = useState<string | null>(null);
@@ -174,7 +174,7 @@ export function useGameSocketSync({
 
     const applyPhaseTransition = (newPhase: GamePhase) => {
       setPhase(newPhase);
-      setSeerResult(null);
+      setSeerResults([]);
       setCursedResult(null);
       if (newPhase === "day") {
         setWitchPendingDeathTargetIds([]);
@@ -359,7 +359,7 @@ export function useGameSocketSync({
       setGameEnded(null);
       setSpiritWolfDecisionTargetId(null);
       setSpiritWolfDecisionDeadline(null);
-      setSeerResult(null);
+      setSeerResults([]);
       setCursedResult(null);
       setCursedTargetId(null);
       setCursedLastTargetId(null);
@@ -564,7 +564,14 @@ export function useGameSocketSync({
     };
 
     const handleSeerResult = (payload: SeerResultPayload) => {
-      setSeerResult(payload);
+      setSeerResults((prev) => {
+        if (prev.some((p) => p.playerId === payload.playerId)) return prev;
+        return [...prev, payload];
+      });
+    };
+
+    const handleSeerResults = (payloads: SeerResultPayload[]) => {
+      setSeerResults(payloads);
     };
 
     const updateCursedUseState = (payload: CursedResultPayload | CursedTargetUpdatedPayload | null | undefined) => {
@@ -792,6 +799,7 @@ export function useGameSocketSync({
     socket.on("wildWolfConversionUpdated", handleWildWolfConversionUpdated);
 
     socket.on("seerResult", handleSeerResult);
+    socket.on("seerResults", handleSeerResults);
     socket.on("cursedResult", handleCursedResult);
     socket.on("cursedTargetUpdated", handleCursedTargetUpdated);
     socket.on("merchantPrivateStateUpdated", handleMerchantPrivateStateUpdated);
@@ -848,6 +856,7 @@ export function useGameSocketSync({
       socket.off("wildWolfConversionUpdated", handleWildWolfConversionUpdated);
 
       socket.off("seerResult", handleSeerResult);
+      socket.off("seerResults", handleSeerResults);
       socket.off("cursedResult", handleCursedResult);
       socket.off("cursedTargetUpdated", handleCursedTargetUpdated);
       socket.off("merchantPrivateStateUpdated", handleMerchantPrivateStateUpdated);
@@ -896,7 +905,7 @@ export function useGameSocketSync({
     () => ({
       phase,
       deadPlayers,
-      seerResult,
+      seerResults,
       cursedResult,
       cursedTargetId,
       cursedLastTargetId,
@@ -965,7 +974,7 @@ export function useGameSocketSync({
     [
       phase,
       deadPlayers,
-      seerResult,
+      seerResults,
       cursedResult,
       cursedTargetId,
       cursedLastTargetId,

@@ -3,7 +3,7 @@ import { ensureRoomGameRules, type EliminationCause, type GameLogEntryPhase, typ
 import { appendGameEvent } from "./gameEvent.js";
 import { clearProtectorTargetIfDead, tryUseProtectorImmortality, type ProtectorSaveRecord } from "./specialRoles.js";
 import { markWildWolfConversionReadyIfWolfDied, markWolfCubExtraBiteReadyIfDied } from "./roomState.js";
-import { emitAngelPrivateState, markAngelReviveAvailable } from "./angel.js";
+import { emitAngelPrivateState, emitAngelPrivateStateForAll, markAngelReviveAvailable } from "./angel.js";
 
 export const LOVE_ROLE = "Thần tình yêu";
 
@@ -198,9 +198,10 @@ export function markEliminatedWithLoveChain(
         options.loveLinkDeaths?.push({ sourceId: id, targetId: partnerId });
       }
     }
-
     return newlyDead;
   };
 
-  return mark(targetId, cause);
+  const result = mark(targetId, cause);
+  emitAngelPrivateStateForAll(ctx, roomId, room);
+  return result;
 }

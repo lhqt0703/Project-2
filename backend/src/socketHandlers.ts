@@ -2345,17 +2345,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         if (room.phase) {
           room.players[playerIndex] = { ...room.players[playerIndex]!, connected: false };
 
-          if (isWolfAlignedPlayer(room, clientId)) {
-            if (room.wolfVotes) room.wolfVotes[clientId] = null;
-            if (room.wolfVotes2) room.wolfVotes2[clientId] = null;
-            if (room.wolfLocked) room.wolfLocked[clientId] = false;
-            ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes || {});
-            ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2 || {});
-            ctx.io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked || {});
-            emitHostNightActionProgress(roomId);
 
-            finishWolfVotingIfAllLocked(roomId, room);
-          }
 
           if (room.phase === "day") {
             if (room.dayVotes) room.dayVotes[clientId] = null;
@@ -2519,6 +2509,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.protectedTonightAt = null;
     room.lastProtected = null;
     room.seerUsedTonight = {};
+    room.seerResultsTonight = {};
     room.hunterTargetTonight = {};
     room.hunterShotPlayerIds = [];
     room.loveCupidId = null;
@@ -3114,6 +3105,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.elementalCorrectGuessPlayerIdsTonight = [];
       room.elementalBuffVotesTonight = {};
       room.seerUsedTonight = {};
+      room.seerResultsTonight = {};
       room.witchHealTargetTonight = {};
       room.witchPoisonTargetTonight = {};
       room.witchHealTargetAt = {};
@@ -4145,9 +4137,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       targetId,
     });
 
-    if (markAngelReviveAvailable(room, targetId)) {
-      emitAngelPrivateState(ctx, roomId, room, targetId);
-    }
+    markAngelReviveAvailable(room, targetId);
+    emitAngelPrivateStateForAll(ctx, roomId, room);
 
     ctx.io.to(roomId).emit("playerKilled", targetId);
     emitHostNightActionProgress(roomId);
@@ -4574,6 +4565,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
             : isWolfRole(roleOfTarget);
 
     const isWolf = seerBlockedByCloak ? false : actualIsWolf;
+    room.seerResultsTonight = room.seerResultsTonight || {};
+    room.seerResultsTonight[clientId] = room.seerResultsTonight[clientId] || [];
+    room.seerResultsTonight[clientId].push({ playerId: targetId, isWolf });
     ctx.io.to(clientId).emit("seerResult", { playerId: targetId, isWolf });
 
     appendLogEntry(room, {

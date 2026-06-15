@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import Counter from "./Counter";
 
 interface CountdownButtonProps {
   showCountdown: boolean;
@@ -12,16 +13,29 @@ export const CountdownButton: React.FC<CountdownButtonProps> = ({
   isPaused = false,
 }) => {
   const [maxCountdownSec, setMaxCountdownSec] = useState<number>(0);
+  const [originalMaxSec, setOriginalMaxSec] = useState<number>(0);
 
   useEffect(() => {
     if (showCountdown && countdownSeconds !== null) {
       if (countdownSeconds > maxCountdownSec) {
         setMaxCountdownSec(countdownSeconds);
+        const calculatedMax = countdownSeconds >= 2 ? countdownSeconds - 2 : countdownSeconds;
+        setOriginalMaxSec(calculatedMax);
       }
     } else {
       setMaxCountdownSec(0);
+      setOriginalMaxSec(0);
     }
   }, [showCountdown, countdownSeconds, maxCountdownSec]);
+
+  const displayValue = useMemo(() => {
+    if (countdownSeconds === null) return 0;
+    if (originalMaxSec <= 0) return countdownSeconds;
+    if (countdownSeconds > originalMaxSec) {
+      return originalMaxSec;
+    }
+    return countdownSeconds;
+  }, [countdownSeconds, originalMaxSec]);
 
   const pulseDuration = useMemo(() => {
     if (!showCountdown || countdownSeconds === null || maxCountdownSec <= 0 || isPaused) return null;
@@ -79,8 +93,20 @@ export const CountdownButton: React.FC<CountdownButtonProps> = ({
 
   return (
     <button className={buttonClass} style={styleOverride}>
-      <div className="btn-content">
-        <span>Còn {countdownSeconds}s</span> {" "}
+      <div className="btn-content" style={{ display: "inline-flex", alignItems: "center" }}>
+        <span>Còn&nbsp;</span>
+        <Counter
+          value={displayValue}
+          fontSize={15}
+          padding={0}
+          gap={1}
+          borderRadius={0}
+          horizontalPadding={0}
+          textColor="inherit"
+          fontWeight={700}
+          gradientHeight={0}
+        />
+        <span>s</span>
         <span className="paused-text"> (tạm ngưng)</span>
       </div>
       <div className="border"></div>

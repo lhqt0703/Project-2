@@ -83,7 +83,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     room.trialSelectedInteractorIds = [];
     room.trialInteractionQueuedIds = [];
     room.trialDefenseDeadline = null;
-    room.trialVerdictDeadline = Date.now() + 20_000;
+    room.trialVerdictDeadline = Date.now() + 20_000 + 500;
 
     const voters = getTrialVoters(room);
     room.trialVotes = room.trialVotes || {};
@@ -103,7 +103,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
 
     room.trialVerdictTimer = setTimeout(() => {
       finishTrialVerdict(roomId);
-    }, 20_000);
+    }, 20_000 + 500);
   }
 
   function finishTrialVerdict(roomId: string) {
@@ -254,7 +254,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
 
     room.trialTargetId = targetId;
     room.trialStage = "defense";
-    room.trialDefenseDeadline = Date.now() + 120_000;
+    room.trialDefenseDeadline = Date.now() + 120_000 + 500;
     room.trialInteractionCut = false;
     room.trialInteractionActiveIds = [];
     room.trialSelectedInteractorId = null;
@@ -276,7 +276,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
 
     room.trialDefenseTimer = setTimeout(() => {
       startTrialVerdictVoting(roomId);
-    }, 120_000);
+    }, 120_000 + 500);
   }
 
   function startDayVoting(roomId: string, opts?: { kind?: "main" | "village_chief_extra" }) {
@@ -312,7 +312,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
       room.dayLocked![id] = false;
     });
 
-    room.dayDeadline = Date.now() + 45_000;
+    room.dayDeadline = Date.now() + 45_000 + 500;
 
     ctx.io.to(roomId).emit("dayPhaseStarted", {
       voters: getActiveDayVoters(room),
@@ -325,7 +325,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
 
     room.dayTimer = setTimeout(() => {
       finishDayVoting(roomId);
-    }, 45_000);
+    }, 45_000 + 500);
   }
 
   function startDayDiscussion(roomId: string) {
@@ -353,7 +353,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     room.dayVotes = {};
     room.dayLocked = {};
     room.dayDeadline = null;
-    room.dayDiscussionDeadline = Date.now() + 240_000;
+    room.dayDiscussionDeadline = Date.now() + 240_000 + 500;
 
     ctx.io.to(roomId).emit("dayDiscussionStarted", {
       deadline: room.dayDiscussionDeadline,
@@ -364,7 +364,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
 
     room.dayDiscussionTimer = setTimeout(() => {
       startDayVoting(roomId);
-    }, 240_000);
+    }, 240_000 + 500);
   }
 
   function finishDayVoting(roomId: string) {

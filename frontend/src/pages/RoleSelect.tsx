@@ -23,15 +23,18 @@ export const CARD_IMAGES = import.meta.glob<string>("../assets/F *.avif", {
   import: "default",
 });
 
-export function getCardUrlByRoleName(roleName: string): string | null {
+export function getCardUrlByRoleName(roleName: string, gameMode?: string): string | null {
   if (!roleName) return null;
   let cleanName = roleName.trim();
   if (cleanName === "Sấm Sét") cleanName = "Sét";
   if (cleanName === "Băng Giá") cleanName = "Băng";
+  if (gameMode === "soi_mu" && cleanName === "Tay Buôn") {
+    cleanName = "Tay Buôn ari";
+  }
 
   const entry = Object.entries(CARD_IMAGES).find(([path]) => {
-    const lowerPath = path.toLowerCase();
-    const targetAvif = `/f ${cleanName.toLowerCase()}.avif`;
+    const lowerPath = path.normalize("NFC").toLowerCase();
+    const targetAvif = `/f ${cleanName.normalize("NFC").toLowerCase()}.avif`;
     return lowerPath.endsWith(targetAvif);
   });
   return entry ? entry[1] : null;
@@ -281,8 +284,7 @@ export default function RoleSelect() {
     };
 
     const handleRolesReady = () => {
-      if (!roomId) return;
-      nav(`/room?roomId=${roomId}`);
+      // Do not redirect, let the user return manually.
     };
 
     socket.on("gameStarted", handleGameStarted);
@@ -357,9 +359,13 @@ export default function RoleSelect() {
       : (roomSnapshot?.roles?.includes(role) ?? false);
 
     const voterIds = roomSnapshot?.roleVotes?.[role] || [];
+    const votersWithAvatar = voterIds.filter((pid) => {
+      const p = roomSnapshot?.players.find((x) => x.id === pid);
+      return !!p?.playerAvatar;
+    });
     const hasVotes = voterIds.length > 0;
     const glowColor = getGlowColor(role);
-    const cardImgUrl = getCardUrlByRoleName(role);
+    const cardImgUrl = getCardUrlByRoleName(role, roomSnapshot?.gameMode);
     const myVote = voterIds.includes(clientId);
 
     const handleCardClick = () => {
@@ -414,7 +420,7 @@ export default function RoleSelect() {
 
         {!isSelected && hasVotes && (
           <div className="voters-container">
-            {voterIds.map((pid) => (
+            {votersWithAvatar.map((pid) => (
               <MiniToken key={pid} playerId={pid} players={roomSnapshot?.players || []} />
             ))}
           </div>
@@ -534,10 +540,11 @@ export default function RoleSelect() {
         </div>
       ) : (
         <div className="roleselect-grid">
-          {renderRoleCard("Dân làng")}
-          {renderRoleCard("Sói")}
+          {(["Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Trưởng làng", "Hộ nhân", "Kẻ bị nguyền", "Thần tình yêu"] as const).map((role) => renderRoleCard(role))}
+          {(["Bán sói", "Linh sói", "Tay Buôn", "Thiên Sứ"] as const).map((role) => renderRoleCard(role))}
+          {(["Sói", "Sói con", "Sói Dại"] as const).map((role) => renderRoleCard(role))}
           {ELEMENTAL_ROLE_ORDER.map((role) => renderRoleCard(role))}
-          {(["Bán sói", "Sói con", "Sói Dại", "Linh sói", "Kẻ bị nguyền", "Tay Buôn", "Thiên Sứ", "Trưởng làng", "Hộ nhân", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Thần tình yêu"] as const).map((role) => renderRoleCard(role))}
+          {renderRoleCard("Dân làng")}
         </div>
       )}
 
@@ -579,7 +586,6 @@ export default function RoleSelect() {
             applyMode: "next-round",
           });
           setPendingRolesApply(null);
-          nav(`/room?roomId=${roomId}`);
         }}
       />
     </div>

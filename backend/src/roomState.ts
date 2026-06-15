@@ -124,7 +124,7 @@ export function getActiveWolves(room: Room) {
   const allWolves = room.players
     .filter((p) => isWolfAlignedPlayer(room, p.id))
     .map((p) => p.id);
-  return allWolves.filter((id) => canPlayerActAtNight(room, id) && isPlayerConnected(room, id));
+  return allWolves.filter((id) => canPlayerActAtNight(room, id));
 }
 
 export function getWitches(room: Room) {
@@ -299,6 +299,7 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.protectedTonightAt = null;
   room.lastProtected = null;
   room.seerUsedTonight = {};
+  room.seerResultsTonight = {};
   room.hunterTargetTonight = {};
   room.hunterShotPlayerIds = [];
   room.loveCupidId = null;

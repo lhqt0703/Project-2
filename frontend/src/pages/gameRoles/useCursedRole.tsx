@@ -101,7 +101,9 @@ export function useCursedRole({
     ),
     playerPositionsProps: {
       selectedOutlinePlayerId:
-        role === CURSED_ROLE && isCursedTurnActive ? (cursedTargetId || (isConfirmOpen ? selectedPlayerId : null)) : null,
+        role === CURSED_ROLE && isCursedTurnActive && !cursedResult
+          ? (cursedTargetId || (isConfirmOpen ? selectedPlayerId : null))
+          : null,
       cursedHighlightPlayerIds:
         role === CURSED_ROLE && isCursedTurnActive && cursedResult ? cursedResult.areaIds : [],
       cursedHighlightIsDanger: cursedResult?.hasWolf === true,

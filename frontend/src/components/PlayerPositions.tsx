@@ -359,7 +359,7 @@ export default function PlayerPositions({
   onPlayerDoubleClick,
   mode = "edit",
   roomOverride,
-  seerResult,
+  seerResults,
   deadPlayersOverride,
   bulletAnimation,
   selectedOutlinePlayerId,
@@ -390,13 +390,13 @@ export default function PlayerPositions({
   replayTargetIds,
   dietQuyOrangeHighlightPlayerIds,
   dietQuyRedHighlightPlayerIds,
-  viewMode = "names-roles",
+  viewMode = "nick-names",
 }: {
   onPlayerClick: (playerId: string) => void;
   onPlayerDoubleClick?: (playerId: string) => void;
   mode?: "edit" | "view";
   roomOverride?: RoomLike | null;
-  seerResult?: { playerId: string; isWolf: boolean } | null;
+  seerResults?: { playerId: string; isWolf: boolean }[] | null;
   deadPlayersOverride?: string[];
   bulletAnimation?: BulletAnimation | null;
   selectedOutlinePlayerId?: string | null;
@@ -427,7 +427,7 @@ export default function PlayerPositions({
   replayTargetIds?: string[];
   dietQuyOrangeHighlightPlayerIds?: string[];
   dietQuyRedHighlightPlayerIds?: string[];
-  viewMode?: "roles" | "names-roles" | "real-names";
+  viewMode?: "real-names" | "nick-names" | "real-names-roles" | "nick-names-roles";
 }) {
   const { room: contextRoom } = useRoomContext();
   const room: RoomLike | null = roomOverride ?? (contextRoom as RoomLike | null);
@@ -1108,6 +1108,11 @@ export default function PlayerPositions({
         }
         .halo-cursed {
           animation: breatheSoft 2.5s ease-in-out infinite;
+          box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
+        }
+        .halo-cursed-wolf {
+          animation: breatheSoft 2.5s ease-in-out infinite;
+          box-shadow: 0 0 16px rgb(255 0 0 / 40%);
         }
         .halo-active-role {
           animation: activeRolePulse 2s ease-in-out infinite;
@@ -1134,6 +1139,10 @@ export default function PlayerPositions({
         .halo-seer {
           animation: breatheSoft 2s ease-in-out infinite;
           box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
+        }
+        .halo-seer-wolf {
+          animation: breatheSoft 2s ease-in-out infinite;
+          box-shadow: 0 0 16px rgb(255 0 0 / 40%);
         }
 
         /* PREMIUM TOKEN COMPONENT */
@@ -1264,7 +1273,8 @@ export default function PlayerPositions({
               }
             }
           }
-          const displayName = (viewMode === "real-names" && p.playerRealName) ? p.playerRealName : p.name;
+          const isRealNamesMode = viewMode === "real-names" || viewMode === "real-names-roles";
+          const displayName = (isRealNamesMode && p.playerRealName) ? p.playerRealName : p.name;
 
           const left = `${pos.x * 100}%`;
           const top = `${pos.y * 100}%`;
@@ -1288,7 +1298,8 @@ export default function PlayerPositions({
           const isReplayActor = !!replayActorIds && replayActorIds.includes(pos.playerId);
           const isReplayTarget = !!replayTargetIds && replayTargetIds.includes(pos.playerId);
 
-          const isSeerResult = !!seerResult && seerResult.playerId === pos.playerId;
+          const currentSeerResult = seerResults?.find(r => r.playerId === pos.playerId);
+          const isSeerResult = !!currentSeerResult;
           const isWitchDanger =
             (!!dangerPlayerId && dangerPlayerId === pos.playerId) ||
             (!!dangerPlayerIds && dangerPlayerIds.includes(pos.playerId))
@@ -1490,8 +1501,8 @@ export default function PlayerPositions({
               {vfxType && <ElementalVFX type={vfxType} />}
 
               {/* Concentric Halo Rings */}
-              {isSeerResult && (
-                <div className="player-halo halo-seer" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid ${seerResult!.isWolf ? "#ef4444" : "#f1f5f9"}` }} />
+              {isSeerResult && currentSeerResult && (
+                <div className={`player-halo halo-seer ${currentSeerResult.isWolf ? "halo-seer-wolf" : ""}`} style={{ inset: -scalePx(6, 4), border: `${scalePx(4, 1)}px solid ${currentSeerResult.isWolf ? "#ef4444" : "#f1f5f9"}` }} />
               )}
               {isVerdictLiveHighlighted && (
                 <div className="player-halo halo-live" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #10b981` }} />
@@ -1503,7 +1514,7 @@ export default function PlayerPositions({
                 <div className="player-halo halo-danger" style={{ inset: -scalePx(6, 4), border: `${scalePx(2.5, 1.5)}px solid #dc2626` }} />
               )}
               {isCursedHighlighted && (
-                <div className="player-halo halo-cursed" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid ${cursedHighlightIsDanger ? "#dc2626" : "#e2e8f0"}` }} />
+                <div className={`player-halo halo-cursed ${cursedHighlightIsDanger ? "halo-cursed-wolf" : ""}`} style={{ inset: -scalePx(6, 4), border: `${scalePx(4, 1)}px solid ${cursedHighlightIsDanger ? "#dc2626" : "#e2e8f0"}` }} />
               )}
               {nightActionProgress === "pending" && (
                 <div className="player-halo halo-night-pending" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px dashed #f59e0b` }} />
@@ -1520,7 +1531,7 @@ export default function PlayerPositions({
 
               {/* Mid Concentric Rings */}
               {isSecondaryHighlighted && (
-                <div className="player-halo halo-secondary" /* style={{ inset: -scalePx(8, 5), border: `${scalePx(2, 1)}px dotted rgba(46, 204, 113, 0.7)` }} */ />
+                <div className="player-halo halo-secondary" style={{ inset: -scalePx(10, 6), border: `${scalePx(4, 1)}px solid #ffffff`, boxShadow: "0 0 10px rgba(255, 255, 255, 0.8)" }} />
               )}
               {(trialWhitePlayerIds || []).includes(pos.playerId) && (
                 <div className="player-halo halo-trial-white" style={{ inset: -scalePx(10, 6), border: `${scalePx(2, 1)}px solid #f1f5f9` }} />
@@ -1528,7 +1539,7 @@ export default function PlayerPositions({
 
               {/* Outer Concentric Rings */}
               {isHighlighted && (
-                <div className="player-halo halo-spotlight" style={{ inset: -scalePx(10, 6), border: `${scalePx(2, 1)}px solid #ff9800` }} />
+                <div className="player-halo halo-spotlight" style={{ inset: -scalePx(10, 6), border: `${scalePx(4, 1)}px solid #ffffff`, boxShadow: "0 0 10px rgba(255, 255, 255, 0.8)" }} />
               )}
               {isActiveNightRoleBadge && (
                 <div className="player-halo halo-active-role" style={{ inset: -scalePx(10, 6), border: `${scalePx(2.5, 1.5)}px solid #ffd700` }} />
@@ -1727,8 +1738,6 @@ export default function PlayerPositions({
                   }}>
                     <div style={{
                       fontWeight: 600,
-                      textDecoration: isDead ? "line-through" : undefined,
-                      textDecorationColor: isDead ? "rgba(239, 68, 68, 0.5)" : undefined,
                       opacity: isDead ? 0.45 : 1,
                       color: isDead ? "#94a3b8" : "#f8fafc",
                       fontFamily: "'Inter', system-ui, sans-serif",
@@ -1814,7 +1823,7 @@ export default function PlayerPositions({
               transition: dragging === pos.playerId
                 ? "none"
                 : "left 0.2s, top 0.2s, width 220ms ease, height 220ms ease, border-radius 220ms ease, box-shadow 300ms ease, transform 0.2s ease, filter 0.5s ease",
-              filter: isDead ? "grayscale(0.94)" : undefined,
+              filter: isDead ? "grayscale(0.94) brightness(0.5) opacity(0.5)" : undefined,
             }
           };
 

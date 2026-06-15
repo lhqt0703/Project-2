@@ -74,6 +74,56 @@ function doesRoleMatchNightTurn(roleName: string | null | undefined, nightTurnRo
   return roleName === nightTurnRole;
 }
 
+const EyeIcon = ({ isOpen }: { isOpen: boolean }) => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ overflow: "visible" }}
+    >
+      <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.875 0Z" />
+      <circle cx="12" cy="12" r="3" />
+      <line
+        x1="3"
+        y1="3"
+        x2="21"
+        y2="21"
+        style={{
+          strokeDasharray: 26,
+          strokeDashoffset: isOpen ? 26 : 0,
+          transition: "stroke-dashoffset 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        }}
+      />
+    </svg>
+  );
+};
+
+const ROLE_SKILL_HINTS: Record<string, string> = {
+  "Tiên tri": "Chọn một người mà bạn nghĩ họ là sói để xem quả cầu có chuyển sang ánh sáng đỏ không",
+  "Bảo vệ": "Chọn một người mà bạn muốn bảo vệ khỏi vết cắn của sói hoặc không hành động gì để bỏ qua",
+  "Hộ nhân": "Chọn một người mà bạn muốn trao hộ thân giúp chặn mọi hiệu ứng gây chết cho họ trong một lần hoặc không hành động gì để bỏ qua",
+  "Phù thủy": "Hãy lựa chọn cẩn thận hoặc không hành động gì để bỏ qua",
+  "Thợ săn": "Chọn một mục tiêu để ghim hoặc không hành động gì để bỏ qua. Nếu bạn bị giết, mục tiêu sẽ bị giết theo",
+  "Sói": "chọn một người để cắn và hãy nhớ chú ý đến việc thống nhất lựa chọn với các sói khác",
+  "Sói con": "chọn một người để cắn và hãy nhớ chú ý đến việc thống nhất lựa chọn với các sói khác",
+  "Sói Dại": "chọn một người để cắn và hãy nhớ chú ý đến việc thống nhất lựa chọn với các sói khác",
+  "Bán sói": "Bạn không cần hành động đêm khi chưa bị cắn và sẽ trở thành phe sói nếu đã bị cắn",
+  "Tay Buôn": "Chọn một người và vật phẩm để tạo giao dịch hoặc không hành động gì để bỏ qua",
+  "Kẻ bị nguyền": "Chọn một người mà bạn muốn ngửi xem liệu người đó và 2 người bên cạnh liệu có sói hay không",
+  "Linh sói": " ",
+  "Thần tình yêu": "Chọn một người mà bạn muốn ghép đôi bản thân với họ",
+  "Thiên Sứ": "Chọn một người đã chết mà bạn muốn hồi sinh trong âm thầm hoặc không hành động gì để bỏ qua",
+  "Dân làng": "Bạn không cần hành động đêm",
+  "Trưởng làng": "Bạn không cần hành động đêm"
+};
+
 export default function GameDaNghich() {
   const { role, room, setRoom } = useRoomContext();
   const nav = useNavigate();
@@ -126,13 +176,39 @@ export default function GameDaNghich() {
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const [scoreboardOpen, setScoreboardOpen] = useState(false);
   const [hostPlayerActionTargetId, setHostPlayerActionTargetId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"roles" | "names-roles" | "real-names">(() => {
-    return (localStorage.getItem("game-view-mode") as any) || "names-roles";
+  const [viewMode, setViewMode] = useState<"real-names" | "nick-names" | "real-names-roles" | "nick-names-roles">(() => {
+    const saved = localStorage.getItem("game-view-mode");
+    if (saved === "real-names" || saved === "real-names-roles") return "real-names";
+    return "nick-names";
   });
-  const handleViewModeChange = (newMode: "roles" | "names-roles" | "real-names") => {
+  const handleViewModeChange = (newMode: "real-names" | "nick-names" | "real-names-roles" | "nick-names-roles") => {
     setViewMode(newMode);
     localStorage.setItem("game-view-mode", newMode);
   };
+
+  useEffect(() => {
+    if (isHost) {
+      if (viewMode === "real-names") {
+        handleViewModeChange("real-names-roles");
+      } else if (viewMode === "nick-names") {
+        handleViewModeChange("nick-names-roles");
+      }
+    } else {
+      if (!sync.gameEnded) {
+        if (viewMode === "real-names-roles") {
+          handleViewModeChange("real-names");
+        } else if (viewMode === "nick-names-roles") {
+          handleViewModeChange("nick-names");
+        }
+      } else {
+        if (viewMode === "real-names") {
+          handleViewModeChange("real-names-roles");
+        } else if (viewMode === "nick-names") {
+          handleViewModeChange("nick-names-roles");
+        }
+      }
+    }
+  }, [isHost, sync.gameEnded, viewMode]);
   const [editingRealName, setEditingRealName] = useState("");
   const [editingAvatar, setEditingAvatar] = useState("");
   useEffect(() => {
@@ -495,6 +571,12 @@ export default function GameDaNghich() {
     return Math.max(0, Math.ceil((mySimultaneousDeadline - nightTurnNow) / 1000));
   }, [isSimultaneousNight, mySimultaneousDeadline, nightTurnNow, nightTurnPaused, nightTurnRemainingMs]);
 
+  const isRoomSimultaneousCountdownExpired = useMemo(() => {
+    if (!isSimultaneousNight || nightTurnPaused) return false;
+    if (!nightTurnDeadline) return false;
+    return nightTurnDeadline <= nightTurnNow;
+  }, [isSimultaneousNight, nightTurnPaused, nightTurnDeadline, nightTurnNow]);
+
   const canHostToggleNightTimer = useMemo(() => {
     if (phase !== "night" || !!sync.gameEnded) return false;
     if (isSequentialNight) return !!currentNightTurnRole;
@@ -535,10 +617,21 @@ export default function GameDaNghich() {
       if (!doesNightTurnMatchMyRole) return false;
       return nightTurnRemainingSec !== null && nightTurnRemainingSec <= 0;
     } else {
-      if (!mySimultaneousDeadline) return false;
-      return simultaneousRemainingSec !== null && simultaneousRemainingSec <= 0;
+      if (mySimultaneousDeadline) {
+        return simultaneousRemainingSec !== null && simultaneousRemainingSec <= 0;
+      }
+      return isRoomSimultaneousCountdownExpired;
     }
-  }, [phase, sync.gameEnded, isSequentialNight, doesNightTurnMatchMyRole, nightTurnRemainingSec, mySimultaneousDeadline, simultaneousRemainingSec]);
+  }, [
+    phase,
+    sync.gameEnded,
+    isSequentialNight,
+    doesNightTurnMatchMyRole,
+    nightTurnRemainingSec,
+    mySimultaneousDeadline,
+    simultaneousRemainingSec,
+    isRoomSimultaneousCountdownExpired,
+  ]);
 
   useEffect(() => {
     if (phase !== "night") {
@@ -960,7 +1053,7 @@ export default function GameDaNghich() {
     phase,
     role,
     deadPlayers: deadPlayersForNightActions,
-    seerResult: sync.seerResult,
+    seerResults: sync.seerResults,
     allNightActionsSimultaneous,
     currentNightTurnRole,
     nightTurnPaused,
@@ -1156,6 +1249,91 @@ export default function GameDaNghich() {
     deadPlayers,
     angelState: sync.angelReviveState,
   });
+
+  const hasVisibleActionPanel = useMemo(() => {
+    if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions) return false;
+    if (role === "Phù thủy") return true;
+    if (role === "Tay Buôn") return true;
+    if (ELEMENTAL_ROLE_SET.has(role) && sync.elementalActionMode === "buff" && (allNightActionsSimultaneous || currentNightTurnRole === role)) return true;
+    if (role === "Thần tình yêu") {
+      return loveActionPlacement === "role-actions" || loveActionPlacement === "general" || loveActionPlacement === "wolf";
+    }
+    return false;
+  }, [phase, role, isCurrentPlayerDeadForNightActions, sync.elementalActionMode, allNightActionsSimultaneous, currentNightTurnRole, loveActionPlacement]);
+
+  const renderSkillHint = () => {
+    if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions) return null;
+    
+    let hintText = ROLE_SKILL_HINTS[role];
+    if (role === "Bán sói") {
+      if (isBanSoiAligned || isWildWolfConverted) {
+        hintText = ROLE_SKILL_HINTS["Sói"];
+      } else {
+        hintText = "Hãy ngủ yên và chờ đợi ngày mới bắt đầu.";
+      }
+    }
+    if (!hintText && ELEMENTAL_ROLE_SET.has(role)) {
+      hintText = "Chọn một người mà bạn nghĩ họ cũng là dân làng nắm giữ nguyên tố";
+    }
+    
+    if (!hintText) return null;
+
+    return (
+      <>
+        <style>{`
+          @keyframes fadeInUp {
+            from {
+              opacity: 0;
+              transform: translateY(8px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+          .role-skill-hint {
+            animation: fadeInUp 0.4s ease-out forwards;
+          }
+          @media (max-width: 768px) {
+            .role-skill-hint {
+              max-width: 62% !important;
+              margin-left: 8px !important;
+              margin-right: auto !important;
+            }
+          }
+          @media (min-width: 769px) {
+            .role-skill-hint {
+              max-width: 550px !important;
+              margin: 0 auto !important;
+            }
+          }
+        `}</style>
+        <div 
+          className="role-skill-hint"
+          style={{
+            background: "rgba(18, 14, 38, 0.65)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            border: "1px solid rgba(168, 85, 247, 0.22)",
+            borderRadius: "10px",
+            padding: "8px 12px",
+            color: "#e2e8f0",
+            fontSize: "0.85rem",
+            lineHeight: "1.4",
+            boxShadow: "0 6px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
+            textAlign: "left",
+            pointerEvents: "auto",
+            marginTop: "10px",
+            zIndex: 5,
+            fontStyle: "italic",
+            opacity: 0.9,
+          }}
+        >
+          {hintText}
+        </div>
+      </>
+    );
+  };
 
   const roleBadgesForDisplay = useMemo(() => {
     const loveRoleBadges = visibleLoveRoleBadges;
@@ -1646,6 +1824,7 @@ export default function GameDaNghich() {
     if (role === "Linh sói") return !!sync.spiritWolfDecisionTargetId;
     return NIGHT_ACTION_ROLE_SET.has(role) || ELEMENTAL_ROLE_SET.has(role);
   }, [role, isBanSoiOrWildConverted, isWolfTeamRole, sync.spiritWolfDecisionTargetId]);
+  void hasNightAction;
 
   const hostNightRemainingSec = useMemo(() => {
     if (phase !== "night") return null;
@@ -1659,13 +1838,16 @@ export default function GameDaNghich() {
 
   const countdownSeconds = isHost
     ? hostNightRemainingSec
-    : (isSequentialNight ? nightTurnRemainingSec : simultaneousRemainingSec);
+    : (isSequentialNight
+        ? nightTurnRemainingSec
+        : (mySimultaneousDeadline ? simultaneousRemainingSec : hostNightRemainingSec)
+      );
 
   const showCountdown = !sync.gameEnded && (
     isHost ? (phase === "night" && countdownSeconds !== null) : (
       !isCurrentPlayerDeadForNightActions && (
         (isSequentialNight && currentNightTurnRole && doesNightTurnMatchMyRole && nightTurnRemainingSec !== null) ||
-        (isSimultaneousNight && hasNightAction && simultaneousRemainingSec !== null)
+        (isSimultaneousNight && countdownSeconds !== null)
       )
     )
   );
@@ -1721,20 +1903,62 @@ export default function GameDaNghich() {
       )}
 
       {!isHost && (
-        <h2>
-          Vai trò của bạn là:{" "}
-          {cardFlippedToFront && role ? (
-            <DecryptedText
-              text={role}
-              speed={40}
-              maxIterations={8}
-              sequential
-              animateOn="view"
-              className="revealed"
-              encryptedClassName="encrypted"
-            />
-          ) : (
-            <span className="encrypted">********</span>
+        <h2 style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: "8px", 
+          flexWrap: "wrap", 
+          justifyContent: "space-between",
+          minHeight: "40px",
+          height: "40px"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span>Vai trò của bạn:</span>
+            <span style={{ display: "inline-flex", alignItems: "center", minHeight: "30px", height: "30px" }}>
+              <DecryptedText
+                text={cardFlippedToFront && role ? role : "********"}
+                speed={40}
+                maxIterations={8}
+                sequential
+                revealDirection={cardFlippedToFront ? "start" : "end"}
+                animateOn="view"
+                className="revealed"
+                encryptedClassName="encrypted"
+              />
+            </span>
+          </div>
+          {phase === "night" && !sync.gameEnded && !isCurrentPlayerDeadForNightActions && (
+            <div
+              onClick={() => setIsNightInfoVisible((p) => !p)}
+              style={{
+                background: "rgba(255, 255, 255, 0.05)",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                borderRadius: "50%",
+                cursor: "pointer",
+                width: "32px",
+                height: "32px",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: isNightInfoVisible ? "#34d399" : "#f87171",
+                transition: "all 0.2s ease",
+                padding: 0,
+                boxShadow: isNightInfoVisible 
+                  ? "0 0 8px rgba(52, 211, 153, 0.2)" 
+                  : "0 0 8px rgba(248, 113, 113, 0.2)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "scale(1.1)";
+                e.currentTarget.style.background = "rgba(255, 255, 255, 0.1)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "scale(1)";
+                e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
+              }}
+              title={isNightInfoVisible ? "Ẩn màn hình" : "Hiện màn hình"}
+            >
+              <EyeIcon isOpen={isNightInfoVisible} />
+            </div>
           )}
         </h2>
       )}
@@ -1911,46 +2135,14 @@ export default function GameDaNghich() {
               )}
             </>
           ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: "0.9rem", flexWrap: "wrap" }}>
+            //Height 46 để cố định chiều cao của cái dòng div này cho nó đừng có nhảy layout khi hiển thị nút đếm ngược
+            <div id="infoThờiGian" style={{ display: "flex", alignItems: "center", gap: "0.9rem", flexWrap: "wrap", height: "46px" }}> 
               {phase === "day" ? (
                 <h1 style={{ margin: 0, display: "flex", alignItems: "center" }}><AvifIcon name="🌞" style={{ marginRight: 8 }} /> Ngày {displayNightNumber}</h1>
               ) : (
                 <h1 style={{ margin: 0, display: "flex", alignItems: "center" }}><AvifIcon name="🌙" style={{ marginRight: 8 }} /> Đêm {displayNightNumber}</h1>
               )}
-              {phase === "night" && !sync.gameEnded && !isHost && !isCurrentPlayerDeadForNightActions && (
-                <button
-                  onClick={() => setIsNightInfoVisible((p) => !p)}
-                  className="button-gradient"
-                  style={{
-                    cursor: "pointer",
-                    background: isNightInfoVisible ? "rgba(239, 68, 68, 0.15)" : "rgba(16, 185, 129, 0.15)",
-                    border: isNightInfoVisible ? "1px solid rgba(239, 68, 68, 0.4)" : "1px solid rgba(16, 185, 129, 0.4)",
-                    color: isNightInfoVisible ? "#f87171" : "#34d399",
-                    padding: "8px 16px",
-                    borderRadius: "8px",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    fontWeight: 500,
-                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                    boxShadow: isNightInfoVisible
-                      ? "0 0 10px rgba(239, 68, 68, 0.2)"
-                      : "0 0 10px rgba(16, 185, 129, 0.2)",
-                  }}
-                >
-                  <div className="btn-content" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    {isNightInfoVisible ? (
-                      <>
-                        <span>👁️</span> Ẩn màn hình
-                      </>
-                    ) : (
-                      <>
-                        <span>👁️‍🗨️</span> Hiện màn hình
-                      </>
-                    )}
-                  </div>
-                </button>
-              )}
+
               <CountdownButton
                 showCountdown={!!showCountdown}
                 countdownSeconds={countdownSeconds}
@@ -2090,7 +2282,7 @@ export default function GameDaNghich() {
                 viewMode={viewMode}
                 onPlayerClick={handlePlayerClick}
                 onPlayerDoubleClick={handlePlayerDoubleClick}
-                seerResult={isSeerTurnActive ? seer.seerResult : null}
+                seerResults={(isSeerTurnActive && isNightInfoVisible) ? seer.seerResults : null}
                 deadPlayersOverride={deadPlayersOverrideForRender}
                 bulletAnimation={hunterBulletAnim}
                 highlightPlayerId={highlightPlayerId}
@@ -2148,6 +2340,7 @@ export default function GameDaNghich() {
                 replayActorIds={replayActorIds}
                 replayTargetIds={replayTargetIds}
               />
+              {!hasVisibleActionPanel && renderSkillHint()}
             </div>
             <RoleCharacterPortrait
               role={shouldShowRolePortrait ? role : null}
@@ -2157,7 +2350,7 @@ export default function GameDaNghich() {
               companionRoleSrc={shouldRevealMyRole && !(sync.gameEnded && canViewLog) ? companionRoleSrc : null}
               normalizedRole={normalizedRole}
               playerFrameHeightPx={playerFrameHeightPx}
-              seerResult={sync.seerResult}
+              seerResults={isNightInfoVisible ? sync.seerResults : null}
             />
           </>
         );
@@ -2170,7 +2363,12 @@ export default function GameDaNghich() {
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && guardian.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && protector.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && love.modals}
-      {shouldRevealMyRole && !sync.gameEnded && loveActionPlacement === "general" ? love.actionButton : null}
+      {shouldRevealMyRole && !sync.gameEnded && loveActionPlacement === "general" && love.actionButton && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start", marginTop: 10 }}>
+          {love.actionButton}
+          {renderSkillHint()}
+        </div>
+      )}
 
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && hunter.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && elemental.modal}
@@ -2178,12 +2376,16 @@ export default function GameDaNghich() {
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && spiritWolf.modal}
 
       {shouldRevealMyRole && !sync.gameEnded && (
-        <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
-          {witch.panel}
-          {protector.panel}
-          {elemental.panel}
-          {merchant.panel}
-          {loveActionPlacement === "role-actions" ? love.actionButton : null}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+            {witch.panel}
+            {protector.panel}
+            {elemental.panel}
+            {merchant.panel}
+            {angel.panel}
+            {loveActionPlacement === "role-actions" ? love.actionButton : null}
+          </div>
+          {hasVisibleActionPanel && (role !== "Thần tình yêu" || loveActionPlacement === "role-actions") && renderSkillHint()}
         </div>
       )}
 
@@ -2291,9 +2493,12 @@ export default function GameDaNghich() {
       {isHost && logPanel}
 
       {shouldRevealMyRole && !sync.gameEnded && (
-        <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
-          {wolf.panel}
-          {loveActionPlacement === "wolf" ? love.actionButton : null}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+            {wolf.panel}
+            {loveActionPlacement === "wolf" ? love.actionButton : null}
+          </div>
+          {role === "Thần tình yêu" && loveActionPlacement === "wolf" && love.actionButton && renderSkillHint()}
         </div>
       )}
       {!isHost && dayVote.panel}

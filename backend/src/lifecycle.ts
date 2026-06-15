@@ -265,6 +265,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
     room.protectedTonightAt = null;
     room.lastProtected = null;
     room.seerUsedTonight = {};
+    room.seerResultsTonight = {};
     room.hunterTargetTonight = {};
     room.hunterShotPlayerIds = [];
     room.loveCupidId = null;

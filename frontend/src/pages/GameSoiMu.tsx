@@ -981,8 +981,8 @@ export default function GameSoiMu() {
           {isDay && (
             <button
               onClick={() => socket.emit("hostStartDayVoting", { roomId: room.id })}
-              disabled={room.dayVotingStarted === true || room.trialStage !== "none"}
-              style={{ opacity: (room.dayVotingStarted === true || room.trialStage !== "none") ? 0.6 : 1 }}
+              disabled={!!room.dayDeadline || room.trialStage !== "none"}
+              style={{ opacity: (!!room.dayDeadline || room.trialStage !== "none") ? 0.6 : 1 }}
             >
               Bắt đầu biểu quyết
             </button>
@@ -1013,7 +1013,7 @@ export default function GameSoiMu() {
           onHighlightPlayer={() => { }}
           canViewNightLogs={true}
           isHost={true}
-          viewMode="names-roles"
+          viewMode="nick-names-roles"
           gameEnded={!!room?.gameOver}
           isReplay={room?.isReplay}
           myPlayerId={clientId || undefined}

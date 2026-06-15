@@ -148,6 +148,7 @@ export interface Room {
   protectedTonightBy?: string | null;
   lastProtected?: string | null;
   seerUsedTonight?: Record<string, number>;
+  seerResultsTonight?: Record<string, { playerId: string; isWolf: boolean }[]>;
   witchPotions?: Record<string, { healUsed: boolean; poisonUsed: boolean }>;
   witchHealTargetTonight?: Record<string, string | null>;
   witchPoisonTargetTonight?: Record<string, string | null>;

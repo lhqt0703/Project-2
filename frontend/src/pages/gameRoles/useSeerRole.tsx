@@ -9,7 +9,7 @@ export function useSeerRole({
   phase,
   role,
   deadPlayers,
-  seerResult,
+  seerResults,
   allNightActionsSimultaneous,
   currentNightTurnRole,
   nightTurnPaused: _nightTurnPaused,
@@ -21,7 +21,7 @@ export function useSeerRole({
   phase: GamePhase;
   role: string | null;
   deadPlayers: string[];
-  seerResult: { playerId: string; isWolf: boolean } | null;
+  seerResults: { playerId: string; isWolf: boolean }[];
   allNightActionsSimultaneous: boolean;
   currentNightTurnRole: string | null;
   nightTurnPaused: boolean;
@@ -35,12 +35,12 @@ export function useSeerRole({
   const prevPhaseRef = useRef<GamePhase>(phase);
 
   useEffect(() => {
-    if (seerResult) {
+    if (seerResults && seerResults.length > 0) {
       setShowConfirm(false);
       setSelectedPlayerId(null);
-      setChecksUsed((c) => c + 1);
+      setChecksUsed(seerResults.length);
     }
-  }, [seerResult]);
+  }, [seerResults]);
 
   useEffect(() => {
     const prev = prevPhaseRef.current;
@@ -99,7 +99,7 @@ export function useSeerRole({
   );
 
   return {
-    seerResult,
+    seerResults,
     onPlayerClick,
     modal,
     resetOnPhaseChange,

@@ -302,11 +302,11 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
         clearTimeout(room.spiritWolfDecisionTimer);
         room.spiritWolfDecisionTimer = null;
       }
-      room.spiritWolfDecisionDeadline = Date.now() + durationMs;
+      room.spiritWolfDecisionDeadline = Date.now() + durationMs + 500;
       emitSpiritWolfDecisionNeeded(roomId);
       room.spiritWolfDecisionTimer = setTimeout(() => {
         finishSpiritWolfTurn(roomId, true);
-      }, durationMs);
+      }, durationMs + 500);
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       emitHostNightActionProgress(roomId);
       return;
@@ -353,7 +353,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     const useTimer = opts?.useTimer !== false;
     const durationMs = useTimer ? Math.max(0, Math.floor(opts?.durationMs ?? getWolfTurnDurationMs(room))) : null;
 
-    room.wolfDeadline = durationMs === null ? null : Date.now() + durationMs;
+    room.wolfDeadline = durationMs === null ? null : Date.now() + durationMs + 500;
     ctx.io.to(`wolves_${roomId}`).emit("wolfPhaseStarted", {
       wolves: wolves.map((w) => w.id),
       activeWolves: getActiveWolves(room),
@@ -385,7 +385,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
 
     room.wolfTimer = setTimeout(() => {
       finishWolfVoting(roomId);
-    }, durationMs);
+    }, durationMs + 500);
   }
 
   function emitWolfBiteDisabled(roomId: string) {
@@ -453,7 +453,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     room.nightTurnRole = role;
     room.nightTurnPaused = false;
     room.nightTurnRemainingMs = durationMs;
-    room.nightTurnDeadline = Date.now() + durationMs;
+    room.nightTurnDeadline = Date.now() + durationMs + 500;
     room.spiritWolfDecisionDeadline = role === "Linh sói" ? room.nightTurnDeadline : room.spiritWolfDecisionDeadline ?? null;
     room.hidePlayerRoleText = false;
 
@@ -469,7 +469,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       } else {
         room.nightTurnTimer = setTimeout(() => {
           finishSpiritWolfTurn(roomId, true);
-        }, durationMs);
+        }, durationMs + 500);
       }
     } else {
       if (durationMs <= 0) {
@@ -483,7 +483,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       } else {
         room.nightTurnTimer = setTimeout(() => {
           startNightTurnByIndex(roomId, index + 1);
-        }, durationMs);
+        }, durationMs + 500);
       }
     }
 
@@ -518,7 +518,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
         const durationMs = getNonWolfTurnDurationMs(room);
         if (durationMs > 0) {
           room.nightTurnRemainingMs = durationMs;
-          room.nightTurnDeadline = Date.now() + durationMs;
+          room.nightTurnDeadline = Date.now() + durationMs + 500;
           room.nightTurnTimer = setTimeout(() => {
             const r = ctx.rooms[roomId];
             if (r && r.phase === "night" && r.nightTurnPlayerId === ravenkeeperId) {
@@ -527,7 +527,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
               ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(r));
               emitHostNightActionProgress(roomId);
             }
-          }, durationMs);
+          }, durationMs + 500);
         } else {
           room.nightTurnRemainingMs = null;
           room.nightTurnDeadline = null;
@@ -580,14 +580,14 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       const durationMs = getNonWolfTurnDurationMs(room);
       if (durationMs > 0) {
         room.nightTurnRemainingMs = durationMs;
-        room.nightTurnDeadline = Date.now() + durationMs;
+        room.nightTurnDeadline = Date.now() + durationMs + 500;
         room.nightTurnTimer = setTimeout(() => {
           const r = ctx.rooms[roomId];
           if (r && r.phase === "night" && r.nightTurnPlayerId === playerId) {
             r.nightTurnIndex = (r.nightTurnIndex ?? 0) + 1;
             advanceDietQuyNightTurn(roomId);
           }
-        }, durationMs);
+        }, durationMs + 500);
       } else {
         room.nightTurnRemainingMs = null;
         room.nightTurnDeadline = null;
@@ -640,7 +640,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     if (rules.allNightActionsSimultaneous) {
       room.hidePlayerRoleText = false;
       const nonWolfDurationMs = getNonWolfTurnDurationMs(room);
-      room.nightTurnDeadline = nonWolfDurationMs > 0 ? Date.now() + nonWolfDurationMs : null;
+      room.nightTurnDeadline = nonWolfDurationMs > 0 ? Date.now() + nonWolfDurationMs + 500 : null;
       const baseDeadline = room.nightTurnDeadline;
 
       if (room.merchantWolfBiteDisabledTonight) {

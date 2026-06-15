@@ -5,12 +5,12 @@ export default function RoleCompanionOverlay({
   companionRoleSrc,
   normalizedRole,
   playerFrameHeightPx,
-  seerResult,
+  seerResults,
 }: {
   companionRoleSrc: string | null;
   normalizedRole: string | null;
   playerFrameHeightPx: number;
-  seerResult: { playerId: string; isWolf: boolean } | null;
+  seerResults: { playerId: string; isWolf: boolean }[] | null;
 }) {
   const [renderedSrc, setRenderedSrc] = useState<string | null>(null);
   const [renderedRole, setRenderedRole] = useState<string | null>(null);
@@ -60,9 +60,10 @@ export default function RoleCompanionOverlay({
     let ringColor = "#a855f7"; // default purple
     let ringColorTwo = "#3b82f6"; // default blue
     let pulse = false;
-    if (seerResult) {
-      pulse = !!seerResult.isWolf;
-      if (seerResult.isWolf) {
+    const lastResult = seerResults && seerResults.length > 0 ? seerResults[seerResults.length - 1] : null;
+    if (lastResult) {
+      pulse = !!lastResult.isWolf;
+      if (lastResult.isWolf) {
         ringColor = "#f38991"; // wolf red/pink
         ringColorTwo = "#e4acb5";
       } else {

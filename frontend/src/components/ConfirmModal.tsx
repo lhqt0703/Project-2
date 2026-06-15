@@ -38,7 +38,8 @@ export default function ConfirmModal({
     >
       <div
         style={{
-          background: "var(--surface)",
+          background: "rgb(23 26 33 / 80%)",
+          backdropFilter: "blur(12px)",
           padding: 32,
           borderRadius: 12,
           minWidth: 320,

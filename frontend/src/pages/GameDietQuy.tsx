@@ -67,6 +67,28 @@ const renderInfoCard = (text: string) => (
   </div>
 );
 
+const DIET_QUY_ROLE_SKILL_HINTS: Record<string, string> = {
+  "Thợ giặt": "Hãy chờ Quản trò gửi thông tin về 1 vai trò Dân làng của 1 trong 2 người chơi",
+  "Thủ thư": "Hãy chờ Quản trò gửi thông tin về 1 vai trò Tay sai của 1 trong 2 người chơi (hoặc không có)",
+  "Điều tra viên": "Hãy chờ Quản trò gửi thông tin về 1 vai trò Ác quỷ của 1 trong 2 người chơi",
+  "Đầu bếp": "Hãy chờ Quản trò gửi thông tin số lượng cặp người chơi xấu ngồi cạnh nhau",
+  "Đồng cảm": "Hãy chờ Quản trò gửi thông tin số lượng người chơi xấu ngồi sát cạnh bạn",
+  "Thầy bói": "Chọn đúng 2 người chơi trên vòng tròn để kiểm tra xem có ai là Quỷ không",
+  "Chôn cất": "Hãy chờ Quản trò gửi thông tin về vai trò thực sự của người vừa bị treo cổ ban ngày",
+  "Nhà sư": "Chọn một người chơi khác mà bạn muốn bảo vệ khỏi sự tấn công của Ác Quỷ đêm nay hoặc không hành động để bỏ qua",
+  "Nuôi quạ": "Chọn một người chơi để tìm hiểu vai trò thực sự của họ nếu bạn bị chết trong đêm nay",
+  "Trinh nữ": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
+  "Diệt quỷ": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
+  "Chiến sĩ": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
+  "Thị trưởng": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
+  "Độc thủ": "Chọn một người chơi để đầu độc kỹ năng của họ trong đêm nay hoặc không hành động để bỏ qua",
+  "Gián điệp": "Hãy xem toàn bộ danh sách vai trò hiện tại (tất cả mọi người) trên màn hình của bạn",
+  "Phò": "Chọn một người chơi để quyến rũ họ, bảo vệ họ khỏi Ác quỷ hoặc chặn kỹ năng của họ đêm nay",
+  "Ác Quỷ": "Chọn cắn một người chơi đêm nay để tiêu diệt họ hoặc không hành động để bỏ qua",
+  "Người ẩn dật": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
+  "Thánh nhân": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu"
+};
+
 export default function GameDietQuy() {
   const { role, room, setRoom } = useRoomContext();
   const nav = useNavigate();
@@ -95,13 +117,39 @@ export default function GameDietQuy() {
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const [scoreboardOpen, setScoreboardOpen] = useState(false);
   const [hostPlayerActionTargetId, setHostPlayerActionTargetId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"roles" | "names-roles" | "real-names">(() => {
-    return (localStorage.getItem("game-view-mode") as any) || "names-roles";
+  const [viewMode, setViewMode] = useState<"real-names" | "nick-names" | "real-names-roles" | "nick-names-roles">(() => {
+    const saved = localStorage.getItem("game-view-mode");
+    if (saved === "real-names" || saved === "real-names-roles") return "real-names";
+    return "nick-names";
   });
-  const handleViewModeChange = (newMode: "roles" | "names-roles" | "real-names") => {
+  const handleViewModeChange = (newMode: "real-names" | "nick-names" | "real-names-roles" | "nick-names-roles") => {
     setViewMode(newMode);
     localStorage.setItem("game-view-mode", newMode);
   };
+
+  useEffect(() => {
+    if (isHost) {
+      if (viewMode === "real-names") {
+        handleViewModeChange("real-names-roles");
+      } else if (viewMode === "nick-names") {
+        handleViewModeChange("nick-names-roles");
+      }
+    } else {
+      if (!sync.gameEnded) {
+        if (viewMode === "real-names-roles") {
+          handleViewModeChange("real-names");
+        } else if (viewMode === "nick-names-roles") {
+          handleViewModeChange("nick-names");
+        }
+      } else {
+        if (viewMode === "real-names") {
+          handleViewModeChange("real-names-roles");
+        } else if (viewMode === "nick-names") {
+          handleViewModeChange("nick-names-roles");
+        }
+      }
+    }
+  }, [isHost, sync.gameEnded, viewMode]);
   const [editingRealName, setEditingRealName] = useState("");
   const [editingAvatar, setEditingAvatar] = useState("");
   useEffect(() => {
@@ -636,6 +684,74 @@ export default function GameDietQuy() {
     deadPlayers: deadPlayersForNightActions,
   });
 
+  const hasVisibleActionPanel = useMemo(() => {
+    if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions) return false;
+    if (isHost) return false;
+    return room?.nightTurnPlayerId === clientId && room?.nightTurnRole === role;
+  }, [phase, role, isCurrentPlayerDeadForNightActions, isHost, room, clientId]);
+
+  const renderSkillHint = () => {
+    if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions) return null;
+    
+    let hintText = DIET_QUY_ROLE_SKILL_HINTS[role] || "Hãy ngủ yên và chờ đợi ngày mới bắt đầu";
+    
+    return (
+      <>
+        <style>{`
+          @keyframes fadeInUp {
+            from {
+              opacity: 0;
+              transform: translateY(8px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+          .role-skill-hint {
+            animation: fadeInUp 0.4s ease-out forwards;
+          }
+          @media (max-width: 768px) {
+            .role-skill-hint {
+              max-width: 62% !important;
+              margin-left: 8px !important;
+              margin-right: auto !important;
+            }
+          }
+          @media (min-width: 769px) {
+            .role-skill-hint {
+              max-width: 550px !important;
+              margin: 0 auto !important;
+            }
+          }
+        `}</style>
+        <div 
+          className="role-skill-hint"
+          style={{
+            background: "rgba(18, 14, 38, 0.65)",
+            backdropFilter: "blur(10px)",
+            WebkitBackdropFilter: "blur(10px)",
+            border: "1px solid rgba(168, 85, 247, 0.22)",
+            borderRadius: "10px",
+            padding: "8px 12px",
+            color: "#e2e8f0",
+            fontSize: "0.85rem",
+            lineHeight: "1.4",
+            boxShadow: "0 6px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
+            textAlign: "left",
+            pointerEvents: "auto",
+            marginTop: "10px",
+            zIndex: 5,
+            fontStyle: "italic",
+            opacity: 0.9,
+          }}
+        >
+          {hintText}
+        </div>
+      </>
+    );
+  };
+
   const confirmSlayerAction = () => {
     if (!roomId || !slayerTargetId) return;
     socket.emit("dietQuySlayerAbility", { roomId, targetId: slayerTargetId });
@@ -1026,21 +1142,20 @@ export default function GameDietQuy() {
         />
       )}
       {!isHost && (
-        <h2>
-          Vai trò của bạn là:{" "}
-          {cardFlippedToFront && role ? (
+        <h2 style={{ display: "inline-flex", alignItems: "center", minHeight: "40px", height: "40px" }}>
+          <span>Vai trò của bạn là:</span>
+          <span style={{ display: "inline-flex", alignItems: "center", minHeight: "30px", height: "30px", marginLeft: "8px" }}>
             <DecryptedText
-              text={role}
+              text={cardFlippedToFront && role ? role : "********"}
               speed={40}
               maxIterations={8}
               sequential
+              revealDirection={cardFlippedToFront ? "start" : "end"}
               animateOn="view"
               className="revealed"
               encryptedClassName="encrypted"
             />
-          ) : (
-            <span className="encrypted">********</span>
-          )}
+          </span>
         </h2>
       )}
 
@@ -1539,6 +1654,7 @@ export default function GameDietQuy() {
                 replayTargetIds={replayTargetIds}
                 suppressNightActionProgress={autoTrialHighlightSuppressed}
               />
+              {!hasVisibleActionPanel && renderSkillHint()}
             </div>
             <RoleCharacterPortrait
               role={shouldShowRolePortrait ? role : null}
@@ -1548,7 +1664,7 @@ export default function GameDietQuy() {
               companionRoleSrc={shouldRevealMyRole && !(sync.gameEnded && canViewLog) ? companionRoleSrc : null}
               normalizedRole={normalizedRole}
               playerFrameHeightPx={playerFrameHeightPx}
-              seerResult={null}
+              seerResults={null}
             />
           </>
         );
@@ -1604,7 +1720,12 @@ export default function GameDietQuy() {
       </div>
 
 
-      {!sync.gameEnded && dietQuy.panel}
+      {!sync.gameEnded && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start" }}>
+          {dietQuy.panel}
+          {hasVisibleActionPanel && renderSkillHint()}
+        </div>
+      )}
 
       {/* Game controls */}
       {canShowGameControls && (

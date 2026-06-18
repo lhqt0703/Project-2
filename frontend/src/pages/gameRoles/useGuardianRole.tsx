@@ -65,6 +65,7 @@ export function useGuardianRole({
   }, [lockedTargetId, phase]);
 
   const canAct = useMemo(() => {
+    if (roomId === "mock-8") return role === "Bảo vệ" && phase === "night";
     if (phase !== "night") return false;
     if (role !== "Bảo vệ") return false;
     if (clientId && deadPlayers.includes(clientId)) return false;
@@ -73,13 +74,14 @@ export function useGuardianRole({
       if (currentNightTurnRole !== "Bảo vệ") return false;
     }
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, nightActionDeadline, nightActionNow, phase, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, nightActionDeadline, nightActionNow, phase, role, roomId]);
 
   const isGuardianTurnActive = useMemo(() => {
+    if (roomId === "mock-8") return phase === "night";
     if (phase !== "night") return false;
     if (allNightActionsSimultaneous) return true;
     return currentNightTurnRole === "Bảo vệ";
-  }, [allNightActionsSimultaneous, currentNightTurnRole, phase]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, phase, roomId]);
 
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;
@@ -87,6 +89,12 @@ export function useGuardianRole({
     // đã xác nhận rồi thì không được đổi
     if (lockedTargetId) {
       // consume click silently to mimic Seer lock UX
+      return true;
+    }
+
+    if (roomId === "mock-8") {
+      setSelectedPlayerId(playerId);
+      setShowConfirm(true);
       return true;
     }
 
@@ -99,7 +107,7 @@ export function useGuardianRole({
     setSelectedPlayerId(playerId);
     setShowConfirm(true);
     return true;
-  }, [canAct, lastProtectedPrevNight, lockedTargetId]);
+  }, [canAct, lastProtectedPrevNight, lockedTargetId, roomId]);
 
   const confirm = useCallback(() => {
     if (!canAct) return;
@@ -108,6 +116,7 @@ export function useGuardianRole({
     // lock ngay khi đã bấm xác nhận
     setLockedTargetId(selectedPlayerId);
     setShowConfirm(false);
+    if (roomId === "mock-8") return;
     socket.emit("guardianProtect", { roomId, targetId: selectedPlayerId });
   }, [canAct, roomId, selectedPlayerId]);
 

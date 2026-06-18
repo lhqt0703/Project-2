@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { socket, clientId } from "../socket";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useRoomContext } from "../context/RoomContext";
@@ -6,6 +6,8 @@ import PlayerPositions from "../components/PlayerPositions";
 import ConfirmModal from "../components/ConfirmModal";
 import Masonry from "../components/Masonry";
 import GameLogPanel from "../components/GameLogPanel";
+import { useDayVoteRole } from "./gameRoles/useDayVoteRole";
+import { CountdownButton } from "../components/CountdownButton";
 import nenLungAsset from "../assets/nền lưng.avif";
 import RoomBg from "../assets/Nền phòng.avif";
 import ChieuBg from "../assets/nền chiều.avif";
@@ -13,6 +15,9 @@ import nenLaiAsset from "../assets/Nền lai.avif";
 import medalSvg from "../assets/medal.svg";
 import GridMotionOverlay from "../components/GridMotionOverlay";
 import type { GameLogNight as SharedGameLogNight } from "./gameRoles/socketEvents";
+import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
+
+const HUNTER_BULLET_ANIM_MS = 1000;
 
 export default function GameSoiMu() {
   const { room, setRoom } = useRoomContext();
@@ -25,8 +30,23 @@ export default function GameSoiMu() {
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [thumbDecision, setThumbDecision] = useState<"up" | "down" | null>(null);
   const [daySelectedTargetId, setDaySelectedTargetId] = useState<string | null>(null);
-  const [dayVoteTargetId, setDayVoteTargetId] = useState<string | null>(null);
-  const [trialVoteDecision, setTrialVoteDecision] = useState<"live" | "die" | null>(null);
+  const [hostPlayerActionTargetId, setHostPlayerActionTargetId] = useState<string | null>(null);
+  const [showGridOverlay, setShowGridOverlay] = useState(true);
+
+  // Hunter shot animation states
+  const [hunterBulletAnim, setHunterBulletAnim] = useState<{
+    fromPlayerId: string;
+    toPlayerId: string;
+    startedAt: number;
+    durationMs: number;
+    assetSrc?: string;
+    alt?: string;
+    rotationOffsetDeg?: number;
+    kind: "hunter" | "love";
+  } | null>(null);
+  const hunterBulletTimeoutRef = useRef<number | null>(null);
+  const [hunterShotPayload, setHunterShotPayload] = useState<{ hunterId: string; targetId: string } | null>(null);
+  const [hunterShotSeq, setHunterShotSeq] = useState(0);
 
   // Log & Progress States
   const [gameLogs, setGameLogs] = useState<SharedGameLogNight[]>([]);
@@ -37,6 +57,62 @@ export default function GameSoiMu() {
   const [now, setNow] = useState(Date.now());
   const [serverTimeOffset, setServerTimeOffset] = useState(0);
 
+  const isHost = room ? room.hostId === clientId : false;
+  const isDusk = room?.phase === "dusk";
+  const isNight = room?.phase === "night";
+  const isDay = room?.phase === "day";
+  const amIDead = room?.deadPlayers?.includes(clientId) || false;
+
+  // View Mode state & syncing
+  const [viewMode, setViewMode] = useState<"real-names" | "nick-names" | "real-names-roles" | "nick-names-roles">(() => {
+    const saved = localStorage.getItem("game-view-mode");
+    if (saved === "real-names" || saved === "real-names-roles") return "real-names";
+    return "nick-names";
+  });
+  const handleViewModeChange = (newMode: "real-names" | "nick-names" | "real-names-roles" | "nick-names-roles") => {
+    setViewMode(newMode);
+    localStorage.setItem("game-view-mode", newMode);
+  };
+
+  // Masonry visibility management
+  const [masonryComplete, setMasonryComplete] = useState(false);
+  const isSelectingLocally = useRef(false);
+
+  useEffect(() => {
+    if (isHost) {
+      if (viewMode === "real-names") {
+        handleViewModeChange("real-names-roles");
+      } else if (viewMode === "nick-names") {
+        handleViewModeChange("nick-names-roles");
+      }
+    } else {
+      if (!room?.gameOver) {
+        if (viewMode === "real-names-roles") {
+          handleViewModeChange("real-names");
+        } else if (viewMode === "nick-names-roles") {
+          handleViewModeChange("nick-names");
+        }
+      } else {
+        if (viewMode === "real-names") {
+          handleViewModeChange("real-names-roles");
+        } else if (viewMode === "nick-names") {
+          handleViewModeChange("nick-names-roles");
+        }
+      }
+    }
+  }, [isHost, room?.gameOver, viewMode]);
+
+  useEffect(() => {
+    if (isDusk) {
+      const hasChosen = room?.duskCardSelections && room.duskCardSelections[clientId] !== undefined;
+      if (hasChosen && !isSelectingLocally.current) {
+        setMasonryComplete(true);
+      }
+    } else {
+      setMasonryComplete(false);
+    }
+  }, [isDusk, room?.duskCardSelections, clientId]);
+
   // Wrong choice highlight states
   const [soiMuWrongChoiceHighlightId, setSoiMuWrongChoiceHighlightId] = useState<string | null>(null);
   const [soiMuWrongChoiceOpacity, setSoiMuWrongChoiceOpacity] = useState(1);
@@ -45,13 +121,6 @@ export default function GameSoiMu() {
   const [quitConfirmOpen, setQuitConfirmOpen] = useState(false);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const isHost = room ? room.hostId === clientId : false;
-
-  const isDusk = room?.phase === "dusk";
-  const isNight = room?.phase === "night";
-  const isDay = room?.phase === "day";
-
-  const amIDead = room?.deadPlayers?.includes(clientId) || false;
   const boardRoomOverride = useMemo(() => {
     if (!room || !isHost) return room;
     return {
@@ -60,17 +129,42 @@ export default function GameSoiMu() {
     };
   }, [room, isHost, nightProgress]);
 
-  const myDayVoteTargetId = room?.dayVotes?.[clientId] ?? null;
-  const myDayVoteLocked = room?.dayLocked?.[clientId] === true;
-  const myTrialVote = trialVoteDecision ?? (room?.trialVotes?.[clientId] ?? null);
-  const isDayVotePhase = isDay && !isHost && !amIDead && room?.trialStage === "none" && !!room?.dayDeadline;
-  const isTrialDefensePhase = isDay && !isHost && !amIDead && room?.trialStage === "defense" && !!room?.trialTargetId;
-  const isTrialVerdictPhase = isDay && !isHost && !amIDead && room?.trialStage === "verdict" && !!room?.trialTargetId;
+  const dayVote = useDayVoteRole({
+    roomId: room?.id || null,
+    phase: (room?.phase || "dusk") as any,
+    room: room || { players: [] },
+    deadPlayers: room?.deadPlayers || [],
+    dayVotes: room?.dayVotes || null,
+    dayLocked: room?.dayLocked || null,
+    dayDiscussionDeadline: room?.dayDiscussionDeadline || null,
+    dayDeadline: room?.dayDeadline || null,
+    dayVoters: room?.dayVoters || [],
+    trialTargetId: room?.trialTargetId || null,
+    trialStage: room?.trialStage || "none",
+    trialDefenseDeadline: room?.trialDefenseDeadline || null,
+    trialVerdictDeadline: room?.trialVerdictDeadline || null,
+    trialInteractionCut: room?.trialInteractionCut || false,
+    trialInteractionActiveIds: room?.trialInteractionActiveIds || [],
+    trialSelectedInteractorId: room?.trialSelectedInteractorId || null,
+    trialSelectedInteractorIds: room?.trialSelectedInteractorIds || [],
+    trialInteractionSelectionLimit: room?.trialInteractionSelectionLimit || 0,
+    trialVotes: room?.trialVotes || null,
+    serverTimeOffset,
+    dayPaused: !!room?.dayPaused,
+    dayRemainingMs: room?.dayRemainingMs || null,
+  });
 
   // Tiên tri status
   const isInvestigated = room?.soiMuInvestigatedPlayerId === clientId;
   const isInvestigationResolved = room?.soiMuInvestigationResolved !== false; // true if resolved or null
   const showInvestigationUI = isDay && isInvestigated && !isInvestigationResolved && !amIDead;
+
+  const isSuyThanAlive = useMemo(() => {
+    if (!room) return false;
+    const suyThanPlayerId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Suy Thận");
+    if (!suyThanPlayerId) return false;
+    return !room.deadPlayers?.includes(suyThanPlayerId);
+  }, [room]);
 
   // Sync server time offset
   useEffect(() => {
@@ -88,8 +182,60 @@ export default function GameSoiMu() {
     return () => clearInterval(interval);
   }, [serverTimeOffset]);
 
+  // Hunter shot animation logic
+  const playHunterShotAnim = useCallback((
+    hunterId: string,
+    targetId: string,
+    options?: { assetSrc?: string; alt?: string; rotationOffsetDeg?: number; kind?: "hunter" | "love" }
+  ) => {
+    if (!hunterId || !targetId || hunterId === targetId) return;
+
+    if (hunterBulletTimeoutRef.current) {
+      window.clearTimeout(hunterBulletTimeoutRef.current);
+      hunterBulletTimeoutRef.current = null;
+    }
+
+    setHunterBulletAnim({
+      fromPlayerId: hunterId,
+      toPlayerId: targetId,
+      startedAt: performance.now(),
+      durationMs: HUNTER_BULLET_ANIM_MS,
+      assetSrc: options?.assetSrc,
+      alt: options?.alt,
+      rotationOffsetDeg: options?.rotationOffsetDeg,
+      kind: options?.kind ?? "hunter",
+    });
+
+    hunterBulletTimeoutRef.current = window.setTimeout(() => {
+      setHunterBulletAnim(null);
+      hunterBulletTimeoutRef.current = null;
+    }, HUNTER_BULLET_ANIM_MS);
+  }, []);
+
+  useEffect(() => {
+    if (!hunterShotPayload?.hunterId || !hunterShotPayload?.targetId) return;
+    const shouldRevealHunterShotInDay = room?.gameRules?.hunterShotPublicInDay !== false;
+    if (isDay && !shouldRevealHunterShotInDay) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      playHunterShotAnim(hunterShotPayload.hunterId, hunterShotPayload.targetId);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isDay, playHunterShotAnim, room?.gameRules?.hunterShotPublicInDay, hunterShotPayload, hunterShotSeq]);
+
   // Watch for Tiên tri wrong choice failure
   const prevResultRef = useRef<string | null | undefined>(undefined);
+  const prevGameOverRef = useRef(false);
+
+  useEffect(() => {
+    if (room?.gameOver && !prevGameOverRef.current) {
+      if (room.winner && room.winner !== "nobody") {
+        shootWinnerConfettiFromSides(room.winner, undefined);
+      }
+    }
+    prevGameOverRef.current = !!room?.gameOver;
+  }, [room?.gameOver, room?.winner]);
+
   useEffect(() => {
     if (!room) return;
     if (room.soiMuInvestigationResult === "fail" && prevResultRef.current !== "fail") {
@@ -161,9 +307,8 @@ export default function GameSoiMu() {
       setSelectedTargetId(null);
       setThumbDecision(null);
       setDaySelectedTargetId(null);
-      setDayVoteTargetId(null);
-      setTrialVoteDecision(null);
       setNightProgress({});
+      setHostPlayerActionTargetId(null);
       socket.emit("requestGameLog", { roomId });
       if (isHost) {
         socket.emit("requestHostNightActionProgress", { roomId });
@@ -192,6 +337,11 @@ export default function GameSoiMu() {
       nav(`/room?roomId=${roomId}`);
     };
 
+    const handleHunterShot = (payload: { hunterId: string; targetId: string }) => {
+      setHunterShotPayload(payload);
+      setHunterShotSeq((prev) => prev + 1);
+    };
+
     socket.on("roomUpdated", handleRoomUpdated);
     socket.on("gameLogUpdated", handleGameLogUpdated);
     socket.on("rolesRevealUpdated", handleRolesRevealUpdated);
@@ -200,6 +350,7 @@ export default function GameSoiMu() {
     socket.on("phaseChanged", handlePhaseChanged);
     socket.on("returnToRoomResult", handleReturnResult);
     socket.on("forceReturnToRoom", handleForceReturnToRoom);
+    socket.on("hunterShot", handleHunterShot);
 
     return () => {
       socket.off("roomUpdated", handleRoomUpdated);
@@ -210,14 +361,11 @@ export default function GameSoiMu() {
       socket.off("phaseChanged", handlePhaseChanged);
       socket.off("returnToRoomResult", handleReturnResult);
       socket.off("forceReturnToRoom", handleForceReturnToRoom);
+      socket.off("hunterShot", handleHunterShot);
     };
   }, [roomId, isHost, nav, setRoom]);
 
-  // Đồng bộ day vote khi dữ liệu phòng cập nhật
-  useEffect(() => {
-    setDayVoteTargetId(room?.dayVotes?.[clientId] ?? null);
-    setTrialVoteDecision(room?.trialVotes?.[clientId] ?? null);
-  }, [room?.dayVotes, room?.trialVotes]);
+
 
   // Chọn thẻ bài dusk
   const masonryItems = useMemo(() => {
@@ -272,47 +420,7 @@ export default function GameSoiMu() {
     socket.emit("soiMuDayChooseTarget", { roomId: room.id, targetId: daySelectedTargetId });
   };
 
-  const handleChooseDayVoteTarget = (targetId: string) => {
-    if (!room || amIDead || isHost || !isDayVotePhase) return;
-    if (room.dayLocked?.[clientId]) return;
-    if (room.dayDeadline && Date.now() >= room.dayDeadline) return;
 
-    const nextTarget = dayVoteTargetId === targetId ? null : targetId;
-    setDayVoteTargetId(nextTarget);
-    socket.emit("dayChooseTarget", { roomId: room.id, targetId: nextTarget });
-  };
-
-  const handleLockDayVote = () => {
-    if (!room || amIDead || isHost || !isDayVotePhase) return;
-    if (room.dayLocked?.[clientId]) return;
-    socket.emit("dayLockVote", { roomId: room.id });
-  };
-
-  const handleBlankDayVote = () => {
-    if (!room || amIDead || isHost || !isDayVotePhase) return;
-    if (room.dayLocked?.[clientId]) return;
-    setDayVoteTargetId(null);
-    socket.emit("dayChooseTarget", { roomId: room.id, targetId: null });
-    socket.emit("dayLockVote", { roomId: room.id });
-  };
-
-  const handleTrialVote = (vote: "live" | "die") => {
-    if (!room || amIDead || isHost || !isTrialVerdictPhase) return;
-    if (room.trialVerdictDeadline && Date.now() >= room.trialVerdictDeadline) return;
-    setTrialVoteDecision(vote);
-    socket.emit("trialVoteLifeDeath", { roomId: room.id, vote });
-  };
-
-  const handleTrialToggleInteraction = () => {
-    if (!room || amIDead || isHost || !isTrialDefensePhase || room.trialTargetId === clientId) return;
-    const hasInteracted = room.trialInteractionActiveIds?.includes(clientId) === true;
-    socket.emit("trialToggleInteraction", { roomId: room.id, active: !hasInteracted });
-  };
-
-  const handleTrialCutInteraction = () => {
-    if (!room || amIDead || isHost || !isTrialDefensePhase || room.trialTargetId !== clientId) return;
-    socket.emit("trialCutInteraction", { roomId: room.id });
-  };
 
   // Host kết tội/treo cổ người chơi
   const handleEliminatePlayer = (targetId: string) => {
@@ -320,9 +428,10 @@ export default function GameSoiMu() {
     const p = room.players.find((player: any) => player.id === targetId);
     if (!p || room.deadPlayers?.includes(targetId)) return;
 
-    const confirm = window.confirm(`Bạn có chắc muốn treo cổ/loại bỏ người chơi "${p.name}" không?`);
+    const confirm = window.confirm(`Bạn có chắc muốn loại người chơi "${p.name}" vì phạm luật không?`);
     if (confirm) {
       socket.emit("hostEliminatePlayerForRules", { roomId: room.id, targetId });
+      setHostPlayerActionTargetId(null);
     }
   };
 
@@ -396,26 +505,31 @@ export default function GameSoiMu() {
     return badges;
   }, [room, isHost, isDusk, revealedRoles]);
 
-  // Cấu hình Highlight của Tiên tri ban ngày
+  // Cấu hình Highlight gộp của Tiên tri ban ngày và Tòa án xét xử
   const trialWhitePlayerIds = useMemo(() => {
+    const list = [...(dayVote.playerPositionsProps.trialWhitePlayerIds || [])];
     if (isDay && room?.soiMuInvestigatedPlayerId && !room.soiMuInvestigationResolved) {
-      return [room.soiMuInvestigatedPlayerId];
+      list.push(room.soiMuInvestigatedPlayerId);
     }
-    return [];
-  }, [isDay, room?.soiMuInvestigatedPlayerId, room?.soiMuInvestigationResolved]);
+    return list;
+  }, [dayVote.playerPositionsProps.trialWhitePlayerIds, isDay, room?.soiMuInvestigatedPlayerId, room?.soiMuInvestigationResolved]);
 
   const trialGreenPlayerId = useMemo(() => {
+    if (dayVote.playerPositionsProps.trialGreenPlayerId) {
+      return dayVote.playerPositionsProps.trialGreenPlayerId;
+    }
     if (isDay && room?.soiMuInvestigatedPlayerId && room.soiMuInvestigationResult === "success") {
       return room.soiMuInvestigatedPlayerId;
     }
     return undefined;
-  }, [isDay, room?.soiMuInvestigatedPlayerId, room?.soiMuInvestigationResult]);
+  }, [dayVote.playerPositionsProps.trialGreenPlayerId, isDay, room?.soiMuInvestigatedPlayerId, room?.soiMuInvestigationResult]);
 
   const verdictDiePlayerIds = useMemo(() => {
+    const list: string[] = [];
     if (soiMuWrongChoiceHighlightId) {
-      return [soiMuWrongChoiceHighlightId];
+      list.push(soiMuWrongChoiceHighlightId);
     }
-    return [];
+    return list;
   }, [soiMuWrongChoiceHighlightId]);
 
   if (!room) {
@@ -430,15 +544,17 @@ export default function GameSoiMu() {
   }
 
   const secondsLeft = useMemo(() => {
-    let deadline: number | null | undefined = null;
     if (isNight) {
-      deadline = room.nightTurnDeadline;
-    } else if (isDay) {
-      deadline = room.dayDeadline || room.dayDiscussionDeadline;
+      if (room.nightTurnPaused) {
+        if (room.nightTurnRemainingMs == null) return null;
+        return Math.max(0, Math.ceil(room.nightTurnRemainingMs / 1000));
+      }
+      const deadline = room.nightTurnDeadline;
+      if (!deadline) return null;
+      return Math.max(0, Math.ceil((deadline - now) / 1000));
     }
-    if (!deadline) return null;
-    return Math.max(0, Math.ceil((deadline - now) / 1000));
-  }, [isNight, isDay, room.nightTurnDeadline, room.dayDeadline, room.dayDiscussionDeadline, now]);
+    return dayVote.remainingSec;
+  }, [isNight, room.nightTurnPaused, room.nightTurnRemainingMs, room.nightTurnDeadline, now, dayVote.remainingSec]);
 
   const hasMerchantInGame = room.soiMuHasMerchant === true;
   const isLocked = room.soiMuLocked?.[clientId] === true;
@@ -454,7 +570,12 @@ export default function GameSoiMu() {
       }} />
 
       {/* Grid Motion Overlay */}
-      {isNight && <GridMotionOverlay active={true} onComplete={() => { }} />}
+      {showGridOverlay && (
+        <GridMotionOverlay
+          active={showGridOverlay}
+          onComplete={() => setShowGridOverlay(false)}
+        />
+      )}
 
       {/* Styles Injection */}
       <style>{`
@@ -711,25 +832,16 @@ export default function GameSoiMu() {
         ) : (
           <h1 style={{ margin: 0, display: "flex", alignItems: "center" }}>🌙 Đêm {room.nightCount || 1}</h1>
         )}
-        {!room.gameOver && secondsLeft !== null && (
-          <button className="visible border button-gradient" style={{ cursor: "default" }}>
-            <div className="btn-content">
-              Còn {secondsLeft}s
-            </div>
-            <div className="border"></div>
-            <div className="gradient-0"></div>
-            <div className="gradient-1"></div>
-            <div className="glass"></div>
-            <div className="gradient-2">
-              <div className="color-1 color" style={{ transform: "translate(3%, 54%)" }}></div>
-              <div className="color-2 color" style={{ transform: "translate(-5%, 64%)" }}></div>
-              <div className="color-3 color" style={{ transform: "translate(-100%, -60%)" }}></div>
-              <div className="color-4 color" style={{ transform: "translate(-98%, 86%)" }}></div>
-              <div className="color-5 color" style={{ transform: "translate(-13%, -27%)" }}></div>
-              <div className="color-6 color" style={{ transform: "translate(6%, -39%)" }}></div>
-            </div>
-          </button>
-        )}
+        <CountdownButton
+          showCountdown={isNight && !room.gameOver && secondsLeft !== null}
+          countdownSeconds={secondsLeft}
+          isPaused={!!room.nightTurnPaused}
+        />
+        <CountdownButton
+          showCountdown={isDay && !room.gameOver && dayVote.remainingSec !== null}
+          countdownSeconds={dayVote.remainingSec}
+          isPaused={!!dayVote.dayPaused}
+        />
       </div>
 
       {(isHost || !!room.gameOver) && (
@@ -740,15 +852,19 @@ export default function GameSoiMu() {
 
       {/* Main Board Area */}
       <div style={{ margin: "2rem auto", width: "100%", maxWidth: "600px" }}>
-        {isDusk && !isHost ? (
+        {isDusk && !isHost && !masonryComplete ? (
           <Masonry
             items={masonryItems}
             duskCardSelections={room.duskCardSelections || {}}
             clientId={clientId}
             onSelectCard={(index) => {
+              isSelectingLocally.current = true;
               socket.emit("duskSelectCard", { roomId: room.id, cardIndex: index });
             }}
-            onSelectionComplete={() => { }}
+            onSelectionComplete={() => {
+              isSelectingLocally.current = false;
+              setMasonryComplete(true);
+            }}
             skipExitAnimation={true}
           />
         ) : (
@@ -757,23 +873,38 @@ export default function GameSoiMu() {
               roomOverride={boardRoomOverride}
               onPlayerClick={(pid) => {
                 if (isHost) {
-                  handleEliminatePlayer(pid);
-                } else if (isNight) {
-                  handleChooseNightTarget(pid);
-                } else if (showInvestigationUI) {
-                  handleChooseDayTarget(pid);
-                } else if (isDayVotePhase) {
-                  handleChooseDayVoteTarget(pid);
+                  if (hostPlayerActionTargetId === pid) {
+                    setHostPlayerActionTargetId(null);
+                  } else {
+                    setHostPlayerActionTargetId(pid);
+                  }
+                  return;
                 }
+                if (isNight) {
+                  handleChooseNightTarget(pid);
+                  return;
+                }
+                if (showInvestigationUI) {
+                  handleChooseDayTarget(pid);
+                  return;
+                }
+                if (dayVote.onPlayerClick(pid)) return;
               }}
               mode="view"
               showRoleBadges={isHost || room.gameOver}
               roleBadges={activeRolesForDisplay}
-              selectedOutlinePlayerId={isNight ? selectedTargetId : (showInvestigationUI ? daySelectedTargetId : (isDayVotePhase ? dayVoteTargetId : null))}
+              selectedOutlinePlayerId={
+                isHost 
+                  ? hostPlayerActionTargetId 
+                  : (isNight ? selectedTargetId : (showInvestigationUI ? daySelectedTargetId : (dayVote.playerPositionsProps.selectedOutlinePlayerId || null)))
+              }
               deadPlayersOverride={room.deadPlayers || []}
+              trialOrangePlayerId={dayVote.playerPositionsProps.trialOrangePlayerId}
               trialWhitePlayerIds={trialWhitePlayerIds}
               trialGreenPlayerId={trialGreenPlayerId}
               verdictDiePlayerIds={verdictDiePlayerIds}
+              bulletAnimation={hunterBulletAnim}
+              viewMode={viewMode}
             />
           </div>
         )}
@@ -781,191 +912,138 @@ export default function GameSoiMu() {
 
       {/* Player controls */}
       {!isHost && !isDusk && !amIDead && (
-        <div className="control-panel" style={{ maxWidth: "600px", margin: "1rem auto" }}>
-          {isNight && (
-            <>
-              <div style={{ fontSize: "14px", color: "rgba(255, 255, 255, 0.7)" }}>
-                {isLocked ? "Hành động của bạn đã được khóa" : "Chọn một mục tiêu mà bạn muốn:"}
-              </div>
+        <>
+          {(isNight || showInvestigationUI) && (
+            <div style={{ maxWidth: "600px", margin: "1rem auto", display: "flex", flexDirection: "column", gap: 12 }}>
+              {isNight && (
+                <>
+                  <div style={{ fontSize: "14px", color: "rgba(255, 255, 255, 0.7)" }}>
+                    {isLocked ? "Hành động của bạn đã được khóa" : "Chọn một mục tiêu mà bạn muốn:"}
+                  </div>
 
-              {/* Tay Buôn thumb selection */}
-              {hasMerchantInGame && (
-                <div style={{ display: "flex", gap: 10, margin: "8px 0" }}>
+                  {/* Tay Buôn thumb selection */}
+                  {hasMerchantInGame && (
+                    <div style={{ display: "flex", gap: 10, margin: "8px 0" }}>
+                      <button
+                        className={`btn-thumb ${thumbDecision === "up" ? "active-up" : ""}`}
+                        onClick={() => handleChooseThumb("up")}
+                        disabled={isLocked}
+                      >
+                        👍🏽
+                      </button>
+                      <button
+                        className={`btn-thumb ${thumbDecision === "down" ? "active-down" : ""}`}
+                        onClick={() => handleChooseThumb("down")}
+                        disabled={isLocked}
+                      >
+                        👎🏽
+                      </button>
+                    </div>
+                  )}
+
                   <button
-                    className={`btn-thumb ${thumbDecision === "up" ? "active-up" : ""}`}
-                    onClick={() => handleChooseThumb("up")}
-                    disabled={isLocked}
+                    className="btn-action btn-primary"
+                    onClick={handleLockNightAction}
+                    disabled={isLocked || !selectedTargetId || (hasMerchantInGame && !thumbDecision)}
                   >
-                    👍🏽
+                    {isLocked ? "Đã khóa lựa chọn" : "Xác nhận hành động"}
                   </button>
+                </>
+              )}
+
+              {/* Tiên tri Day UI */}
+              {showInvestigationUI && (
+                <div style={{
+                  background: "rgba(245, 158, 11, 0.1)",
+                  border: "1px solid rgba(245, 158, 11, 0.3)",
+                  padding: "16px",
+                  borderRadius: "12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 12
+                }}>
+                  <div style={{ fontWeight: 800, color: "#f59e0b" }}>⚠️ Chọn lại mục tiêu bạn đã chọn đêm qua</div>
                   <button
-                    className={`btn-thumb ${thumbDecision === "down" ? "active-down" : ""}`}
-                    onClick={() => handleChooseThumb("down")}
-                    disabled={isLocked}
+                    className="btn-action"
+                    style={{ background: "#f59e0b", color: "#000", fontWeight: 900 }}
+                    onClick={handleConfirmDayTarget}
+                    disabled={!daySelectedTargetId}
                   >
-                    👎🏽
+                    Xác nhận lựa chọn
                   </button>
                 </div>
               )}
-
-              <button
-                className="btn-action btn-primary"
-                onClick={handleLockNightAction}
-                disabled={isLocked || !selectedTargetId || (hasMerchantInGame && !thumbDecision)}
-              >
-                {isLocked ? "Đã khóa lựa chọn" : "Xác nhận hành động"}
-              </button>
-            </>
-          )}
-
-          {isDayVotePhase && (
-            <div style={{
-              background: "rgba(59, 130, 246, 0.1)",
-              border: "1px solid rgba(59, 130, 246, 0.3)",
-              padding: "16px",
-              borderRadius: "12px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 12
-            }}>
-              <div style={{ fontWeight: 800, color: "#60a5fa" }}>🗳️ Biểu quyết ban ngày</div>
-              <div style={{ fontSize: "13px", lineHeight: 1.4, color: "rgba(255, 255, 255, 0.8)" }}>
-                Chọn một người trên bàn rồi khóa phiếu của bạn.
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                <button
-                  className="btn-action btn-primary"
-                  onClick={handleLockDayVote}
-                  disabled={myDayVoteLocked || !myDayVoteTargetId}
-                >
-                  {myDayVoteLocked ? "Đã khóa phiếu" : "Khóa phiếu biểu quyết"}
-                </button>
-                <button
-                  className="btn-action"
-                  onClick={handleBlankDayVote}
-                  disabled={myDayVoteLocked}
-                  style={{ background: "rgba(255,255,255,0.08)", color: "#fff" }}
-                >
-                  Bỏ phiếu trống
-                </button>
-              </div>
-              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>
-                Phiếu hiện tại: {myDayVoteTargetId ? (room.players.find((p) => p.id === myDayVoteTargetId)?.name || "Người chơi") : "Chưa chọn"}
-              </div>
-              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.55)" }}>
-                Đã khóa: {Object.values(room.dayLocked || {}).filter(Boolean).length} / {room.dayVoters?.length || room.players.filter((p) => p.id !== room.hostId && !room.deadPlayers?.includes(p.id)).length}
-              </div>
             </div>
           )}
 
-          {isTrialDefensePhase && (
-            <div style={{
-              background: "rgba(245, 158, 11, 0.12)",
-              border: "1px solid rgba(245, 158, 11, 0.35)",
-              padding: "16px",
-              borderRadius: "12px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 12
-            }}>
-              <div style={{ fontWeight: 800, color: "#f59e0b" }}>🏛️ Người đang trên giàn</div>
-              <div style={{ fontSize: "13px", lineHeight: 1.4, color: "rgba(255, 255, 255, 0.8)" }}>
-                {room.trialTargetId === clientId
-                  ? "Bạn là người đang bị xét xử. Hãy cắt tương tác nếu cần."
-                  : "Hãy tương tác với người đang bị xét xử trên giàn."}
-              </div>
-              {room.trialTargetId !== clientId ? (
-                <button
-                  className="btn-action btn-primary"
-                  onClick={handleTrialToggleInteraction}
-                  disabled={room.trialInteractionCut === true}
-                >
-                  {room.trialInteractionActiveIds?.includes(clientId) ? "Hủy tương tác" : "Tương tác"}
-                </button>
-              ) : (
-                <button
-                  className="btn-action"
-                  onClick={handleTrialCutInteraction}
-                  style={{ background: "rgba(255,255,255,0.08)", color: "#fff" }}
-                >
-                  ✂️ Cắt tương tác
-                </button>
-              )}
-              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.65)" }}>
-                Đang tương tác: {(room.trialInteractionActiveIds || []).length} / {room.trialInteractionSelectionLimit || 0}
-              </div>
+          {dayVote.panel && (
+            <div style={{ maxWidth: "600px", margin: "1rem auto 0 auto" }}>
+              {dayVote.panel}
             </div>
           )}
-
-          {isTrialVerdictPhase && (
-            <div style={{
-              background: "rgba(16, 185, 129, 0.1)",
-              border: "1px solid rgba(16, 185, 129, 0.3)",
-              padding: "16px",
-              borderRadius: "12px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 12
-            }}>
-              <div style={{ fontWeight: 800, color: "#10b981" }}>⚖️ Phiếu sống/chết</div>
-              <div style={{ fontSize: "13px", lineHeight: 1.4, color: "rgba(255, 255, 255, 0.8)" }}>
-                Hãy chọn Sống hoặc Chết cho người đang bị xét xử.
-              </div>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <button
-                  className="btn-action"
-                  onClick={() => handleTrialVote("live")}
-                  disabled={myTrialVote === "live"}
-                  style={{ background: myTrialVote === "live" ? "rgba(16,185,129,0.35)" : "rgba(255,255,255,0.08)", color: "#fff" }}
-                >
-                  Sống
-                </button>
-                <button
-                  className="btn-action"
-                  onClick={() => handleTrialVote("die")}
-                  disabled={myTrialVote === "die"}
-                  style={{ background: myTrialVote === "die" ? "rgba(239,68,68,0.35)" : "rgba(255,255,255,0.08)", color: "#fff" }}
-                >
-                  Chết
-                </button>
-              </div>
-              <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.7)" }}>
-                Phiếu hiện tại: {myTrialVote === "live" ? "Sống" : myTrialVote === "die" ? "Chết" : "Chưa chọn"}
-              </div>
-            </div>
-          )}
-
-          {/* Tiên tri Day UI */}
-          {showInvestigationUI && (
-            <div style={{
-              background: "rgba(245, 158, 11, 0.1)",
-              border: "1px solid rgba(245, 158, 11, 0.3)",
-              padding: "16px",
-              borderRadius: "12px",
-              display: "flex",
-              flexDirection: "column",
-              gap: 12
-            }}>
-              <div style={{ fontWeight: 800, color: "#f59e0b" }}>⚠️ Chọn lại mục tiêu bạn đã chọn đêm qua</div>
-              <div style={{ fontSize: "13px", lineHeight: 1.4, color: "rgba(255, 255, 255, 0.8)" }}>
-              </div>
-              <button
-                className="btn-action"
-                style={{ background: "#f59e0b", color: "#000", fontWeight: 900 }}
-                onClick={handleConfirmDayTarget}
-                disabled={!daySelectedTargetId}
-              >
-                Xác nhận lựa chọn
-              </button>
-            </div>
-          )}
-        </div>
+        </>
       )}
 
       {/* Host Controls */}
       {isHost && (
         <div className="game-host-controls" style={{ maxWidth: "600px", margin: "1.5rem auto" }}>
-          {isDusk && (
+          {hostPlayerActionTargetId && (
+            <div style={{
+              background: "rgba(167, 139, 250, 0.12)",
+              border: "2px dashed rgba(167, 139, 250, 0.4)",
+              padding: "16px",
+              borderRadius: "16px",
+              marginBottom: "1.5rem",
+              width: "100%",
+              display: "flex",
+              flexDirection: "column",
+              gap: 12,
+              textAlign: "left",
+              boxShadow: "0 4px 20px rgba(0,0,0,0.3)"
+            }}>
+              <div style={{ fontWeight: 800, color: "#a78bfa", fontSize: "15px" }}>
+                🎯 Đang chọn: <span style={{ color: "#fff" }}>{room.players.find((p: any) => p.id === hostPlayerActionTargetId)?.name || hostPlayerActionTargetId}</span>
+              </div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  onClick={() => handleEliminatePlayer(hostPlayerActionTargetId)}
+                  style={{ background: "#e74c3c", color: "#fff", fontWeight: 700 }}
+                >
+                  Loại vì phạm luật
+                </button>
+                {room.soiMuNamThuTargetId === hostPlayerActionTargetId && (
+                  <button
+                    onClick={() => {
+                      socket.emit("hostNamThuTargetSmile", { roomId: room.id, targetId: hostPlayerActionTargetId });
+                      setHostPlayerActionTargetId(null);
+                    }}
+                    style={{ background: "#f59e0b", color: "#000", fontWeight: 900 }}
+                  >
+                    😂 Xác nhận cười (Nam Thư)
+                  </button>
+                )}
+                {isSuyThanAlive && (
+                  <button
+                    onClick={() => {
+                      socket.emit("hostSuyThanTargetPee", { roomId: room.id, targetId: hostPlayerActionTargetId });
+                      setHostPlayerActionTargetId(null);
+                    }}
+                    style={{ background: "#34d399", color: "#000", fontWeight: 900 }}
+                  >
+                    🚽 Xác nhận đi đái (Suy Thận)
+                  </button>
+                )}
+                <button
+                  onClick={() => setHostPlayerActionTargetId(null)}
+                  style={{ background: "rgba(255,255,255,0.08)", color: "#fff" }}
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isHost && !room.gameOver && (
             <button onClick={() => handleChangePhase("night")}>
               Bắt đầu đêm
             </button>
@@ -973,9 +1051,19 @@ export default function GameSoiMu() {
           <button onClick={handleRestartGame}>
             Chia bài lại
           </button>
-          {isNight && (
+          {isHost && !room.gameOver && isNight && (
             <button onClick={() => handleChangePhase("day")}>
               Bắt đầu ngày
+            </button>
+          )}
+          {isHost && !room.gameOver && isNight && (
+            <button onClick={() => socket.emit("hostToggleNightTurnPause", { roomId: room.id })}>
+              {room.nightTurnPaused ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
+            </button>
+          )}
+          {isHost && !room.gameOver && isDay && (
+            <button onClick={() => socket.emit("hostToggleDayPause", { roomId: room.id })}>
+              {room.dayPaused ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
             </button>
           )}
           {isDay && (
@@ -1012,14 +1100,16 @@ export default function GameSoiMu() {
           playerRealNamesById={Object.fromEntries((room?.players || []).filter((player: any) => player.playerRealName).map((player: any) => [player.id, player.playerRealName]))}
           onHighlightPlayer={() => { }}
           canViewNightLogs={true}
-          isHost={true}
-          viewMode="nick-names-roles"
+          isHost={isHost}
+          viewMode={viewMode}
+          onViewModeChange={handleViewModeChange}
           gameEnded={!!room?.gameOver}
           isReplay={room?.isReplay}
           myPlayerId={clientId || undefined}
           myRole={room?.playerRoles?.[clientId || ""]}
           wolves={room?.wolves || []}
           gameRules={room?.gameRules}
+          isBlindWerewolf={true}
         />
       </div>
 

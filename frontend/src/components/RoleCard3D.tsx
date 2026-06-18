@@ -56,6 +56,29 @@ const getRoleCardImage = (roleName: string | null) => {
   return roleCardImages["../assets/F Dân Làng.png"] || "";
 };
 
+// Hàm tìm ảnh biến thể phù hợp với vai trò (định dạng "N F <Tên Vai Trò>")
+const getRoleCardVariantImage = (roleName: string | null) => {
+  if (!roleName) return "";
+  const normalizedSearch = normalizeName(roleName);
+
+  // Tìm kiếm tương thích với định dạng "N F <Tên Vai Trò>"
+  const matchKey = Object.keys(roleCardImages).find(key => {
+    const filename = key.split("/").pop()?.replace(/\.(png|avif)$/i, "") || "";
+    if (filename.startsWith("N F ")) {
+      const cleanFilename = filename.substring(4);
+      return normalizeName(cleanFilename) === normalizedSearch;
+    }
+    return false;
+  });
+
+  if (matchKey) {
+    return roleCardImages[matchKey];
+  }
+
+  return "";
+};
+
+
 const ANIMATION_CONFIG = {
   INITIAL_DURATION: 1200,
   INITIAL_X_OFFSET: 70,
@@ -121,6 +144,7 @@ export default function RoleCard3D({
   }, [role, isRevealed]);
 
   const cardFrontImage = getRoleCardImage(displayedRole);
+  const cardFrontVariantImage = getRoleCardVariantImage(displayedRole);
 
   // 1. Khởi tạo bộ máy Easing 3D Spring (Tính toán gia tốc mượt mà 60 FPS)
   const tiltEngine = useMemo(() => {
@@ -157,6 +181,10 @@ export default function RoleCard3D({
       const centerX = percentX - 50;
       const centerY = percentY - 50;
 
+      // Tính toán độ mờ cho ảnh biến thể (Lenticular effect)
+      // percentX chạy từ 0 đến 100. Đổi hình trong khoảng từ 42% đến 58%.
+      const lenticularOpacity = clamp((percentX - 42) / 16, 0, 1);
+
       // Thiết lập toàn bộ các biến CSS tùy biến cho cơ chế ánh sáng của ProfileCard
       const properties = {
         "--pointer-x": `${percentX}%`,
@@ -167,7 +195,8 @@ export default function RoleCard3D({
         "--pointer-from-top": `${percentY / 100}`,
         "--pointer-from-left": `${percentX / 100}`,
         "--rotate-x": `${round(-(centerX / 4.8))}deg`,
-        "--rotate-y": `${round(centerY / 3.8)}deg`
+        "--rotate-y": `${round(centerY / 3.8)}deg`,
+        "--lenticular-opacity": `${round(lenticularOpacity, 3)}`
       } as Record<string, string>;
 
       for (const [k, v] of Object.entries(properties)) {
@@ -465,13 +494,21 @@ export default function RoleCard3D({
           </div>
 
           {/* ================= MẶT TRƯỚC LÁ BÀI (CARD FRONT) ================= */}
-          <div className="pc-card-front">
+          <div className={`pc-card-front ${cardFrontVariantImage ? "has-lenticular" : ""}`}>
             <img
               src={cardFrontImage}
               alt={role || "Vai Trò"}
-              className="pc-front-img"
+              className="pc-front-img pc-front-img-base"
               loading="lazy"
             />
+            {cardFrontVariantImage && (
+              <img
+                src={cardFrontVariantImage}
+                alt={`${role || "Vai Trò"} Biến Thể`}
+                className="pc-front-img pc-front-img-variant"
+                loading="lazy"
+              />
+            )}
             {/* Lớp phủ nhũ Holographic Foil óng ánh chói lóa trên mặt thẻ nhân vật */}
             <div className="pc-shine pc-front-holo-overlay" />
             <div className="pc-glare" />

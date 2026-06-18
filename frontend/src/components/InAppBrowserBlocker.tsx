@@ -125,7 +125,7 @@ export default function InAppBrowserBlocker() {
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 99999,
+        zIndex: 25,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -339,7 +339,7 @@ export default function InAppBrowserBlocker() {
             style={{
               position: 'fixed',
               inset: 0,
-              zIndex: 999999,
+              zIndex: 26,
               backgroundColor: 'rgba(0, 0, 0, 0.85)',
               pointerEvents: 'auto',
             }}
@@ -412,7 +412,7 @@ export default function InAppBrowserBlocker() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 gap: '8px',
-                zIndex: 1000000,
+                zIndex: 27,
               }}
             >
               <div
@@ -458,7 +458,7 @@ export default function InAppBrowserBlocker() {
             style={{
               position: 'fixed',
               inset: 0,
-              zIndex: 999999,
+              zIndex: 26,
               backgroundColor: 'rgba(0, 0, 0, 0.85)',
               display: 'flex',
               alignItems: 'center',

@@ -173,6 +173,7 @@ interface GameLogPanelProps {
   gameRules?: RoomGameRules;
   gameEnded?: boolean;
   isReplay?: boolean;
+  isBlindWerewolf?: boolean;
 }
 
 function getRoleName(playerId: string, rolesByPlayerId: RolesByPlayerId): string {
@@ -424,7 +425,7 @@ function TimeoutBadge({ message }: { message: string }) {
             borderRadius: 6,
             padding: "6px 10px",
             boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-            zIndex: 1000,
+            zIndex: 25,
             whiteSpace: "nowrap",
             fontSize: 13,
           }}
@@ -491,7 +492,7 @@ function ActionSpan({
             borderRadius: 6,
             padding: "6px 10px",
             boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-            zIndex: 1000,
+            zIndex: 25,
             whiteSpace: "pre-line",
             wordBreak: "break-word",
             maxWidth: "min(320px, calc(100vw - 48px))",
@@ -620,7 +621,7 @@ function RoleSpan({
             borderRadius: 6,
             padding: "6px 10px",
             boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-            zIndex: 1000,
+            zIndex: 25,
             whiteSpace: "pre-line",
             wordBreak: "break-word",
             maxWidth: "min(320px, calc(100vw - 48px))",
@@ -705,16 +706,20 @@ function LogItem({
   emoji,
   style,
   children,
+  hideIcon,
 }: {
   emoji: string;
   style?: React.CSSProperties;
   children: React.ReactNode;
+  hideIcon?: boolean;
 }) {
   return (
     <li className="game-log-item" style={style}>
-      <span className="game-log-item-icon">
-        <AvifIcon name={emoji} />
-      </span>
+      {!hideIcon && (
+        <span className="game-log-item-icon">
+          <AvifIcon name={emoji} />
+        </span>
+      )}
       <span className="game-log-item-content">{children}</span>
     </li>
   );
@@ -738,6 +743,9 @@ function LogEntryLine({
   wolfBadgeRoles,
   gameEnded,
   isHost,
+  isBlindWerewolf,
+  nightEntries,
+  hideIcon,
 }: {
   night: number;
   entry: GameLogEntry;
@@ -756,6 +764,9 @@ function LogEntryLine({
   wolfBadgeRoles?: Record<string, string>;
   gameEnded?: boolean;
   isHost?: boolean;
+  isBlindWerewolf?: boolean;
+  nightEntries?: GameLogEntry[];
+  hideIcon?: boolean;
 }) {
   const viewMode = useContext(ViewModeContext);
   const realNamesById = useContext(RealNamesContext);
@@ -795,6 +806,32 @@ function LogEntryLine({
     transition: "opacity 280ms ease",
     filter: dimmed ? "blur(4px)" : "none",
   };
+
+  if (isBlindWerewolf && !isHost && !gameEnded && entry.phase === "night" && "actorId" in entry) {
+    const actorId = (entry as any).actorId;
+    if (actorId === myPlayerId) {
+      const targetId = (entry as any).targetId || 
+                       ((entry as any).targetIds && (entry as any).targetIds[0]) || 
+                       (entry.type === "soi_mu_wolf_suicide" ? actorId : null);
+      if (targetId) {
+        return (
+          <LogItem emoji="👤" style={lineStyle} hideIcon={hideIcon}>
+            Bạn đã chọn{" "}
+            <RoleSpan
+              playerId={targetId}
+              rolesByPlayerId={rolesByPlayerId}
+              playerNamesById={playerNamesById}
+              displayMode={getTargetDisplayMode(targetId)}
+              popupMode="none"
+              secondaryHighlightIds={[actorId]}
+              onEliminationFocusChange={onEliminationFocusChange}
+              onHighlightPlayer={onHighlightPlayer}
+            />
+          </LogItem>
+        );
+      }
+    }
+  }
 
   switch (entry.type) {
     case "wolf_vote": {
@@ -1819,15 +1856,80 @@ function LogEntryLine({
 
     case "soi_mu_villager_choose": {
       const actorRole = getRoleName(entry.actorId, rolesByPlayerId);
+      const targetDisplayMode = getTargetDisplayMode(entry.targetId);
+
+      if (actorRole === "Phù thủy") {
+        const wolfBiteEntry = (nightEntries || []).find(e => e.type === "soi_mu_wolf_bite");
+        const wolfBittenId = wolfBiteEntry ? (wolfBiteEntry as any).targetId : null;
+
+        if (wolves && wolves.includes(entry.targetId)) {
+          return (
+            <LogItem emoji="🧪" style={lineStyle} hideIcon={hideIcon}>
+              <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onHighlightPlayer={onHighlightPlayer} />{" "}
+              đã quăng bình giết{" "}
+              <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={targetDisplayMode} popupMode="none" secondaryHighlightIds={[entry.actorId]} onHighlightPlayer={onHighlightPlayer} />
+            </LogItem>
+          );
+        } else if (wolfBittenId && entry.targetId === wolfBittenId) {
+          return (
+            <LogItem emoji="🧪" style={lineStyle} hideIcon={hideIcon}>
+              <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onHighlightPlayer={onHighlightPlayer} />{" "}
+              đã dùng bình cứu{" "}
+              <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={targetDisplayMode} popupMode="none" secondaryHighlightIds={[entry.actorId]} onHighlightPlayer={onHighlightPlayer} />
+            </LogItem>
+          );
+        } else {
+          return (
+            <LogItem emoji="👤" style={lineStyle} hideIcon={hideIcon}>
+              <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onHighlightPlayer={onHighlightPlayer} />{" "}
+              {actorRole}{" "}
+              <ActionSpan highlightPayload={{ primaryId: entry.actorId, secondaryIds: [entry.targetId] }} onHighlightPlayer={onHighlightPlayer}>
+                chọn
+              </ActionSpan>{" "}
+              <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={targetDisplayMode} popupMode="none" secondaryHighlightIds={[entry.actorId]} onHighlightPlayer={onHighlightPlayer} />
+            </LogItem>
+          );
+        }
+      }
+
+      if (actorRole === "Đàn bà") {
+        return (
+          <LogItem emoji="👄" style={lineStyle} hideIcon={hideIcon}>
+            <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={targetDisplayMode} popupMode="none" secondaryHighlightIds={[entry.actorId]} onHighlightPlayer={onHighlightPlayer} />{" "}
+            đã bị vô hiệu chức năng vì bị dính những niềm đau từ đàn bà mang tới
+          </LogItem>
+        );
+      }
+
+      if (actorRole === "Thợ săn") {
+        return (
+          <LogItem emoji="🎯" style={lineStyle} hideIcon={hideIcon}>
+            <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onHighlightPlayer={onHighlightPlayer} />{" "}
+            ghim{" "}
+            <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={targetDisplayMode} popupMode="none" secondaryHighlightIds={[entry.actorId]} onHighlightPlayer={onHighlightPlayer} />
+          </LogItem>
+        );
+      }
+
+      if (actorRole === "Tiên tri") {
+        return (
+          <LogItem emoji="🔮" style={lineStyle} hideIcon={hideIcon}>
+            <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onHighlightPlayer={onHighlightPlayer} />{" "}
+            chọn soi{" "}
+            <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={targetDisplayMode} popupMode="none" secondaryHighlightIds={[entry.actorId]} onHighlightPlayer={onHighlightPlayer} />
+          </LogItem>
+        );
+      }
+
       const tooltipText = `Lựa chọn của ${actorRole.toLowerCase()} sẽ không gây ảnh hưởng gì lên mục tiêu`;
       return (
-        <LogItem emoji="👤" style={lineStyle}>
+        <LogItem emoji="👤" style={lineStyle} hideIcon={hideIcon}>
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onHighlightPlayer={onHighlightPlayer} />{" "}
           {actorRole}{" "}
           <ActionSpan tooltipDetail={tooltipText} highlightPayload={{ primaryId: entry.actorId, secondaryIds: [entry.targetId] }} onHighlightPlayer={onHighlightPlayer}>
             chọn
           </ActionSpan>{" "}
-          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onHighlightPlayer={onHighlightPlayer} />
+          <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={targetDisplayMode} popupMode="none" secondaryHighlightIds={[entry.actorId]} onHighlightPlayer={onHighlightPlayer} />
         </LogItem>
       );
     }
@@ -1896,6 +1998,233 @@ function LogEntryLine({
   }
 }
 
+function groupSoiMuEntries(
+  entries: GameLogEntry[],
+  rolesByPlayerId: Record<string, string>,
+  wolves: string[],
+  nightEntries: GameLogEntry[]
+): (GameLogEntry | { type: "soi_mu_collapsed_group"; entries: GameLogEntry[] })[] {
+  const noImpactChoose: GameLogEntry[] = [];
+  const otherEntries: GameLogEntry[] = [];
+
+  const isNoImpactVillagerChoose = (entry: GameLogEntry) => {
+    if (entry.type !== "soi_mu_villager_choose") return false;
+    const actorRole = rolesByPlayerId[entry.actorId];
+    if (actorRole === "Phù thủy") {
+      const wolfBiteEntry = nightEntries.find(e => e.type === "soi_mu_wolf_bite");
+      const wolfBittenId = wolfBiteEntry ? (wolfBiteEntry as any).targetId : null;
+      if (wolves && wolves.includes(entry.targetId)) return false;
+      if (wolfBittenId && entry.targetId === wolfBittenId) return false;
+    }
+    if (actorRole === "Đàn bà" || actorRole === "Thợ săn" || actorRole === "Tiên tri") return false;
+    return true;
+  };
+
+  for (const entry of entries) {
+    if (isNoImpactVillagerChoose(entry)) {
+      noImpactChoose.push(entry);
+    } else {
+      otherEntries.push(entry);
+    }
+  }
+
+  const result: (GameLogEntry | { type: "soi_mu_collapsed_group"; entries: GameLogEntry[] })[] = [];
+  if (noImpactChoose.length > 0) {
+    result.push({
+      type: "soi_mu_collapsed_group",
+      entries: noImpactChoose,
+    });
+  }
+  result.push(...otherEntries);
+  return result;
+}
+
+function SoiMuCollapsedGroup({
+  night,
+  entries,
+  dayVotersByTarget,
+  legacyAngelGuessByPair,
+  playerOnlyDayLogs,
+  rolesByPlayerId,
+  playerNamesById,
+  targetRoleDisplayOrderByPlayerId,
+  eliminationFocus,
+  onEliminationFocusChange,
+  onHighlightPlayer,
+  myPlayerId,
+  loveState,
+  wolves,
+  wolfBadgeRoles,
+  gameEnded,
+  isHost,
+  isBlindWerewolf,
+  nightEntries,
+}: {
+  night: number;
+  entries: GameLogEntry[];
+  dayVotersByTarget: Record<string, string[]>;
+  legacyAngelGuessByPair: Record<string, string | null | undefined>;
+  playerOnlyDayLogs: boolean;
+  rolesByPlayerId: RolesByPlayerId;
+  playerNamesById: PlayerNamesById;
+  targetRoleDisplayOrderByPlayerId?: TargetRoleDisplayOrderByPlayerId;
+  eliminationFocus: EliminationFocus | null;
+  onEliminationFocusChange: (focus: EliminationFocus | null) => void;
+  onHighlightPlayer: (payload: HighlightPayload) => void;
+  myPlayerId?: string;
+  loveState?: any;
+  wolves?: string[];
+  wolfBadgeRoles?: Record<string, string>;
+  gameEnded?: boolean;
+  isHost?: boolean;
+  isBlindWerewolf?: boolean;
+  nightEntries?: GameLogEntry[];
+}) {
+  const [isCollapsed, setIsCollapsed] = useState(true);
+
+  const lineStyle: React.CSSProperties = {
+    opacity: 1,
+    transition: "opacity 280ms ease",
+  };
+
+  return (
+    <div className="soi-mu-thread-group" style={{ marginBottom: 12, ...lineStyle }}>
+      {/* Header dòng tiêu đề */}
+      <div className="soi-mu-thread-header" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span className="game-log-item-icon" style={{ flexShrink: 0, width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <AvifIcon name="👤" />
+        </span>
+        <span className="soi-mu-thread-title" style={{ fontWeight: 600, color: "#cbd5e1", fontSize: "14px" }}>
+          Các lựa chọn không gây tác động
+        </span>
+      </div>
+
+      {/* Phần thân chứa line và nội dung */}
+      <div className="soi-mu-thread-body" style={{ position: "relative", marginTop: 4 }}>
+        {/* Đường dọc chính chạy suốt từ trên xuống dưới và tự động co giãn mượt mà */}
+        <div 
+          style={{
+            position: "absolute",
+            left: 10, // Căn giữa thẳng hàng với các nhánh ngang (24px paddingLeft - 14px left = 10px)
+            top: -4,  // Bắt đầu ngay dưới avatar tiêu đề
+            bottom: 14, // Kết thúc chính xác tại điểm rẽ ngang của nút toggle (tâm nút toggle)
+            width: 2,
+            background: "rgb(162, 155, 254)",
+            pointerEvents: "none",
+            filter: "brightness(0.5)",
+          }}
+        />
+
+        {/* Danh sách con co giãn mượt mà sử dụng CSS Grid */}
+        <div 
+          className="soi-mu-thread-children" 
+          style={{ 
+            display: "grid",
+            gridTemplateRows: isCollapsed ? "0fr" : "1fr",
+            opacity: isCollapsed ? 0 : 1,
+            overflow: "hidden",
+            transition: "grid-template-rows 320ms cubic-bezier(0.4, 0, 0.2, 1), opacity 240ms ease, margin-bottom 320ms ease",
+            marginBottom: isCollapsed ? 0 : 8,
+          }}
+        >
+          <div style={{ overflow: "hidden", display: "flex", flexDirection: "column", gap: 8 }}>
+            {entries.map((childEntry, idx) => {
+              return (
+                <div key={idx} style={{ display: "flex", alignItems: "center", position: "relative", paddingLeft: 24 }}>
+                  {/* Nhánh lưới cho dòng con bọc trong 1 div để áp filter brightness(0.5) và dùng màu solid rgb(162, 155, 254) */}
+                  <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 24, pointerEvents: "none", filter: "brightness(0.5)" }}>
+                    {/* Nhánh ngang cong nối tới từng lựa chọn con từ đường dọc chính của cha */}
+                    <div 
+                      style={{
+                        position: "absolute",
+                        left: 10,
+                        top: -12,
+                        width: 10,
+                        height: 26,
+                        borderLeft: "2px solid rgb(162, 155, 254)",
+                        borderBottom: "2px solid rgb(162, 155, 254)",
+                        borderBottomLeftRadius: 6
+                      }}
+                    />
+                  </div>
+
+                  <ul style={{ marginLeft: 4, width: "100%", padding: 0, margin: 0, listStyleType: "none" }}>
+                    <LogEntryLine
+                      night={night}
+                      entry={childEntry}
+                      dayVotersByTarget={dayVotersByTarget}
+                      legacyAngelGuessByPair={legacyAngelGuessByPair}
+                      playerOnlyDayLogs={playerOnlyDayLogs}
+                      rolesByPlayerId={rolesByPlayerId}
+                      playerNamesById={playerNamesById}
+                      targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
+                      eliminationFocus={eliminationFocus}
+                      onEliminationFocusChange={onEliminationFocusChange}
+                      onHighlightPlayer={onHighlightPlayer}
+                      myPlayerId={myPlayerId}
+                      loveState={loveState}
+                      wolves={wolves}
+                      wolfBadgeRoles={wolfBadgeRoles}
+                      gameEnded={gameEnded}
+                      isHost={isHost}
+                      isBlindWerewolf={isBlindWerewolf}
+                      nightEntries={nightEntries}
+                      hideIcon={true}
+                    />
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Nút bấm toggle */}
+        <div style={{ display: "flex", alignItems: "center", position: "relative", height: 28, paddingLeft: 24 }}>
+          {/* Nhánh lưới cho nút toggle (luôn là nhánh cong rẽ vào từ đường dọc chính của cha, không thò đuôi) */}
+          <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 24, pointerEvents: "none", filter: "brightness(0.5)" }}>
+            <div 
+              style={{
+                position: "absolute",
+                left: 10,
+                top: 0,
+                width: 10,
+                height: 14,
+                borderLeft: "2px solid rgb(162, 155, 254)",
+                borderBottom: "2px solid rgb(162, 155, 254)",
+                borderBottomLeftRadius: 6
+              }}
+            />
+          </div>
+
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="soi-mu-thread-toggle-btn"
+            style={{
+              background: "linear-gradient(135deg, rgba(162, 155, 254, 0.08) 0%, rgba(108, 92, 231, 0.04) 100%)",
+              border: "1px solid rgba(162, 155, 254, 0.3)",
+              color: "#a29bfe",
+              fontSize: "12.5px",
+              fontWeight: 600,
+              padding: "4px 12px",
+              borderRadius: "12px",
+              cursor: "pointer",
+              marginLeft: 4,
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              userSelect: "none",
+              outline: "none",
+              transition: "all 0.2s ease"
+            }}
+          >
+            {isCollapsed ? `Xem tất cả ${entries.length} lựa chọn ∨` : `Thu gọn lựa chọn ∧`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function GameLogPanel({
   nights,
   rolesByPlayerId,
@@ -1916,6 +2245,7 @@ export default function GameLogPanel({
   gameRules,
   gameEnded = false,
   isReplay = false,
+  isBlindWerewolf,
 }: GameLogPanelProps) {
   const [localViewMode, setLocalViewMode] = useState<ViewMode>("nick-names");
   const viewMode = viewModeProp ?? localViewMode;
@@ -2055,7 +2385,7 @@ export default function GameLogPanel({
         .game-log-panel-container {
           margin-top: 24px;
           padding: 24px;
-          background: linear-gradient(145deg, rgba(23, 26, 33, 0.4) 0%, rgba(15, 17, 21, 0.6) 100%);
+          background: linear-gradient(145deg, rgba(14, 16, 20, 0.5) 0%, rgba(15, 17, 21, 0.7) 100%);
           border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 16px;
           box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
@@ -2289,7 +2619,7 @@ export default function GameLogPanel({
         }
 
         .game-log-item:has(.game-log-tooltip) {
-          z-index: 50;
+          z-index: 21;
         }
 
         .game-log-item-icon {
@@ -2333,7 +2663,7 @@ export default function GameLogPanel({
           border-radius: 12px;
           box-shadow: 0 8px 32px rgba(0,0,0,0.5);
           padding: 0;
-          z-index: 200;
+          z-index: 22;
           min-width: 170px;
           display: flex;
           flex-direction: column;
@@ -2978,6 +3308,11 @@ export default function GameLogPanel({
               : {};
           const dimBucket = !!eliminationFocus && eliminationFocus.night !== n.night;
 
+          const isPlayerViewForGroup = !isHost && !gameEnded;
+          const groupedNightEntries = (isBlindWerewolf && !isPlayerViewForGroup)
+            ? groupSoiMuEntries(displayNightEntries, rolesByEntry.get(nightEntries[0] || {} as any) || rolesByPlayerId, wolves || [], nightEntries)
+            : displayNightEntries;
+
           return (
             <div key={n.night} style={{ opacity: dimBucket ? 0.42 : 1, transition: "all 240ms ease", marginTop: 14 }}>
               {canViewNightLogs && (
@@ -2989,28 +3324,58 @@ export default function GameLogPanel({
                     <div className="game-log-empty-msg">Không có hành động nào đã xảy ra</div>
                   ) : (
                     <ul className="game-log-list">
-                      {displayNightEntries.map((entry, idx) => (
-                        <LogEntryLine
-                          key={idx}
-                          night={n.night}
-                          entry={entry}
-                          dayVotersByTarget={dayVotersByTarget}
-                          legacyAngelGuessByPair={legacyAngelGuessByPair}
-                          playerOnlyDayLogs={!isHost && !gameEnded && !isReplay}
-                          rolesByPlayerId={rolesByEntry.get(entry) || rolesByPlayerId}
-                          playerNamesById={playerNamesById}
-                          targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
-                          eliminationFocus={eliminationFocus}
-                          onEliminationFocusChange={setEliminationFocus}
-                          onHighlightPlayer={onHighlightPlayer}
-                          myPlayerId={myPlayerId}
-                          loveState={loveState}
-                          wolves={wolves}
-                          wolfBadgeRoles={wolfBadgeRoles}
-                          gameEnded={gameEnded}
-                          isHost={isHost}
-                        />
-                      ))}
+                      {groupedNightEntries.map((entry, idx) => {
+                        if ("type" in entry && entry.type === "soi_mu_collapsed_group") {
+                          return (
+                            <SoiMuCollapsedGroup
+                              key={`group-${idx}`}
+                              night={n.night}
+                              entries={entry.entries}
+                              dayVotersByTarget={dayVotersByTarget}
+                              legacyAngelGuessByPair={legacyAngelGuessByPair}
+                              playerOnlyDayLogs={isPlayerView}
+                              rolesByPlayerId={rolesByEntry.get(n.entries?.[0] || {} as any) || rolesByPlayerId}
+                              playerNamesById={playerNamesById}
+                              targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
+                              eliminationFocus={eliminationFocus}
+                              onEliminationFocusChange={setEliminationFocus}
+                              onHighlightPlayer={onHighlightPlayer}
+                              myPlayerId={myPlayerId}
+                              loveState={loveState}
+                              wolves={wolves}
+                              wolfBadgeRoles={wolfBadgeRoles}
+                              gameEnded={gameEnded}
+                              isHost={isHost}
+                              isBlindWerewolf={isBlindWerewolf}
+                              nightEntries={nightEntries}
+                            />
+                          );
+                        }
+                        return (
+                          <LogEntryLine
+                            key={idx}
+                            night={n.night}
+                            entry={entry as GameLogEntry}
+                            dayVotersByTarget={dayVotersByTarget}
+                            legacyAngelGuessByPair={legacyAngelGuessByPair}
+                            playerOnlyDayLogs={isPlayerView}
+                            rolesByPlayerId={rolesByEntry.get(entry as GameLogEntry) || rolesByPlayerId}
+                            playerNamesById={playerNamesById}
+                            targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
+                            eliminationFocus={eliminationFocus}
+                            onEliminationFocusChange={setEliminationFocus}
+                            onHighlightPlayer={onHighlightPlayer}
+                            myPlayerId={myPlayerId}
+                            loveState={loveState}
+                            wolves={wolves}
+                            wolfBadgeRoles={wolfBadgeRoles}
+                            gameEnded={gameEnded}
+                            isHost={isHost}
+                            isBlindWerewolf={isBlindWerewolf}
+                            nightEntries={nightEntries}
+                          />
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
@@ -3029,7 +3394,7 @@ export default function GameLogPanel({
                         entry={entry}
                         dayVotersByTarget={dayVotersByTarget}
                         legacyAngelGuessByPair={legacyAngelGuessByPair}
-                        playerOnlyDayLogs={!isHost && !gameEnded && !isReplay}
+                        playerOnlyDayLogs={isPlayerView}
                         rolesByPlayerId={rolesByEntry.get(entry) || rolesByPlayerId}
                         playerNamesById={playerNamesById}
                         targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
@@ -3042,6 +3407,7 @@ export default function GameLogPanel({
                         wolfBadgeRoles={wolfBadgeRoles}
                         gameEnded={gameEnded}
                         isHost={isHost}
+                        isBlindWerewolf={isBlindWerewolf}
                       />
                     ))}
                   </ul>

@@ -9,7 +9,7 @@
   --surface: #171a21;
   --surface-muted: rgb(22 25 35 / 88%);
 
-  --border: #2c3442;
+  --border: #1d222b;
   --border-strong: #7a8394;
 
   --accent: #ff9800;
@@ -51,7 +51,7 @@ input {
 }
 
 button {
-  background: var(--surface);
+  background: rgba(13, 14, 17, 0.6);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 12px;
@@ -141,7 +141,7 @@ input {
 .elemental-guide-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 23;
   display: flex;
   align-items: center;
   justify-content: center;

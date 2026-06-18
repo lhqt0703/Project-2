@@ -144,8 +144,9 @@ export function updateSoiMuActionLog(room: Room, actorId: string) {
     const isActive = (actorId === activeWolfId);
 
     // Xác định nhãn của sói này
+    const totalWolves = (room.wolves || []).length;
     const wolfIndex = (room.wolves || []).indexOf(actorId);
-    const wolfLabel = `Sói ${wolfIndex !== -1 ? wolfIndex + 1 : 1}`;
+    const wolfLabel = totalWolves <= 1 ? "Sói" : `Sói ${wolfIndex !== -1 ? wolfIndex + 1 : 1}`;
 
     if (isActive) {
       if (targetId === actorId) {
@@ -156,7 +157,7 @@ export function updateSoiMuActionLog(room: Room, actorId: string) {
     } else {
       // Sói không hoạt động
       const activeWolfIndex = (room.wolves || []).indexOf(activeWolfId);
-      const activeWolfLabel = `Sói ${activeWolfIndex !== -1 ? activeWolfIndex + 1 : 1}`;
+      const activeWolfLabel = totalWolves <= 1 ? "Sói" : `Sói ${activeWolfIndex !== -1 ? activeWolfIndex + 1 : 1}`;
       newEntry = {
         type: "soi_mu_wolf_inactive_choose",
         phase: "night",
@@ -180,6 +181,9 @@ export function updateSoiMuActionLog(room: Room, actorId: string) {
         targetThumb,
       };
     }
+  } else {
+    // Tất cả các vai trò khác (Tiên tri, Phù thủy, Thợ săn, v.v.)
+    newEntry = { type: "soi_mu_villager_choose", phase: "night", actorId, targetId };
   }
 
   if (newEntry) {

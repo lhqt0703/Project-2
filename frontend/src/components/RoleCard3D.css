@@ -198,6 +198,87 @@
   display: block;
 }
 
+/* --- Hỗ trợ hiệu ứng Lenticular Card --- */
+.has-lenticular .pc-front-img-base {
+  position: relative;
+  z-index: 1;
+  transition: transform 0.15s ease-out;
+}
+
+.has-lenticular .pc-front-img-variant {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--card-radius);
+  pointer-events: none;
+  opacity: 0;
+  transition: transform 0.15s ease-out, opacity 0.15s ease-out;
+}
+
+/* 1. KHI TẮT CHẾ ĐỘ TỐI ƯU HIỆU NĂNG: Thẻ bài có Holographic Foil, ảnh biến thể chỉ lộ diện tại vị trí vệt sáng xiên */
+.pc-card-wrapper:not(.performance-mode) .has-lenticular .pc-front-img-variant {
+  -webkit-mask-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0%,
+    transparent 2.5%,
+    black 3.5%,
+    black 8.5%,
+    transparent 9.5%,
+    transparent 12%
+  );
+  -webkit-mask-size: 300% 300%;
+  -webkit-mask-position: var(--background-x) var(--background-y);
+  -webkit-mask-repeat: repeat;
+
+  mask-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0%,
+    transparent 2.5%,
+    black 3.5%,
+    black 8.5%,
+    transparent 9.5%,
+    transparent 12%
+  );
+  mask-size: 300% 300%;
+  mask-position: var(--background-x) var(--background-y);
+  mask-repeat: repeat;
+  transition: transform 0.15s ease-out, opacity 0.25s ease-out;
+}
+
+/* Hiệu ứng Parallax dịch chuyển ngang đối xứng khi tương tác ở chế độ bình thường */
+.pc-card-wrapper:not(.performance-mode):hover .has-lenticular .pc-front-img-base,
+.pc-card-wrapper:not(.performance-mode).active .has-lenticular .pc-front-img-base {
+ 
+}
+
+.pc-card-wrapper:not(.performance-mode):hover .has-lenticular .pc-front-img-variant,
+.pc-card-wrapper:not(.performance-mode).active .has-lenticular .pc-front-img-variant {
+  opacity: 1; /* Hiển thị ảnh biến thể theo mask vệt sáng */
+  
+}
+
+/* 2. KHI BẬT CHẾ ĐỘ TỐI ƯU HIỆU NĂNG: Thẻ bài tắt Holographic, dùng hiệu ứng đổi hình toàn phần (fade) */
+.pc-card-wrapper.performance-mode .has-lenticular .pc-front-img-variant {
+  -webkit-mask-image: none;
+  mask-image: none;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.pc-card-wrapper.performance-mode:hover .has-lenticular .pc-front-img-variant,
+.pc-card-wrapper.performance-mode.active .has-lenticular .pc-front-img-variant {
+  opacity: var(--lenticular-opacity, 0); /* Fade toàn thẻ bài */
+  transform: none !important;
+}
+
+.pc-card-wrapper.performance-mode:hover .has-lenticular .pc-front-img-base,
+.pc-card-wrapper.performance-mode.active .has-lenticular .pc-front-img-base {
+  transform: none !important;
+}
+
+
 /* Lớp phủ nhũ cầu vồng mặt trước (Foil Holographic Overlay) */
 .pc-front-holo-overlay {
   position: absolute;

@@ -17,7 +17,7 @@ import nenLungAsset from "../assets/nền lưng.avif";
 import RoomBg from "../assets/Nền phòng.avif";
 import ChieuBg from "../assets/nền chiều.avif";
 import { gsap } from "gsap";
-import DecryptedText from "../components/DecryptedText";
+import { GameRoleStatusBar } from "../components/GameRoleStatusBar";
 import medalSvg from "../assets/medal.svg";
 import angleCircleLeftSvg from "../assets/angle-circle-left.svg";
 import angleCircleRightSvg from "../assets/angle-circle-right.svg";
@@ -25,6 +25,7 @@ import GridMotionOverlay from "../components/GridMotionOverlay";
 import RoleCompanionOverlay from "../components/RoleCompanionOverlay";
 import { AvifIcon } from "../components/AvifIcon";
 import { CountdownButton } from "../components/CountdownButton";
+import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
 
 
 const VIP_REAL_NAMES: Record<string, string> = {
@@ -200,6 +201,20 @@ export default function GameDietQuy() {
     return false;
   });
   const [isAnimatingLeaf, setIsAnimatingLeaf] = useState(false);
+  const [showLowPerfToast, setShowLowPerfToast] = useState(false);
+
+  useEffect(() => {
+    if (lowPerformanceMode) {
+      setShowLowPerfToast(true);
+      const timer = setTimeout(() => {
+        setShowLowPerfToast(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowLowPerfToast(false);
+    }
+  }, [lowPerformanceMode]);
+
   const [duskRevealGameUI, setDuskRevealGameUI] = useState(false);
   const duskPlayedRef = useRef(false);
 
@@ -909,7 +924,8 @@ export default function GameDietQuy() {
     }
     const winnerText = (sync.gameEnded.winner as string) === "demons" ? "Phe Quỷ" : "Phe Dân";
     showNotice("Trò chơi kết thúc", `${winnerText} chiến thắng`);
-  }, [showNotice, sync.gameEnded]);
+    shootWinnerConfettiFromSides(sync.gameEnded.winner, sync.loveState);
+  }, [showNotice, sync.gameEnded, sync.loveState]);
 
   useEffect(() => {
     const seq = sync.dayVoteFinishedSeq;
@@ -1113,8 +1129,6 @@ export default function GameDietQuy() {
     )
   );
 
-
-
   return (
     <div
       className={`page-shell game-page${shouldShowRolePortrait ? " has-role-portrait" : ""}`}
@@ -1141,23 +1155,17 @@ export default function GameDietQuy() {
           }}
         />
       )}
-      {!isHost && (
-        <h2 style={{ display: "inline-flex", alignItems: "center", minHeight: "40px", height: "40px" }}>
-          <span>Vai trò của bạn là:</span>
-          <span style={{ display: "inline-flex", alignItems: "center", minHeight: "30px", height: "30px", marginLeft: "8px" }}>
-            <DecryptedText
-              text={cardFlippedToFront && role ? role : "********"}
-              speed={40}
-              maxIterations={8}
-              sequential
-              revealDirection={cardFlippedToFront ? "start" : "end"}
-              animateOn="view"
-              className="revealed"
-              encryptedClassName="encrypted"
-            />
-          </span>
-        </h2>
-      )}
+      <GameRoleStatusBar
+        isHost={isHost}
+        role={role}
+        cardFlippedToFront={cardFlippedToFront}
+        lowPerformanceMode={lowPerformanceMode}
+        setLowPerformanceMode={setLowPerformanceMode}
+        showLowPerfToast={showLowPerfToast}
+        isAnimatingLeaf={isAnimatingLeaf}
+        setIsAnimatingLeaf={setIsAnimatingLeaf}
+        phase={phase}
+      />
 
       {sync.gameEnded && (
         <h2>
@@ -1177,95 +1185,8 @@ export default function GameDietQuy() {
         <>
           {phase === "dusk" ? (
             <>
-              <style>{`
-                @keyframes gentleBob {
-                  0% {
-                    transform: translateY(0px) rotate(-45deg);
-                  }
-                  50% {
-                    transform: translateY(2.5px) rotate(-45deg);
-                  }
-                  100% {
-                    transform: translateY(0px) rotate(-45deg);
-                  }
-                }
-                @keyframes leaf3DFly {
-                  0% {
-                    transform: translateY(0) rotateY(0deg) rotate(-45deg);
-                  }
-                  50% {
-                    transform: translateY(-4dvh) rotateY(-360deg) rotate(-45deg);
-                  }
-                  100% {
-                    transform: translateY(0) rotateY(0deg) rotate(-45deg);
-                  }
-                }
-              `}</style>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "12px" }}>
                 <h1 style={{ display: "flex", alignItems: "center" }}><AvifIcon name="🌥️" style={{ marginRight: 8 }} /> Hoàng hôn</h1>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => {
-                    setLowPerformanceMode(p => !p);
-                    setIsAnimatingLeaf(true);
-                  }}
-                  title="Tối ưu hiệu năng di động"
-                  style={{
-                    background: "transparent",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: "8px",
-                    borderRadius: "50%",
-                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                    backgroundColor: lowPerformanceMode ? "rgba(16, 185, 129, 0.2)" : "rgba(255, 255, 255, 0.05)",
-                    boxShadow: lowPerformanceMode ? "0 0 15px rgba(16, 185, 129, 0.5), inset 0 0 8px rgba(16, 185, 129, 0.3)" : "none",
-                    border: lowPerformanceMode ? "1px solid rgba(16, 185, 129, 0.5)" : "1px solid rgba(255, 255, 255, 0.1)",
-                    outline: "none",
-                    userSelect: "none",
-                    perspective: "400px",
-                  }}
-                >
-                  <svg
-                    height="22"
-                    viewBox="0 0 30 30"
-                    width="22"
-                    xmlns="http://www.w3.org/2000/svg"
-                    style={{
-                      transform: "translateY(0px) rotate(-45deg)",
-                      display: "block",
-                      filter: lowPerformanceMode ? "drop-shadow(0 0 6px rgba(16, 185, 129, 0.8))" : "none",
-                      transition: "all 0.3s ease",
-                      animation: isAnimatingLeaf
-                        ? "leaf3DFly 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards"
-                        : (lowPerformanceMode ? "gentleBob 3.5s ease-in-out infinite" : "none"),
-                      transformStyle: "preserve-3d",
-                    }}
-                    onAnimationEnd={() => setIsAnimatingLeaf(false)}
-                  >
-                    <g fill="none" fillRule="evenodd">
-                      <g transform="translate(-450 -44)">
-                        <g transform="translate(449 40)">
-                          <path
-                            d="m23.6927469 29.6472387c2.6828915-2.2634443 4.2921773-5.3077228 4.2921773-9.0321629 0-.8160058-.0940967-1.6579238-.2767828-2.5232792-.6251216-2.9611024-2.2514506-6.099632-4.5695216-9.27172914-1.0509363-1.43812332-2.1759983-2.78819777-3.3012368-4.01214133-.3940924-.42866192-.7603031-.81118168-1.0893806-1.14273337-.1985344-.20002717-.3413556-.33934047-.4192058-.41309334-.1928481-.18269821-.4948966-.18269821-.6877447 0-.0778502.07375287-.2206714.21306617-.4192059.41309334-.3290774.33155169-.6952882.71407145-1.0893806 1.14273337-1.1252384 1.22394356-2.2503004 2.57401801-3.3012367 4.01214133-2.318071 3.17209714-3.94439999 6.31062674-4.5695216 9.27172914-.18268615.8653554-.27678286 1.7072734-.27678286 2.5232792 0 3.7244401 1.60928585 6.7687186 4.29217726 9.0321629 1.9448996 1.6408312 4.4617414 2.7678371 5.7078227 2.7678371 1.2460814 0 3.7629231-1.1270059 5.7078227-2.7678371z"
-                            fill={lowPerformanceMode ? "#4caf50" : "none"}
-                            stroke="#4caf50"
-                            strokeWidth={lowPerformanceMode ? "0" : "1.8"}
-                            transform="matrix(.707 .707 -.707 .707 17.829 -7.514)"
-                            style={{ transition: "fill 0.3s ease, stroke-width 0.3s ease" }}
-                          />
-                          <path
-                            d="m12.9943854 22.0490888-3.1450267-3.1450267c-.20305299-.203053-.51326456-.1966821-.7085267-.0014199-.18955158.1895515-.19515261.5119541.00024466.7073514l3.85330874 3.8533087v10.7923818c0 .2764249.2319336.5005115.5.5005115.2761424 0 .5-.2269016.5-.5005115v-10.7923818l3.8533087-3.8533087c.1971842-.1971842.1955068-.5120893.0002447-.7073514-.1895516-.1895516-.5124804-.1946265-.7085267.0014199l-3.1450267 3.1450267v-5.5857865l1.8531998-1.8531998c.1926722-.1926721.1956157-.5121982.0003536-.7074603-.1895516-.1895516-.5095255-.1975813-.7019268-.00518l-1.1516266 1.1516266v-4.7935088c0-.283258-.2238576-.49938444-.5-.49938444-.2680664 0-.5.22358205-.5.49938444v4.7935088l-1.1516266-1.1516266c-.1914368-.1914368-.5066647-.1900822-.7019268.00518-.1895516-.1895515-.1951039.5120029.0003535.7074603l1.8531999 1.8531998z"
-                            fill="#607d8b"
-                            transform="matrix(.707 .707 -.707 .707 19.69 -3.024)"
-                          />
-                        </g>
-                      </g>
-                    </g>
-                  </svg>
-                </div>
               </div>
               {!isHost && !duskTransitionActive && (
                 <>

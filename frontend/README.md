@@ -1,73 +1,62 @@
-# React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-Currently, two official plugins are available:
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Real-time Board Game Platform
+Một nền tảng web chơi game Ma Sói và Diệt Quỷ (phóng tác từ *Blood on the Clocktower*) trực tuyến thời gian thực, hỗ trợ nhiều chế độ chơi đa dạng, thiết lập luật chơi chi tiết và tương tác mượt mà qua kết nối WebSocket.
+---
+## 🚀 Tính năng nổi bật
+### 🎮 Các Chế độ chơi đa dạng
+1. **Dạ Nghịch (Chế độ chính):** Lấy cảm hứng từ Ma sói và kết hợp với hệ thống Nguyên tố (Elemental Buffs). Người chơi có thể bầu chọn các hiệu ứng nguyên tố để tăng sức mạnh cho phe của mình vào ban đêm.
+2. **Diệt Quỷ (Clocktower style):** Lấy cảm hứng từ *Blood on the Clocktower* với các vai trò độc đáo như Ác Quỷ (Imp), Nhà Sư (Monk), Gián Điệp (Spy), Thợ Giặt (Washerwoman), Thủ Thư (Librarian), Điều Tra Viên (Investigator), Nuôi Quạ (Ravenkeeper), Diệt Quỷ (Slayer)... Vòng chơi ban đêm diễn ra theo lượt xoay vòng của từng người chơi.
+3. **Sói Mù (Blind Werewolf):** Chế độ đặc biệt nơi thông tin của Ma Sói bị ẩn giấu và người chơi tương tác qua các quyết định giơ ngón tay (Thumbs up/down).
+### 🛠️ Tùy biến Luật chơi linh hoạt (Game Rules Customization)
+* Tùy chỉnh thứ tự hành động ban đêm (Sequential vs Simultaneous).
+* Cài đặt thời gian cho các phe ban đêm.
+* Cài đặt chi tiết luật cho những vai trò khác nhau.
+### ⏱️ Luồng Game Thời gian thực (Real-time Flow)
+* **Ban đêm (Night Flow):** Xử lý hành động của các vai trò đặc biệt, đếm ngược thời gian, hỗ trợ xin thêm thời gian (Extra time).
+* **Ban ngày (Day Flow):** Thảo luận tự do, bỏ phiếu treo cổ, đưa nghi phạm lên giàn giáo.
+* **Xét xử (Trial Stage):** Nghi phạm tự bào chữa (Defense), người dân bỏ phiếu kết án (Verdict) sống hoặc chết.
+### 📊 Hệ thống Lịch sử Trận đấu & Replay
+* Tự động lưu trữ thông tin trận đấu dưới dạng file `.json` tại thư mục [backend/data/history](file:///b:/Project%202/backend/data/history).
+* Hỗ trợ tải lại trận đấu để xem lại diễn biến chi tiết (Replay) của từng đêm và ngày.
+---
+## 🛠️ Công nghệ sử dụng
+### Backend
+* **Runtime:** Node.js (TypeScript)
+* **Framework:** Express
+* **Real-time:** Socket.io
+* **Lưu trữ:** File-based JSON Database
+### Frontend
+* **Framework:** React.js (TypeScript)
+* **Build Tool:** Vite
+* **Real-time Client:** Socket.io-client
+* **CSS:** Vanilla CSS (Sử dụng hệ thống biến CSS đồng bộ)
+---
+## 📂 Cấu trúc thư mục dự án
+```text
+├── backend/
+│   ├── data/                 # Thư mục lưu lịch sử trận đấu (.json)
+│   ├── src/
+│   │   ├── server.ts         # Khởi tạo Express server & Socket.io
+│   │   ├── socketHandlers.ts # Xử lý toàn bộ sự kiện realtime
+│   │   ├── dayFlow.ts        # Quản lý luồng chơi ban ngày
+│   │   ├── nightFlow.ts      # Quản lý luồng chơi ban đêm
+│   │   ├── gameHistory.ts    # Đọc/ghi lịch sử trận đấu
+│   │   ├── serverTypes.ts    # Định nghĩa các TypeScript types & interfaces
+│   │   └── tests/            # Bộ unit tests cho backend
+│   └── tsconfig.json
+│
+├── frontend/
+│   ├── src/
+│   │   ├── pages/            # Các trang giao diện chính
+│   │   │   ├── Home.tsx      # Trang chủ
+│   │   │   ├── Lobby.tsx     # Sảnh chờ tìm phòng
+│   │   │   ├── Room.tsx      # Phòng chờ chuẩn bị game
+│   │   │   ├── GameDaNghich.tsx # Giao diện chơi chế độ Dạ Nghịch
+│   │   │   ├── GameDietQuy.tsx   # Giao diện chơi chế độ Diệt Quỷ
+│   │   │   └── GameSoiMu.tsx     # Giao diện chơi chế độ Sói Mù
+│   │   ├── components/       # Các components dùng chung
+│   │   ├── theme.css         # CSS Theme hệ thống
+│   │   └── socket.ts         # Cấu hình kết nối WebSocket client
+│   └── vite.config.ts
+└── README.md                 # Tài liệu hướng dẫn này
 ```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+---

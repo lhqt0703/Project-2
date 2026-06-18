@@ -17,8 +17,8 @@ const NO_DARK_OVERLAY_ROLE_NAMES = new Set(["tiên tri", "phù thủy", "thợ s
 const FADE_OUT_MS = 280;
 const WOLF_ROLE_NAMES = new Set(["sói", "sói con", "sói dại"]);
 const HYBRID_ROLE_NAMES = new Set(["bán sói", "linh sói", "tay buôn", "thiên sứ"]);
-const VILLAGER_BACKGROUND_ASSET = "Nền dân";
-const WOLF_BACKGROUND_ASSET = "Nền sói";
+export const VILLAGER_BACKGROUND_ASSET = "Nền dân";
+export const WOLF_BACKGROUND_ASSET = "Nền sói";
 export const HYBRID_BACKGROUND_ASSET = "Nền lai";
 
 function normalizeRoleName(value: string) {

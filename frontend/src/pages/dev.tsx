@@ -113,6 +113,14 @@ export default function DevSpawn() {
     window.open(`/game?${params.toString()}`, "_blank");
   };
 
+  const openMockGame = (opts: { debugAnim?: boolean; debugCupid?: boolean }) => {
+    const params = new URLSearchParams();
+    params.set("roomId", "mock-8");
+    if (opts.debugAnim) params.set("debugAnim", "1");
+    if (opts.debugCupid) params.set("debugCupid", "1");
+    window.open(`/game?${params.toString()}`, "_blank");
+  };
+
   const handleStartReplay = () => {
     if (!selectedMatch) return;
     setReplayError("");
@@ -381,23 +389,102 @@ export default function DevSpawn() {
                 Mở Trang Game (Debug Anim)
               </button>
             </div>
+            <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
+              <button
+                onClick={() => openMockGame({ debugAnim: true })}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  borderRadius: "8px",
+                  border: "1px solid rgba(239, 68, 68, 0.4)",
+                  background: "rgba(239, 68, 68, 0.15)",
+                  color: "#fca5a5",
+                  fontWeight: 600,
+                  fontSize: "0.875rem",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                Test Thợ Săn Bắn (8 Players Ảo)
+              </button>
+              <button
+                onClick={() => openMockGame({ debugCupid: true })}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  borderRadius: "8px",
+                  border: "1px solid rgba(244, 63, 94, 0.4)",
+                  background: "rgba(244, 63, 94, 0.15)",
+                  color: "#fda4af",
+                  fontWeight: 600,
+                  fontSize: "0.875rem",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                Test Cupid Bắn (8 Players Ảo)
+              </button>
+            </div>
+
             <button
-              onClick={shootWinnerConfettiFromSides}
+              onClick={() => shootWinnerConfettiFromSides("villagers")}
               style={{
                 width: "100%",
                 marginTop: "12px",
                 padding: "10px",
                 borderRadius: "8px",
-                border: "1px solid rgba(250, 204, 21, 0.35)",
-                background: "rgba(250, 204, 21, 0.12)",
-                color: "#fde68a",
+                border: "1px solid rgba(52, 152, 219, 0.35)",
+                background: "rgba(52, 152, 219, 0.12)",
+                color: "#99ccff",
                 fontWeight: 700,
                 fontSize: "0.875rem",
                 cursor: "pointer",
                 transition: "all 0.2s",
               }}
             >
-              Test hiệu ứng thắng
+              Test Phe Dân thắng
+            </button>
+            <button
+              onClick={() => shootWinnerConfettiFromSides("wolves")}
+              style={{
+                width: "100%",
+                marginTop: "8px",
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid rgba(231, 76, 60, 0.35)",
+                background: "rgba(231, 76, 60, 0.12)",
+                color: "#ff9999",
+                fontWeight: 700,
+                fontSize: "0.875rem",
+                cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+            >
+              Test Phe Sói thắng
+            </button>
+            <button
+              onClick={() => shootWinnerConfettiFromSides("lovers", {
+                pairIds: ["p1", "p2"],
+                rolesByPlayerId: {
+                  p1: "Thần tình yêu",
+                  p2: "Sói thường"
+                }
+              })}
+              style={{
+                width: "100%",
+                marginTop: "8px",
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid rgba(253, 121, 168, 0.35)",
+                background: "rgba(253, 121, 168, 0.12)",
+                color: "#ffb3d9",
+                fontWeight: 700,
+                fontSize: "0.875rem",
+                cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+            >
+              Test Cặp đôi Sói + Cupid thắng
             </button>
           </div>
         </div>

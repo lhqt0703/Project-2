@@ -286,12 +286,71 @@ export default function GameRulesModal({
     ? draftRules.witchHideProtectedBiteInSimultaneous
     : draftRules.witchHideProtectedBiteWhenSequential;
 
+  const renderTwoHeartsFirstTwoNights = () => {
+    const desc = isDietQuy
+      ? "Đêm 1 bị quỷ đâm sẽ mất 1 máu. Đêm 2 bị quỷ đâm sẽ mất 2 máu và chết ngay cả khi đã mất 1 máu ở đêm 1."
+      : "Đêm 1 bị sói cắn sẽ mất 1 máu. Đêm 2 bị sói cắn sẽ mất 2 máu và chết ngay cả khi đã mất 1 máu ở đêm 1.";
+
+    return (
+      <label style={rowStyle()}>
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả nhân vật sẽ có 2 máu trong 2 đêm đầu</div>
+          <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+            {desc}
+          </div>
+        </div>
+        <input
+          type="checkbox"
+          checked={draftRules.twoHeartsFirstTwoNights}
+          disabled={readOnly}
+          onChange={(e) => {
+            const checked = e.target.checked;
+            if (readOnly) return;
+            setDraftRules((prev) => ({
+              ...prev,
+              twoHeartsFirstTwoNights: checked,
+              forceWolfBiteFirstNight: checked ? prev.forceWolfBiteFirstNight : false,
+            }));
+          }}
+          style={{ width: 20, height: 20, marginTop: 2 }}
+        />
+      </label>
+    );
+  };
+
+  const renderForceWolfBiteFirstNight = () => {
+    if (!draftRules.twoHeartsFirstTwoNights) return null;
+
+    const label = isDietQuy ? "Bắt buộc quỷ phải đâm trong đêm đầu" : "Bắt buộc phe sói cắn trong đêm đầu";
+    const desc = isDietQuy
+      ? "Nếu Quỷ không chọn ai, hệ thống sẽ chọn ngẫu nhiên một mục tiêu hợp lệ."
+      : "Nếu Sói không chọn ai, hệ thống sẽ chọn ngẫu nhiên một mục tiêu hợp lệ. Nếu hòa phiếu, hệ thống chọn ngẫu nhiên trong các mục tiêu đang hòa.";
+
+    return (
+      <label style={rowStyle()}>
+        <div>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>{label}</div>
+          <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+            {desc}
+          </div>
+        </div>
+        <input
+          type="checkbox"
+          checked={draftRules.forceWolfBiteFirstNight}
+          disabled={readOnly}
+          onChange={(e) => updateRule("forceWolfBiteFirstNight", e.target.checked)}
+          style={{ width: 20, height: 20, marginTop: 2 }}
+        />
+      </label>
+    );
+  };
+
   return (
     <div
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 9999,
+        zIndex: 100,
         background: "rgba(4,8,18,0.72)",
         backdropFilter: "blur(8px)",
         display: "flex",
@@ -331,47 +390,8 @@ export default function GameRulesModal({
         <div style={{ padding: 24, display: "grid", gap: 14 }}>
           {isDietQuy ? (
             <>
-              <label style={rowStyle()}>
-                <div>
-                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả nhân vật sẽ có 2 máu trong 2 đêm đầu</div>
-                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                    Đêm 1 bị quỷ đâm sẽ mất 1 máu. Đêm 2 bị quỷ đâm sẽ mất 2 máu và chết ngay cả khi đã mất 1 máu ở đêm 1.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={draftRules.twoHeartsFirstTwoNights}
-                  disabled={readOnly}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    if (readOnly) return;
-                    setDraftRules((prev) => ({
-                      ...prev,
-                      twoHeartsFirstTwoNights: checked,
-                      forceWolfBiteFirstNight: checked ? prev.forceWolfBiteFirstNight : false,
-                    }));
-                  }}
-                  style={{ width: 20, height: 20, marginTop: 2 }}
-                />
-              </label>
-
-              {draftRules.twoHeartsFirstTwoNights && (
-                <label style={rowStyle()}>
-                  <div>
-                    <div style={{ fontWeight: 700, marginBottom: 4 }}>Bắt buộc quỷ phải đâm trong đêm đầu</div>
-                    <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                      Nếu Quỷ không chọn ai, hệ thống sẽ chọn ngẫu nhiên một mục tiêu hợp lệ.
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={draftRules.forceWolfBiteFirstNight}
-                    disabled={readOnly}
-                    onChange={(e) => updateRule("forceWolfBiteFirstNight", e.target.checked)}
-                    style={{ width: 20, height: 20, marginTop: 2 }}
-                  />
-                </label>
-              )}
+              {renderTwoHeartsFirstTwoNights()}
+              {renderForceWolfBiteFirstNight()}
 
               <label style={rowStyle()}>
                 <div>
@@ -403,47 +423,8 @@ export default function GameRulesModal({
             </>
           ) : isSoiMu ? (
             <>
-              <label style={rowStyle()}>
-                <div>
-                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả nhân vật sẽ có 2 máu trong 2 đêm đầu</div>
-                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                    Đêm 1 bị sói cắn sẽ mất 1 máu. Đêm 2 bị sói cắn sẽ mất 2 máu và chết ngay cả khi đã mất 1 máu ở đêm 1.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={draftRules.twoHeartsFirstTwoNights}
-                  disabled={readOnly}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    if (readOnly) return;
-                    setDraftRules((prev) => ({
-                      ...prev,
-                      twoHeartsFirstTwoNights: checked,
-                      forceWolfBiteFirstNight: checked ? prev.forceWolfBiteFirstNight : false,
-                    }));
-                  }}
-                  style={{ width: 20, height: 20, marginTop: 2 }}
-                />
-              </label>
-
-              {draftRules.twoHeartsFirstTwoNights && (
-                <label style={rowStyle()}>
-                  <div>
-                    <div style={{ fontWeight: 700, marginBottom: 4 }}>Bắt buộc phe sói cắn trong đêm đầu</div>
-                    <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                      Nếu Sói không chọn ai, hệ thống sẽ chọn ngẫu nhiên một mục tiêu hợp lệ. Nếu hòa phiếu, hệ thống chọn ngẫu nhiên trong các mục tiêu đang hòa.
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={draftRules.forceWolfBiteFirstNight}
-                    disabled={readOnly}
-                    onChange={(e) => updateRule("forceWolfBiteFirstNight", e.target.checked)}
-                    style={{ width: 20, height: 20, marginTop: 2 }}
-                  />
-                </label>
-              )}
+              {renderTwoHeartsFirstTwoNights()}
+              {renderForceWolfBiteFirstNight()}
 
               <label style={rowStyle()}>
                 <div>
@@ -491,47 +472,8 @@ export default function GameRulesModal({
             </>
           ) : (
             <>
-              <label style={rowStyle()}>
-                <div>
-                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Tất cả nhân vật sẽ có 2 máu trong 2 đêm đầu</div>
-                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                    Đêm 1 bị sói cắn sẽ mất 1 máu. Đêm 2 bị sói cắn sẽ mất 2 máu và chết ngay cả khi đã mất 1 máu ở đêm 1.
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={draftRules.twoHeartsFirstTwoNights}
-                  disabled={readOnly}
-                  onChange={(e) => {
-                    const checked = e.target.checked;
-                    if (readOnly) return;
-                    setDraftRules((prev) => ({
-                      ...prev,
-                      twoHeartsFirstTwoNights: checked,
-                      forceWolfBiteFirstNight: checked ? prev.forceWolfBiteFirstNight : false,
-                    }));
-                  }}
-                  style={{ width: 20, height: 20, marginTop: 2 }}
-                />
-              </label>
-
-              {draftRules.twoHeartsFirstTwoNights && (
-                <label style={rowStyle()}>
-                  <div>
-                    <div style={{ fontWeight: 700, marginBottom: 4 }}>Bắt buộc phe sói cắn trong đêm đầu</div>
-                    <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                      Nếu Sói không chọn ai, hệ thống sẽ chọn ngẫu nhiên một mục tiêu hợp lệ. Nếu hòa phiếu, hệ thống chọn ngẫu nhiên trong các mục tiêu đang hòa.
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={draftRules.forceWolfBiteFirstNight}
-                    disabled={readOnly}
-                    onChange={(e) => updateRule("forceWolfBiteFirstNight", e.target.checked)}
-                    style={{ width: 20, height: 20, marginTop: 2 }}
-                  />
-                </label>
-              )}
+              {renderTwoHeartsFirstTwoNights()}
+              {renderForceWolfBiteFirstNight()}
 
               <label style={rowStyle()}>
                 <div>

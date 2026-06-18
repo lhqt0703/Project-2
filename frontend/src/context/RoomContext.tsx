@@ -170,6 +170,7 @@ export interface RoomData {
   soiMuDaySelectedTargetId?: string | null;
   soiMuInvestigationResult?: "success" | "fail" | null;
   soiMuHasMerchant?: boolean;
+  soiMuNamThuTargetId?: string | null;
   dayVotes?: Record<string, string | null>;
   dayLocked?: Record<string, boolean>;
   dayVoters?: string[];

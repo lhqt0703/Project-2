@@ -54,6 +54,7 @@ export function useSeerRole({
 
 
   const canAct = useMemo(() => {
+    if (roomId === "mock-8") return role === "Tiên tri" && phase === "night";
     if (phase !== "night") return false;
     if (role !== "Tiên tri") return false;
     const max = maxChecksTonight ?? 1;
@@ -64,20 +65,29 @@ export function useSeerRole({
       if (currentNightTurnRole !== "Tiên tri") return false;
     }
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, maxChecksTonight, nightActionDeadline, nightActionNow, phase, role, checksUsed]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, maxChecksTonight, nightActionDeadline, nightActionNow, phase, role, checksUsed, roomId]);
 
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;
+    if (roomId === "mock-8") {
+      setSelectedPlayerId(playerId);
+      setShowConfirm(true);
+      return true;
+    }
     if (playerId === clientId) return true; // Không cho chọn chính mình
 
     setSelectedPlayerId(playerId);
     setShowConfirm(true);
     return true;
-  }, [canAct]);
+  }, [canAct, roomId]);
 
   const confirm = useCallback(() => {
     if (!canAct) return;
     if (!roomId || !selectedPlayerId) return;
+    if (roomId === "mock-8") {
+      setShowConfirm(false);
+      return;
+    }
 
     socket.emit("seerCheck", { roomId, targetId: selectedPlayerId });
   }, [canAct, roomId, selectedPlayerId]);

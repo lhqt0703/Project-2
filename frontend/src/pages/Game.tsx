@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { useRoomContext } from "../context/RoomContext";
+import { useRoomContext, DEFAULT_ROOM_GAME_RULES } from "../context/RoomContext";
 import { socket } from "../socket";
 import { useLocation, useNavigate } from "react-router-dom";
 import ConfirmModal from "../components/ConfirmModal";
@@ -19,7 +19,42 @@ export default function Game() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    if (room || !roomId) return;
+    if (!roomId) return;
+    if (room && room.id === roomId) return;
+
+    if (roomId === "mock-8") {
+      setRoom({
+        id: "mock-8",
+        hostId: "P1",
+        players: [
+          { id: "P1", name: "Player 1" },
+          { id: "P2", name: "Player 2" },
+          { id: "P3", name: "Player 3" },
+          { id: "P4", name: "Player 4" },
+          { id: "P5", name: "Player 5" },
+          { id: "P6", name: "Player 6" },
+          { id: "P7", name: "Player 7" },
+          { id: "P8", name: "Player 8" },
+        ],
+        positions: [
+          { playerId: "P1", x: 0.415, y: 0.16 },
+          { playerId: "P2", x: 0.585, y: 0.16 },
+          { playerId: "P3", x: 0.27,  y: 0.32 },
+          { playerId: "P4", x: 0.73,  y: 0.32 },
+          { playerId: "P5", x: 0.27,  y: 0.54 },
+          { playerId: "P6", x: 0.73,  y: 0.54 },
+          { playerId: "P7", x: 0.415, y: 0.7 },
+          { playerId: "P8", x: 0.585, y: 0.7 },
+        ],
+        phase: "night",
+        nightCount: 1,
+        nightTurnRemainingMs: 690 * 1000,
+        nightTurnPaused: true,
+        deadPlayers: [],
+        gameRules: DEFAULT_ROOM_GAME_RULES,
+      });
+      return;
+    }
 
     // Gửi yêu cầu lấy thông tin phòng từ server
     socket.emit("getRoom", roomId);
@@ -38,7 +73,9 @@ export default function Game() {
     socket.on("errorMessage", handleErrorMessage);
 
     const handleConnect = () => {
-      socket.emit("getRoom", roomId);
+      if (roomId !== "mock-8") {
+        socket.emit("getRoom", roomId);
+      }
     };
     socket.on("connect", handleConnect);
 

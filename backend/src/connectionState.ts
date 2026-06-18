@@ -63,6 +63,12 @@ export function createConnectionState(ctx: ServerContext, state: ConnectionState
           delete room.pendingRoleBlocks;
         }
       }
+      if (room.playerRoleHistory) {
+        delete room.playerRoleHistory[playerId];
+        if (Object.keys(room.playerRoleHistory).length === 0) {
+          delete room.playerRoleHistory;
+        }
+      }
 
       if (room.players.length === 0) {
         delete ctx.rooms[roomId];

@@ -692,6 +692,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
   function finishWolfVoting(roomId: string) {
     const room = ctx.rooms[roomId];
     if (!room) return;
+    if (room.gameMode === "soi_mu") return;
     if (room.wolfVoteResolvedTonight) return;
     const rules = ensureRoomGameRules(room);
     if (room.merchantWolfBiteDisabledTonight) {

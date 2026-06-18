@@ -23,6 +23,7 @@ import { useLoveRole } from "./gameRoles/useLoveRole";
 import { useCursedRole } from "./gameRoles/useCursedRole";
 import { useMerchantRole } from "./gameRoles/useMerchantRole";
 import { useAngelRole } from "./gameRoles/useAngelRole";
+import { useMock8Test } from "./gameRoles/useMock8Test";
 import { ScoreboardModal } from "../components/ScoreboardModal";
 import RoleCard3D from "../components/RoleCard3D";
 import Masonry from "../components/Masonry";
@@ -30,12 +31,13 @@ import nenLungAsset from "../assets/nền lưng.avif";
 import RoomBg from "../assets/Nền phòng.avif";
 import ChieuBg from "../assets/nền chiều.avif";
 import { gsap } from "gsap";
-import DecryptedText from "../components/DecryptedText";
+import { GameRoleStatusBar } from "../components/GameRoleStatusBar";
 import medalSvg from "../assets/medal.svg";
 import GridMotionOverlay from "../components/GridMotionOverlay";
 import RoleCompanionOverlay from "../components/RoleCompanionOverlay";
 import { AvifIcon } from "../components/AvifIcon";
 import { CountdownButton } from "../components/CountdownButton";
+import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
 
 
 const VIP_REAL_NAMES: Record<string, string> = {
@@ -74,36 +76,6 @@ function doesRoleMatchNightTurn(roleName: string | null | undefined, nightTurnRo
   return roleName === nightTurnRole;
 }
 
-const EyeIcon = ({ isOpen }: { isOpen: boolean }) => {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      style={{ overflow: "visible" }}
-    >
-      <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.875 0Z" />
-      <circle cx="12" cy="12" r="3" />
-      <line
-        x1="3"
-        y1="3"
-        x2="21"
-        y2="21"
-        style={{
-          strokeDasharray: 26,
-          strokeDashoffset: isOpen ? 26 : 0,
-          transition: "stroke-dashoffset 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-        }}
-      />
-    </svg>
-  );
-};
 
 const ROLE_SKILL_HINTS: Record<string, string> = {
   "Tiên tri": "Chọn một người mà bạn nghĩ họ là sói để xem quả cầu có chuyển sang ánh sáng đỏ không",
@@ -125,11 +97,13 @@ const ROLE_SKILL_HINTS: Record<string, string> = {
 };
 
 export default function GameDaNghich() {
-  const { role, room, setRoom } = useRoomContext();
+  const { role: contextRole, room, setRoom } = useRoomContext();
   const nav = useNavigate();
   const location = useLocation();
-  const query = new URLSearchParams(location.search);
+  const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const roomId = query.get("roomId");
+  const [roleOverride, setRoleOverride] = useState<string | null>("Thần tình yêu");
+  const role = roomId === "mock-8" ? roleOverride : contextRole;
   const debugAnim = query.get("debugAnim") === "1";
   const sync = useGameSocketSync({ roomId, setRoom });
   const phase: GamePhase = sync.phase;
@@ -173,6 +147,7 @@ export default function GameDaNghich() {
   const [nightTurnNow, setNightTurnNow] = useState(() => Date.now() + serverTimeOffset);
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [isNightInfoVisible, setIsNightInfoVisible] = useState(true);
+  const [cardFlippedToFront, setCardFlippedToFront] = useState(false);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const [scoreboardOpen, setScoreboardOpen] = useState(false);
   const [hostPlayerActionTargetId, setHostPlayerActionTargetId] = useState<string | null>(null);
@@ -260,6 +235,20 @@ export default function GameDaNghich() {
     return false;
   });
   const [isAnimatingLeaf, setIsAnimatingLeaf] = useState(false);
+  const [showLowPerfToast, setShowLowPerfToast] = useState(false);
+
+  useEffect(() => {
+    if (lowPerformanceMode) {
+      setShowLowPerfToast(true);
+      const timer = setTimeout(() => {
+        setShowLowPerfToast(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowLowPerfToast(false);
+    }
+  }, [lowPerformanceMode]);
+
   const [duskRevealGameUI, setDuskRevealGameUI] = useState(false);
   const duskPlayedRef = useRef(false);
 
@@ -961,11 +950,13 @@ export default function GameDaNghich() {
       hunterBulletTimeoutRef.current = null;
     }
 
+    const duration = options?.kind === "love" ? 2400 : HUNTER_BULLET_ANIM_MS;
+
     setHunterBulletAnim({
       fromPlayerId: hunterId,
       toPlayerId: targetId,
       startedAt: performance.now(),
-      durationMs: HUNTER_BULLET_ANIM_MS,
+      durationMs: duration,
       assetSrc: options?.assetSrc,
       alt: options?.alt,
       rotationOffsetDeg: options?.rotationOffsetDeg,
@@ -975,7 +966,7 @@ export default function GameDaNghich() {
     hunterBulletTimeoutRef.current = window.setTimeout(() => {
       setHunterBulletAnim(null);
       hunterBulletTimeoutRef.current = null;
-    }, HUNTER_BULLET_ANIM_MS);
+    }, duration);
   }, []);
 
   useEffect(() => {
@@ -1006,30 +997,33 @@ export default function GameDaNghich() {
     return () => window.cancelAnimationFrame(frame);
   }, [playHunterShotAnim, sync.loveArrowShot, sync.loveArrowShotSeq]);
 
-  useEffect(() => {
-    if (!debugAnim) return;
-    if (!room) return;
+  const mock8 = useMock8Test({
+    roomId,
+    room,
+    deadPlayers,
+    playHunterShotAnim,
+    setIsNightInfoVisible,
+    setCardFlippedToFront,
+    debugAnim,
+    roleOverride,
+    setRoleOverride,
+  });
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== "h" || !e.shiftKey) return;
-
-      const alive = room.players
-        .map(p => p.id)
-        .filter(id => !deadPlayers.includes(id));
-      if (alive.length < 2) return;
-
-      const from = alive[Math.floor(Math.random() * alive.length)]!;
-      let to = from;
-      for (let i = 0; i < 10 && to === from; i++) {
-        to = alive[Math.floor(Math.random() * alive.length)]!;
-      }
-      if (to === from) return;
-      playHunterShotAnim(from, to);
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [debugAnim, room, deadPlayers]);
+  const handleToggleNightInfoVisible = useCallback((visible: boolean | ((prev: boolean) => boolean)) => {
+    if (room?.id === "mock-8") {
+      // Danh sách các vai trò để kiểm thử giao diện
+      const TEST_ROLES = ["Thần tình yêu", "Phù thủy", "Sói Dại", "Tiên tri", "Bảo vệ", "Thợ săn"];
+      const currentRole = roleOverride || "Thần tình yêu";
+      const nextIndex = (TEST_ROLES.indexOf(currentRole) + 1) % TEST_ROLES.length;
+      const nextRole = TEST_ROLES[nextIndex]!;
+      setRoleOverride(nextRole);
+      // Luôn bật hiển thị để giao diện role mới được vẽ ra
+      setIsNightInfoVisible(true);
+      setCardFlippedToFront(true);
+    } else {
+      setIsNightInfoVisible(visible);
+    }
+  }, [room?.id, roleOverride, setRoleOverride, setIsNightInfoVisible, setCardFlippedToFront]);
 
   const deadPlayersOverrideForRender = useMemo(() => {
     if (!hunterBulletAnim) return displayDeadPlayers;
@@ -1262,7 +1256,7 @@ export default function GameDaNghich() {
   }, [phase, role, isCurrentPlayerDeadForNightActions, sync.elementalActionMode, allNightActionsSimultaneous, currentNightTurnRole, loveActionPlacement]);
 
   const renderSkillHint = () => {
-    if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions) return null;
+    if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions || !isNightInfoVisible) return null;
     
     let hintText = ROLE_SKILL_HINTS[role];
     if (role === "Bán sói") {
@@ -1363,6 +1357,7 @@ export default function GameDaNghich() {
   }, [canViewRoles, currentNightTurnRole, isBanSoiAligned, isHost, isSequentialNight, roomForDisplay?.publicRevealedRolesByPlayerId, sync.gameEnded, sync.revealedRolesByPlayerId, visibleLoveRoleBadges]);
 
   const isLocalPlayerAbleToAct = useMemo(() => {
+    if (room?.id === "mock-8") return true;
     if (!clientId || !room || room.gameOver) return false;
     const isDead = deadPlayers.includes(clientId);
 
@@ -1567,7 +1562,8 @@ export default function GameDaNghich() {
           ? "Cặp đôi"
           : "Phe Dân";
     showNotice("Trò chơi kết thúc", `${winnerText} chiến thắng`);
-  }, [showNotice, sync.gameEnded]);
+    shootWinnerConfettiFromSides(sync.gameEnded.winner, sync.loveState);
+  }, [showNotice, sync.gameEnded, sync.loveState]);
 
   useEffect(() => {
     const seq = sync.dayVoteFinishedSeq;
@@ -1699,14 +1695,14 @@ export default function GameDaNghich() {
     : "";
   const isRoleRevealLimitedToCurrentNightTurn = isSequentialNight && !sync.gameEnded;
   const shouldRevealMyRole =
-    !isHost &&
-    !!role &&
-    (!!sync.gameEnded ||
-      (!shouldBlockDeadNightRoleReveal &&
-        (phase === "night" ? isNightInfoVisible : true) &&
-        (isRoleRevealLimitedToCurrentNightTurn ? doesNightTurnMatchMyRole : !shouldHidePlayerRoleText)));
-
-  const [cardFlippedToFront, setCardFlippedToFront] = useState(false);
+    room?.id === "mock-8"
+      ? true
+      : (!isHost &&
+         !!role &&
+         (!!sync.gameEnded ||
+           (!shouldBlockDeadNightRoleReveal &&
+             (phase === "night" ? isNightInfoVisible : true) &&
+             (isRoleRevealLimitedToCurrentNightTurn ? doesNightTurnMatchMyRole : !shouldHidePlayerRoleText))));
 
   const masonryItems = useMemo(() => {
     const roles = room?.roles || [];
@@ -1828,13 +1824,30 @@ export default function GameDaNghich() {
 
   const hostNightRemainingSec = useMemo(() => {
     if (phase !== "night") return null;
+
+    // Tự động cộng thêm 10 giây thời gian của Phù thủy cho Host nếu Phù thủy còn sống và có bonus
+    let witchExtraMs = 0;
+    if (isSimultaneousNight && room?.players && sync.revealedRolesByPlayerId) {
+      const witchPlayer = room.players.find(p => sync.revealedRolesByPlayerId?.[p.id] === "Phù thủy");
+      const isWitchAlive = !!witchPlayer && !deadPlayers.includes(witchPlayer.id);
+
+      const rules = room?.gameRules;
+      const nonWolf = rules?.nonWolfNightActionDurationSec || 0;
+      const wolf = rules?.wolfNightActionDurationSec || 0;
+      const witchBonusApplies = nonWolf > 0 && wolf === nonWolf;
+
+      if (isWitchAlive && witchBonusApplies) {
+        witchExtraMs = 10000;
+      }
+    }
+
     if (nightTurnPaused) {
       if (nightTurnRemainingMs == null) return null;
-      return Math.max(0, Math.ceil(nightTurnRemainingMs / 1000));
+      return Math.max(0, Math.ceil((nightTurnRemainingMs + witchExtraMs) / 1000));
     }
     if (!nightTurnDeadline) return null;
-    return Math.max(0, Math.ceil((nightTurnDeadline - nightTurnNow) / 1000));
-  }, [phase, nightTurnPaused, nightTurnRemainingMs, nightTurnDeadline, nightTurnNow]);
+    return Math.max(0, Math.ceil((nightTurnDeadline + witchExtraMs - nightTurnNow) / 1000));
+  }, [phase, nightTurnPaused, nightTurnRemainingMs, nightTurnDeadline, nightTurnNow, isSimultaneousNight, room?.players, sync.revealedRolesByPlayerId, deadPlayers, room?.gameRules]);
 
   const countdownSeconds = isHost
     ? hostNightRemainingSec
@@ -1893,7 +1906,7 @@ export default function GameDaNghich() {
             style={{
               position: "fixed",
               inset: 0,
-              zIndex: 9997,
+              zIndex: 27,
               pointerEvents: "none",
               borderRadius: 0,
               animation: "villageChiefDyingFramePulse 1400ms ease-in-out infinite",
@@ -1902,66 +1915,20 @@ export default function GameDaNghich() {
         </>
       )}
 
-      {!isHost && (
-        <h2 style={{ 
-          display: "flex", 
-          alignItems: "center", 
-          gap: "8px", 
-          flexWrap: "wrap", 
-          justifyContent: "space-between",
-          minHeight: "40px",
-          height: "40px"
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span>Vai trò của bạn:</span>
-            <span style={{ display: "inline-flex", alignItems: "center", minHeight: "30px", height: "30px" }}>
-              <DecryptedText
-                text={cardFlippedToFront && role ? role : "********"}
-                speed={40}
-                maxIterations={8}
-                sequential
-                revealDirection={cardFlippedToFront ? "start" : "end"}
-                animateOn="view"
-                className="revealed"
-                encryptedClassName="encrypted"
-              />
-            </span>
-          </div>
-          {phase === "night" && !sync.gameEnded && !isCurrentPlayerDeadForNightActions && (
-            <div
-              onClick={() => setIsNightInfoVisible((p) => !p)}
-              style={{
-                background: "rgba(255, 255, 255, 0.05)",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                borderRadius: "50%",
-                cursor: "pointer",
-                width: "32px",
-                height: "32px",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: isNightInfoVisible ? "#34d399" : "#f87171",
-                transition: "all 0.2s ease",
-                padding: 0,
-                boxShadow: isNightInfoVisible 
-                  ? "0 0 8px rgba(52, 211, 153, 0.2)" 
-                  : "0 0 8px rgba(248, 113, 113, 0.2)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "scale(1.1)";
-                e.currentTarget.style.background = "rgba(255, 255, 255, 0.1)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "scale(1)";
-                e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
-              }}
-              title={isNightInfoVisible ? "Ẩn màn hình" : "Hiện màn hình"}
-            >
-              <EyeIcon isOpen={isNightInfoVisible} />
-            </div>
-          )}
-        </h2>
-      )}
+      <GameRoleStatusBar
+        isHost={isHost}
+        role={role}
+        cardFlippedToFront={cardFlippedToFront}
+        lowPerformanceMode={lowPerformanceMode}
+        setLowPerformanceMode={setLowPerformanceMode}
+        showLowPerfToast={showLowPerfToast}
+        isAnimatingLeaf={isAnimatingLeaf}
+        setIsAnimatingLeaf={setIsAnimatingLeaf}
+        phase={phase}
+        showEyeIcon={phase === "night" && !sync.gameEnded && !isCurrentPlayerDeadForNightActions}
+        isNightInfoVisible={isNightInfoVisible}
+        setIsNightInfoVisible={handleToggleNightInfoVisible}
+      />
       
       {sync.gameEnded && (
         <h2>
@@ -1984,95 +1951,8 @@ export default function GameDaNghich() {
         <>
           {phase === "dusk" ? (
             <>
-              <style>{`
-                @keyframes gentleBob {
-                  0% {
-                    transform: translateY(0px) rotate(-45deg);
-                  }
-                  50% {
-                    transform: translateY(2.5px) rotate(-45deg);
-                  }
-                  100% {
-                    transform: translateY(0px) rotate(-45deg);
-                  }
-                }
-                @keyframes leaf3DFly {
-                  0% {
-                    transform: translateY(0) rotateY(0deg) rotate(-45deg);
-                  }
-                  50% {
-                    transform: translateY(-4dvh) rotateY(-360deg) rotate(-45deg);
-                  }
-                  100% {
-                    transform: translateY(0) rotateY(0deg) rotate(-45deg);
-                  }
-                }
-              `}</style>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "12px" }}>
                 <h1 style={{ display: "flex", alignItems: "center" }}><AvifIcon name="🌥️" style={{ marginRight: 8 }} /> Hoàng hôn</h1>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => {
-                    setLowPerformanceMode(p => !p);
-                    setIsAnimatingLeaf(true);
-                  }}
-                  title="Tối ưu hiệu năng di động"
-                  style={{
-                    background: "transparent",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: "8px",
-                    borderRadius: "50%",
-                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                    backgroundColor: lowPerformanceMode ? "rgba(16, 185, 129, 0.2)" : "rgba(255, 255, 255, 0.05)",
-                    boxShadow: lowPerformanceMode ? "0 0 15px rgba(16, 185, 129, 0.5), inset 0 0 8px rgba(16, 185, 129, 0.3)" : "none",
-                    border: lowPerformanceMode ? "1px solid rgba(16, 185, 129, 0.5)" : "1px solid rgba(255, 255, 255, 0.1)",
-                    outline: "none",
-                    userSelect: "none",
-                    perspective: "400px",
-                  }}
-                >
-                  <svg
-                    height="22"
-                    viewBox="0 0 30 30"
-                    width="22"
-                    xmlns="http://www.w3.org/2000/svg"
-                    style={{
-                      transform: "translateY(0px) rotate(-45deg)",
-                      display: "block",
-                      filter: lowPerformanceMode ? "drop-shadow(0 0 6px rgba(16, 185, 129, 0.8))" : "none",
-                      transition: "all 0.3s ease",
-                      animation: isAnimatingLeaf
-                        ? "leaf3DFly 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards"
-                        : (lowPerformanceMode ? "gentleBob 3.5s ease-in-out infinite" : "none"),
-                      transformStyle: "preserve-3d",
-                    }}
-                    onAnimationEnd={() => setIsAnimatingLeaf(false)}
-                  >
-                    <g fill="none" fillRule="evenodd">
-                      <g transform="translate(-450 -44)">
-                        <g transform="translate(449 40)">
-                          <path
-                            d="m23.6927469 29.6472387c2.6828915-2.2634443 4.2921773-5.3077228 4.2921773-9.0321629 0-.8160058-.0940967-1.6579238-.2767828-2.5232792-.6251216-2.9611024-2.2514506-6.099632-4.5695216-9.27172914-1.0509363-1.43812332-2.1759983-2.78819777-3.3012368-4.01214133-.3940924-.42866192-.7603031-.81118168-1.0893806-1.14273337-.1985344-.20002717-.3413556-.33934047-.4192058-.41309334-.1928481-.18269821-.4948966-.18269821-.6877447 0-.0778502.07375287-.2206714.21306617-.4192059.41309334-.3290774.33155169-.6952882.71407145-1.0893806 1.14273337-1.1252384 1.22394356-2.2503004 2.57401801-3.3012367 4.01214133-2.318071 3.17209714-3.94439999 6.31062674-4.5695216 9.27172914-.18268615.8653554-.27678286 1.7072734-.27678286 2.5232792 0 3.7244401 1.60928585 6.7687186 4.29217726 9.0321629 1.9448996 1.6408312 4.4617414 2.7678371 5.7078227 2.7678371 1.2460814 0 3.7629231-1.1270059 5.7078227-2.7678371z"
-                            fill={lowPerformanceMode ? "#4caf50" : "none"}
-                            stroke="#4caf50"
-                            strokeWidth={lowPerformanceMode ? "0" : "1.8"}
-                            transform="matrix(.707 .707 -.707 .707 17.829 -7.514)"
-                            style={{ transition: "fill 0.3s ease, stroke-width 0.3s ease" }}
-                          />
-                          <path
-                            d="m12.9943854 22.0490888-3.1450267-3.1450267c-.20305299-.203053-.51326456-.1966821-.7085267-.0014199-.18955158.1895515-.19515261.5119541.00024466.7073514l3.85330874 3.8533087v10.7923818c0 .2764249.2319336.5005115.5.5005115.2761424 0 .5-.2269016.5-.5005115v-10.7923818l3.8533087-3.8533087c.1971842-.1971842.1955068-.5120893.0002447-.7073514-.1895516-.1895516-.5124804-.1946265-.7085267.0014199l-3.1450267 3.1450267v-5.5857865l1.8531998-1.8531998c.1926722-.1926721.1956157-.5121982.0003536-.7074603-.1895516-.1895516-.5095255-.1975813-.7019268-.00518l-1.1516266 1.1516266v-4.7935088c0-.283258-.2238576-.49938444-.5-.49938444-.2680664 0-.5.22358205-.5.49938444v4.7935088l-1.1516266-1.1516266c-.1914368-.1914368-.5066647-.1900822-.7019268.00518-.1895516-.1895515-.1951039.5120029.0003535.7074603l1.8531999 1.8531998z"
-                            fill="#607d8b"
-                            transform="matrix(.707 .707 -.707 .707 19.69 -3.024)"
-                          />
-                        </g>
-                      </g>
-                    </g>
-                  </svg>
-                </div>
               </div>
               {!isHost && !duskTransitionActive && (
                 <>
@@ -2138,15 +2018,35 @@ export default function GameDaNghich() {
             //Height 46 để cố định chiều cao của cái dòng div này cho nó đừng có nhảy layout khi hiển thị nút đếm ngược
             <div id="infoThờiGian" style={{ display: "flex", alignItems: "center", gap: "0.9rem", flexWrap: "wrap", height: "46px" }}> 
               {phase === "day" ? (
-                <h1 style={{ margin: 0, display: "flex", alignItems: "center" }}><AvifIcon name="🌞" style={{ marginRight: 8 }} /> Ngày {displayNightNumber}</h1>
+                <h1 
+                  onClick={room?.id === "mock-8" ? (mock8.handleHeaderClick || undefined) : undefined}
+                  style={{ 
+                    margin: 0, 
+                    display: "flex", 
+                    alignItems: "center", 
+                    cursor: (room?.id === "mock-8" && mock8.handleHeaderClick) ? "pointer" : "default" 
+                  }}
+                >
+                  <AvifIcon name="🌞" style={{ marginRight: 8 }} /> Ngày {displayNightNumber}
+                </h1>
               ) : (
-                <h1 style={{ margin: 0, display: "flex", alignItems: "center" }}><AvifIcon name="🌙" style={{ marginRight: 8 }} /> Đêm {displayNightNumber}</h1>
+                <h1 
+                  onClick={room?.id === "mock-8" ? (mock8.handleHeaderClick || undefined) : undefined}
+                  style={{ 
+                    margin: 0, 
+                    display: "flex", 
+                    alignItems: "center", 
+                    cursor: (room?.id === "mock-8" && mock8.handleHeaderClick) ? "pointer" : "default" 
+                  }}
+                >
+                  <AvifIcon name="🌙" style={{ marginRight: 8 }} /> Đêm {displayNightNumber}
+                </h1>
               )}
 
               <CountdownButton
-                showCountdown={!!showCountdown}
-                countdownSeconds={countdownSeconds}
-                isPaused={!!nightTurnPaused}
+                showCountdown={room?.id === "mock-8" ? true : !!showCountdown}
+                countdownSeconds={room?.id === "mock-8" ? mock8.countdownSeconds : countdownSeconds}
+                isPaused={room?.id === "mock-8" ? mock8.isPaused : !!nightTurnPaused}
               />
               <CountdownButton
                 showCountdown={phase === "day" && !sync.gameEnded && dayVote.remainingSec !== null}
@@ -2344,7 +2244,11 @@ export default function GameDaNghich() {
             </div>
             <RoleCharacterPortrait
               role={shouldShowRolePortrait ? role : null}
-              backgroundAssetOverride={shouldShowRolePortrait ? loveHybridBackgroundAsset : null}
+              backgroundAssetOverride={
+                room?.id === "mock-8"
+                  ? mock8.backgroundAssetOverride
+                  : (shouldShowRolePortrait ? loveHybridBackgroundAsset : null)
+              }
             />
             <RoleCompanionOverlay
               companionRoleSrc={shouldRevealMyRole && !(sync.gameEnded && canViewLog) ? companionRoleSrc : null}

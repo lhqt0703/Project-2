@@ -150,7 +150,12 @@ export function dealRolesWithPendingAssignments<T extends RoleDealPlayer>(
   pendingRoleAssignments: PendingRoleAssignments | undefined,
   pendingRoleBlocks: PendingRoleBlocks | undefined,
   pickRemainingRoles: (remainingRoles: string[], remainingPlayerCount: number) => string[],
-): { playerRoles: Record<string, string>; appliedAssignments: PendingRoleAssignments } | null {
+  playerRoleHistory?: Record<string, string[]>,
+): {
+  playerRoles: Record<string, string>;
+  appliedAssignments: PendingRoleAssignments;
+  updatedPlayerRoleHistory?: Record<string, string[]>;
+} | null {
   const remainingRoles = normalizeRoles(roles);
   const appliedAssignments: PendingRoleAssignments = {};
 
@@ -166,12 +171,59 @@ export function dealRolesWithPendingAssignments<T extends RoleDealPlayer>(
   }
 
   const unassignedParticipants = participants.filter((player) => !appliedAssignments[player.id]);
-  const assignedRemainingRoles = pickAndAssignRolesWithBlocks(
+
+  let updatedHistory = playerRoleHistory ? { ...playerRoleHistory } : undefined;
+
+  if (updatedHistory) {
+    for (const player of unassignedParticipants) {
+      const history = updatedHistory[player.id] || [];
+      if (history.length > 0) {
+        const hasUnplayedRole = remainingRoles.some((role) => !history.includes(role));
+        if (!hasUnplayedRole) {
+          delete updatedHistory[player.id];
+        }
+      }
+    }
+  }
+
+  const getEffectiveBlocks = (historyRecord: Record<string, string[]> | undefined) => {
+    const blocks: Record<string, string[]> = {};
+    if (pendingRoleBlocks) {
+      for (const [playerId, blocked] of Object.entries(pendingRoleBlocks)) {
+        blocks[playerId] = [...blocked];
+      }
+    }
+    if (historyRecord) {
+      for (const [playerId, history] of Object.entries(historyRecord)) {
+        blocks[playerId] = Array.from(new Set([...(blocks[playerId] || []), ...history]));
+      }
+    }
+    return blocks;
+  };
+
+  let effectiveBlocks = getEffectiveBlocks(updatedHistory);
+
+  let assignedRemainingRoles = pickAndAssignRolesWithBlocks(
     unassignedParticipants,
     remainingRoles,
-    pendingRoleBlocks,
+    effectiveBlocks,
     pickRemainingRoles,
   );
+
+  if (!assignedRemainingRoles && updatedHistory) {
+    for (const player of unassignedParticipants) {
+      if (updatedHistory[player.id]) {
+        delete updatedHistory[player.id];
+      }
+    }
+    effectiveBlocks = getEffectiveBlocks(updatedHistory);
+    assignedRemainingRoles = pickAndAssignRolesWithBlocks(
+      unassignedParticipants,
+      remainingRoles,
+      effectiveBlocks,
+      pickRemainingRoles,
+    );
+  }
 
   if (!assignedRemainingRoles) {
     return null;
@@ -179,7 +231,27 @@ export function dealRolesWithPendingAssignments<T extends RoleDealPlayer>(
 
   const playerRoles: Record<string, string> = { ...appliedAssignments, ...assignedRemainingRoles };
 
-  return { playerRoles, appliedAssignments };
+  if (updatedHistory) {
+    for (const player of participants) {
+      const assignedRole = playerRoles[player.id];
+      if (assignedRole) {
+        let list = updatedHistory[player.id];
+        if (!list) {
+          list = [];
+          updatedHistory[player.id] = list;
+        }
+        if (!list.includes(assignedRole)) {
+          list.push(assignedRole);
+        }
+      }
+    }
+  }
+
+  return {
+    playerRoles,
+    appliedAssignments,
+    ...(updatedHistory ? { updatedPlayerRoleHistory: updatedHistory } : {}),
+  };
 }
 
 const HIGH_PRIORITY_ROLES = new Set(["Tiên tri", "Bảo vệ", "Phù thủy"]);

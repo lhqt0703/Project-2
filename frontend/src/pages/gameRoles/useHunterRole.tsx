@@ -67,6 +67,7 @@ export function useHunterRole({
   }, [hunterTargetId, hunterTargetSeq, phase]);
 
   const canAct = useMemo(() => {
+    if (roomId === "mock-8") return role === "Thợ săn" && phase === "night";
     if (phase !== "night") return false;
     if (role !== "Thợ săn") return false;
     if (clientId && deadPlayers.includes(clientId)) return false;
@@ -75,29 +76,37 @@ export function useHunterRole({
       if (currentNightTurnRole !== "Thợ săn") return false;
     }
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, nightActionDeadline, nightActionNow, phase, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, nightActionDeadline, nightActionNow, phase, role, roomId]);
 
   const isHunterTurnActive = useMemo(() => {
+    if (roomId === "mock-8") return phase === "night";
     if (phase !== "night") return false;
     if (allNightActionsSimultaneous) return true;
     return currentNightTurnRole === "Thợ săn";
-  }, [allNightActionsSimultaneous, currentNightTurnRole, phase]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, phase, roomId]);
 
   const onPlayerClick = useCallback(
     (playerId: string) => {
       if (!canAct) return false;
-      if (playerId === clientId) return true; // Không cho chọn chính mình
 
       // đã xác nhận rồi thì không được đổi
       if (lockedTargetId) {
         return true;
       }
 
+      if (roomId === "mock-8") {
+        setSelectedPlayerId(playerId);
+        setShowConfirm(true);
+        return true;
+      }
+
+      if (playerId === clientId) return true; // Không cho chọn chính mình
+
       setSelectedPlayerId(playerId);
       setShowConfirm(true);
       return true;
     },
-    [canAct, lockedTargetId]
+    [canAct, lockedTargetId, roomId]
   );
 
   const confirm = useCallback(() => {
@@ -106,6 +115,7 @@ export function useHunterRole({
     // lock ngay khi đã bấm xác nhận
     setLockedTargetId(selectedPlayerId);
     setShowConfirm(false);
+    if (roomId === "mock-8") return;
     socket.emit("hunterChooseTarget", { roomId, targetId: selectedPlayerId });
   }, [canAct, roomId, selectedPlayerId]);
 

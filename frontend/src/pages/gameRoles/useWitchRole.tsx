@@ -68,6 +68,7 @@ export function useWitchRole({
   }, [healSelectedTargetId, showHealConfirm, witchPendingDeathTargetIds]);
 
   const canAct = useMemo(() => {
+    if (roomId === "mock-8") return role === "Phù thủy" && phase === "night";
     if (phase !== "night") return false;
     if (role !== "Phù thủy") return false;
     if (clientId && deadPlayers.includes(clientId)) return false;
@@ -76,31 +77,49 @@ export function useWitchRole({
       if (currentNightTurnRole !== "Phù thủy") return false;
     }
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, nightActionDeadline, nightActionNow, phase, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, nightActionDeadline, nightActionNow, phase, role, roomId]);
 
   const isWitchTurnActive = useMemo(() => {
+    if (roomId === "mock-8") return phase === "night" && isNightInfoVisible;
     if (phase !== "night") return false;
     if (!isNightInfoVisible) return false;
     if (allNightActionsSimultaneous) return true;
     return currentNightTurnRole === "Phù thủy";
-  }, [allNightActionsSimultaneous, currentNightTurnRole, phase, isNightInfoVisible]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, phase, isNightInfoVisible, roomId]);
 
   const healDisabled = useMemo(() => {
+    if (roomId === "mock-8") return false;
     if (!canAct) return true;
     if (!witchPendingDeathTargetIds.length) return true;
     if (witchPotions?.healUsed) return true;
     return false;
-  }, [canAct, witchPendingDeathTargetIds.length, witchPotions?.healUsed]);
+  }, [canAct, witchPendingDeathTargetIds.length, witchPotions?.healUsed, roomId]);
 
   const poisonDisabled = useMemo(() => {
+    if (roomId === "mock-8") return false;
     if (!canAct) return true;
     if (witchPotions?.poisonUsed) return true;
     return false;
-  }, [canAct, witchPotions?.poisonUsed]);
+  }, [canAct, witchPotions?.poisonUsed, roomId]);
 
   const onPlayerClick = useCallback(
     (playerId: string) => {
       if (!canAct) return false;
+
+      if (roomId === "mock-8") {
+        if (healMode) {
+          setHealSelectedTargetId(playerId);
+          setShowHealConfirm(true);
+          return true;
+        }
+        if (poisonMode) {
+          setPoisonSelectedTargetId(playerId);
+          setPoisonMode(false);
+          setShowPoisonConfirm(true);
+          return true;
+        }
+        return false;
+      }
 
       // Heal selection: only allow selecting from pending targets.
       if (healMode && !healDisabled) {
@@ -131,6 +150,11 @@ export function useWitchRole({
   const confirmHeal = useCallback(() => {
     if (!canAct) return;
     if (!roomId || !healSelectedTargetId) return;
+    if (roomId === "mock-8") {
+      setShowHealConfirm(false);
+      setHealMode(false);
+      return;
+    }
     socket.emit("witchHeal", { roomId, targetId: healSelectedTargetId });
     setShowHealConfirm(false);
     setHealMode(false);
@@ -139,6 +163,10 @@ export function useWitchRole({
   const confirmPoison = useCallback(() => {
     if (!canAct) return;
     if (!roomId || !poisonSelectedTargetId) return;
+    if (roomId === "mock-8") {
+      setShowPoisonConfirm(false);
+      return;
+    }
     socket.emit("witchPoison", { roomId, targetId: poisonSelectedTargetId });
     setShowPoisonConfirm(false);
   }, [canAct, poisonSelectedTargetId, roomId]);

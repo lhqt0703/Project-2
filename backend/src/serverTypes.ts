@@ -31,7 +31,7 @@ export interface Player {
   playerAvatar?: string;
 }
 
-export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | "Kẻ bị nguyền" | "Tay Buôn" | ElementalRole | "Độc thủ" | "Gián điệp" | "Nhà sư" | "Thầy bói" | "Ác Quỷ" | "Thợ giặt" | "Thủ thư" | "Điều tra viên" | "Nuôi quạ" | "Diệt quỷ";
+export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | "Kẻ bị nguyền" | "Tay Buôn" | "Bác sĩ ung thư" | "Nam Thư" | "Đàn bà" | "Suy Thận" | ElementalRole | "Độc thủ" | "Gián điệp" | "Nhà sư" | "Thầy bói" | "Ác Quỷ" | "Thợ giặt" | "Thủ thư" | "Điều tra viên" | "Nuôi quạ" | "Diệt quỷ";
 
 export type NightActionOrderRole = NightActionRole | typeof ELEMENTAL_GROUP_ROLE;
 
@@ -91,12 +91,14 @@ export interface Room {
   soiMuDaySelectedTargetId?: string | null;
   soiMuInvestigationResult?: "success" | "fail" | null;
   soiMuHasMerchant?: boolean;
+  soiMuNamThuTargetId?: string | null;
   hidePlayerRoleText?: boolean;
   roles?: string[];
   rolesLocked?: boolean;
   lockedPlayerIds?: string[];
   pendingRoleAssignments?: Record<string, string>;
   pendingRoleBlocks?: Record<string, string[]>;
+  playerRoleHistory?: Record<string, string[]>;
   phase?: string;
   positions?: { playerId: string; x: number; y: number }[];
   positionEditors?: string[];
@@ -381,7 +383,7 @@ export function buildRoomGameRules(input?: Partial<RoomGameRules> | null, gameMo
       loveCanChoosePartnerFirstTwoNights: false,
       villageChiefKnowsWolfBite: merged.villageChiefKnowsWolfBite,
       witchSeeProtectorImmortalBite: false,
-      hunterShotPublicInDay: false,
+      hunterShotPublicInDay: merged.hunterShotPublicInDay ?? false,
       merchantSingleUseItems: false,
       merchantWinRequiredSuccessfulTrades: 3,
       merchantHideReceivedItemName: false,
@@ -412,7 +414,10 @@ export type EliminationCause =
   | { type: "merchant_gunpowder"; sourceId: string }
   | { type: "love_link"; sourceId: string }
   | { type: "day_vote"; voterIds: string[] }
-  | { type: "trial_verdict"; voterIds: string[] };
+  | { type: "trial_verdict"; voterIds: string[] }
+  | { type: "cancer_doctor" }
+  | { type: "nam_thu_smile" }
+  | { type: "suy_than_pee" };
 
 export type GameLogEntry =
   | { type: "custom_log"; phase: GameLogEntryPhase; message: string; timestamp?: number }

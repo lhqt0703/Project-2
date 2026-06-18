@@ -412,6 +412,9 @@ const PUBLIC_NIGHT_GAME_LOG_TYPES = new Set<GameLogEntry["type"]>([
   "saved_by_guardian",
   "saved_by_witch",
   "eliminated",
+  "no_death",
+  "mysterious_force_eliminated",
+  "angel_revive_activated",
 ]);
 
 export function isPublicGameLogEntry(entry: GameLogEntry) {
@@ -424,8 +427,7 @@ function getGameLogForPlayer(room: Room, playerId: string): GameLogNight[] {
   }
   
   const myRole = room.playerRoles?.[playerId];
-  const wolves = room.wolves || [];
-  const isWolf = wolves.includes(playerId);
+  const isWolf = isWolfAlignedPlayer(room, playerId);
   const isElemental = ELEMENTAL_ROLE_SET.has(myRole || "");
   const isCupid = myRole === "Thần tình yêu";
   const pair = getLovePairIds(room);
@@ -717,6 +719,10 @@ export function syncPrivateRoleStateForSocket(
     socket.join(`wolves_${roomId}`);
     const rules = ensureRoomGameRules(room);
     const wolves = room.players.filter((p) => isWolfAlignedPlayer(room, p.id));
+    socket.emit("wolvesListSync", {
+      wolves: wolves.map((w) => w.id),
+      wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
+    });
     if (room.gameMode === "diet_quy") {
       socket.emit("wolfPhaseStarted", {
         wolves: wolves.map((w) => w.id),
@@ -796,6 +802,24 @@ export function syncPrivateRoleStateForSocket(
   });
 }
 
+export function broadcastWolvesListSync(roomId: string) {
+  const ctx = getServerContext();
+  if (!ctx) return;
+  const room = ctx.rooms[roomId];
+  if (!room) return;
+
+  const wolves = room.players.filter((p) => isWolfAlignedPlayer(room, p.id));
+  const wolfIds = wolves.map((w) => w.id);
+  const wolfBadgeRolesByPlayerId = Object.fromEntries(
+    wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])
+  );
+
+  ctx.io.to(`wolves_${roomId}`).emit("wolvesListSync", {
+    wolves: wolfIds,
+    wolfBadgeRolesByPlayerId,
+  });
+}
+
 export function broadcastElementalBuffSelection(
   roomId: string,
   payload: {
@@ -822,3 +846,4 @@ export {
   isElementalRoleTurn,
   shouldElementalsVoteBuffTonight,
 };
+

@@ -83,11 +83,12 @@ export function useWolfRole({
   }, [activeWolves, deadPlayers, room.players, wolves]);
 
   const isWolfTurnActive = useMemo(() => {
+    if (roomId === "mock-8") return phase === "night";
     if (phase !== "night") return false;
     if (wolfBiteDisabled) return false;
     if (allNightActionsSimultaneous) return true;
     return currentNightTurnRole === "Sói";
-  }, [allNightActionsSimultaneous, currentNightTurnRole, phase, wolfBiteDisabled]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, phase, wolfBiteDisabled, roomId]);
 
   useEffect(() => {
     // Reset local selection only when wolf turn actually starts, not when deadline is adjusted on pause/resume.
@@ -118,6 +119,7 @@ export function useWolfRole({
   }, [hasSubmittedLock, wolfLocked]);
 
   const canAct = useMemo(() => {
+    if (roomId === "mock-8") return isWolfTeam && phase === "night";
     if (phase !== "night") return false;
     if (wolfBiteDisabled) return false;
     if (!isWolfTeam) return false;
@@ -126,7 +128,7 @@ export function useWolfRole({
       if (currentNightTurnRole !== "Sói") return false;
     }
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, isWolfTeam, phase, wolfBiteDisabled]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, isWolfTeam, phase, wolfBiteDisabled, roomId]);
 
   const deadlineReached = !!(wolfDeadline && nightActionNow >= wolfDeadline && !nightTurnPaused);
   const effectiveSelectedTarget = localSelectedTarget || (clientId ? room.wolfVotes?.[clientId] || null : null);
@@ -161,7 +163,7 @@ export function useWolfRole({
     !deadlineReached &&
     !nightTurnPaused &&
     (wolfDurationSec === 0 || wildWolfHalfTimeReached);
-  const canPressWildWolfConversion = canAct && !deadlineReached;
+  const canPressWildWolfConversion = roomId === "mock-8" ? true : (canAct && !deadlineReached);
 
   useEffect(() => {
     if (!wildWolfLocalConversionTarget) return;
@@ -173,13 +175,18 @@ export function useWolfRole({
     if (!canAct) return false;
 
     // không cho chọn chính mình
-    if (playerId === clientId) return true;
+    if (playerId === clientId && roomId !== "mock-8") return true;
     // không cho chọn sói khác
-    if (wolves.includes(playerId)) return true;
+    if (wolves.includes(playerId) && roomId !== "mock-8") return true;
     // lock vote rồi thì không được chọn nữa
     if (isLocked) return true;
     // hoặc là hết thời gian
     if (deadlineReached) return true;
+
+    if (roomId === "mock-8") {
+      setLocalSelectedTarget(playerId);
+      return true;
+    }
 
     const isWolfTeamTarget = wolves.includes(playerId);
 
@@ -275,6 +282,10 @@ export function useWolfRole({
               disabled={!canPressWildWolfConversion}
               onClick={() => {
                 if (!canPressWildWolfConversion) return;
+                if (roomId === "mock-8") {
+                  alert("Đã bấm chọn lây nhiễm (giả lập)");
+                  return;
+                }
                 if (wildWolfConversionRequested) {
                   setWildWolfConversionPickerOpen(false);
                   setWildWolfLocalConversionTarget(null);
@@ -385,7 +396,9 @@ export function useWolfRole({
             if (ok) {
               hasSubmittedLockRef.current = true;
               setHasSubmittedLock(true);
-              socket.emit("wolfLockVote", { roomId });
+              if (roomId !== "mock-8") {
+                socket.emit("wolfLockVote", { roomId });
+              }
             }
           }}
           style={{

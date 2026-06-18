@@ -119,12 +119,15 @@ export type WolfVoteBreakdown = {
 
 export type EliminationCause =
   | { type: "wolf"; attackerIds: string[] }
-  | { type: "witch_poison" }
+  | { type: "witch_poison"; sourceActorId?: string; killerId?: string }
   | { type: "hunter_shot" }
   | { type: "merchant_gunpowder"; sourceId: string }
   | { type: "love_link"; sourceId: string }
   | { type: "day_vote"; voterIds: string[] }
-  | { type: "trial_verdict"; voterIds: string[] };
+  | { type: "trial_verdict"; voterIds: string[] }
+  | { type: "cancer_doctor" }
+  | { type: "nam_thu_smile" }
+  | { type: "suy_than_pee" };
 
 export type GameLogEntry =
   | { type: "wolf_vote"; phase: GameLogEntryPhase; voteBreakdown: WolfVoteBreakdown[] }

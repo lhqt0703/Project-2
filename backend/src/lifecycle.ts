@@ -2,7 +2,7 @@ import type { ServerContext } from "./serverContext.js";
 import { ensureRoomGameRules, buildRoomGameRules, type Room, type GameLogEntryPhase } from "./serverTypes.js";
 import { clearGameTimers, clearTrialState, ensureWitchState, getParticipantCount, getParticipantPlayers, getParticipantIds, getBanSoiId, getSpiritWolfId, getWildWolfId, getWitches, isWolfRole, resetNightTurnState, getAlivePlayerIds, isWolfAlignedPlayer } from "./roomState.js";
 import { RULES_RESTART_FADE_IN_MS, RULES_RESTART_FADE_OUT_MS, RULES_RESTART_HOLD_MS, RULES_RESTART_RESTART_AT_MS, TWO_HEARTS_NIGHT_LIMIT, initTwoHeartsForParticipants } from "./gameConfig.js";
-import { emitRolesRevealToSocket, toPublicRoom } from "./serverEmitters.js";
+import { emitRolesRevealToSocket, toPublicRoom, broadcastWolvesListSync, emitPublicDayGameLogToRoom, emitGameLogToSocket } from "./serverEmitters.js";
 import { dealRolesWithPendingAssignments, pickRolesForParticipants } from "./roleAssignment.js";
 import { clearLoveStateForPlayers, getLovePairIds } from "./love.js";
 import { MERCHANT_ROLE, resetMerchantRoundState } from "./merchant.js";
@@ -212,11 +212,15 @@ export function createLifecycleFlow(ctx: ServerContext) {
       room.pendingRoleAssignments,
       room.pendingRoleBlocks,
       pickRolesForParticipants,
+      room.playerRoleHistory,
     );
 
     if (!deal) return false;
 
     room.playerRoles = deal.playerRoles;
+    if (deal.updatedPlayerRoleHistory) {
+      room.playerRoleHistory = deal.updatedPlayerRoleHistory;
+    }
     delete room.pendingRoleAssignments;
     delete room.pendingRoleBlocks;
     ctx.io.to(room.hostId).emit("pendingRoleAssignmentsUpdated", {});
@@ -234,6 +238,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
     room.wolves.forEach((wolfId) => {
       ctx.io.in(wolfId).socketsJoin(`wolves_${roomId}`);
     });
+    broadcastWolvesListSync(roomId);
 
     room.witchPotions = {};
     room.witchHealTargetTonight = {};
@@ -359,6 +364,8 @@ export function createLifecycleFlow(ctx: ServerContext) {
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     ctx.io.to(roomId).emit("gameStarted");
     emitRolesRevealToSocket(roomId, room.hostId);
+    emitPublicDayGameLogToRoom(roomId);
+    emitGameLogToSocket(roomId, room.hostId);
 
     checkAndEndGame(roomId, "after_restart_game");
     return true;

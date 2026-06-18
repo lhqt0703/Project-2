@@ -44,8 +44,8 @@ export function useLoveRole({
   const [showPairConfirm, setShowPairConfirm] = useState(false);
   const [showEscapeConfirm, setShowEscapeConfirm] = useState(false);
 
-  const isMeAlive = !!clientId && !deadPlayers.includes(clientId);
-  const isPaired = !!clientId && loveState.pairIds.includes(clientId);
+  const isMeAlive = roomId === "mock-8" ? true : (!!clientId && !deadPlayers.includes(clientId));
+  const isPaired = roomId === "mock-8" ? true : (!!clientId && loveState.pairIds.includes(clientId));
   const partnerId = loveState.partnerId;
   const partnerName = partnerId ? room.players.find((player) => player.id === partnerId)?.name : null;
   const hasVotedEscape = !!clientId && loveState.escapeVotes.includes(clientId);
@@ -53,6 +53,7 @@ export function useLoveRole({
   const loveChoiceLastNight = room.gameRules?.loveCanChoosePartnerFirstTwoNights ? 2 : 1;
 
   const canChoosePartner = useMemo(() => {
+    if (roomId === "mock-8") return role === LOVE_ROLE && phase === "night";
     const currentNight = room.nightCount || 0;
     if (phase !== "night") return false;
     if (role !== LOVE_ROLE) return false;
@@ -73,9 +74,11 @@ export function useLoveRole({
     phase,
     role,
     room.nightCount,
+    roomId,
   ]);
 
   const canUseEscape = useMemo(() => {
+    if (roomId === "mock-8") return role === LOVE_ROLE && phase === "night";
     if (phase !== "night") return false;
     if (!isPaired || !isMeAlive) return false;
     if (loveState.escapeUsed || loveState.escapeActiveTonight) return false;
@@ -99,11 +102,18 @@ export function useLoveRole({
     nightActionDeadline,
     nightActionNow,
     phase,
+    roomId,
+    role,
   ]);
 
   const onPlayerClick = useCallback(
     (playerId: string) => {
       if (!canChoosePartner) return false;
+      if (roomId === "mock-8") {
+        setSelectedPlayerId(playerId);
+        setShowPairConfirm(true);
+        return true;
+      }
       if (playerId === clientId) return true;
       if (deadPlayers.includes(playerId)) return true;
       if (!room.players.find((player) => player.id === playerId)) return true;
@@ -112,19 +122,21 @@ export function useLoveRole({
       setShowPairConfirm(true);
       return true;
     },
-    [canChoosePartner, deadPlayers, room.players]
+    [canChoosePartner, deadPlayers, room.players, roomId]
   );
 
   const confirmPair = useCallback(() => {
     if (!canChoosePartner || !roomId || !selectedPlayerId) return;
     setShowPairConfirm(false);
     setSelectedPlayerId(null);
+    if (roomId === "mock-8") return;
     socket.emit("loveChoosePartner", { roomId, targetId: selectedPlayerId });
   }, [canChoosePartner, roomId, selectedPlayerId]);
 
   const confirmEscape = useCallback(() => {
     if (!canUseEscape || !roomId) return;
     setShowEscapeConfirm(false);
+    if (roomId === "mock-8") return;
     socket.emit("loveEscapeVote", { roomId });
   }, [canUseEscape, roomId]);
 

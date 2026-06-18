@@ -74,8 +74,8 @@ export function useGameSocketSync({
   roomId: string | null;
   setRoom: React.Dispatch<React.SetStateAction<any>>;
 }) {
-  const [phase, setPhase] = useState<GamePhase>("dusk");
-  const phaseRef = useRef<GamePhase>("dusk");
+  const [phase, setPhase] = useState<GamePhase>(roomId === "mock-8" ? "night" : "dusk");
+  const phaseRef = useRef<GamePhase>(roomId === "mock-8" ? "night" : "dusk");
   useEffect(() => {
     phaseRef.current = phase;
   }, [phase]);
@@ -165,7 +165,7 @@ export function useGameSocketSync({
 
   useEffect(() => {
     const syncGameRoom = () => {
-      if (!roomId) return;
+      if (!roomId || roomId === "mock-8") return;
       socket.emit("getRoom", roomId);
     };
 
@@ -218,7 +218,6 @@ export function useGameSocketSync({
       }
       setWolfLocked(null);
       setWolfDeadline(null);
-      setWolves([]);
       setWolfVotes2(null);
       setWolfMaxTargets(1);
       setWolfBiteDisabled(false);
@@ -563,6 +562,11 @@ export function useGameSocketSync({
       }
     };
 
+    const handleWolvesListSync = ({ wolves, wolfBadgeRolesByPlayerId }: { wolves: string[], wolfBadgeRolesByPlayerId: Record<string, string> }) => {
+      setWolves(wolves || []);
+      setWolfBadgeRolesByPlayerId(wolfBadgeRolesByPlayerId || {});
+    };
+
     const handleSeerResult = (payload: SeerResultPayload) => {
       setSeerResults((prev) => {
         if (prev.some((p) => p.playerId === payload.playerId)) return prev;
@@ -796,6 +800,7 @@ export function useGameSocketSync({
     socket.on("wolfLockedUpdated", handleWolfLockedUpdated);
     socket.on("wolfVoteFinished", handleWolfVoteFinished);
     socket.on("wolfPhaseStarted", handleWolfPhaseStarted);
+    socket.on("wolvesListSync", handleWolvesListSync);
     socket.on("wildWolfConversionUpdated", handleWildWolfConversionUpdated);
 
     socket.on("seerResult", handleSeerResult);
@@ -853,6 +858,7 @@ export function useGameSocketSync({
       socket.off("wolfLockedUpdated", handleWolfLockedUpdated);
       socket.off("wolfVoteFinished", handleWolfVoteFinished);
       socket.off("wolfPhaseStarted", handleWolfPhaseStarted);
+      socket.off("wolvesListSync", handleWolvesListSync);
       socket.off("wildWolfConversionUpdated", handleWildWolfConversionUpdated);
 
       socket.off("seerResult", handleSeerResult);

@@ -6,6 +6,8 @@ import ElementalVFX from "./ElementalVFX";
 import Orb from "./Orb";
 import { AvifIcon } from "./AvifIcon";
 
+import PlayerShotEffect from "./PlayerShotEffect";
+
 import nenLungAsset from "../assets/nền lưng.avif";
 import avaPhucMasked from "../assets/Ava/M 046fa88a-a719-47c3-8b97-ddfc8337cf83.avif";
 import avaDinMasked from "../assets/Ava/M f7d9652f-ac74-4557-81a2-7c2731a77d37.avif";
@@ -39,7 +41,7 @@ export const MASKED_AVATAR_MAP: Record<string, string> = {
 };
 
 
-interface PlayerPosition {
+export interface PlayerPosition {
   playerId: string;
   x: number;
   y: number;
@@ -84,6 +86,7 @@ type BulletAnimation = {
   assetSrc?: string;
   alt?: string;
   rotationOffsetDeg?: number;
+  kind?: "hunter" | "love";
 };
 
 const DEFAULT_CIRCLE_SIZE_PX = 72; // Match Game.tsx size
@@ -316,8 +319,8 @@ function applyMagnetSnap(
 const getRoleBadgeStyle = (role: string) => {
   const isWolf = ["Sói", "Sói con", "Sói Dại", "Bán sói", "Linh sói"].includes(role);
   const isSpecialBlue = ["Tiên tri", "Tiên tri tập sự", "Thợ săn", "Hiệp sĩ"].includes(role);
-  const isSpecialGreen = ["Bảo vệ", "Phù thủy", "Già làng", "Sinh đôi"].includes(role);
-  const isSpecialPurple = ["Thổi sáo", "Linh hồn", "Kẻ nguyền rủa"].includes(role);
+  const isSpecialGreen = ["Bảo vệ", "Phù thủy", "Già làng", "Sinh đôi", "Bác sĩ ung thư"].includes(role);
+  const isSpecialPurple = ["Thổi sáo", "Linh hồn", "Kẻ nguyền rủa", "Nam Thư", "Đàn bà", "Suy Thận"].includes(role);
 
   let borderGradient = "linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05))";
   let bgGradient = "linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95))";
@@ -615,94 +618,10 @@ export default function PlayerPositions({
     animPositionsRef.current = (localPositions && localPositions.length ? localPositions : (room.positions || [])) as PlayerPosition[];
   }, [localPositions, room.positions]);
 
-  const [bulletFrame, setBulletFrame] = useState<{ x: number; y: number; elapsedMs: number; totalMs: number } | null>(null);
-  const bulletRafRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    if (bulletRafRef.current != null) {
-      cancelAnimationFrame(bulletRafRef.current);
-      bulletRafRef.current = null;
-    }
-
-    if (!bulletAnimation) {
-      setBulletFrame(null);
-      return;
-    }
-
-    const easeInCubic = (t: number) => t * t * t;
-    const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
-    const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-
-    // Cinematic timing: quick burst -> slow-mo (~1s) -> quick finish.
-    // These are time-based (ms), so the feel doesn't depend on distance.
-    const burst1Ms = 800;
-    const slowMoMs = 100;
-    const burst2Ms = 100;
-    const totalMs = burst1Ms + slowMoMs + burst2Ms;
-
-    const tick = () => {
-      const now = performance.now();
-      const elapsedMs = now - bulletAnimation.startedAt;
-      const localElapsed = clamp(elapsedMs, 0, totalMs);
-      const t = clamp(localElapsed / totalMs, 0, 1);
-
-      const positions = animPositionsRef.current;
-      const from = positions.find(p => p.playerId === bulletAnimation.fromPlayerId);
-      const to = positions.find(p => p.playerId === bulletAnimation.toPlayerId);
-
-      if (!from || !to) {
-        setBulletFrame(null);
-        return;
-      }
-
-      // Map elapsed time -> travel fraction (0..1) with the cinematic beat.
-      // Distance splits are chosen to keep the bullet visible during slow-mo.
-      const d1 = 0.35;
-      const d2 = 0.70;
-
-      let s = 0;
-      if (localElapsed <= burst1Ms) {
-        const u = clamp(localElapsed / burst1Ms, 0, 1);
-        s = d1 * easeOutCubic(u);
-      } else if (localElapsed <= burst1Ms + slowMoMs) {
-        const u = clamp((localElapsed - burst1Ms) / slowMoMs, 0, 1);
-        s = d1 + (d2 - d1) * easeInOutCubic(u);
-      } else {
-        const u = clamp((localElapsed - burst1Ms - slowMoMs) / burst2Ms, 0, 1);
-        s = d2 + (1 - d2) * easeInCubic(u);
-      }
-
-      setBulletFrame({
-        x: from.x + (to.x - from.x) * s,
-        y: from.y + (to.y - from.y) * s,
-        elapsedMs: localElapsed,
-        totalMs,
-      });
-
-      if (t < 1) {
-        bulletRafRef.current = requestAnimationFrame(tick);
-      } else {
-        // Keep the last frame briefly; Game will clear bulletAnimation state.
-        bulletRafRef.current = null;
-      }
-    };
-
-    bulletRafRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (bulletRafRef.current != null) {
-        cancelAnimationFrame(bulletRafRef.current);
-        bulletRafRef.current = null;
-      }
-    };
-  }, [
-    bulletAnimation?.fromPlayerId,
-    bulletAnimation?.toPlayerId,
-    bulletAnimation?.startedAt,
-    bulletAnimation?.durationMs,
-  ]);
+    const [recoilState, setRecoilState] = useState<{ elapsedMs: number; totalMs: number } | null>(null);
 
   const bulletRecoil = (() => {
-    if (!bulletAnimation || !bulletFrame) return null;
+    if (!bulletAnimation || !recoilState) return null;
     const positions = localPositions && localPositions.length ? localPositions : (room.positions || []);
     const from = positions.find(p => p.playerId === bulletAnimation.fromPlayerId);
     const to = positions.find(p => p.playerId === bulletAnimation.toPlayerId);
@@ -719,8 +638,8 @@ export default function PlayerPositions({
       ux: dxPx / len,
       uy: dyPx / len,
       angleDeg: (Math.atan2(dyPx, dxPx) * 180) / Math.PI,
-      elapsedMs: bulletFrame.elapsedMs,
-      totalMs: bulletFrame.totalMs,
+      elapsedMs: recoilState.elapsedMs,
+      totalMs: recoilState.totalMs,
     };
   })();
 
@@ -1194,7 +1113,7 @@ export default function PlayerPositions({
         style={{
           width: "100%",
           height: frameHeightPx,
-          background: "rgb(21 24 33 / 67%)",
+          background: "rgb(12 14 18 / 67%)",
           backdropFilter: "blur(8px)",
           borderRadius: 10,
           position: "relative",
@@ -1208,31 +1127,12 @@ export default function PlayerPositions({
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
       >
-        {bulletAnimation && bulletFrame && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              pointerEvents: "none",
-              zIndex: 9,
-            }}
-          >
-            <img
-              src={bulletAnimation.assetSrc || encodeURI("/Đạn.svg")}
-              alt={bulletAnimation.alt || "Đạn"}
-              style={{
-                position: "absolute",
-                left: `${bulletFrame.x * 100}%`,
-                top: `${bulletFrame.y * 100}%`,
-                // The SVG's default facing is up-right; +45deg makes it face right.
-                transform: `translate(-50%, -50%) rotate(${(bulletRecoil?.angleDeg ?? 0) + (bulletAnimation.rotationOffsetDeg ?? 45)}deg)`,
-                transformOrigin: "center",
-                width: scalePx(22, 14),
-                height: scalePx(22, 14),
-              }}
-            />
-          </div>
-        )}
+        <PlayerShotEffect
+          bulletAnimation={bulletAnimation}
+          positions={animPositionsRef.current}
+          containerRef={containerRef}
+          onRecoilUpdate={setRecoilState}
+        />
         {localPositions.filter((pos) => pos.playerId !== room.hostId).map((pos) => {
           const p = room.players.find((x) => x.id === pos.playerId);
           if (!p) return null;
@@ -1744,7 +1644,7 @@ export default function PlayerPositions({
                       letterSpacing: "-0.01em",
                       textShadow: (avatarUrl || maskedAvatarUrl) ? "0 2px 4px rgba(0,0,0,0.95), 0 0 6px rgba(0,0,0,0.95)" : "0 1px 2px rgba(0,0,0,0.6)",
                     }}>{displayName}</div>
-                    <div style={{ opacity: isDead ? 0.3 : 0.5, fontSize: playerSubFontSizePx, textShadow: (avatarUrl || maskedAvatarUrl) ? "0 1px 2px rgba(0,0,0,0.9)" : undefined }}>
+                    <div style={{ opacity: isDead ? 0.3 : 0.5, fontSize: playerSubFontSizePx, textShadow: (avatarUrl || maskedAvatarUrl) ? "0 1px 2px rgba(0,0,0,0.9)" : undefined, filter: "drop-shadow(2px 4px 6px black)" }}>
                       {p.id === clientId ? "(Bạn)" : ""}
                     </div>
                   </div>

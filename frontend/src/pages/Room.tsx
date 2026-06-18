@@ -720,7 +720,8 @@ export default function Room() {
           </button>
           <h1 id="Ma-phong">Phòng: {room.id}</h1>
         </div>
-        {room.gameMode !== "diet_quy" && room.gameMode !== "soi_mu" && (
+        {room.gameMode !== "diet_quy" && room.gameMode !== "soi_mu" && hasElementalRole && (
+          
           <div id="Luat-phong" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
             {(() => {
               const isQuick = isElementalQuickOrder(room.gameRules?.nightActionOrder || DEFAULT_ROOM_GAME_RULES.nightActionOrder);

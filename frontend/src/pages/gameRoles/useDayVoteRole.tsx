@@ -159,12 +159,12 @@ export function useDayVoteRole({
 
   const panel =
     phase === "day" && clientId && !deadPlayers.includes(clientId) ? (
-      <div style={{ marginTop: 12 }}>
+      <div>
         {trialStage === "none" && (
           <>
             {dayDeadline && (
               <>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between" }}>
                   <button
                     onClick={() => {
                       if (!localSelectedTarget) {
@@ -172,21 +172,21 @@ export function useDayVoteRole({
                         return;
                       }
                       const targetName = room.players.find(p => p.id === localSelectedTarget)?.name || "người chơi";
-                      const ok = window.confirm(`Xác nhận biểu quyết loại ${targetName}?`);
+                      const ok = window.confirm(`Xác nhận chọn biểu quyết ${targetName}?`);
                       if (!ok) return;
                       socket.emit("dayLockVote", { roomId });
                     }}
-                    style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer" }}
+                    style={{ margin: "4px 0", padding: "8px 12px", cursor: "pointer" }}
                     disabled={!!dayLocked?.[clientId]}
                   >
-                    <AvifIcon name="🗳️" style={{ marginRight: 4 }} /> Khóa phiếu biểu quyết
+                    <AvifIcon name="🗳️" style={{ marginRight: 4 }} /> Chốt biểu quyết
                   </button>
                   <button
                     onClick={() => {
                       socket.emit("dayChooseTarget", { roomId, targetId: null });
                       socket.emit("dayLockVote", { roomId });
                     }}
-                    style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer" }}
+                    style={{ margin: "4px 0", padding: "8px 12px", cursor: "pointer" }}
                     disabled={!!dayLocked?.[clientId]}
                   >
                     ⭕ Bỏ phiếu trống

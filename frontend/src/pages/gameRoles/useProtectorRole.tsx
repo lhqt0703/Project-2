@@ -35,6 +35,7 @@ export function useProtectorRole({
   const [showConfirm, setShowConfirm] = useState(false);
 
   const canAct = useMemo(() => {
+    if (roomId === "mock-8") return role === "Hộ nhân" && phase === "night";
     if (phase !== "night") return false;
     if (role !== "Hộ nhân") return false;
     if (clientId && deadPlayers.includes(clientId)) return false;
@@ -43,26 +44,36 @@ export function useProtectorRole({
     if (allNightActionsSimultaneous && nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
     if (!allNightActionsSimultaneous && currentNightTurnRole !== "Hộ nhân") return false;
     return true;
-  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, nightActionDeadline, nightActionNow, phase, protectorHasUsed, protectorTargetId, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, nightActionDeadline, nightActionNow, phase, protectorHasUsed, protectorTargetId, role, roomId]);
 
   const isProtectorTurnActive = useMemo(() => {
+    if (roomId === "mock-8") return phase === "night";
     if (phase !== "night") return false;
     if (role !== "Hộ nhân") return false;
     if (allNightActionsSimultaneous) return true;
     return currentNightTurnRole === "Hộ nhân";
-  }, [allNightActionsSimultaneous, currentNightTurnRole, phase, role]);
+  }, [allNightActionsSimultaneous, currentNightTurnRole, phase, role, roomId]);
 
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;
+    if (roomId === "mock-8") {
+      setSelectedPlayerId(playerId);
+      setShowConfirm(true);
+      return true;
+    }
     if (playerId === clientId) return true;
     setSelectedPlayerId(playerId);
     setShowConfirm(true);
     return true;
-  }, [canAct]);
+  }, [canAct, roomId]);
 
   const confirm = useCallback(() => {
     if (!canAct) return;
     if (!roomId || !selectedPlayerId) return;
+    if (roomId === "mock-8") {
+      setShowConfirm(false);
+      return;
+    }
     socket.emit("protectorChooseTarget", { roomId, targetId: selectedPlayerId });
     setShowConfirm(false);
   }, [canAct, roomId, selectedPlayerId]);

@@ -33,7 +33,7 @@ export default function ConfirmModal({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        zIndex: 9999,
+        zIndex: 100,
       }}
     >
       <div

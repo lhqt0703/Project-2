@@ -24,7 +24,7 @@ import {
   canPlayerActAtNight,
   isWolfAlignedPlayer,
 } from "./roomState.js";
-import { LOVE_ROLE, emitLoveStateToPlayer, isLovePairMemberAwayAt, isLovePartnerChoiceNight, getLovePairIds } from "./love.js";
+import { LOVE_ROLE, emitLoveStateToPlayer, isLovePairMemberAwayAt, isLovePartnerChoiceNight, getLovePairIds, isLovePairMember } from "./love.js";
 import {
   CURSED_ROLE,
   MERCHANT_ROLE,
@@ -380,7 +380,7 @@ export function getWitchPendingDeaths(room: Room): string[] {
 
   const candidates = [room.killedTonight, room.killedTonightExtra]
     .filter(Boolean)
-    .filter((pid) => !isLovePairMemberAwayAt(room, pid as string, room.wolfAttackResolvedAt || Date.now()))
+    .filter((pid) => !isLovePairMemberAwayAt(room, pid as string, room.wolfAttackResolvedAt || Date.now(), true))
     .filter((pid) => (hideProtectedBite ? !guardianTargets.has(pid as string) : true)) as string[];
 
   const unique: string[] = [];
@@ -714,6 +714,24 @@ export function syncPrivateRoleStateForSocket(
     converted: (room.wildWolfConvertedPlayerIds || []).includes(playerId),
   });
   emitLoveStateToPlayer(ctx, roomId, room, playerId);
+
+  if (isLovePairMember(room, playerId)) {
+    socket.join(`lovers_${roomId}`);
+  }
+
+  // Sync stickers if any
+  const isWolf = isWolfAlignedPlayer(room, playerId);
+  const isLover = isLovePairMember(room, playerId);
+  if (isWolf || isLover) {
+    const visibleStickers = (room.stickers || []).filter((s) => {
+      if (s.channel === "wolf" && isWolf) return true;
+      if (s.channel === "lovers" && isLover) return true;
+      return false;
+    });
+    socket.emit("stickersSync", visibleStickers);
+  } else {
+    socket.emit("stickersSync", []);
+  }
 
   if (isWolfAlignedPlayer(room, playerId)) {
     socket.join(`wolves_${roomId}`);

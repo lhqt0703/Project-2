@@ -1,3 +1,12 @@
+/*!
+ * CustomWiggle 3.15.0
+ * https://gsap.com
+ * 
+ * @license Copyright 2026, GreenSock. All rights reserved.
+ * Subject to the terms at https://gsap.com/standard-license.
+ * @author: Jack Doyle, jack@greensock.com
+ */
+
 let n: any, C: number, M: any;
 const y: Record<string, any> = {
   easeOut: "M0,1,C0.7,1,0.6,0,1,0",

@@ -1165,6 +1165,8 @@ export default function GameDietQuy() {
         isAnimatingLeaf={isAnimatingLeaf}
         setIsAnimatingLeaf={setIsAnimatingLeaf}
         phase={phase}
+        roles={room?.roles}
+        gameMode={room?.gameMode}
       />
 
       {sync.gameEnded && (

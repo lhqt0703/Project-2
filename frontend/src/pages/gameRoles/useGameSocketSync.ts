@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { clientId, socket } from "../../socket";
 import type {
   GamePhase,
+  Sticker,
   GameEndedPayload,
   GameLogUpdatedPayload,
   GameLogNight,
@@ -112,6 +113,7 @@ export function useGameSocketSync({
   const [loveArrowShotSeq, setLoveArrowShotSeq] = useState(0);
   const [loveArrowShot, setLoveArrowShot] = useState<LoveArrowShotPayload | null>(null);
   const [loveState, setLoveState] = useState<LoveStatePayload>(EMPTY_LOVE_STATE);
+  const [stickers, setStickers] = useState<Sticker[]>([]);
 
   const [wolfLocked, setWolfLocked] = useState<WolfLockedUpdatedPayload | null>(null);
   const [wolfDeadline, setWolfDeadline] = useState<number | null>(null);
@@ -681,6 +683,27 @@ export function useGameSocketSync({
       });
     };
 
+    const handleStickersSync = (payload: Sticker[]) => {
+      setStickers(payload);
+    };
+
+    const handleStickerPlaced = (newSticker: Sticker) => {
+      setStickers((prev) => {
+        if (prev.some((s) => s.id === newSticker.id)) return prev;
+        return [...prev, newSticker];
+      });
+    };
+
+    const handleStickerMoved = ({ stickerId, x, y, isPasted, pastedAt }: { stickerId: string; x: number; y: number; isPasted?: boolean; pastedAt?: number }) => {
+      setStickers((prev) =>
+        prev.map((s) => (s.id === stickerId ? { ...s, x, y, isPasted: isPasted ?? s.isPasted, pastedAt: pastedAt ?? s.pastedAt } : s))
+      );
+    };
+
+    const handleStickerDeleted = ({ stickerId }: { stickerId: string }) => {
+      setStickers((prev) => prev.filter((s) => s.id !== stickerId));
+    };
+
     const handleDayVotesUpdated = (votes: DayVotesUpdatedPayload) => {
       setDayVotes(votes);
       setRoom((prev: any) => (prev ? { ...prev, wolfVotes: votes } : prev));
@@ -821,6 +844,11 @@ export function useGameSocketSync({
     socket.on("loveArrowShot", handleLoveArrowShot);
     socket.on("loveStateUpdated", handleLoveStateUpdated);
 
+    socket.on("stickersSync", handleStickersSync);
+    socket.on("stickerPlaced", handleStickerPlaced);
+    socket.on("stickerMoved", handleStickerMoved);
+    socket.on("stickerDeleted", handleStickerDeleted);
+
     socket.on("dayVotesUpdated", handleDayVotesUpdated);
     socket.on("dayLockedUpdated", handleDayLockedUpdated);
     socket.on("dayDiscussionStarted", handleDayDiscussionStarted);
@@ -879,6 +907,11 @@ export function useGameSocketSync({
       socket.off("loveArrowShot", handleLoveArrowShot);
       socket.off("loveStateUpdated", handleLoveStateUpdated);
 
+      socket.off("stickersSync", handleStickersSync);
+      socket.off("stickerPlaced", handleStickerPlaced);
+      socket.off("stickerMoved", handleStickerMoved);
+      socket.off("stickerDeleted", handleStickerDeleted);
+
       socket.off("dayVotesUpdated", handleDayVotesUpdated);
       socket.off("dayLockedUpdated", handleDayLockedUpdated);
       socket.off("dayDiscussionStarted", handleDayDiscussionStarted);
@@ -936,6 +969,8 @@ export function useGameSocketSync({
       loveArrowShotSeq,
       loveArrowShot,
       loveState,
+      stickers,
+      setStickers,
       wolfLocked,
       wolfDeadline,
       wolves,
@@ -1005,6 +1040,8 @@ export function useGameSocketSync({
       loveArrowShotSeq,
       loveArrowShot,
       loveState,
+      stickers,
+      setStickers,
       wolfLocked,
       wolfDeadline,
       wolves,

@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import DecryptedText from "./DecryptedText";
+import { ActiveRolesModal } from "./ActiveRolesModal";
+import { StickerSelectorModal } from "./StickerSelectorModal";
 
 const EyeIcon = ({ isOpen }: { isOpen: boolean }) => {
   return (
@@ -32,6 +34,36 @@ const EyeIcon = ({ isOpen }: { isOpen: boolean }) => {
   );
 };
 
+const RolePlayIcon = () => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      style={{ overflow: "visible" }}
+    >
+      <path d="m4.976 9.161-2.998 2.998c-.037-.231 0-6.15-.013-6.381 0-1.465.936-2.761 2.329-3.224l7.708-2.554 5.828 1.932c-1.357.546-2.618 1.203-3.75 1.929l-2.078-.689-6.759 2.241c-.159.053-.267.2-.267.366v3.383zm14.052 2.343v.459c0 3.689-2.466 6.089-4.603 7.478l-3.863 3.863c.283.152 1.085.548 1.376.696l1.024-.414c2.129-.857 9.077-4.226 9.077-11.624v-5.723c-.817 2-1.885 3.77-3.011 5.264zm-7.868 8.364-1.471-1.471 5.222-5.222c2.801-2.777 5.155-6.311 6.101-10.182-3.881.931-7.409 3.289-10.191 6.092l-5.222 5.221-1.465-1.465-2.129 2.129 2.448 2.448-2.448 2.448 2.129 2.129 2.448-2.448 2.448 2.448 2.129-2.129z" />
+    </svg>
+  );
+};
+
+const StickersIcon = () => {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      style={{ overflow: "visible" }}
+    >
+      <path d="M12,0C5.383,0,0,5.383,0,12s5.383,12,12,12,12-5.383,12-12S18.617,0,12,0Zm1.445,8.168l3-2c.46-.307,1.08-.183,1.387,.277s.183,1.08-.277,1.387l-1.752,1.168,1.752,1.168c.46,.307,.584,.927,.277,1.387-.192,.289-.51,.445-.833,.445-.19,0-.383-.055-.554-.168l-3-2c-.278-.186-.445-.498-.445-.832s.167-.646,.445-.832Zm-7-.336c-.46-.307-.584-.927-.277-1.387,.306-.46,.925-.584,1.387-.277l3,2c.278,.186,.445,.498,.445,.832s-.167,.646-.445,.832l-3,2c-.171,.113-.363,.168-.554,.168-.323,0-.641-.156-.833-.445-.307-.46-.183-1.08,.277-1.387l1.752-1.168-1.752-1.168Zm13.275,7.863l-1.786,1.845c-.283,.291-.66,.451-1.062,.455h-.013c-.398,0-.772-.154-1.056-.435l-1.371-1.357-1.376,1.363c-.283,.279-.658,.434-1.057,.434s-.771-.154-1.054-.434l-1.377-1.363-1.371,1.357c-.283,.28-.657,.435-1.056,.435h-.013c-.402-.004-.779-.164-1.06-.452l-1.789-1.848c-.384-.396-.374-1.029,.023-1.414,.397-.383,1.03-.374,1.414,.023l1.432,1.479,1.364-1.35c.582-.574,1.527-.572,2.109-.002l1.377,1.364,1.375-1.362c.584-.574,1.528-.572,2.11-.002l1.365,1.352,1.432-1.479c.385-.398,1.018-.406,1.414-.023,.397,.385,.407,1.018,.023,1.414Z" />
+    </svg>
+  );
+};
+
 interface GameRoleStatusBarProps {
   isHost: boolean;
   role: string | null;
@@ -42,11 +74,19 @@ interface GameRoleStatusBarProps {
   isAnimatingLeaf: boolean;
   setIsAnimatingLeaf: React.Dispatch<React.SetStateAction<boolean>>;
   phase?: string;
+  roles?: string[];
+  gameMode?: string;
 
   // Night EyeIcon options
   showEyeIcon?: boolean;
   isNightInfoVisible?: boolean;
   setIsNightInfoVisible?: React.Dispatch<React.SetStateAction<boolean>>;
+
+  // Stickers options
+  showStickersButton?: boolean;
+  isWolf?: boolean;
+  isLover?: boolean;
+  onSelectSticker?: (filename: string, channel: "wolf" | "lovers") => void;
 }
 
 export const GameRoleStatusBar: React.FC<GameRoleStatusBarProps> = ({
@@ -59,10 +99,19 @@ export const GameRoleStatusBar: React.FC<GameRoleStatusBarProps> = ({
   isAnimatingLeaf,
   setIsAnimatingLeaf,
   phase = "",
+  roles = [],
+  gameMode,
   showEyeIcon = false,
   isNightInfoVisible = false,
   setIsNightInfoVisible,
+  showStickersButton = false,
+  isWolf = false,
+  isLover = false,
+  onSelectSticker,
 }) => {
+  const [isRolesModalOpen, setIsRolesModalOpen] = useState(false);
+  const [isStickersOpen, setIsStickersOpen] = useState(false);
+
   if (isHost) return null;
 
   const shouldShowLowPerfToast = showLowPerfToast && phase === "dusk";
@@ -235,22 +284,63 @@ export const GameRoleStatusBar: React.FC<GameRoleStatusBarProps> = ({
             </div>
           </div>
 
-          {setIsNightInfoVisible && (() => {
-            const isEyeOpen = phase === "night" && isNightInfoVisible;
-            return (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {/* Nút Danh sách vai trò */}
+            <div style={{
+              transition: "max-width 0.4s ease, opacity 0.4s ease, transform 0.4s ease",
+              maxWidth: phase === "dusk" ? "0px" : "50px",
+              opacity: phase === "dusk" ? 0 : 1,
+              transform: phase === "dusk" ? "translateX(100px)" : "translateX(0)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              pointerEvents: phase === "dusk" ? "none" : "auto",
+            }}>
+              <div
+                onClick={() => setIsRolesModalOpen(true)}
+                style={{
+                  background: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  borderRadius: "50%",
+                  cursor: "pointer",
+                  width: "32px",
+                  height: "32px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#ffffff",
+                  transition: "all 0.2s ease",
+                  padding: 0,
+                  boxShadow: "0 0 8px rgba(52, 211, 153, 0.2)",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "scale(1.1)";
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.1)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "scale(1)";
+                  e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
+                }}
+                title="Danh sách vai trò"
+              >
+                <RolePlayIcon />
+              </div>
+            </div>
+
+            {/* Nút Sticker */}
+            {showStickersButton && onSelectSticker && (
               <div style={{
                 transition: "max-width 0.4s ease, opacity 0.4s ease, transform 0.4s ease",
-                transitionDelay: showEyeIcon ? "0.2s" : "0.2s",
-                maxWidth: showEyeIcon ? "50px" : "0px",
-                opacity: showEyeIcon ? 1 : 0,
-                transform: showEyeIcon ? "translateX(0)" : "translateX(100px)",
+                maxWidth: phase === "night" ? "50px" : "0px",
+                opacity: phase === "night" ? 1 : 0,
+                transform: phase === "night" ? "translateX(0)" : "translateX(100px)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                pointerEvents: showEyeIcon ? "auto" : "none",
+                pointerEvents: phase === "night" ? "auto" : "none",
               }}>
                 <div
-                  onClick={() => setIsNightInfoVisible((p) => !p)}
+                  onClick={() => setIsStickersOpen(true)}
                   style={{
                     background: "rgba(255, 255, 255, 0.05)",
                     border: "1px solid rgba(255, 255, 255, 0.1)",
@@ -261,12 +351,10 @@ export const GameRoleStatusBar: React.FC<GameRoleStatusBarProps> = ({
                     display: "inline-flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    color: isEyeOpen ? "#34d399" : "#f87171",
+                    color: "#ffffff",
                     transition: "all 0.2s ease",
                     padding: 0,
-                    boxShadow: isEyeOpen 
-                      ? "0 0 8px rgba(52, 211, 153, 0.2)" 
-                      : "0 0 8px rgba(248, 113, 113, 0.2)",
+                    boxShadow: "0 0 8px rgba(52, 211, 153, 0.2)",
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = "scale(1.1)";
@@ -276,15 +364,77 @@ export const GameRoleStatusBar: React.FC<GameRoleStatusBarProps> = ({
                     e.currentTarget.style.transform = "scale(1)";
                     e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
                   }}
-                  title={isNightInfoVisible ? "Ẩn màn hình" : "Hiện màn hình"}
+                  title="Dán Sticker"
                 >
-                  <EyeIcon isOpen={isEyeOpen} />
+                  <StickersIcon />
                 </div>
               </div>
-            );
-          })()}
+            )}
+
+            {setIsNightInfoVisible && (() => {
+              const isEyeOpen = phase === "night" && isNightInfoVisible;
+              return (
+                <div style={{
+                  transition: "max-width 0.4s ease, opacity 0.4s ease, transform 0.4s ease",
+                  transitionDelay: showEyeIcon ? "0.2s" : "0.2s",
+                  maxWidth: showEyeIcon ? "50px" : "0px",
+                  opacity: showEyeIcon ? 1 : 0,
+                  transform: showEyeIcon ? "translateX(0)" : "translateX(100px)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  pointerEvents: showEyeIcon ? "auto" : "none",
+                }}>
+                  <div
+                    onClick={() => setIsNightInfoVisible((p) => !p)}
+                    style={{
+                      background: "rgba(255, 255, 255, 0.05)",
+                      border: "1px solid rgba(255, 255, 255, 0.1)",
+                      borderRadius: "50%",
+                      cursor: "pointer",
+                      width: "32px",
+                      height: "32px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: isEyeOpen ? "#34d399" : "#f87171",
+                      transition: "all 0.2s ease",
+                      padding: 0,
+                      boxShadow: isEyeOpen 
+                        ? "0 0 8px rgba(52, 211, 153, 0.2)" 
+                        : "0 0 8px rgba(248, 113, 113, 0.2)",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = "scale(1.1)";
+                      e.currentTarget.style.background = "rgba(255, 255, 255, 0.1)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "scale(1)";
+                      e.currentTarget.style.background = "rgba(255, 255, 255, 0.05)";
+                    }}
+                    title={isNightInfoVisible ? "Ẩn màn hình" : "Hiện màn hình"}
+                  >
+                    <EyeIcon isOpen={isEyeOpen} />
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
         </div>
       </h2>
+      <ActiveRolesModal
+        open={isRolesModalOpen}
+        onClose={() => setIsRolesModalOpen(false)}
+        roles={roles}
+        gameMode={gameMode}
+      />
+      <StickerSelectorModal
+        isOpen={isStickersOpen}
+        onClose={() => setIsStickersOpen(false)}
+        onSelectSticker={onSelectSticker}
+        isWolf={isWolf}
+        isLover={isLover}
+      />
     </>
   );
 };

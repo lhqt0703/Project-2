@@ -53,8 +53,14 @@ export function isLovePairMember(room: Room, playerId: string) {
   return getLovePartnerId(room, playerId) !== null;
 }
 
-export function isLovePairMemberAwayAt(room: Room, playerId: string, actionAt: number) {
+export function isLovePairMemberAwayAt(room: Room, playerId: string, actionAt: number, ignoreTimeSimultaneous = false) {
   if (!room.loveEscapeActiveTonight) return false;
+
+  const rules = ensureRoomGameRules(room);
+  if (rules.allNightActionsSimultaneous && rules.loveEscapeImmuneSimultaneous && ignoreTimeSimultaneous) {
+    return isLovePairMember(room, playerId);
+  }
+
   const escapedAt = room.loveEscapeActivatedAt;
   if (!escapedAt) return false;
   if (!isLovePairMember(room, playerId)) return false;
@@ -96,6 +102,12 @@ export function buildLoveStateForPlayer(room: Room, playerId: string): LoveState
 }
 
 export function emitLoveStateToPlayer(ctx: ServerContext, roomId: string, room: Room, playerId: string) {
+  const isLover = isLovePairMember(room, playerId);
+  if (isLover) {
+    ctx.io.in(playerId).socketsJoin(`lovers_${roomId}`);
+  } else {
+    ctx.io.in(playerId).socketsLeave(`lovers_${roomId}`);
+  }
   ctx.io.to(playerId).emit("loveStateUpdated", buildLoveStateForPlayer(room, playerId));
 }
 
@@ -109,6 +121,7 @@ export function emitLoveStateToPair(ctx: ServerContext, roomId: string, room: Ro
 
 export function clearLoveStateForPlayers(ctx: ServerContext, room: Room, roomId: string) {
   for (const player of room.players) {
+    ctx.io.in(player.id).socketsLeave(`lovers_${roomId}`);
     ctx.io.to(player.id).emit("loveStateUpdated", buildLoveStateForPlayer(room, player.id));
   }
 }

@@ -405,7 +405,7 @@ export default function DevSpawn() {
                   transition: "all 0.2s",
                 }}
               >
-                Test Thợ Săn Bắn (8 Players Ảo)
+                Test Thợ Săn Bắn
               </button>
               <button
                 onClick={() => openMockGame({ debugCupid: true })}
@@ -422,7 +422,7 @@ export default function DevSpawn() {
                   transition: "all 0.2s",
                 }}
               >
-                Test Cupid Bắn (8 Players Ảo)
+                Test Cupid Bắn
               </button>
             </div>
 

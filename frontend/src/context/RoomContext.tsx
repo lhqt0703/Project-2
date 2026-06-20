@@ -57,6 +57,8 @@ export interface RoomGameRules {
   merchantSingleUseItems: boolean;
   merchantWinRequiredSuccessfulTrades: number;
   merchantHideReceivedItemName: boolean;
+  loveEscapeImmuneSimultaneous: boolean;
+  wolfCanBiteWolf?: boolean;
 }
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -79,6 +81,8 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   merchantSingleUseItems: false,
   merchantWinRequiredSuccessfulTrades: 3,
   merchantHideReceivedItemName: false,
+  loveEscapeImmuneSimultaneous: true,
+  wolfCanBiteWolf: false,
 };
 
 export interface RoomData {

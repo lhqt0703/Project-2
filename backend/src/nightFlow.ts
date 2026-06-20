@@ -740,8 +740,8 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       const attackAt = room.wolfAttackResolvedAt || Date.now();
       const candidates = getParticipantIds(room)
         .filter((playerId) => !dead.has(playerId))
-        .filter((playerId) => !isWolfAlignedPlayer(room, playerId))
-        .filter((playerId) => !isLovePairMemberAwayAt(room, playerId, attackAt));
+        .filter((playerId) => rules.wolfCanBiteWolf || !isWolfAlignedPlayer(room, playerId))
+        .filter((playerId) => !isLovePairMemberAwayAt(room, playerId, attackAt, true));
       return randomFrom(candidates);
     };
 

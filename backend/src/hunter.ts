@@ -3,7 +3,7 @@ import { ensureRoomGameRules, type EliminationCause, type GameLogEntryPhase, typ
 import { appendLogEntry } from "./gameLog.js";
 import { appendGameEvent } from "./gameEvent.js";
 import { getHunters } from "./roomState.js";
-import { markEliminatedWithLoveChain } from "./love.js";
+import { markEliminatedWithLoveChain, isLovePairMemberAwayAt } from "./love.js";
 import { triggerMerchantGunpowderExplosion } from "./merchantEffects.js";
 import { hasActiveMerchantItem } from "./merchant.js";
 import { type ProtectorSaveRecord } from "./specialRoles.js";
@@ -56,6 +56,16 @@ export function resolveHunterShotsForDeaths(
     if (targetId === hunterId) continue;
     if (!room.players.find((player) => player.id === targetId)) continue;
     if ((room.deadPlayers || []).includes(targetId)) continue;
+
+    if (isLovePairMemberAwayAt(room, targetId, Date.now(), true)) {
+      const playerName = room.players.find(p => p.id === targetId)?.name || targetId;
+      appendLogEntry(room, {
+        type: "custom_log",
+        phase,
+        message: `[Cặp đôi bỏ trốn] Thợ săn bắn ${playerName} nhưng không trúng do cặp đôi đã quyết định ra khỏi làng.`
+      });
+      continue;
+    }
 
     const blockedByArmor = hasActiveMerchantItem(room, targetId, "iron-armor");
     appendLogEntry(room, {

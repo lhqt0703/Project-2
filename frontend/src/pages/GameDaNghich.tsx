@@ -33,11 +33,15 @@ import ChieuBg from "../assets/nền chiều.avif";
 import { gsap } from "gsap";
 import { GameRoleStatusBar } from "../components/GameRoleStatusBar";
 import medalSvg from "../assets/medal.svg";
+import trashIcon from "../assets/trash-x.svg";
 import GridMotionOverlay from "../components/GridMotionOverlay";
 import RoleCompanionOverlay from "../components/RoleCompanionOverlay";
 import { AvifIcon } from "../components/AvifIcon";
 import { CountdownButton } from "../components/CountdownButton";
 import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
+import { StickerSelectorModal } from "../components/StickerSelectorModal";
+import StickerPeel from "../components/StickerPeel";
+import { getStickerUrlByFileName } from "../utils/stickerAssets";
 
 
 const VIP_REAL_NAMES: Record<string, string> = {
@@ -120,6 +124,103 @@ export default function GameDaNghich() {
   const isCurrentPlayerDead = !!clientId && deadPlayers.includes(clientId);
   const isCurrentPlayerHiddenRevived = sync.angelReviveState.reviveStage === "hidden";
   const isCurrentPlayerDeadForNightActions = isCurrentPlayerDead && !isCurrentPlayerHiddenRevived;
+
+  const handleSelectSticker = useCallback((filename: string, channel: "wolf" | "lovers", event?: React.MouseEvent | React.TouchEvent) => {
+    const id = `sticker-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Calculate initial x, y directly under client pointer
+    let clientX = window.innerWidth / 2;
+    let clientY = window.innerHeight / 2;
+    if (event) {
+      const nativeEvent = 'nativeEvent' in event ? event.nativeEvent : event;
+      if ('touches' in nativeEvent && nativeEvent.touches.length > 0) {
+        clientX = nativeEvent.touches[0].clientX;
+        clientY = nativeEvent.touches[0].clientY;
+      } else if ('clientX' in nativeEvent) {
+        clientX = nativeEvent.clientX;
+        clientY = nativeEvent.clientY;
+      }
+    }
+
+    const stickerWidth = 100;
+    const x = clientX - stickerWidth / 2;
+    const y = clientY - stickerWidth / 2;
+    const rotate = Math.floor(Math.random() * 40 - 20);
+    const createdAt = Date.now();
+
+    const sticker: any = {
+      id,
+      imageSrc: filename,
+      x,
+      y,
+      rotate,
+      channel,
+      createdAt,
+      owner: clientId,
+      isPasted: false
+    };
+
+    if (event) {
+      sticker.startDragEvent = 'nativeEvent' in event ? event.nativeEvent : event;
+    }
+
+    // Always update local state for fast UI response
+    sync.setStickers((prev: any) => [...prev, sticker]);
+
+    if (roomId === "mock-8") {
+      return;
+    }
+
+    socket.emit("placeSticker", {
+      roomId,
+      sticker: {
+        id,
+        imageSrc: filename,
+        x,
+        y,
+        rotate,
+        channel,
+        createdAt,
+        isPasted: false
+      }
+    });
+  }, [roomId, sync, clientId]);
+
+  const handleDragUpdateSticker = useCallback((stickerId: string, x: number, y: number, channel: "wolf" | "lovers", isPasted?: boolean, pastedAt?: number) => {
+    // Always update local state for fast UI response
+    sync.setStickers((prev: any) =>
+      prev.map((s: any) => (s.id === stickerId ? { ...s, x, y, isPasted: isPasted ?? s.isPasted, pastedAt: pastedAt ?? s.pastedAt } : s))
+    );
+
+    if (roomId === "mock-8") {
+      return;
+    }
+
+    socket.emit("moveSticker", {
+      roomId,
+      stickerId,
+      x,
+      y,
+      channel,
+      isPasted,
+      pastedAt
+    });
+  }, [roomId, sync]);
+
+  const handleDeleteSticker = useCallback((stickerId: string, channel: "wolf" | "lovers") => {
+    // Always update local state for fast UI response
+    sync.setStickers((prev: any) => prev.filter((s: any) => s.id !== stickerId));
+
+    if (roomId === "mock-8") {
+      return;
+    }
+
+    socket.emit("deleteSticker", {
+      roomId,
+      stickerId,
+      channel
+    });
+  }, [roomId, sync]);
   const shouldForceHideAngelReviveIdentity =
     phase === "day" &&
     isCurrentPlayerDead &&
@@ -147,6 +248,9 @@ export default function GameDaNghich() {
   const [nightTurnNow, setNightTurnNow] = useState(() => Date.now() + serverTimeOffset);
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [isNightInfoVisible, setIsNightInfoVisible] = useState(true);
+  const [isStickersOpen, setIsStickersOpen] = useState(false);
+  const [draggingStickerId, setDraggingStickerId] = useState<string | null>(null);
+  const [isOverTrash, setIsOverTrash] = useState(false);
   const [cardFlippedToFront, setCardFlippedToFront] = useState(false);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const [scoreboardOpen, setScoreboardOpen] = useState(false);
@@ -1915,20 +2019,33 @@ export default function GameDaNghich() {
         </>
       )}
 
-      <GameRoleStatusBar
-        isHost={isHost}
-        role={role}
-        cardFlippedToFront={cardFlippedToFront}
-        lowPerformanceMode={lowPerformanceMode}
-        setLowPerformanceMode={setLowPerformanceMode}
-        showLowPerfToast={showLowPerfToast}
-        isAnimatingLeaf={isAnimatingLeaf}
-        setIsAnimatingLeaf={setIsAnimatingLeaf}
-        phase={phase}
-        showEyeIcon={phase === "night" && !sync.gameEnded && !isCurrentPlayerDeadForNightActions}
-        isNightInfoVisible={isNightInfoVisible}
-        setIsNightInfoVisible={handleToggleNightInfoVisible}
-      />
+      {(() => {
+        const isLover = roomId === "mock-8" ? true : (sync.loveState?.pairIds?.includes(clientId || "") === true);
+        const showStickersButton = roomId === "mock-8" || (phase === "night" && !sync.gameEnded && !isCurrentPlayerDeadForNightActions && (isWolfTeamRole || isLover));
+        const isWolfForStatus = roomId === "mock-8" ? true : isWolfTeamRole;
+        return (
+          <GameRoleStatusBar
+            isHost={isHost}
+            role={role}
+            cardFlippedToFront={cardFlippedToFront}
+            lowPerformanceMode={lowPerformanceMode}
+            setLowPerformanceMode={setLowPerformanceMode}
+            showLowPerfToast={showLowPerfToast}
+            isAnimatingLeaf={isAnimatingLeaf}
+            setIsAnimatingLeaf={setIsAnimatingLeaf}
+            phase={phase}
+            roles={room?.roles}
+            gameMode={room?.gameMode}
+            showEyeIcon={phase === "night" && !sync.gameEnded && !isCurrentPlayerDeadForNightActions}
+            isNightInfoVisible={isNightInfoVisible}
+            setIsNightInfoVisible={handleToggleNightInfoVisible}
+            showStickersButton={showStickersButton}
+            isWolf={isWolfForStatus}
+            isLover={isLover}
+            onSelectSticker={handleSelectSticker}
+          />
+        );
+      })()}
       
       {sync.gameEnded && (
         <h2>
@@ -2811,6 +2928,140 @@ export default function GameDaNghich() {
           active={duskTransitionActive}
           onComplete={() => setDuskTransitionActive(false)}
         />
+      )}
+
+      {/* Board dán sticker */}
+      {phase === "night" && !sync.gameEnded && (
+        <div
+          className="stickers-board"
+          style={{
+            position: "fixed",
+            inset: 0,
+            pointerEvents: "none",
+            zIndex: 999,
+            opacity: isNightInfoVisible ? 1 : 0,
+            transition: "opacity 0.3s ease",
+            touchAction: "none"
+          }}
+        >
+          {sync.stickers.map((sticker: any) => {
+            const resolvedUrl = getStickerUrlByFileName(sticker.imageSrc);
+            if (!resolvedUrl) return null;
+            return (
+              <StickerPeel
+                key={sticker.id}
+                imageSrc={resolvedUrl}
+                createdAt={sticker.createdAt}
+                isOwner={sticker.owner === clientId}
+                isPasted={sticker.isPasted}
+                pastedAt={sticker.pastedAt}
+                startDragEvent={sticker.startDragEvent}
+                onDragStart={() => {
+                  if (sticker.owner === clientId) {
+                    setDraggingStickerId(sticker.id);
+                  }
+                }}
+                onDragUpdate={(x, y, overTrash) => {
+                  if (sticker.owner === clientId) {
+                    handleDragUpdateSticker(sticker.id, x, y, sticker.channel);
+                    setIsOverTrash(overTrash);
+                  }
+                }}
+                onDragEnd={(isDeleted, finalX, finalY) => {
+                  if (sticker.owner === clientId) {
+                    if (isDeleted) {
+                      // Slide both trash and sticker out
+                      const trashEl = document.getElementById("sticker-trash-zone");
+                      if (trashEl) {
+                        gsap.to(trashEl, {
+                          y: "100%",
+                          duration: 0.4,
+                          ease: "power2.in",
+                          onComplete: () => {
+                            handleDeleteSticker(sticker.id, sticker.channel);
+                            setDraggingStickerId(null);
+                            setIsOverTrash(false);
+                            gsap.set(trashEl, { clearProps: "all" });
+                          }
+                        });
+                      } else {
+                        handleDeleteSticker(sticker.id, sticker.channel);
+                        setDraggingStickerId(null);
+                        setIsOverTrash(false);
+                      }
+                    } else {
+                      setDraggingStickerId(null);
+                      setIsOverTrash(false);
+                      if (!sticker.isPasted) {
+                        handleDragUpdateSticker(
+                          sticker.id,
+                          finalX !== undefined ? finalX : sticker.x,
+                          finalY !== undefined ? finalY : sticker.y,
+                          sticker.channel,
+                          true,
+                          Date.now()
+                        );
+                      }
+                    }
+                  }
+                }}
+                onDeleteClick={() => handleDeleteSticker(sticker.id, sticker.channel)}
+                onAnimationEnd={() => {
+                  if (sticker.owner === clientId) {
+                    handleDeleteSticker(sticker.id, sticker.channel);
+                  }
+                }}
+                rotate={sticker.rotate}
+                initialPosition={{ x: sticker.x, y: sticker.y }}
+                width={100}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* Trash Zone */}
+      {draggingStickerId && (
+        <div
+          id="sticker-trash-zone"
+          style={{
+            position: "fixed",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: "10dvh",
+            zIndex: 1010,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: isOverTrash
+              ? "linear-gradient(to top, rgba(239, 68, 68, 0.95) 0%, rgba(239, 68, 68, 0.4) 50%, transparent 100%)"
+              : "linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.4) 50%, transparent 100%)",
+            transition: "background 0.2s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+            pointerEvents: "none",
+            animation: "slideUpTrashZone 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards"
+          }}
+        >
+          <style>{`
+            @keyframes slideUpTrashZone {
+              from { transform: translateY(100%); }
+              to { transform: translateY(0); }
+            }
+          `}</style>
+          <img
+            src={trashIcon}
+            alt="Thùng rác"
+            style={{
+              width: "32px",
+              height: "32px",
+              filter: isOverTrash 
+                ? "invert(21%) sepia(84%) saturate(7415%) hue-rotate(354deg) brightness(93%) contrast(92%)"
+                : "invert(100%) brightness(200%)",
+              transform: isOverTrash ? "translateY(-8px) scale(1.1)" : "translateY(0) scale(1.0)",
+              transition: "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), filter 0.2s ease"
+            }}
+          />
+        </div>
       )}
     </div>
   );

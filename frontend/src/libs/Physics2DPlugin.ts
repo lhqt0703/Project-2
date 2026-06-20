@@ -1,3 +1,12 @@
+/*!
+ * Physics2DPlugin 3.15.0
+ * https://gsap.com
+ * 
+ * @license Copyright 2026, GreenSock. All rights reserved.
+ * Subject to the terms at https://gsap.com/standard-license.
+ * @author: Jack Doyle, jack@greensock.com
+ */
+
 let t: any, v: number, o: any, f: any, w: any;
 const j = () => t || (typeof window !== "undefined" && (t = (window as any).gsap) && t.registerPlugin && t);
 const k = (e: number) => Math.round(1e4 * e) / 1e4;

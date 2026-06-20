@@ -233,6 +233,7 @@ export default function GameRulesModal({
         merchantHideReceivedItemName: false,
         wolfNightActionDurationSec: draftRules.nonWolfNightActionDurationSec,
         forceWolfBiteFirstNight: draftRules.twoHeartsFirstTwoNights && draftRules.forceWolfBiteFirstNight,
+        wolfCanBiteWolf: false,
       });
       return;
     }
@@ -253,6 +254,7 @@ export default function GameRulesModal({
         merchantHideReceivedItemName: false,
         wolfNightActionDurationSec: draftRules.nonWolfNightActionDurationSec,
         forceWolfBiteFirstNight: draftRules.twoHeartsFirstTwoNights && draftRules.forceWolfBiteFirstNight,
+        wolfCanBiteWolf: false,
       });
       return;
     }
@@ -521,6 +523,22 @@ export default function GameRulesModal({
 
               <label style={rowStyle()}>
                 <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Cặp đôi bỏ trốn được miễn nhiễm mọi hành động gây hại trong chế độ xử lý đồng thời</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Mặc định bật. Khi bật, trong đêm nếu cặp đôi quyết định ra khỏi làng thì dù hành động ra khỏi làng xảy ra trước hay sau hành động của những vai trò nhắm vào thì vẫn miễn nhiễm hết (không quan trọng thứ tự thời gian bấm). Chỉ khi Tiên tri hoặc Kẻ bị nguyền soi trước khi cặp đôi rời làng thì kết quả soi mới hiển thị bình thường.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.loveEscapeImmuneSimultaneous === true}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("loveEscapeImmuneSimultaneous", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>Bán sói / Sói Dại vẫn chuyển phe mục tiêu dù vết cắn được cứu</div>
                   <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
                     Mặc định tắt. Khi bật, nếu Bán sói bị cắn được cứu / được Bảo vệ trúng thì Bán sói vẫn chuyển phe; nếu mục tiêu Sói Dại biến đổi được cứu / được Bảo vệ trúng thì mục tiêu vẫn trở thành Sói thường.
@@ -531,6 +549,22 @@ export default function GameRulesModal({
                   checked={draftRules.banSoiBecomeWolfEvenIfHealed}
                   disabled={readOnly}
                   onChange={(e) => updateRule("banSoiBecomeWolfEvenIfHealed", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Cho phép Sói cắn Sói khác</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi bật, phe Sói có thể chọn cắn chính đồng bọn (Sói khác) của mình trong đêm.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.wolfCanBiteWolf === true}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("wolfCanBiteWolf", e.target.checked)}
                   style={{ width: 20, height: 20, marginTop: 2 }}
                 />
               </label>

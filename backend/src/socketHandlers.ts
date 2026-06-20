@@ -47,6 +47,7 @@ import {
   type Room,
   type RoomGameRules,
   type NightActionRole,
+  type Sticker,
 } from "./serverTypes.js";
 import {
   appendLogEntry,
@@ -139,6 +140,7 @@ import {
   markEliminatedWithLoveChain,
   getLovePairIds,
   getLovePartnerId,
+  isLovePairMember,
 } from "./love.js";
 import {
   PROTECTOR_ROLE,
@@ -1105,7 +1107,15 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     for (const targetId of wolfTargets) {
       if (initialDead.has(targetId)) continue;
 
-      if (isLovePairMemberAwayAt(room, targetId, wolfAttackAt)) continue;
+      if (isLovePairMemberAwayAt(room, targetId, wolfAttackAt, true)) {
+        const playerName = room.players.find(p => p.id === targetId)?.name || targetId;
+        appendLogEntry(room, {
+          type: "custom_log",
+          phase: "night",
+          message: `[Cặp đôi bỏ trốn] ${playerName} đã né được vết cắn của Sói do cặp đôi quyết định ra khỏi làng trong đêm.`
+        });
+        continue;
+      }
 
       const escapeAt = room.loveEscapeActiveTonight ? (room.loveEscapeActivatedAt || null) : null;
       const saveCutoffAt = escapeAt && wolfAttackAt <= escapeAt && getLovePairIds(room)?.includes(targetId)
@@ -1213,7 +1223,13 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       const poisonAts = poisonEntries
         .filter(([, poisonedTargetId]) => poisonedTargetId === targetId)
         .map(([witchId]) => room.witchPoisonTargetAt?.[witchId] || Date.now());
-      if (poisonAts.length > 0 && poisonAts.every((poisonAt) => isLovePairMemberAwayAt(room, targetId, poisonAt))) {
+      if (poisonAts.length > 0 && poisonAts.every((poisonAt) => isLovePairMemberAwayAt(room, targetId, poisonAt, true))) {
+        const playerName = room.players.find(p => p.id === targetId)?.name || targetId;
+        appendLogEntry(room, {
+          type: "custom_log",
+          phase: "night",
+          message: `[Cặp đôi bỏ trốn] ${playerName} đã né được bình độc của Phù thủy do cặp đôi quyết định ra khỏi làng trong đêm.`
+        });
         continue;
       }
       const witchEntry = poisonEntries.find(([, poisonedTargetId]) => poisonedTargetId === targetId);
@@ -2972,6 +2988,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     ctx.io.to(roomId).emit("phaseChanged", phase);
 
     if (phase === "day") {
+      room.stickers = [];
+      ctx.io.to(`wolves_${roomId}`).emit("stickersSync", []);
+      ctx.io.to(`lovers_${roomId}`).emit("stickersSync", []);
       room.nightActionExtraTimeMsByPlayerId = {};
       const revealedAngelRevives = revealAngelHiddenRevivesForDay(room);
       for (const record of revealedAngelRevives) {
@@ -4482,6 +4501,96 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
+  socket.on("placeSticker", ({ roomId, sticker }: { roomId: string; sticker: Omit<Sticker, "owner"> }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver || room.phase !== "night") return;
+
+    const isWolf = isWolfAlignedPlayer(room, clientId);
+    const isLover = isLovePairMember(room, clientId);
+    if (!isWolf && !isLover) return;
+
+    const newSticker: Sticker = {
+      ...sticker,
+      owner: clientId
+    };
+
+    if (!room.stickers) {
+      room.stickers = [];
+    }
+    room.stickers.push(newSticker);
+
+    if (newSticker.channel === "wolf" && isWolf) {
+      ctx.io.to(`wolves_${roomId}`).emit("stickerPlaced", newSticker);
+    } else if (newSticker.channel === "lovers" && isLover) {
+      ctx.io.to(`lovers_${roomId}`).emit("stickerPlaced", newSticker);
+    }
+  });
+
+  socket.on("moveSticker", ({ roomId, stickerId, x, y, channel, isPasted, pastedAt }: { roomId: string; stickerId: string; x: number; y: number; channel: "wolf" | "lovers"; isPasted?: boolean; pastedAt?: number }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver || room.phase !== "night") return;
+
+    const isWolf = isWolfAlignedPlayer(room, clientId);
+    const isLover = isLovePairMember(room, clientId);
+    if (!isWolf && !isLover) return;
+
+    if (!room.stickers) return;
+    const sticker = room.stickers.find((s) => s.id === stickerId);
+    if (!sticker) return;
+
+    if (sticker.channel !== channel) return;
+    if (channel === "wolf" && !isWolf) return;
+    if (channel === "lovers" && !isLover) return;
+
+    if (sticker.owner !== clientId) return;
+
+    sticker.x = x;
+    sticker.y = y;
+    if (isPasted !== undefined) {
+      sticker.isPasted = isPasted;
+    }
+    if (pastedAt !== undefined) {
+      sticker.pastedAt = pastedAt;
+    }
+
+    if (channel === "wolf") {
+      socket.to(`wolves_${roomId}`).emit("stickerMoved", { stickerId, x, y, isPasted, pastedAt });
+    } else if (channel === "lovers") {
+      socket.to(`lovers_${roomId}`).emit("stickerMoved", { stickerId, x, y, isPasted, pastedAt });
+    }
+  });
+
+  socket.on("deleteSticker", ({ roomId, stickerId, channel }: { roomId: string; stickerId: string; channel: "wolf" | "lovers" }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver || room.phase !== "night") return;
+
+    const isWolf = isWolfAlignedPlayer(room, clientId);
+    const isLover = isLovePairMember(room, clientId);
+    if (!isWolf && !isLover) return;
+
+    if (!room.stickers) return;
+    const index = room.stickers.findIndex((s) => s.id === stickerId);
+    if (index === -1) return;
+
+    const sticker = room.stickers[index];
+    if (sticker.channel !== channel) return;
+    if (channel === "wolf" && !isWolf) return;
+    if (channel === "lovers" && !isLover) return;
+
+    if (sticker.owner !== clientId) return;
+
+    room.stickers.splice(index, 1);
+
+    if (channel === "wolf") {
+      ctx.io.to(`wolves_${roomId}`).emit("stickerDeleted", { stickerId });
+    } else if (channel === "lovers") {
+      ctx.io.to(`lovers_${roomId}`).emit("stickerDeleted", { stickerId });
+    }
+  });
+
   socket.on("hostEndGameNow", ({ roomId }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -4675,7 +4784,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!room.players.find(p => p.id === targetId)) return;
     if ((room.deadPlayers || []).includes(targetId)) return;
 
-    if (isLovePairMemberAwayAt(room, targetId, Date.now())) {
+    if (isLovePairMemberAwayAt(room, targetId, Date.now(), true)) {
       room.hunterTargetTonight[clientId] = null;
       emitHunterTarget(roomId, clientId);
       emitHostNightActionProgress(roomId);
@@ -4717,7 +4826,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!room.players.find((p) => p.id === targetId)) return;
     if ((room.deadPlayers || []).includes(targetId)) return;
 
-    if (isLovePairMemberAwayAt(room, targetId, Date.now())) {
+    if (isLovePairMemberAwayAt(room, targetId, Date.now(), true)) {
       room.elementalTargetTonight[clientId] = null;
       emitElementalTarget(roomId, clientId);
       emitHostNightActionProgress(roomId);
@@ -5309,7 +5418,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if ((room.deadPlayers || []).includes(targetId)) return;
 
     if (targetId === clientId) return;
-    if (isWolfAlignedPlayer(room, targetId)) return;
+    if (!room.gameRules?.wolfCanBiteWolf && isWolfAlignedPlayer(room, targetId)) return;
 
     room.wolfVotes[clientId] = targetId;
     clearWildWolfConversionIfTargetIsNoLongerSelected(roomId, room, clientId);
@@ -5346,7 +5455,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if ((room.deadPlayers || []).includes(targetId)) return;
 
     if (targetId === clientId) return;
-    if (isWolfAlignedPlayer(room, targetId)) return;
+    if (!room.gameRules?.wolfCanBiteWolf && isWolfAlignedPlayer(room, targetId)) return;
 
     if (room.wolfVotes?.[clientId] && room.wolfVotes[clientId] === targetId) return;
 

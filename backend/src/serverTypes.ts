@@ -55,6 +55,8 @@ export interface RoomGameRules {
   merchantSingleUseItems: boolean;
   merchantWinRequiredSuccessfulTrades: number;
   merchantHideReceivedItemName: boolean;
+  loveEscapeImmuneSimultaneous: boolean;
+  wolfCanBiteWolf?: boolean;
 }
 
 export interface Room {
@@ -133,6 +135,7 @@ export interface Room {
   dayDiscussionDeadline?: number | null;
   dayTimer?: NodeJS.Timeout | null;
   dayDeadline?: number | null;
+  stickers?: Sticker[];
   trialTargetId?: string | null;
   trialStage?: "none" | "defense" | "verdict";
   trialDefenseDeadline?: number | null;
@@ -275,6 +278,8 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   merchantSingleUseItems: false,
   merchantWinRequiredSuccessfulTrades: 3,
   merchantHideReceivedItemName: false,
+  loveEscapeImmuneSimultaneous: true,
+  wolfCanBiteWolf: false,
 };
 
 const NIGHT_ACTION_ROLE_SET = new Set<NightActionOrderRole>([
@@ -387,10 +392,13 @@ export function buildRoomGameRules(input?: Partial<RoomGameRules> | null, gameMo
       merchantSingleUseItems: false,
       merchantWinRequiredSuccessfulTrades: 3,
       merchantHideReceivedItemName: false,
+      loveEscapeImmuneSimultaneous: merged.loveEscapeImmuneSimultaneous ?? true,
+      wolfCanBiteWolf: false,
     };
   }
   return {
     ...merged,
+    wolfCanBiteWolf: merged.wolfCanBiteWolf ?? false,
     forceWolfBiteFirstNight: merged.twoHeartsFirstTwoNights && merged.forceWolfBiteFirstNight,
   };
 }
@@ -500,4 +508,18 @@ export interface GameEvent {
   night?: number;
   metadata?: Record<string, any>;
 }
+
+export interface Sticker {
+  id: string;
+  imageSrc: string;
+  x: number;
+  y: number;
+  rotate: number;
+  channel: "wolf" | "lovers";
+  owner: string;
+  createdAt: number;
+  isPasted?: boolean;
+  pastedAt?: number;
+}
+
 

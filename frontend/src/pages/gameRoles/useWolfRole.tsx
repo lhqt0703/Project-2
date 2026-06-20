@@ -176,8 +176,8 @@ export function useWolfRole({
 
     // không cho chọn chính mình
     if (playerId === clientId && roomId !== "mock-8") return true;
-    // không cho chọn sói khác
-    if (wolves.includes(playerId) && roomId !== "mock-8") return true;
+    // không cho chọn sói khác (trừ khi luật wolfCanBiteWolf được bật)
+    if (!room.gameRules?.wolfCanBiteWolf && wolves.includes(playerId) && roomId !== "mock-8") return true;
     // lock vote rồi thì không được chọn nữa
     if (isLocked) return true;
     // hoặc là hết thời gian
@@ -209,7 +209,7 @@ export function useWolfRole({
       }
 
       // Prevent selecting wolves (already handled), but keep explicit for readability.
-      if (isWolfTeamTarget) return true;
+      if (!room.gameRules?.wolfCanBiteWolf && isWolfTeamTarget) return true;
 
       // Fill first then second
       if (!localSelectedTarget) {

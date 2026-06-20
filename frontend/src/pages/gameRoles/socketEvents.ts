@@ -2,6 +2,19 @@ import type { MerchantDecision, MerchantItemId, MerchantTradeResult } from "../.
 
 export type GamePhase = "dusk" | "day" | "night";
 
+export type Sticker = {
+  id: string;
+  imageSrc: string;
+  x: number;
+  y: number;
+  rotate: number;
+  channel: "wolf" | "lovers";
+  owner: string;
+  createdAt: number;
+  isPasted?: boolean;
+  pastedAt?: number;
+};
+
 export type RoomUpdatedPayload = unknown;
 
 export type WolfVotesUpdatedPayload = Record<string, string | null>;

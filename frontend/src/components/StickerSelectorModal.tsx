@@ -1,13 +1,126 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { STICKER_LIST } from "../utils/stickerAssets";
 
 interface StickerSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectSticker: (filename: string, channel: "wolf" | "lovers", event: React.MouseEvent | React.TouchEvent) => void;
+  onSelectSticker: (filename: string, channel: "wolf" | "lovers", event: React.MouseEvent | React.TouchEvent | null) => void;
   isWolf: boolean;
   isLover: boolean;
 }
+
+interface StickerItemProps {
+  sticker: { filename: string; url: string };
+  activeChannel: "wolf" | "lovers";
+  onSelectSticker: (filename: string, channel: "wolf" | "lovers", event: any) => void;
+  onClose: () => void;
+}
+
+const StickerItem: React.FC<StickerItemProps> = ({ sticker, activeChannel, onSelectSticker, onClose }) => {
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const startPosRef = useRef<{ x: number; y: number } | null>(null);
+  const isTriggeredRef = useRef(false);
+
+  const startTimer = (clientX: number, clientY: number, originalEvent: any) => {
+    isTriggeredRef.current = false;
+    startPosRef.current = { x: clientX, y: clientY };
+
+    const mockEvent = {
+      clientX,
+      clientY,
+      touches: originalEvent.touches ? [{ clientX, clientY }] : undefined,
+      nativeEvent: originalEvent.nativeEvent || originalEvent
+    };
+
+    timerRef.current = setTimeout(() => {
+      isTriggeredRef.current = true;
+      onSelectSticker(sticker.filename, activeChannel, mockEvent);
+      onClose();
+    }, 180); // 180ms long-press detection
+  };
+
+  const handleMove = (clientX: number, clientY: number) => {
+    if (!startPosRef.current || isTriggeredRef.current) return;
+    const dx = clientX - startPosRef.current.x;
+    const dy = clientY - startPosRef.current.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Hủy timer nếu người dùng vuốt/di chuyển quá 8px (đang cuộn danh sách)
+    if (dist > 8) {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+  };
+
+  const handleEnd = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+
+      // Click/Tap nhanh -> dán tĩnh ngay
+      if (!isTriggeredRef.current) {
+        onSelectSticker(sticker.filename, activeChannel, null);
+        onClose();
+      }
+    }
+  };
+
+  // Mouse Handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return; // Chỉ chuột trái
+    startTimer(e.clientX, e.clientY, e);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    handleMove(e.clientX, e.clientY);
+  };
+
+  const handleMouseUp = () => {
+    handleEnd();
+  };
+
+  // Touch Handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    startTimer(touch.clientX, touch.clientY, e);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    handleMove(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchEnd = () => {
+    handleEnd();
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      className="sticker-grid-item"
+    >
+      <img
+        src={sticker.url}
+        alt=""
+        style={{ width: "42px", height: "42px", objectFit: "contain" }}
+        draggable="false"
+      />
+    </div>
+  );
+};
 
 export const StickerSelectorModal: React.FC<StickerSelectorModalProps> = ({
   isOpen,
@@ -73,7 +186,6 @@ export const StickerSelectorModal: React.FC<StickerSelectorModalProps> = ({
             display: flex;
             align-items: center;
             justify-content: center;
-            touch-action: none;
           }
           .sticker-grid-item:hover {
             background: rgba(255, 255, 255, 0.08);
@@ -147,28 +259,13 @@ export const StickerSelectorModal: React.FC<StickerSelectorModalProps> = ({
           }}
         >
           {STICKER_LIST.map((sticker) => (
-            <div
+            <StickerItem
               key={sticker.filename}
-              onMouseDown={(e) => {
-                if (e.button !== 0) return; // Chỉ chuột trái
-                e.preventDefault();
-                onSelectSticker(sticker.filename, activeChannel, e);
-                onClose();
-              }}
-              onTouchStart={(e) => {
-                e.preventDefault();
-                onSelectSticker(sticker.filename, activeChannel, e);
-                onClose();
-              }}
-              className="sticker-grid-item"
-            >
-              <img
-                src={sticker.url}
-                alt=""
-                style={{ width: "42px", height: "42px", objectFit: "contain" }}
-                draggable="false"
-              />
-            </div>
+              sticker={sticker}
+              activeChannel={activeChannel}
+              onSelectSticker={onSelectSticker}
+              onClose={onClose}
+            />
           ))}
         </div>
       </div>

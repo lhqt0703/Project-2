@@ -125,20 +125,22 @@ export default function GameDaNghich() {
   const isCurrentPlayerHiddenRevived = sync.angelReviveState.reviveStage === "hidden";
   const isCurrentPlayerDeadForNightActions = isCurrentPlayerDead && !isCurrentPlayerHiddenRevived;
 
-  const handleSelectSticker = useCallback((filename: string, channel: "wolf" | "lovers", event?: React.MouseEvent | React.TouchEvent) => {
+  const handleSelectSticker = useCallback((filename: string, channel: "wolf" | "lovers", event?: React.MouseEvent | React.TouchEvent | null) => {
     const id = `sticker-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
+    const isStaticPaste = !event; // Nếu không có event -> dán tĩnh luôn (click/tap nhanh)
+
     // Calculate initial x, y directly under client pointer
     let clientX = window.innerWidth / 2;
     let clientY = window.innerHeight / 2;
     if (event) {
       const nativeEvent = 'nativeEvent' in event ? event.nativeEvent : event;
-      if ('touches' in nativeEvent && nativeEvent.touches.length > 0) {
+      if (nativeEvent.touches && nativeEvent.touches.length > 0) {
         clientX = nativeEvent.touches[0].clientX;
         clientY = nativeEvent.touches[0].clientY;
       } else if ('clientX' in nativeEvent) {
-        clientX = nativeEvent.clientX;
-        clientY = nativeEvent.clientY;
+        clientX = (nativeEvent as any).clientX;
+        clientY = (nativeEvent as any).clientY;
       }
     }
 
@@ -157,7 +159,8 @@ export default function GameDaNghich() {
       channel,
       createdAt,
       owner: clientId,
-      isPasted: false
+      isPasted: isStaticPaste,
+      pastedAt: isStaticPaste ? Date.now() : undefined
     };
 
     if (event) {
@@ -181,15 +184,16 @@ export default function GameDaNghich() {
         rotate,
         channel,
         createdAt,
-        isPasted: false
+        isPasted: isStaticPaste,
+        pastedAt: isStaticPaste ? Date.now() : undefined
       }
     });
   }, [roomId, sync, clientId]);
 
-  const handleDragUpdateSticker = useCallback((stickerId: string, x: number, y: number, channel: "wolf" | "lovers", isPasted?: boolean, pastedAt?: number) => {
+  const handleDragUpdateSticker = useCallback((stickerId: string, x: number, y: number, channel: "wolf" | "lovers", isPasted?: boolean, pastedAt?: number, rotate?: number) => {
     // Always update local state for fast UI response
     sync.setStickers((prev: any) =>
-      prev.map((s: any) => (s.id === stickerId ? { ...s, x, y, isPasted: isPasted ?? s.isPasted, pastedAt: pastedAt ?? s.pastedAt } : s))
+      prev.map((s: any) => (s.id === stickerId ? { ...s, x, y, isPasted: isPasted ?? s.isPasted, pastedAt: pastedAt ?? s.pastedAt, rotate: rotate ?? s.rotate } : s))
     );
 
     if (roomId === "mock-8") {
@@ -203,7 +207,8 @@ export default function GameDaNghich() {
       y,
       channel,
       isPasted,
-      pastedAt
+      pastedAt,
+      rotate
     });
   }, [roomId, sync]);
 
@@ -2961,13 +2966,13 @@ export default function GameDaNghich() {
                     setDraggingStickerId(sticker.id);
                   }
                 }}
-                onDragUpdate={(x, y, overTrash) => {
+                onDragUpdate={(x, y, overTrash, rotateVal) => {
                   if (sticker.owner === clientId) {
-                    handleDragUpdateSticker(sticker.id, x, y, sticker.channel);
+                    handleDragUpdateSticker(sticker.id, x, y, sticker.channel, undefined, undefined, rotateVal);
                     setIsOverTrash(overTrash);
                   }
                 }}
-                onDragEnd={(isDeleted, finalX, finalY) => {
+                onDragEnd={(isDeleted, finalX, finalY, finalRotation) => {
                   if (sticker.owner === clientId) {
                     if (isDeleted) {
                       // Slide both trash and sticker out
@@ -2992,16 +2997,15 @@ export default function GameDaNghich() {
                     } else {
                       setDraggingStickerId(null);
                       setIsOverTrash(false);
-                      if (!sticker.isPasted) {
-                        handleDragUpdateSticker(
-                          sticker.id,
-                          finalX !== undefined ? finalX : sticker.x,
-                          finalY !== undefined ? finalY : sticker.y,
-                          sticker.channel,
-                          true,
-                          Date.now()
-                        );
-                      }
+                      handleDragUpdateSticker(
+                        sticker.id,
+                        finalX !== undefined ? finalX : sticker.x,
+                        finalY !== undefined ? finalY : sticker.y,
+                        sticker.channel,
+                        true,
+                        Date.now(),
+                        finalRotation !== undefined ? finalRotation : sticker.rotate
+                      );
                     }
                   }
                 }}

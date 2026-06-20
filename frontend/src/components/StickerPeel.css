@@ -39,10 +39,21 @@
   transform: rotate(calc(-1 * var(--peel-direction)));
 }
 
+.sticker-container:not(.pasted):hover .sticker-main,
+.sticker-container:not(.pasted).touch-active .sticker-main,
 .sticker-container.peel-active .sticker-main {
   clip-path: polygon(
     var(--sticker-start) var(--sticker-peelback-hover),
     var(--sticker-end) var(--sticker-peelback-hover),
+    var(--sticker-end) var(--sticker-end),
+    var(--sticker-start) var(--sticker-end)
+  );
+}
+
+.sticker-container:not(.pasted):active .sticker-main {
+  clip-path: polygon(
+    var(--sticker-start) var(--sticker-peelback-active),
+    var(--sticker-end) var(--sticker-peelback-active),
     var(--sticker-end) var(--sticker-end),
     var(--sticker-start) var(--sticker-end)
   );
@@ -64,6 +75,7 @@
     var(--sticker-end) var(--sticker-start),
     var(--sticker-start) var(--sticker-start)
   );
+  transform: scaleY(-1);
   transition: all 0.6s ease-out;
 }
 
@@ -71,6 +83,8 @@
   transform: rotate(calc(-1 * var(--peel-direction)));
 }
 
+.sticker-container:not(.pasted):hover .flap,
+.sticker-container:not(.pasted).touch-active .flap,
 .sticker-container.peel-active .flap {
   clip-path: polygon(
     var(--sticker-start) var(--sticker-start),
@@ -79,6 +93,16 @@
     var(--sticker-start) var(--sticker-peelback-hover)
   );
   top: calc(-100% + 2 * var(--sticker-peelback-hover) - 1px);
+}
+
+.sticker-container:not(.pasted):active .flap {
+  clip-path: polygon(
+    var(--sticker-start) var(--sticker-start),
+    var(--sticker-end) var(--sticker-start),
+    var(--sticker-end) var(--sticker-peelback-active),
+    var(--sticker-start) var(--sticker-peelback-active)
+  );
+  top: calc(-100% + 2 * var(--sticker-peelback-active) - 1px);
 }
 
 .flap-image {
@@ -92,6 +116,7 @@
   cursor: grab;
   -webkit-transform: translateZ(0);
   transform: translateZ(0);
+  touch-action: none !important;
 }
 
 .draggable:active {

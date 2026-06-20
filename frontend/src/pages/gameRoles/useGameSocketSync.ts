@@ -694,9 +694,9 @@ export function useGameSocketSync({
       });
     };
 
-    const handleStickerMoved = ({ stickerId, x, y, isPasted, pastedAt }: { stickerId: string; x: number; y: number; isPasted?: boolean; pastedAt?: number }) => {
+    const handleStickerMoved = ({ stickerId, x, y, isPasted, pastedAt, rotate }: { stickerId: string; x: number; y: number; isPasted?: boolean; pastedAt?: number; rotate?: number }) => {
       setStickers((prev) =>
-        prev.map((s) => (s.id === stickerId ? { ...s, x, y, isPasted: isPasted ?? s.isPasted, pastedAt: pastedAt ?? s.pastedAt } : s))
+        prev.map((s) => (s.id === stickerId ? { ...s, x, y, isPasted: isPasted ?? s.isPasted, pastedAt: pastedAt ?? s.pastedAt, rotate: rotate ?? s.rotate } : s))
       );
     };
 

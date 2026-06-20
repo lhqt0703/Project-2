@@ -14,8 +14,8 @@ interface StickerPeelProps {
   startDragEvent?: any;
   onDeleteClick?: () => void;
   onDragStart?: () => void;
-  onDragUpdate?: (x: number, y: number, isOverTrash: boolean) => void;
-  onDragEnd?: (isDeleted: boolean, x: number, y: number) => void;
+  onDragUpdate?: (x: number, y: number, isOverTrash: boolean, rotate?: number) => void;
+  onDragEnd?: (isDeleted: boolean, x: number, y: number, rotate?: number) => void;
   onAnimationEnd?: () => void;
   rotate?: number;
   peelBackHoverPct?: number;
@@ -67,16 +67,39 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
 
   const [isFlyingAway, setIsFlyingAway] = useState(false);
   const [localIsPasted, setLocalIsPasted] = useState(isPasted);
+  const [isPositioned, setIsPositioned] = useState(false);
+  const [localIsDragging, setLocalIsDragging] = useState(!isPasted);
   const defaultPadding = 10;
+
+  const dragOffsetXRef = useRef<number>(0);
+  const dragOffsetYRef = useRef<number>(0);
+  const isRelativeDraggingRef = useRef<boolean>(false);
+  const hasCenteredRef = useRef<boolean>(false);
+  const isCenteringRef = useRef<boolean>(false);
+
+  const baseRotationRef = useRef<number>(rotate);
+  const isDraggingRef = useRef<boolean>(false);
+  const isRotatingRef = useRef<boolean>(false);
+  const dragEndedRef = useRef<boolean>(false);
+  const lastTouchAngleRef = useRef<number>(0);
 
   // Sync prop changes to local state
   useEffect(() => {
     setLocalIsPasted(isPasted);
   }, [isPasted]);
 
-  // Lifecycle timer (4 seconds max lifespan after pasted)
+  // Sync rotate prop changes to base rotation ref and CSS custom property
   useEffect(() => {
-    if (!localIsPasted) return;
+    baseRotationRef.current = rotate;
+    const target = dragTargetRef.current;
+    if (target) {
+      target.style.setProperty('--sticker-rotate', `${rotate}deg`);
+    }
+  }, [rotate]);
+
+  // Lifecycle timer (4 seconds max lifespan after pasted, paused while dragging)
+  useEffect(() => {
+    if (!localIsPasted || localIsDragging) return;
 
     const lifespanMs = 4000;
     const start = pastedAt || Date.now();
@@ -88,7 +111,7 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
     }, remainingTime);
 
     return () => clearTimeout(timer);
-  }, [localIsPasted, pastedAt]);
+  }, [localIsPasted, pastedAt, localIsDragging]);
 
   // Handle Fly Away animation using GSAP
   useEffect(() => {
@@ -134,6 +157,7 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
     }
 
     gsap.set(target, { x: startX, y: startY });
+    setIsPositioned(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -144,11 +168,34 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
     const target = dragTargetRef.current;
     if (!target) return;
 
+    dragEndedRef.current = false;
+    isDraggingRef.current = true;
+    hasCenteredRef.current = false;
+    isCenteringRef.current = false;
+
     if (onDragStart) {
       onDragStart();
     }
 
+    // Chặn cuộn trang bằng cách preventDefault sự kiện touchmove/wheel
+    const preventScroll = (e: TouchEvent | WheelEvent) => {
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('touchmove', preventScroll, { passive: false });
+    window.addEventListener('wheel', preventScroll, { passive: false });
+
     const handlePointerMove = (e: PointerEvent) => {
+      if (isRotatingRef.current || isRelativeDraggingRef.current) return;
+
+      // Nếu là chuột và không có nút chuột nào đang nhấn (người dùng đã thả chuột từ trước khi render xong)
+      if (e.pointerType === 'mouse' && e.buttons === 0) {
+        handlePointerUp(e);
+        return;
+      }
+
       const x = e.clientX - width / 2;
       const y = e.clientY - width / 2;
 
@@ -158,9 +205,6 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
       const deltaX = e.movementX || 0;
       const rot = gsap.utils.clamp(-24, 24, deltaX * 0.4);
       gsap.to(target, { rotation: rot, duration: 0.15, ease: 'power1.out' });
-      
-      // Scale up to 1.1 during drag
-      gsap.to(target, { scale: 1.1, duration: 0.2, overwrite: 'auto' });
 
       // Check if pointer is in the Trash Zone (bottom 10dvh)
       const pointerY = e.clientY;
@@ -168,11 +212,19 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
       const isOverTrash = pointerY > window.innerHeight - trashHeight;
 
       if (onDragUpdate) {
-        onDragUpdate(x, y, isOverTrash);
+        onDragUpdate(x, y, isOverTrash, baseRotationRef.current);
       }
     };
 
     const handlePointerUp = (e: PointerEvent) => {
+      if (isRotatingRef.current || isRelativeDraggingRef.current) return;
+      if (dragEndedRef.current) return;
+      dragEndedRef.current = true;
+      isDraggingRef.current = false;
+      setLocalIsDragging(false);
+
+      window.removeEventListener('touchmove', preventScroll);
+      window.removeEventListener('wheel', preventScroll);
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
 
@@ -190,16 +242,16 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
           ease: 'power2.in',
           onComplete: () => {
             if (onDragEnd) {
-              onDragEnd(true, x, y); // isDeleted = true
+              onDragEnd(true, x, y, baseRotationRef.current);
             }
           }
         });
       } else {
-        // Paste the sticker (scale back to 1.0)
-        gsap.to(target, { scale: 1.0, rotation: 0, duration: 0.5, ease: 'power2.out' });
+        // Paste the sticker
+        gsap.to(target, { rotation: 0, duration: 0.5, ease: 'power2.out' });
         setLocalIsPasted(true);
         if (onDragEnd) {
-          onDragEnd(false, x, y); // isDeleted = false
+          onDragEnd(false, x, y, baseRotationRef.current);
         }
       }
     };
@@ -208,6 +260,8 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
     window.addEventListener('pointerup', handlePointerUp);
 
     return () => {
+      window.removeEventListener('touchmove', preventScroll);
+      window.removeEventListener('wheel', preventScroll);
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
     };
@@ -226,6 +280,11 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
       bounds: boundsEl,
       inertia: true,
       onDragStart(this: Draggable) {
+        dragEndedRef.current = false;
+        isDraggingRef.current = true;
+        setLocalIsDragging(true);
+        hasCenteredRef.current = false;
+        isCenteringRef.current = false;
         gsap.to(target, { scale: 1.1, duration: 0.2, ease: 'power2.out' });
         if (onDragStart) {
           onDragStart();
@@ -241,10 +300,20 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
         const isOverTrash = pointerY > window.innerHeight - trashHeight;
 
         if (onDragUpdate) {
-          onDragUpdate(this.x, this.y, isOverTrash);
+          onDragUpdate(this.x, this.y, isOverTrash, baseRotationRef.current);
         }
       },
       onDragEnd(this: Draggable) {
+        if (isRotatingRef.current) {
+          // Bỏ qua vì cử chỉ xoay 2 ngón tay đang tiếp quản, 
+          // việc kết thúc kéo sẽ được xử lý bởi touchend global.
+          return;
+        }
+        if (dragEndedRef.current) return;
+        dragEndedRef.current = true;
+        isDraggingRef.current = false;
+        setLocalIsDragging(false);
+
         // Check if pointer is in the Trash Zone
         const pointerY = this.pointerY;
         const trashHeight = window.innerHeight * 0.1;
@@ -259,7 +328,7 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
             ease: 'power2.in',
             onComplete: () => {
               if (onDragEnd) {
-                onDragEnd(true, this.x, this.y); // isDeleted = true
+                onDragEnd(true, this.x, this.y, baseRotationRef.current);
               }
             }
           });
@@ -269,7 +338,7 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
           gsap.to(target, { rotation: 0, duration: 0.8, ease: 'power2.out' });
 
           if (onDragEnd) {
-            onDragEnd(false, this.x, this.y); // isDeleted = false
+            onDragEnd(false, this.x, this.y, baseRotationRef.current);
           }
         }
       }
@@ -294,6 +363,292 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
       }
     };
   }, [isOwner, isFlyingAway, localIsPasted]);
+
+  // Phase 3: Global Event Listeners for Rotation Gestures (Mouse Wheel & Multi-touch Rotate)
+  useEffect(() => {
+    if (!isOwner || isFlyingAway) return;
+
+    const handleGlobalWheel = (e: WheelEvent) => {
+      if (!isDraggingRef.current) return;
+
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+
+      const delta = e.deltaY;
+      const rotateStep = 10;
+      const currentRot = baseRotationRef.current;
+      const newRot = delta < 0 ? currentRot - rotateStep : currentRot + rotateStep;
+
+      baseRotationRef.current = newRot;
+      const target = dragTargetRef.current;
+      if (target) {
+        target.style.setProperty('--sticker-rotate', `${newRot}deg`);
+      }
+
+      if (target && onDragUpdate) {
+        const x = gsap.getProperty(target, 'x') as number;
+        const y = gsap.getProperty(target, 'y') as number;
+        const pointerY = e.clientY;
+        const trashHeight = window.innerHeight * 0.1;
+        const isOverTrash = pointerY > window.innerHeight - trashHeight;
+        onDragUpdate(x, y, isOverTrash, baseRotationRef.current);
+      }
+    };
+
+    const handleGlobalTouchStart = (e: TouchEvent) => {
+      if (!isDraggingRef.current) return;
+
+      if (e.touches.length === 2) {
+        isRotatingRef.current = true;
+
+        if (draggableInstanceRef.current) {
+          draggableInstanceRef.current.disable();
+        }
+
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const dx = touch2.clientX - touch1.clientX;
+        const dy = touch2.clientY - touch1.clientY;
+        lastTouchAngleRef.current = Math.atan2(dy, dx) * (180 / Math.PI);
+
+        const midX = (touch1.clientX + touch2.clientX) / 2 - width / 2;
+        const midY = (touch1.clientY + touch2.clientY) / 2 - width / 2;
+        const target = dragTargetRef.current;
+
+        if (target) {
+          if (!hasCenteredRef.current) {
+            // Lần chạm 2 ngón tay đầu tiên: transition mượt mà ra trung điểm
+            hasCenteredRef.current = true;
+            isCenteringRef.current = true;
+            dragOffsetXRef.current = 0;
+            dragOffsetYRef.current = 0;
+
+            gsap.to(target, {
+              x: midX,
+              y: midY,
+              duration: 0.25,
+              ease: 'power2.out',
+              onComplete: () => {
+                isCenteringRef.current = false;
+              }
+            });
+          } else {
+            // Các lần chạm 2 ngón tay tiếp theo: giữ nguyên vị trí, tính offset tương đối
+            const currentX = gsap.getProperty(target, 'x') as number;
+            const currentY = gsap.getProperty(target, 'y') as number;
+            dragOffsetXRef.current = currentX - midX;
+            dragOffsetYRef.current = currentY - midY;
+            isCenteringRef.current = false;
+          }
+        }
+      }
+    };
+
+    const handleGlobalTouchMove = (e: TouchEvent) => {
+      if (!isDraggingRef.current) return;
+
+      if (e.touches.length === 2) {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const dx = touch2.clientX - touch1.clientX;
+        const dy = touch2.clientY - touch1.clientY;
+
+        const target = dragTargetRef.current;
+        if (!target) return;
+
+        const midX = (touch1.clientX + touch2.clientX) / 2 - width / 2;
+        const midY = (touch1.clientY + touch2.clientY) / 2 - width / 2;
+
+        if (!isRotatingRef.current) {
+          isRotatingRef.current = true;
+          if (draggableInstanceRef.current) {
+            draggableInstanceRef.current.disable();
+          }
+          lastTouchAngleRef.current = Math.atan2(dy, dx) * (180 / Math.PI);
+          
+          if (!hasCenteredRef.current) {
+            hasCenteredRef.current = true;
+            isCenteringRef.current = true;
+            dragOffsetXRef.current = 0;
+            dragOffsetYRef.current = 0;
+            gsap.to(target, {
+              x: midX,
+              y: midY,
+              duration: 0.25,
+              ease: 'power2.out',
+              onComplete: () => {
+                isCenteringRef.current = false;
+              }
+            });
+          } else {
+            const currentX = gsap.getProperty(target, 'x') as number;
+            const currentY = gsap.getProperty(target, 'y') as number;
+            dragOffsetXRef.current = currentX - midX;
+            dragOffsetYRef.current = currentY - midY;
+          }
+        }
+
+        // 1. Move/Follow center
+        if (isCenteringRef.current) {
+          // Bám đuổi mượt mà theo trung điểm khi đang transition
+          gsap.to(target, {
+            x: midX,
+            y: midY,
+            duration: 0.1,
+            overwrite: 'auto'
+          });
+        } else {
+          const x = midX + dragOffsetXRef.current;
+          const y = midY + dragOffsetYRef.current;
+          gsap.set(target, { x, y });
+        }
+
+        // 2. Rotate according to touch angle delta
+        const currentTouchAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+        let deltaAngle = currentTouchAngle - lastTouchAngleRef.current;
+        
+        // Chuẩn hóa hiệu góc để tránh giật quay tít mù khi đi qua ranh giới 180 độ
+        if (deltaAngle < -180) deltaAngle += 360;
+        if (deltaAngle > 180) deltaAngle -= 360;
+
+        // Giảm độ nhạy (damping) khi khoảng cách hai chạm quá gần để tránh run tay làm xoay mạnh
+        const distance = Math.hypot(dx, dy);
+        if (distance < 50) {
+          deltaAngle *= 0.25; // Giảm độ nhạy đi 4 lần
+        } else if (distance < 100) {
+          deltaAngle *= 0.55; // Giảm độ nhạy đi gần 2 lần
+        }
+
+        const newRotation = baseRotationRef.current + deltaAngle;
+        baseRotationRef.current = newRotation;
+        target.style.setProperty('--sticker-rotate', `${newRotation}deg`);
+
+        lastTouchAngleRef.current = currentTouchAngle;
+
+        const curX = gsap.getProperty(target, 'x') as number;
+        const curY = gsap.getProperty(target, 'y') as number;
+        const trashHeight = window.innerHeight * 0.1;
+        const isOverTrash = (touch1.clientY + touch2.clientY) / 2 > window.innerHeight - trashHeight;
+
+        if (onDragUpdate) {
+          onDragUpdate(curX, curY, isOverTrash, baseRotationRef.current);
+        }
+      } else if (e.touches.length === 1 && isRelativeDraggingRef.current) {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+
+        const target = dragTargetRef.current;
+        if (!target) return;
+
+        const touch = e.touches[0];
+        const x = touch.clientX + dragOffsetXRef.current;
+        const y = touch.clientY + dragOffsetYRef.current;
+
+        gsap.set(target, { x, y });
+
+        const trashHeight = window.innerHeight * 0.1;
+        const isOverTrash = touch.clientY > window.innerHeight - trashHeight;
+
+        if (onDragUpdate) {
+          onDragUpdate(x, y, isOverTrash, baseRotationRef.current);
+        }
+      }
+    };
+
+    const handleGlobalTouchEnd = (e: TouchEvent) => {
+      if (!isDraggingRef.current) return;
+
+      // 1. Khi đang xoay (2 ngón) và nhấc bớt ngón tay ra (còn 1 ngón)
+      if (isRotatingRef.current && e.touches.length === 1) {
+        isRotatingRef.current = false;
+
+        const touch = e.touches[0];
+        const target = dragTargetRef.current;
+        if (target) {
+          const currentX = gsap.getProperty(target, 'x') as number;
+          const currentY = gsap.getProperty(target, 'y') as number;
+          dragOffsetXRef.current = currentX - touch.clientX;
+          dragOffsetYRef.current = currentY - touch.clientY;
+          isRelativeDraggingRef.current = true;
+        }
+        return; // Tiếp tục di chuyển bằng 1 ngón còn lại
+      }
+
+      // 2. Khi nhấc ngón tay cuối cùng ra
+      if (e.touches.length === 0) {
+        const wasRotating = isRotatingRef.current;
+        const wasRelative = isRelativeDraggingRef.current;
+
+        isRotatingRef.current = false;
+        isRelativeDraggingRef.current = false;
+
+        const target = dragTargetRef.current;
+        if (!target) return;
+
+        if (draggableInstanceRef.current) {
+          draggableInstanceRef.current.enable();
+        }
+
+        // Chỉ xử lý kết thúc kéo nếu ta đang ở chế độ xoay hoặc kéo tương đối
+        if (wasRotating || wasRelative) {
+          if (dragEndedRef.current) return;
+          dragEndedRef.current = true;
+          isDraggingRef.current = false;
+          setLocalIsDragging(false);
+
+          const x = gsap.getProperty(target, 'x') as number;
+          const y = gsap.getProperty(target, 'y') as number;
+          const trashHeight = window.innerHeight * 0.1;
+          
+          let clientY = window.innerHeight / 2;
+          if (e.changedTouches && e.changedTouches.length > 0) {
+            clientY = e.changedTouches[0].clientY;
+          }
+          const isOverTrash = clientY > window.innerHeight - trashHeight;
+
+          if (isOverTrash) {
+            gsap.to(target, {
+              y: window.innerHeight + 120,
+              opacity: 0,
+              duration: 0.4,
+              ease: 'power2.in',
+              onComplete: () => {
+                if (onDragEnd) {
+                  onDragEnd(true, x, y, baseRotationRef.current);
+                }
+              }
+            });
+          } else {
+            gsap.to(target, { rotation: 0, duration: 0.5, ease: 'power2.out' });
+            setLocalIsPasted(true);
+            if (onDragEnd) {
+              onDragEnd(false, x, y, baseRotationRef.current);
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener('wheel', handleGlobalWheel, { passive: false });
+    window.addEventListener('touchstart', handleGlobalTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+    window.addEventListener('touchend', handleGlobalTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', handleGlobalTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('wheel', handleGlobalWheel);
+      window.removeEventListener('touchstart', handleGlobalTouchStart);
+      window.removeEventListener('touchmove', handleGlobalTouchMove);
+      window.removeEventListener('touchend', handleGlobalTouchEnd);
+      window.removeEventListener('touchcancel', handleGlobalTouchEnd);
+    };
+  }, [width, onDragUpdate, onDragEnd, isOwner, isFlyingAway]);
 
   // Touch class toggle
   useEffect(() => {
@@ -322,7 +677,7 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
   const cssVars: CSSVars = useMemo(
     () => ({
       '--sticker-rotate': `${rotate}deg`,
-      '--sticker-p': `${isFlyingAway ? width * 0.6 : defaultPadding}px`,
+      '--sticker-p': `${defaultPadding}px`,
       '--sticker-peelback-hover': isFlyingAway ? '100%' : `${peelBackHoverPct}%`,
       '--sticker-peelback-active': `${peelBackActivePct}%`,
       '--sticker-peel-easing': peelEasing,
@@ -346,7 +701,11 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
     <div 
       className={`draggable ${className} ${isOwner ? 'owner-draggable' : 'observer-draggable'}`} 
       ref={dragTargetRef} 
-      style={cssVars}
+      style={{
+        ...cssVars,
+        opacity: isPositioned ? undefined : 0,
+        visibility: isPositioned ? undefined : 'hidden'
+      }}
     >
       <div 
         className={`sticker-container ${isFlyingAway ? 'peel-active' : ''} ${localIsPasted ? 'pasted' : ''}`} 

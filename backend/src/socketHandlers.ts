@@ -4527,7 +4527,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
   });
 
-  socket.on("moveSticker", ({ roomId, stickerId, x, y, channel, isPasted, pastedAt }: { roomId: string; stickerId: string; x: number; y: number; channel: "wolf" | "lovers"; isPasted?: boolean; pastedAt?: number }) => {
+  socket.on("moveSticker", ({ roomId, stickerId, x, y, channel, isPasted, pastedAt, rotate }: { roomId: string; stickerId: string; x: number; y: number; channel: "wolf" | "lovers"; isPasted?: boolean; pastedAt?: number; rotate?: number }) => {
     const room = rooms[roomId];
     if (!room) return;
     if (room.gameOver || room.phase !== "night") return;
@@ -4554,11 +4554,14 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (pastedAt !== undefined) {
       sticker.pastedAt = pastedAt;
     }
+    if (rotate !== undefined) {
+      sticker.rotate = rotate;
+    }
 
     if (channel === "wolf") {
-      socket.to(`wolves_${roomId}`).emit("stickerMoved", { stickerId, x, y, isPasted, pastedAt });
+      socket.to(`wolves_${roomId}`).emit("stickerMoved", { stickerId, x, y, isPasted, pastedAt, rotate });
     } else if (channel === "lovers") {
-      socket.to(`lovers_${roomId}`).emit("stickerMoved", { stickerId, x, y, isPasted, pastedAt });
+      socket.to(`lovers_${roomId}`).emit("stickerMoved", { stickerId, x, y, isPasted, pastedAt, rotate });
     }
   });
 
@@ -4576,6 +4579,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (index === -1) return;
 
     const sticker = room.stickers[index];
+    if (!sticker) return;
     if (sticker.channel !== channel) return;
     if (channel === "wolf" && !isWolf) return;
     if (channel === "lovers" && !isLover) return;

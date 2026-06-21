@@ -109,6 +109,26 @@ export default function GameDaNghich() {
   const [roleOverride, setRoleOverride] = useState<string | null>("Thần tình yêu");
   const role = roomId === "mock-8" ? roleOverride : contextRole;
   const debugAnim = query.get("debugAnim") === "1";
+  const [windowDimensions, setWindowDimensions] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+    };
+  }, []);
+
   const sync = useGameSocketSync({ roomId, setRoom });
   const phase: GamePhase = sync.phase;
   const isDusk = phase === "dusk";
@@ -130,9 +150,11 @@ export default function GameDaNghich() {
     
     const isStaticPaste = !event; // Nếu không có event -> dán tĩnh luôn (click/tap nhanh)
 
-    // Calculate initial x, y directly under client pointer
-    let clientX = window.innerWidth / 2;
-    let clientY = window.innerHeight / 2;
+    let xPct = 0.5;
+    let yPct = 0.5;
+    let clientX = windowDimensions.width / 2;
+    let clientY = windowDimensions.height / 2;
+
     if (event) {
       const nativeEvent = 'nativeEvent' in event ? event.nativeEvent : event;
       if (nativeEvent.touches && nativeEvent.touches.length > 0) {
@@ -142,19 +164,32 @@ export default function GameDaNghich() {
         clientX = (nativeEvent as any).clientX;
         clientY = (nativeEvent as any).clientY;
       }
+
+      const frameEl = document.querySelector(".player-position-frame");
+      const frameRect = frameEl ? frameEl.getBoundingClientRect() : null;
+      const stickerWidth = 100;
+
+      if (frameRect) {
+        const absX = clientX - frameRect.left - stickerWidth / 2;
+        const absY = clientY - frameRect.top - stickerWidth / 2;
+        xPct = absX / frameRect.width;
+        yPct = absY / frameRect.height;
+      } else {
+        const absX = clientX - stickerWidth / 2;
+        const absY = clientY - stickerWidth / 2;
+        xPct = absX / windowDimensions.width;
+        yPct = absY / windowDimensions.height;
+      }
     }
 
-    const stickerWidth = 100;
-    const x = clientX - stickerWidth / 2;
-    const y = clientY - stickerWidth / 2;
     const rotate = Math.floor(Math.random() * 40 - 20);
     const createdAt = Date.now();
 
     const sticker: any = {
       id,
       imageSrc: filename,
-      x,
-      y,
+      x: xPct,
+      y: yPct,
       rotate,
       channel,
       createdAt,
@@ -179,8 +214,8 @@ export default function GameDaNghich() {
       sticker: {
         id,
         imageSrc: filename,
-        x,
-        y,
+        x: xPct,
+        y: yPct,
         rotate,
         channel,
         createdAt,
@@ -188,12 +223,20 @@ export default function GameDaNghich() {
         pastedAt: isStaticPaste ? Date.now() : undefined
       }
     });
-  }, [roomId, sync, clientId]);
+  }, [roomId, sync, clientId, windowDimensions]);
 
-  const handleDragUpdateSticker = useCallback((stickerId: string, x: number, y: number, channel: "wolf" | "lovers", isPasted?: boolean, pastedAt?: number, rotate?: number) => {
+  const handleDragUpdateSticker = useCallback((
+    stickerId: string, 
+    xPct: number, 
+    yPct: number, 
+    channel: "wolf" | "lovers", 
+    isPasted?: boolean, 
+    pastedAt?: number, 
+    rotate?: number
+  ) => {
     // Always update local state for fast UI response
     sync.setStickers((prev: any) =>
-      prev.map((s: any) => (s.id === stickerId ? { ...s, x, y, isPasted: isPasted ?? s.isPasted, pastedAt: pastedAt ?? s.pastedAt, rotate: rotate ?? s.rotate } : s))
+      prev.map((s: any) => (s.id === stickerId ? { ...s, x: xPct, y: yPct, isPasted: isPasted ?? s.isPasted, pastedAt: pastedAt ?? s.pastedAt, rotate: rotate ?? s.rotate } : s))
     );
 
     if (roomId === "mock-8") {
@@ -203,12 +246,36 @@ export default function GameDaNghich() {
     socket.emit("moveSticker", {
       roomId,
       stickerId,
-      x,
-      y,
+      x: xPct,
+      y: yPct,
       channel,
       isPasted,
       pastedAt,
       rotate
+    });
+  }, [roomId, sync]);
+
+  const handleDragStartSticker = useCallback((stickerId: string, channel: "wolf" | "lovers") => {
+    // Set isPasted to false locally
+    sync.setStickers((prev: any) =>
+      prev.map((s: any) => (s.id === stickerId ? { ...s, isPasted: false } : s))
+    );
+
+    if (roomId === "mock-8") {
+      return;
+    }
+
+    const sticker = sync.stickers.find((s: any) => s.id === stickerId);
+    if (!sticker) return;
+
+    socket.emit("moveSticker", {
+      roomId,
+      stickerId,
+      x: sticker.x,
+      y: sticker.y,
+      channel,
+      isPasted: false,
+      rotate: sticker.rotate
     });
   }, [roomId, sync]);
 
@@ -2952,6 +3019,7 @@ export default function GameDaNghich() {
           {sync.stickers.map((sticker: any) => {
             const resolvedUrl = getStickerUrlByFileName(sticker.imageSrc);
             if (!resolvedUrl) return null;
+
             return (
               <StickerPeel
                 key={sticker.id}
@@ -2964,43 +3032,31 @@ export default function GameDaNghich() {
                 onDragStart={() => {
                   if (sticker.owner === clientId) {
                     setDraggingStickerId(sticker.id);
+                    handleDragStartSticker(sticker.id, sticker.channel);
                   }
                 }}
                 onDragUpdate={(x, y, overTrash, rotateVal) => {
                   if (sticker.owner === clientId) {
-                    handleDragUpdateSticker(sticker.id, x, y, sticker.channel, undefined, undefined, rotateVal);
                     setIsOverTrash(overTrash);
+                  }
+                }}
+                onRelease={() => {
+                  if (sticker.owner === clientId) {
+                    setDraggingStickerId(null);
+                    setIsOverTrash(false);
                   }
                 }}
                 onDragEnd={(isDeleted, finalX, finalY, finalRotation) => {
                   if (sticker.owner === clientId) {
                     if (isDeleted) {
-                      // Slide both trash and sticker out
-                      const trashEl = document.getElementById("sticker-trash-zone");
-                      if (trashEl) {
-                        gsap.to(trashEl, {
-                          y: "100%",
-                          duration: 0.4,
-                          ease: "power2.in",
-                          onComplete: () => {
-                            handleDeleteSticker(sticker.id, sticker.channel);
-                            setDraggingStickerId(null);
-                            setIsOverTrash(false);
-                            gsap.set(trashEl, { clearProps: "all" });
-                          }
-                        });
-                      } else {
-                        handleDeleteSticker(sticker.id, sticker.channel);
-                        setDraggingStickerId(null);
-                        setIsOverTrash(false);
-                      }
+                      handleDeleteSticker(sticker.id, sticker.channel);
                     } else {
                       setDraggingStickerId(null);
                       setIsOverTrash(false);
                       handleDragUpdateSticker(
                         sticker.id,
-                        finalX !== undefined ? finalX : sticker.x,
-                        finalY !== undefined ? finalY : sticker.y,
+                        finalX,
+                        finalY,
                         sticker.channel,
                         true,
                         Date.now(),
@@ -3016,8 +3072,8 @@ export default function GameDaNghich() {
                   }
                 }}
                 rotate={sticker.rotate}
-                initialPosition={{ x: sticker.x, y: sticker.y }}
-                width={100}
+                x={sticker.x}
+                y={sticker.y}
               />
             );
           })}
@@ -3025,48 +3081,63 @@ export default function GameDaNghich() {
       )}
 
       {/* Trash Zone */}
-      {draggingStickerId && (
+      <div
+        id="sticker-trash-zone"
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: "12dvh",
+          zIndex: 1010,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          pointerEvents: "none",
+          transform: draggingStickerId ? "translateY(0)" : "translateY(100%)",
+          opacity: draggingStickerId ? 1 : 0,
+          transition: draggingStickerId
+            ? "transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease"
+            : "transform 0.35s cubic-bezier(0.3, 0, 0.8, 0.15), opacity 0.35s ease-in",
+          overflow: "hidden"
+        }}
+      >
+        {/* Lớp nền đen mặc định */}
         <div
-          id="sticker-trash-zone"
           style={{
-            position: "fixed",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: "10dvh",
-            zIndex: 1010,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: isOverTrash
-              ? "linear-gradient(to top, rgba(239, 68, 68, 0.95) 0%, rgba(239, 68, 68, 0.4) 50%, transparent 100%)"
-              : "linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.4) 50%, transparent 100%)",
-            transition: "background 0.2s ease, transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
-            pointerEvents: "none",
-            animation: "slideUpTrashZone 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards"
+            position: "absolute",
+            inset: 0,
+            background: "linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.3) 60%, transparent 100%)",
+            zIndex: -1
           }}
-        >
-          <style>{`
-            @keyframes slideUpTrashZone {
-              from { transform: translateY(100%); }
-              to { transform: translateY(0); }
-            }
-          `}</style>
-          <img
-            src={trashIcon}
-            alt="Thùng rác"
-            style={{
-              width: "32px",
-              height: "32px",
-              filter: isOverTrash 
-                ? "invert(21%) sepia(84%) saturate(7415%) hue-rotate(354deg) brightness(93%) contrast(92%)"
-                : "invert(100%) brightness(200%)",
-              transform: isOverTrash ? "translateY(-8px) scale(1.1)" : "translateY(0) scale(1.0)",
-              transition: "transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), filter 0.2s ease"
-            }}
-          />
-        </div>
-      )}
+        />
+        
+        {/* Lớp nền đỏ khi rê sticker vào - Transition opacity tạo hiệu ứng chuyển màu gradient cực mượt */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "linear-gradient(to top, rgba(239, 68, 68, 0.95) 0%, rgba(239, 68, 68, 0.4) 60%, transparent 100%)",
+            opacity: isOverTrash ? 1 : 0,
+            transition: "opacity 0.3s ease-in-out",
+            zIndex: -1
+          }}
+        />
+
+        <img
+          src={trashIcon}
+          alt="Thùng rác"
+          style={{
+            width: "36px",
+            height: "36px",
+            filter: isOverTrash 
+              ? "invert(21%) sepia(84%) saturate(7415%) hue-rotate(354deg) brightness(93%) contrast(92%)"
+              : "invert(100%) brightness(200%)",
+            transform: isOverTrash ? "translateY(-10px) scale(1.15)" : "translateY(0) scale(1.0)",
+            transition: "transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), filter 0.25s ease"
+          }}
+        />
+      </div>
     </div>
   );
 }

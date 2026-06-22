@@ -216,5 +216,8 @@ export function useLoveRole({
     playerPositionsProps: {
       selectedOutlinePlayerId: canChoosePartner ? selectedPlayerId : null,
     },
+    isPaired,
+    canUseEscape,
+    targetId: loveState.targetId,
   };
 }

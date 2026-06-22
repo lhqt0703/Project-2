@@ -41,6 +41,11 @@ export function PlayerShotEffect({ bulletAnimation, positions, containerRef, onR
   const [bulletFrame, setBulletFrame] = useState<{ x: number; y: number; elapsedMs: number; totalMs: number; rotationDeg?: number } | null>(null);
   const bulletRafRef = useRef<number | null>(null);
   const confettiTriggeredRef = useRef(false);
+  const positionsRef = useRef(positions);
+
+  useEffect(() => {
+    positionsRef.current = positions;
+  }, [positions]);
 
   // Register GSAP plugins
   useEffect(() => {
@@ -138,7 +143,7 @@ export function PlayerShotEffect({ bulletAnimation, positions, containerRef, onR
     const tick = () => {
       const now = performance.now();
       const elapsedMs = now - bulletAnimation.startedAt;
-      const to = positions.find((p) => p.playerId === bulletAnimation.toPlayerId);
+      const to = positionsRef.current.find((p) => p.playerId === bulletAnimation.toPlayerId);
 
       if (!to) {
         setBulletFrame(null);
@@ -199,7 +204,7 @@ export function PlayerShotEffect({ bulletAnimation, positions, containerRef, onR
         } else {
           bulletRafRef.current = null;
         }
-      } else {
+      } else if (bulletAnimation.kind === "hunter") {
         const easeInCubic = (t: number) => t * t * t;
         const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
         const easeInOutCubic = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -211,7 +216,7 @@ export function PlayerShotEffect({ bulletAnimation, positions, containerRef, onR
 
         const localElapsed = clamp(elapsedMs, 0, totalMs);
         const t = clamp(localElapsed / totalMs, 0, 1);
-        const from = positions.find((p) => p.playerId === bulletAnimation.fromPlayerId);
+        const from = positionsRef.current.find((p) => p.playerId === bulletAnimation.fromPlayerId);
 
         if (!from) {
           setBulletFrame(null);
@@ -258,16 +263,21 @@ export function PlayerShotEffect({ bulletAnimation, positions, containerRef, onR
       }
       onRecoilUpdate?.(null);
       if (bulletAnimation && bulletAnimation.kind === "love" && !confettiTriggeredRef.current) {
-        const to = positions.find((p) => p.playerId === bulletAnimation.toPlayerId);
+        const to = positionsRef.current.find((p) => p.playerId === bulletAnimation.toPlayerId);
         if (to) {
           confettiTriggeredRef.current = true;
           triggerCupidConfetti(to);
         }
       }
     };
-  }, [bulletAnimation, positions]);
+  }, [bulletAnimation]);
 
   if (!bulletAnimation || !bulletFrame) return null;
+
+  // Hide the Cupid arrow after it hits the target (elapsedMs > 2400)
+  if (bulletAnimation.kind === "love" && bulletFrame.elapsedMs > 2398) {
+    return null;
+  }
 
   const rotationDeg = bulletFrame.rotationDeg ?? 0;
   const rotationOffset = bulletAnimation.rotationOffsetDeg ?? 0;

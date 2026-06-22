@@ -37,7 +37,7 @@ const getGlowColor = (role: string) => {
   if (DIET_QUY_DEMON.includes(role)) return "#f87171";
 
   if (["Sói", "Sói con", "Sói Dại", "Linh sói", "Bán sói"].includes(role)) return "#ef4444";
-  if (ELEMENTAL_ROLE_ORDER.includes(role)) return "#ED6E7B";
+  if (ELEMENTAL_ROLE_ORDER.includes(role as any)) return "#ED6E7B";
   if (["Tiên tri", "Thợ săn"].includes(role)) return "#60a5fa";
   if (["Bảo vệ", "Phù thủy", "Hộ nhân", "Trưởng làng"].includes(role)) return "#34d399";
   if (["Kẻ bị nguyền", "Thiên Sứ", "Thần tình yêu", "Tay Buôn"].includes(role)) return "#a855f7";

@@ -38,7 +38,13 @@ function assignRolesWithBlocks<T extends RoleDealPlayer>(
     (a, b) => (roleCountsByPlayer.get(a.id) || 0) - (roleCountsByPlayer.get(b.id) || 0),
   );
 
+  let steps = 0;
+  const MAX_STEPS = 1000;
+
   function backtrack(index: number, remainingRoles: string[], assignedRoles: Record<string, string>): Record<string, string> | null {
+    steps++;
+    if (steps > MAX_STEPS) return null;
+
     if (index >= orderedParticipants.length) return assignedRoles;
 
     const player = orderedParticipants[index]!;
@@ -72,7 +78,7 @@ function pickAndAssignRolesWithBlocks<T extends RoleDealPlayer>(
   const playerCount = participants.length;
   if (playerCount <= 0) return {};
 
-  for (let attempt = 0; attempt < 200; attempt++) {
+  for (let attempt = 0; attempt < 20; attempt++) {
     const pickedRoles = pickRemainingRoles(roles, playerCount).filter(
       (role): role is string => typeof role === "string" && role.trim().length > 0,
     );

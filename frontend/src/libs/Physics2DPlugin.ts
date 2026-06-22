@@ -28,7 +28,7 @@ const i: any = {
     this.styles = f && f(e, t.xProp && "x" !== t.xProp ? t.xProp + "," + t.yProp : "transform"); this.target = e; this.tween = s; this.step = 0; this.sps = 30; if (t.gravity) { a = +t.gravity; h = 90; }
     n *= u; h *= u; this.fr = 1 - (+t.friction || 0); this._props.push(c, p); this.xp = new m(e, c, Math.cos(n) * r, Math.cos(h) * a, this.sps); this.yp = new m(e, p, Math.sin(n) * r, Math.sin(h) * a, this.sps); this.skipX = this.skipY = 0;
   },
-  render: function (e: number, t: any) {
+  render: function (_e: number, t: any) {
     let i, s, n, r, a, o, p = t.xp, l = t.yp, c = t.tween, v = t.target, f = t.step, u = t.sps, h = t.fr, d = t.skipX, g = t.skipY, y = c._from ? c._dur - c._time : c._time;
     if (c._time || !w()) {
       if (1 === h) n = y * y * .5, i = p.s + p.vel * y + p.acc * n, s = l.s + l.vel * y + l.acc * n;

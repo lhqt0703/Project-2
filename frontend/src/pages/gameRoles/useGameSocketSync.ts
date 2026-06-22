@@ -235,6 +235,12 @@ export function useGameSocketSync({
       setCursedTargetId(null);
       setMerchantCheeseMarkPlayerIds([]);
       setRoom((prev: any) => (prev ? { ...prev, nightActionProgressByPlayerId: {} } : prev));
+      
+      // Reset shot animations on phase changes
+      setHunterShot(null);
+      setHunterShotSeq(0);
+      setLoveArrowShot(null);
+      setLoveArrowShotSeq(0);
     };
 
     const handleRoomUpdated = (data: any) => {

@@ -39,7 +39,6 @@ import RoleCompanionOverlay from "../components/RoleCompanionOverlay";
 import { AvifIcon } from "../components/AvifIcon";
 import { CountdownButton } from "../components/CountdownButton";
 import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
-import { StickerSelectorModal } from "../components/StickerSelectorModal";
 import StickerPeel from "../components/StickerPeel";
 import { getStickerUrlByFileName } from "../utils/stickerAssets";
 
@@ -87,15 +86,15 @@ const ROLE_SKILL_HINTS: Record<string, string> = {
   "Hộ nhân": "Chọn một người mà bạn muốn trao hộ thân giúp chặn mọi hiệu ứng gây chết cho họ trong một lần hoặc không hành động gì để bỏ qua",
   "Phù thủy": "Hãy lựa chọn cẩn thận hoặc không hành động gì để bỏ qua",
   "Thợ săn": "Chọn một mục tiêu để ghim hoặc không hành động gì để bỏ qua. Nếu bạn bị giết, mục tiêu sẽ bị giết theo",
-  "Sói": "chọn một người để cắn và hãy nhớ chú ý đến việc thống nhất lựa chọn với các sói khác",
-  "Sói con": "chọn một người để cắn và hãy nhớ chú ý đến việc thống nhất lựa chọn với các sói khác",
-  "Sói Dại": "chọn một người để cắn và hãy nhớ chú ý đến việc thống nhất lựa chọn với các sói khác",
+  "Sói": "chọn một người để cắn và hãy nhớ cẩn trọng đến việc thống nhất lựa chọn với những sói khác",
+  "Sói con": "chọn một người để cắn và hãy cẩn trọng đến việc thống nhất lựa chọn với những sói khác",
+  "Sói Dại": "chọn một người để cắn và hãy cẩn trọng đến việc thống nhất lựa chọn với những sói khác",
   "Bán sói": "Bạn không cần hành động đêm khi chưa bị cắn và sẽ trở thành phe sói nếu đã bị cắn",
   "Tay Buôn": "Chọn một người và vật phẩm để tạo giao dịch hoặc không hành động gì để bỏ qua",
   "Kẻ bị nguyền": "Chọn một người mà bạn muốn ngửi xem liệu người đó và 2 người bên cạnh liệu có sói hay không",
   "Linh sói": " ",
   "Thần tình yêu": "Chọn một người mà bạn muốn ghép đôi bản thân với họ",
-  "Thiên Sứ": "Chọn một người đã chết mà bạn muốn hồi sinh trong âm thầm hoặc không hành động gì để bỏ qua",
+  "Thiên Sứ": "Hãy quan sát kỹ mọi người, khi bạn bị giết, bạn sẽ có thể âm thầm hồi sinh một người đã chết mà bạn đặt niềm tin ở họ",
   "Dân làng": "Bạn không cần hành động đêm",
   "Trưởng làng": "Bạn không cần hành động đêm"
 };
@@ -157,12 +156,15 @@ export default function GameDaNghich() {
 
     if (event) {
       const nativeEvent = 'nativeEvent' in event ? event.nativeEvent : event;
-      if (nativeEvent.touches && nativeEvent.touches.length > 0) {
-        clientX = nativeEvent.touches[0].clientX;
-        clientY = nativeEvent.touches[0].clientY;
+      if ('touches' in nativeEvent) {
+        const touches = (nativeEvent as TouchEvent).touches;
+        if (touches && touches.length > 0) {
+          clientX = touches[0].clientX;
+          clientY = touches[0].clientY;
+        }
       } else if ('clientX' in nativeEvent) {
-        clientX = (nativeEvent as any).clientX;
-        clientY = (nativeEvent as any).clientY;
+        clientX = (nativeEvent as MouseEvent).clientX;
+        clientY = (nativeEvent as MouseEvent).clientY;
       }
 
       const frameEl = document.querySelector(".player-position-frame");
@@ -320,7 +322,6 @@ export default function GameDaNghich() {
   const [nightTurnNow, setNightTurnNow] = useState(() => Date.now() + serverTimeOffset);
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [isNightInfoVisible, setIsNightInfoVisible] = useState(true);
-  const [isStickersOpen, setIsStickersOpen] = useState(false);
   const [draggingStickerId, setDraggingStickerId] = useState<string | null>(null);
   const [isOverTrash, setIsOverTrash] = useState(false);
   const [cardFlippedToFront, setCardFlippedToFront] = useState(false);
@@ -362,11 +363,38 @@ export default function GameDaNghich() {
   }, [isHost, sync.gameEnded, viewMode]);
   const [editingRealName, setEditingRealName] = useState("");
   const [editingAvatar, setEditingAvatar] = useState("");
+  const [avatarSearch, setAvatarSearch] = useState("");
+  const [avatarTab, setAvatarTab] = useState("all");
+
+  const allAvatars = useMemo(() => {
+    return Object.keys(AVA_IMAGES)
+      .map((path) => path.split("/").pop() || "")
+      .filter(Boolean)
+      .sort();
+  }, []);
+
+  const filteredAvatars = useMemo(() => {
+    return allAvatars.filter((fileName) => {
+      if (avatarSearch && !fileName.toLowerCase().includes(avatarSearch.toLowerCase())) {
+        return false;
+      }
+      if (avatarTab === "masked") {
+        return fileName.startsWith("M ");
+      }
+      if (avatarTab === "normal") {
+        return !fileName.startsWith("M ");
+      }
+      return true;
+    });
+  }, [allAvatars, avatarSearch, avatarTab]);
+
   useEffect(() => {
     if (hostPlayerActionTargetId) {
       const p = room?.players.find((x) => x.id === hostPlayerActionTargetId);
       setEditingRealName(p?.playerRealName || "");
       setEditingAvatar(p?.playerAvatar || "");
+      setAvatarSearch("");
+      setAvatarTab("all");
     }
   }, [hostPlayerActionTargetId, room?.players]);
 
@@ -1126,7 +1154,7 @@ export default function GameDaNghich() {
       hunterBulletTimeoutRef.current = null;
     }
 
-    const duration = options?.kind === "love" ? 2400 : HUNTER_BULLET_ANIM_MS;
+    const duration = options?.kind === "love" ? 4400 : HUNTER_BULLET_ANIM_MS;
 
     setHunterBulletAnim({
       fromPlayerId: hunterId,
@@ -1421,29 +1449,51 @@ export default function GameDaNghich() {
   });
 
   const hasVisibleActionPanel = useMemo(() => {
-    if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions) return false;
+    if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions || !isNightInfoVisible) return false;
     if (role === "Phù thủy") return true;
     if (role === "Tay Buôn") return true;
     if (ELEMENTAL_ROLE_SET.has(role) && sync.elementalActionMode === "buff" && (allNightActionsSimultaneous || currentNightTurnRole === role)) return true;
     if (role === "Thần tình yêu") {
-      return loveActionPlacement === "role-actions" || loveActionPlacement === "general" || loveActionPlacement === "wolf";
+      return !!love.targetId;
     }
     return false;
-  }, [phase, role, isCurrentPlayerDeadForNightActions, sync.elementalActionMode, allNightActionsSimultaneous, currentNightTurnRole, loveActionPlacement]);
+  }, [phase, role, isCurrentPlayerDeadForNightActions, sync.elementalActionMode, allNightActionsSimultaneous, currentNightTurnRole, loveActionPlacement, love.targetId]);
 
   const renderSkillHint = () => {
     if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions || !isNightInfoVisible) return null;
     
-    let hintText = ROLE_SKILL_HINTS[role];
-    if (role === "Bán sói") {
-      if (isBanSoiAligned || isWildWolfConverted) {
-        hintText = ROLE_SKILL_HINTS["Sói"];
+    let hintText = "";
+    if (role === "Thần tình yêu") {
+      if (!love.targetId) {
+        hintText = "Hãy chọn một người mà bạn muốn ghép đôi bản thân với họ";
       } else {
-        hintText = "Hãy ngủ yên và chờ đợi ngày mới bắt đầu.";
+        if (love.canUseEscape) {
+          hintText = "Bạn có thể gửi tín hiệu muốn ra khỏi làng cho nửa kia và nếu cả hai đều đồng ý thì cả bạn và người đó sẽ đều né được mọi sự kiện nhắm vào trong đêm, tuy nhiên điều này sẽ chỉ có thể thực hiện được một lần";
+        } else {
+          hintText = "Hãy cẩn trọng và cố gắng sống sót, vì nửa kia cũng như vì chính bản thân bạn";
+        }
       }
-    }
-    if (!hintText && ELEMENTAL_ROLE_SET.has(role)) {
-      hintText = "Chọn một người mà bạn nghĩ họ cũng là dân làng nắm giữ nguyên tố";
+    } else {
+      let baseHintText = ROLE_SKILL_HINTS[role] || "";
+      if (role === "Bán sói") {
+        if (isBanSoiAligned || isWildWolfConverted) {
+          baseHintText = ROLE_SKILL_HINTS["Sói"];
+        } else {
+          baseHintText = "Bạn hiện vẫn là một dân làng nên chưa có khả năng thực hiện hành động đêm. Nhưng hãy cẩn thận vì nếu bạn bị sói tấn công thì dòng máu sói của bạn sẽ trỗi dậy";
+        }
+      }
+      if (!baseHintText && ELEMENTAL_ROLE_SET.has(role)) {
+        baseHintText = "Chọn một người mà bạn nghĩ họ cũng là dân làng nắm giữ nguyên tố";
+      }
+      
+      hintText = baseHintText;
+      if (love.isPaired) {
+        if (love.canUseEscape) {
+          hintText = baseHintText + "<br><br>* Bạn có thể gửi tín hiệu muốn ra khỏi làng cho nửa kia và nếu cả hai đều đồng ý thì cả bạn và người đó sẽ đều né được mọi sự kiện nhắm vào trong đêm, tuy nhiên điều này sẽ chỉ có thể thực hiện được một lần";
+        } else {
+          hintText = baseHintText + "<br><br>* Hãy cẩn trọng và cố gắng sống sót, vì nửa kia cũng như vì chính bản thân bạn";
+        }
+      }
     }
     
     if (!hintText) return null;
@@ -1466,8 +1516,8 @@ export default function GameDaNghich() {
           }
           @media (max-width: 768px) {
             .role-skill-hint {
-              max-width: 62% !important;
-              margin-left: 8px !important;
+              max-width: 58% !important;
+              
               margin-right: auto !important;
             }
           }
@@ -1498,9 +1548,8 @@ export default function GameDaNghich() {
             fontStyle: "italic",
             opacity: 0.9,
           }}
-        >
-          {hintText}
-        </div>
+          dangerouslySetInnerHTML={{ __html: hintText }}
+        />
       </>
     );
   };
@@ -2452,14 +2501,14 @@ export default function GameDaNghich() {
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && seer.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && cursed.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && merchant.modal}
-      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && angel.modal}
+      {!sync.gameEnded && canShowConfirmModals && angel.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && guardian.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && protector.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && love.modals}
       {shouldRevealMyRole && !sync.gameEnded && loveActionPlacement === "general" && love.actionButton && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start", marginTop: 10 }}>
           {love.actionButton}
-          {renderSkillHint()}
+          {role === "Thần tình yêu" && renderSkillHint()}
         </div>
       )}
 
@@ -2475,12 +2524,12 @@ export default function GameDaNghich() {
             {protector.panel}
             {elemental.panel}
             {merchant.panel}
-            {angel.panel}
             {loveActionPlacement === "role-actions" ? love.actionButton : null}
           </div>
           {hasVisibleActionPanel && (role !== "Thần tình yêu" || loveActionPlacement === "role-actions") && renderSkillHint()}
         </div>
       )}
+      {!sync.gameEnded && angel.panel}
 
       {/* Game controls */}
       {canShowGameControls && (
@@ -2687,6 +2736,8 @@ export default function GameDaNghich() {
           <div id="host-god"
             style={{
               width: "min(92vw, 420px)",
+              maxHeight: "90vh",
+              overflowY: "auto",
               background: "var(--surface)",
               border: "1px solid var(--border)",
               borderRadius: 12,
@@ -2788,8 +2839,10 @@ export default function GameDaNghich() {
             </div>
 
             <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 12, marginTop: 12 }}>
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>Ảnh đại diện của người chơi</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ fontWeight: 600, marginBottom: 12 }}>Ảnh đại diện của người chơi</div>
+              
+              {/* Row 1: Preview & Current Selection Info & Clear Button */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
                 {/* Vòng tròn xem trước (Avatar Preview) */}
                 {(() => {
                   const previewUrl = getAvatarUrlByFileName(editingAvatar);
@@ -2856,78 +2909,196 @@ export default function GameDaNghich() {
                   );
                 })()}
 
-                {/* Dropdown select và Nút Gắn ảnh */}
-                <div style={{ flex: 1, display: "flex", gap: 8 }}>
-                  <select
-                    value={editingAvatar}
-                    onChange={(e) => setEditingAvatar(e.target.value)}
-                    style={{
-                      flex: 1,
-                      background: "rgba(255, 255, 255, 0.05)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 6,
-                      color: "#fff",
-                      padding: "6px 10px",
-                      fontSize: "14px",
-                      outline: "none"
-                    }}
-                  >
-                    <option value="" style={{ background: "#1e1e24", color: "#ccc" }}>-- Chọn ảnh đại diện --</option>
-                    {Object.keys(AVA_IMAGES)
-                      .map((path) => path.split("/").pop() || "")
-                      .filter(Boolean)
-                      .sort()
-                      .map((fileName) => {
-                        let label = fileName;
-                        if (fileName.startsWith("M ")) {
-                          label = `🖼️ [Tách nền] ${fileName.substring(2)}`;
-                        } else if (fileName.startsWith("S ")) {
-                          label = `👤 [Thường] ${fileName.substring(2)}`;
-                        }
-                        return (
-                          <option key={fileName} value={fileName} style={{ background: "#1e1e24", color: "#fff" }}>
-                            {label}
-                          </option>
-                        );
-                      })}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!roomId || !hostPlayerActionTargetId) return;
-                      // 1. Gửi qua socket lên server
-                      socket.emit("hostSetPlayerAvatar", {
-                        roomId,
-                        targetId: hostPlayerActionTargetId,
-                        playerAvatar: editingAvatar
-                      });
-                      // 2. Lưu local để F5 không mất
-                      try {
-                        const customAvatars = JSON.parse(localStorage.getItem("game-custom-avatars") || "{}");
-                        if (editingAvatar) {
-                          customAvatars[hostPlayerActionTargetId] = editingAvatar;
-                        } else {
-                          delete customAvatars[hostPlayerActionTargetId];
-                        }
-                        localStorage.setItem("game-custom-avatars", JSON.stringify(customAvatars));
-                      } catch (e) {
-                        console.error("Lỗi lưu avatar vào localStorage:", e);
-                      }
-                    }}
-                    style={{
-                      background: "var(--accent)",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 6,
-                      padding: "6px 12px",
-                      fontWeight: "bold",
-                      cursor: "pointer"
-                    }}
-                  >
-                    Gắn ảnh
-                  </button>
+                {/* Tên file hiện tại và nút xóa */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 0.5 }}>Đang chọn:</div>
+                  <div style={{ 
+                    fontSize: "13px", 
+                    fontWeight: 500, 
+                    whiteSpace: "nowrap", 
+                    overflow: "hidden", 
+                    textOverflow: "ellipsis",
+                    color: editingAvatar ? "#fff" : "rgba(255,255,255,0.3)"
+                  }}>
+                    {editingAvatar ? (
+                      editingAvatar.startsWith("M ") ? `🖼️ Tách nền: ${editingAvatar.substring(2)}` :
+                      editingAvatar.startsWith("S ") ? `👤 Thường: ${editingAvatar.substring(2)}` : editingAvatar
+                    ) : "Chưa chọn (Ẩn avatar)"}
+                  </div>
+                  {editingAvatar && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingAvatar("")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "#e74c3c",
+                        padding: "2px 0 0 0",
+                        fontSize: "11px",
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                        display: "block",
+                      }}
+                    >
+                      Bỏ chọn / Xóa avatar
+                    </button>
+                  )}
                 </div>
               </div>
+
+              {/* Row 2: Tìm kiếm và Tabs */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm avatar..."
+                  value={avatarSearch}
+                  onChange={(e) => setAvatarSearch(e.target.value)}
+                  style={{
+                    width: "100%",
+                    background: "rgba(255, 255, 255, 0.05)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                    color: "#fff",
+                    padding: "6px 10px",
+                    fontSize: "13px",
+                    outline: "none"
+                  }}
+                />
+                
+                {/* Tabs */}
+                <div style={{ display: "flex", gap: 2, background: "rgba(0, 0, 0, 0.2)", borderRadius: 6, padding: 2 }}>
+                  {[
+                    { id: "all", label: "Tất cả" },
+                    { id: "masked", label: "Tách nền" },
+                    { id: "normal", label: "Ảnh thường" }
+                  ].map((t) => {
+                    const isActive = avatarTab === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setAvatarTab(t.id)}
+                        style={{
+                          flex: 1,
+                          background: isActive ? "rgba(255, 255, 255, 0.1)" : "transparent",
+                          border: "none",
+                          borderRadius: 4,
+                          color: isActive ? "#fff" : "rgba(255, 255, 255, 0.5)",
+                          padding: "4px 0",
+                          fontSize: "11px",
+                          cursor: "pointer",
+                          fontWeight: isActive ? 600 : 400,
+                          transition: "all 0.1s ease"
+                        }}
+                      >
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Row 3: Lưới Sticker (Grid) */}
+              <div style={{
+                maxHeight: "150px",
+                overflowY: "auto",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                padding: 6,
+                background: "rgba(0,0,0,0.15)",
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(42px, 1fr))",
+                gap: 6,
+                marginBottom: 12
+              }}>
+                {filteredAvatars.map((fileName) => {
+                  const url = getAvatarUrlByFileName(fileName);
+                  const isMasked = fileName.startsWith("M ");
+                  const isSelected = fileName === editingAvatar;
+                  return (
+                    <button
+                      key={fileName}
+                      type="button"
+                      onClick={() => setEditingAvatar(fileName)}
+                      title={fileName}
+                      style={{
+                        aspectRatio: "1",
+                        borderRadius: "50%",
+                        border: isSelected ? "2px solid var(--accent)" : "1px solid rgba(255, 255, 255, 0.1)",
+                        background: isMasked 
+                          ? `url(${nenLungAsset}) center/cover no-repeat` 
+                          : "rgba(255, 255, 255, 0.03)",
+                        position: "relative",
+                        cursor: "pointer",
+                        overflow: "hidden",
+                        padding: 0,
+                        outline: "none",
+                        boxShadow: isSelected ? "0 0 6px var(--accent)" : "none",
+                        transform: isSelected ? "scale(1.05)" : "none",
+                        transition: "all 0.1s ease",
+                      }}
+                    >
+                      {url && (
+                        <img
+                          src={url}
+                          alt={fileName}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                            opacity: isSelected ? 1 : 0.8,
+                          }}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+                {filteredAvatars.length === 0 && (
+                  <div style={{ gridColumn: "1 / -1", textAlign: "center", color: "rgba(255,255,255,0.3)", fontSize: "12px", padding: "16px 0" }}>
+                    Không tìm thấy avatar
+                  </div>
+                )}
+              </div>
+
+              {/* Row 4: Nút Gắn ảnh */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!roomId || !hostPlayerActionTargetId) return;
+                  // 1. Gửi qua socket lên server
+                  socket.emit("hostSetPlayerAvatar", {
+                    roomId,
+                    targetId: hostPlayerActionTargetId,
+                    playerAvatar: editingAvatar
+                  });
+                  // 2. Lưu local để F5 không mất
+                  try {
+                    const customAvatars = JSON.parse(localStorage.getItem("game-custom-avatars") || "{}");
+                    if (editingAvatar) {
+                      customAvatars[hostPlayerActionTargetId] = editingAvatar;
+                    } else {
+                      delete customAvatars[hostPlayerActionTargetId];
+                    }
+                    localStorage.setItem("game-custom-avatars", JSON.stringify(customAvatars));
+                  } catch (e) {
+                    console.error("Lỗi lưu avatar vào localStorage:", e);
+                  }
+                }}
+                style={{
+                  width: "100%",
+                  background: "var(--accent)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "8px 12px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  transition: "background 0.2s",
+                }}
+              >
+                Gắn ảnh
+              </button>
             </div>
 
             {!isHostPlayerActionTargetDead ? (
@@ -3035,7 +3206,7 @@ export default function GameDaNghich() {
                     handleDragStartSticker(sticker.id, sticker.channel);
                   }
                 }}
-                onDragUpdate={(x, y, overTrash, rotateVal) => {
+                onDragUpdate={(_x, _y, overTrash, _rotateVal) => {
                   if (sticker.owner === clientId) {
                     setIsOverTrash(overTrash);
                   }

@@ -20,7 +20,7 @@ const j = (e?: number) => { if (!C) { n = g(); M = n && n.parseEase("_CE"); if (
 const k = (t: any, e?: boolean) => (typeof t !== "function" && (t = n.parseEase(t) || M("", t)), t.custom || !e ? t : (e: number) => 1 - t(e));
 
 const o = (e: string, t: any): any => {
-  C || j(1); let s: number, u: number, r: number, a: number, gVal: number, f: any[], l: number, c = Math.floor((t = t || {}).wiggles || 10), p = 1 / c, d = p / 2, m = t.type === "anticipate", h = y[t.type] || y.easeOut, w = m ? h : (x: any) => x;
+  C || j(1); let u: number, r: number, a: number, gVal: number, f: any[], l: number, c = Math.floor((t = t || {}).wiggles || 10), p = 1 / c, d = p / 2, m = t.type === "anticipate", h = y[t.type] || y.easeOut, w = m ? h : (x: any) => x;
   if (m) h = y.easeOut; if (t.timingEase) w = k(t.timingEase); if (t.amplitudeEase) h = k(t.amplitudeEase, true);
   f = [0, 0, (a = w(d)) / 4, 0, a / 2, gVal = m ? -h(d) : h(d), a, gVal];
   if (t.type === "random") { f.length = 4; let nX = w(p), nY = 2 * Math.random() - 1; for (l = 2; l < c; l++) { d = nX; gVal = nY; nX = w(p * l); nY = 2 * Math.random() - 1; let sA = Math.atan2(nY - f[f.length - 3], nX - f[f.length - 4]); u = Math.cos(sA) * p; r = Math.sin(sA) * p; f.push(d - u, gVal - r, d, gVal, d + u, gVal+r); } f.push(nX, 0, 1, 0); } 

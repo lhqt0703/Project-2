@@ -53,12 +53,30 @@ const getGlowColor = (role: string) => {
   if (["Kẻ bị nguyền", "Thiên Sứ", "Thần tình yêu", "Tay Buôn"].includes(role)) return "#a855f7";
   return "#ff9800"; // fallback gold glow
 };
-
 interface PlayerInfo {
   id: string;
   name: string;
   playerAvatar?: string;
 }
+
+const hasAvatar = (p: PlayerInfo) => {
+  if (!p) return false;
+  if (p.playerAvatar && getAvatarUrlByFileName(p.playerAvatar)) {
+    return true;
+  }
+  if (MASKED_AVATAR_MAP[p.id]) {
+    return true;
+  }
+  if (p.id.startsWith("dev-")) {
+    const parts = p.id.split("-");
+    const lastPart = parts[parts.length - 1];
+    const idx = parseInt(lastPart, 10);
+    if (!isNaN(idx) && idx >= 1 && idx <= 7) {
+      return true;
+    }
+  }
+  return false;
+};
 
 const MiniToken = ({ playerId, players }: { playerId: string; players: PlayerInfo[] }) => {
   const p = players.find((x) => x.id === playerId);
@@ -361,7 +379,7 @@ export default function RoleSelect() {
     const voterIds = roomSnapshot?.roleVotes?.[role] || [];
     const votersWithAvatar = voterIds.filter((pid) => {
       const p = roomSnapshot?.players.find((x) => x.id === pid);
-      return !!p?.playerAvatar;
+      return p ? hasAvatar(p) : false;
     });
     const hasVotes = voterIds.length > 0;
     const glowColor = getGlowColor(role);

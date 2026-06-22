@@ -317,6 +317,7 @@ function applyMagnetSnap(
 }
 
 const getRoleBadgeStyle = (role: string) => {
+  const isCupid = role === "Thần tình yêu";
   const isWolf = ["Sói", "Sói con", "Sói Dại", "Bán sói", "Linh sói"].includes(role);
   const isSpecialBlue = ["Tiên tri", "Tiên tri tập sự", "Thợ săn", "Hiệp sĩ"].includes(role);
   const isSpecialGreen = ["Bảo vệ", "Phù thủy", "Già làng", "Sinh đôi", "Bác sĩ ung thư"].includes(role);
@@ -327,7 +328,12 @@ const getRoleBadgeStyle = (role: string) => {
   let textColor = "#e2e8f0";
   let glow = "rgba(0, 0, 0, 0.4)";
 
-  if (isWolf) {
+  if (isCupid) {
+    borderGradient = "linear-gradient(135deg, rgba(244, 114, 182, 0.6), rgba(219, 39, 119, 0.3))";
+    bgGradient = "linear-gradient(135deg, rgba(74, 20, 45, 0.95), rgba(40, 10, 25, 0.98))";
+    textColor = "#f472b6";
+    glow = "rgba(244, 114, 182, 0.25)";
+  } else if (isWolf) {
     borderGradient = "linear-gradient(135deg, rgba(239, 68, 68, 0.6), rgba(153, 27, 27, 0.3))";
     bgGradient = "linear-gradient(135deg, rgba(45, 18, 18, 0.95), rgba(20, 10, 10, 0.98))";
     textColor = "#ff6b6b";
@@ -621,7 +627,7 @@ export default function PlayerPositions({
     const [recoilState, setRecoilState] = useState<{ elapsedMs: number; totalMs: number } | null>(null);
 
   const bulletRecoil = (() => {
-    if (!bulletAnimation || !recoilState) return null;
+    if (!bulletAnimation || !recoilState || bulletAnimation.kind === "love") return null;
     const positions = localPositions && localPositions.length ? localPositions : (room.positions || []);
     const from = positions.find(p => p.playerId === bulletAnimation.fromPlayerId);
     const to = positions.find(p => p.playerId === bulletAnimation.toPlayerId);
@@ -1217,7 +1223,25 @@ export default function PlayerPositions({
           const showWolfBadge = !!showWolfBadges && (wolfBadgePlayerIds || []).includes(p.id);
           const showCheeseBadge = !!cheesePlayerIds && cheesePlayerIds.includes(p.id);
           const wolfBadgeText = showWolfBadge ? (wolfBadgeRoles?.[p.id] || "Sói") : undefined;
-          const roleBadgeText = (showRoleBadges && roleBadges) ? roleBadges[p.id] : undefined;
+          let rawRoleBadgeText = (showRoleBadges && roleBadges) ? roleBadges[p.id] : undefined;
+
+          // Delay showing role badges during Cupid's shot animation
+          if (bulletAnimation && bulletAnimation.kind === "love" && rawRoleBadgeText) {
+            const elapsed = recoilState ? recoilState.elapsedMs : 0;
+            const targetId = bulletAnimation.toPlayerId;
+            const cupidId = bulletAnimation.fromPlayerId;
+
+            // 1. Hide the target's badge until the explosion starts (2400ms)
+            if (p.id === targetId && elapsed < 2400) {
+              rawRoleBadgeText = undefined;
+            }
+            // 2. Hide Cupid's badge ("Thần tình yêu") until the explosion ends completely (4400ms)
+            if (p.id === cupidId && rawRoleBadgeText === "Thần tình yêu" && elapsed < 4400) {
+              rawRoleBadgeText = undefined;
+            }
+          }
+
+          const roleBadgeText = rawRoleBadgeText;
           
           const vfxType = (() => {
             if (!roleBadgeText) return null;

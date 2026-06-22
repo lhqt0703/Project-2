@@ -1432,14 +1432,14 @@ function LogEntryLine({
         const resolvedGuess = entry.guess ?? legacyGuess;
         if (isPlayerView) {
           return (
-            <LogItem emoji="👼" style={lineStyle}>
+            <LogItem emoji="🪽" style={lineStyle}>
               Đã quyết định theo {getAngelGuessText(resolvedGuess)} và hồi sinh{" "}
               <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
             </LogItem>
           );
         }
         return (
-          <LogItem emoji="👼" style={lineStyle}>
+          <LogItem emoji="🪽" style={lineStyle}>
             Thiên sứ{" "}
             <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />{" "}
             quyết định theo {getAngelGuessText(resolvedGuess)} và hồi sinh{" "}
@@ -1470,7 +1470,7 @@ function LogEntryLine({
                   tooltipDetail="sẽ có thể thể thắng riêng khi cả hai còn sống đến khi trong làng chỉ còn lại x người khác"
                   onHighlightPlayer={onHighlightPlayer}
                 >
-                  <span style={{ opacity: 0.75, cursor: "pointer", textDecoration: "underline dotted" }}> - tình yêu sóng gió</span>
+                  <span style={{ opacity: 0.75, cursor: "pointer", textDecoration: "underline dotted" }}>{/* tình yêu trắc trở */}</span>
                 </ActionSpan>
               ) : null}
             </LogItem>

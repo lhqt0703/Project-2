@@ -402,7 +402,6 @@ export function useWolfRole({
             }
           }}
           style={{
-            marginTop: 8,
             padding: "8px 12px",
             cursor: isLocked || !canAct || deadlineReached ? "not-allowed" : "pointer",
             opacity: isLocked || !canAct || deadlineReached ? 0.7 : 1,
@@ -410,11 +409,6 @@ export function useWolfRole({
         >
           <AvifIcon name="🐺" style={{ marginRight: 4 }} /> CẮN!
         </button>
-        {wolfDeadline && (
-          <div style={{ marginTop: 6 }}>
-            Thời gian còn lại: {Math.max(0, Math.ceil((wolfDeadline - nightActionNow) / 1000))}s {nightTurnPaused ? "(đang tạm ngưng)" : ""}
-          </div>
-        )}
       </div>
     ) : null;
 

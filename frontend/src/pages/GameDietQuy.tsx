@@ -153,11 +153,38 @@ export default function GameDietQuy() {
   }, [isHost, sync.gameEnded, viewMode]);
   const [editingRealName, setEditingRealName] = useState("");
   const [editingAvatar, setEditingAvatar] = useState("");
+  const [avatarSearch, setAvatarSearch] = useState("");
+  const [avatarTab, setAvatarTab] = useState("all");
+
+  const allAvatars = useMemo(() => {
+    return Object.keys(AVA_IMAGES)
+      .map((path) => path.split("/").pop() || "")
+      .filter(Boolean)
+      .sort();
+  }, []);
+
+  const filteredAvatars = useMemo(() => {
+    return allAvatars.filter((fileName) => {
+      if (avatarSearch && !fileName.toLowerCase().includes(avatarSearch.toLowerCase())) {
+        return false;
+      }
+      if (avatarTab === "masked") {
+        return fileName.startsWith("M ");
+      }
+      if (avatarTab === "normal") {
+        return !fileName.startsWith("M ");
+      }
+      return true;
+    });
+  }, [allAvatars, avatarSearch, avatarTab]);
+
   useEffect(() => {
     if (hostPlayerActionTargetId) {
       const p = room?.players.find((x) => x.id === hostPlayerActionTargetId);
       setEditingRealName(p?.playerRealName || "");
       setEditingAvatar(p?.playerAvatar || "");
+      setAvatarSearch("");
+      setAvatarTab("all");
     }
   }, [hostPlayerActionTargetId, room?.players]);
 
@@ -1851,6 +1878,8 @@ export default function GameDietQuy() {
           <div
             style={{
               width: "min(92vw, 420px)",
+              maxHeight: "90vh",
+              overflowY: "auto",
               background: "var(--surface)",
               border: "1px solid var(--border)",
               borderRadius: 12,
@@ -1952,8 +1981,10 @@ export default function GameDietQuy() {
             </div>
 
             <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 12, marginTop: 12 }}>
-              <div style={{ fontWeight: 600, marginBottom: 8 }}>Ảnh đại diện của người chơi</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ fontWeight: 600, marginBottom: 12 }}>Ảnh đại diện của người chơi</div>
+              
+              {/* Row 1: Preview & Current Selection Info & Clear Button */}
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
                 {/* Vòng tròn xem trước (Avatar Preview) */}
                 {(() => {
                   const previewUrl = getAvatarUrlByFileName(editingAvatar);
@@ -2020,78 +2051,196 @@ export default function GameDietQuy() {
                   );
                 })()}
 
-                {/* Dropdown select và Nút Gắn ảnh */}
-                <div style={{ flex: 1, display: "flex", gap: 8 }}>
-                  <select
-                    value={editingAvatar}
-                    onChange={(e) => setEditingAvatar(e.target.value)}
-                    style={{
-                      flex: 1,
-                      background: "rgba(255, 255, 255, 0.05)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 6,
-                      color: "#fff",
-                      padding: "6px 10px",
-                      fontSize: "14px",
-                      outline: "none"
-                    }}
-                  >
-                    <option value="" style={{ background: "#1e1e24", color: "#ccc" }}>-- Chọn ảnh đại diện --</option>
-                    {Object.keys(AVA_IMAGES)
-                      .map((path) => path.split("/").pop() || "")
-                      .filter(Boolean)
-                      .sort()
-                      .map((fileName) => {
-                        let label = fileName;
-                        if (fileName.startsWith("M ")) {
-                          label = `🖼️ [Tách nền] ${fileName.substring(2)}`;
-                        } else if (fileName.startsWith("S ")) {
-                          label = `👤 [Thường] ${fileName.substring(2)}`;
-                        }
-                        return (
-                          <option key={fileName} value={fileName} style={{ background: "#1e1e24", color: "#fff" }}>
-                            {label}
-                          </option>
-                        );
-                      })}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!roomId || !hostPlayerActionTargetId) return;
-                      // 1. Gửi qua socket lên server
-                      socket.emit("hostSetPlayerAvatar", {
-                        roomId,
-                        targetId: hostPlayerActionTargetId,
-                        playerAvatar: editingAvatar
-                      });
-                      // 2. Lưu local để F5 không mất
-                      try {
-                        const customAvatars = JSON.parse(localStorage.getItem("game-custom-avatars") || "{}");
-                        if (editingAvatar) {
-                          customAvatars[hostPlayerActionTargetId] = editingAvatar;
-                        } else {
-                          delete customAvatars[hostPlayerActionTargetId];
-                        }
-                        localStorage.setItem("game-custom-avatars", JSON.stringify(customAvatars));
-                      } catch (e) {
-                        console.error("Lỗi lưu avatar vào localStorage:", e);
-                      }
-                    }}
-                    style={{
-                      background: "var(--accent)",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 6,
-                      padding: "6px 12px",
-                      fontWeight: "bold",
-                      cursor: "pointer"
-                    }}
-                  >
-                    Gắn ảnh
-                  </button>
+                {/* Tên file hiện tại và nút xóa */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 0.5 }}>Đang chọn:</div>
+                  <div style={{ 
+                    fontSize: "13px", 
+                    fontWeight: 500, 
+                    whiteSpace: "nowrap", 
+                    overflow: "hidden", 
+                    textOverflow: "ellipsis",
+                    color: editingAvatar ? "#fff" : "rgba(255,255,255,0.3)"
+                  }}>
+                    {editingAvatar ? (
+                      editingAvatar.startsWith("M ") ? `🖼️ Tách nền: ${editingAvatar.substring(2)}` :
+                      editingAvatar.startsWith("S ") ? `👤 Thường: ${editingAvatar.substring(2)}` : editingAvatar
+                    ) : "Chưa chọn (Ẩn avatar)"}
+                  </div>
+                  {editingAvatar && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingAvatar("")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "#e74c3c",
+                        padding: "2px 0 0 0",
+                        fontSize: "11px",
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                        display: "block",
+                      }}
+                    >
+                      Bỏ chọn / Xóa avatar
+                    </button>
+                  )}
                 </div>
               </div>
+
+              {/* Row 2: Tìm kiếm và Tabs */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm avatar..."
+                  value={avatarSearch}
+                  onChange={(e) => setAvatarSearch(e.target.value)}
+                  style={{
+                    width: "100%",
+                    background: "rgba(255, 255, 255, 0.05)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                    color: "#fff",
+                    padding: "6px 10px",
+                    fontSize: "13px",
+                    outline: "none"
+                  }}
+                />
+                
+                {/* Tabs */}
+                <div style={{ display: "flex", gap: 2, background: "rgba(0, 0, 0, 0.2)", borderRadius: 6, padding: 2 }}>
+                  {[
+                    { id: "all", label: "Tất cả" },
+                    { id: "masked", label: "Tách nền" },
+                    { id: "normal", label: "Ảnh thường" }
+                  ].map((t) => {
+                    const isActive = avatarTab === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setAvatarTab(t.id)}
+                        style={{
+                          flex: 1,
+                          background: isActive ? "rgba(255, 255, 255, 0.1)" : "transparent",
+                          border: "none",
+                          borderRadius: 4,
+                          color: isActive ? "#fff" : "rgba(255, 255, 255, 0.5)",
+                          padding: "4px 0",
+                          fontSize: "11px",
+                          cursor: "pointer",
+                          fontWeight: isActive ? 600 : 400,
+                          transition: "all 0.1s ease"
+                        }}
+                      >
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Row 3: Lưới Sticker (Grid) */}
+              <div style={{
+                maxHeight: "150px",
+                overflowY: "auto",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                padding: 6,
+                background: "rgba(0,0,0,0.15)",
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(42px, 1fr))",
+                gap: 6,
+                marginBottom: 12
+              }}>
+                {filteredAvatars.map((fileName) => {
+                  const url = getAvatarUrlByFileName(fileName);
+                  const isMasked = fileName.startsWith("M ");
+                  const isSelected = fileName === editingAvatar;
+                  return (
+                    <button
+                      key={fileName}
+                      type="button"
+                      onClick={() => setEditingAvatar(fileName)}
+                      title={fileName}
+                      style={{
+                        aspectRatio: "1",
+                        borderRadius: "50%",
+                        border: isSelected ? "2px solid var(--accent)" : "1px solid rgba(255, 255, 255, 0.1)",
+                        background: isMasked 
+                          ? `url(${nenLungAsset}) center/cover no-repeat` 
+                          : "rgba(255, 255, 255, 0.03)",
+                        position: "relative",
+                        cursor: "pointer",
+                        overflow: "hidden",
+                        padding: 0,
+                        outline: "none",
+                        boxShadow: isSelected ? "0 0 6px var(--accent)" : "none",
+                        transform: isSelected ? "scale(1.05)" : "none",
+                        transition: "all 0.1s ease",
+                      }}
+                    >
+                      {url && (
+                        <img
+                          src={url}
+                          alt={fileName}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                            opacity: isSelected ? 1 : 0.8,
+                          }}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+                {filteredAvatars.length === 0 && (
+                  <div style={{ gridColumn: "1 / -1", textAlign: "center", color: "rgba(255,255,255,0.3)", fontSize: "12px", padding: "16px 0" }}>
+                    Không tìm thấy avatar
+                  </div>
+                )}
+              </div>
+
+              {/* Row 4: Nút Gắn ảnh */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!roomId || !hostPlayerActionTargetId) return;
+                  // 1. Gửi qua socket lên server
+                  socket.emit("hostSetPlayerAvatar", {
+                    roomId,
+                    targetId: hostPlayerActionTargetId,
+                    playerAvatar: editingAvatar
+                  });
+                  // 2. Lưu local để F5 không mất
+                  try {
+                    const customAvatars = JSON.parse(localStorage.getItem("game-custom-avatars") || "{}");
+                    if (editingAvatar) {
+                      customAvatars[hostPlayerActionTargetId] = editingAvatar;
+                    } else {
+                      delete customAvatars[hostPlayerActionTargetId];
+                    }
+                    localStorage.setItem("game-custom-avatars", JSON.stringify(customAvatars));
+                  } catch (e) {
+                    console.error("Lỗi lưu avatar vào localStorage:", e);
+                  }
+                }}
+                style={{
+                  width: "100%",
+                  background: "var(--accent)",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "8px 12px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  transition: "background 0.2s",
+                }}
+              >
+                Gắn ảnh
+              </button>
             </div>
             {!isHostPlayerActionTargetDead ? (
               <>

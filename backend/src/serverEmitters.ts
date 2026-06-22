@@ -435,7 +435,12 @@ function getGameLogForPlayer(room: Room, playerId: string): GameLogNight[] {
 
   return (room.gameLog || []).map((nightLog) => {
     const filteredEntries = (nightLog.entries || []).filter((entry) => {
-      if (entry.phase === "day") return true;
+      if (entry.phase === "day") {
+        if (entry.type === "angel_revive_activated") {
+          return myRole === "Thiên Sứ";
+        }
+        return true;
+      }
 
       // 1. Mysterious force
       if (entry.type === "mysterious_force_eliminated") {
@@ -444,7 +449,7 @@ function getGameLogForPlayer(room: Room, playerId: string): GameLogNight[] {
 
       // 2. Angel revive
       if (entry.type === "angel_revive_activated") {
-        return true;
+        return myRole === "Thiên Sứ";
       }
 
       // 3. Phe sói

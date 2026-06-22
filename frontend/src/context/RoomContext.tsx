@@ -208,13 +208,25 @@ interface RoomContextType {
 const RoomContext = createContext<RoomContextType | undefined>(undefined);
 
 export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [role, setRole] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(() => {
+    const query = new URLSearchParams(window.location.search);
+    const rId = query.get("roomId");
+    if (rId) {
+      return sessionStorage.getItem(`playerRole:${rId}`) || null;
+    }
+    return null;
+  });
   const [room, setRoom] = useState<RoomData | null>(null);
 
   useEffect(() => {
     const handleYourRole = (nextRole: string) => {
       if (!nextRole) return;
       setRole(nextRole);
+      const query = new URLSearchParams(window.location.search);
+      const rId = query.get("roomId");
+      if (rId) {
+        sessionStorage.setItem(`playerRole:${rId}`, nextRole);
+      }
     };
 
     socket.on("yourRole", handleYourRole);
@@ -222,6 +234,21 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
       socket.off("yourRole", handleYourRole);
     };
   }, []);
+
+  // Tự động yêu cầu cấp lại vai trò nếu bị trống khi game đang chạy
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const rId = query.get("roomId");
+    if (!rId || rId === "mock-8") return;
+
+    const phase = room?.phase;
+    const isGameActive = phase === "dusk" || phase === "night" || phase === "day";
+
+    if (isGameActive && !role) {
+      console.log("[RoomContext] Game đang chạy nhưng vai trò bị trống, gửi yêu cầu requestMyRole...");
+      socket.emit("requestMyRole", { roomId: rId });
+    }
+  }, [room?.phase, role]);
 
   return (
     <RoomContext.Provider value={{ role, setRole, room, setRoom }}>

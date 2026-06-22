@@ -86,7 +86,7 @@ interface GameRoleStatusBarProps {
   showStickersButton?: boolean;
   isWolf?: boolean;
   isLover?: boolean;
-  onSelectSticker?: (filename: string, channel: "wolf" | "lovers") => void;
+  onSelectSticker?: (filename: string, channel: "wolf" | "lovers", event: React.MouseEvent | React.TouchEvent | null) => void;
 }
 
 export const GameRoleStatusBar: React.FC<GameRoleStatusBarProps> = ({
@@ -431,7 +431,7 @@ export const GameRoleStatusBar: React.FC<GameRoleStatusBarProps> = ({
       <StickerSelectorModal
         isOpen={isStickersOpen}
         onClose={() => setIsStickersOpen(false)}
-        onSelectSticker={onSelectSticker}
+        onSelectSticker={onSelectSticker || (() => {})}
         isWolf={isWolf}
         isLover={isLover}
       />

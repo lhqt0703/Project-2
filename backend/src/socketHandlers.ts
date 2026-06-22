@@ -2221,7 +2221,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.roles,
       room.pendingRoleAssignments,
       room.pendingRoleBlocks,
-      (remainingRoles) => remainingRoles.slice().sort(() => Math.random() - 0.5),
+      pickRolesForParticipants,
       room.playerRoleHistory,
     );
 
@@ -3093,13 +3093,22 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       expireUnusedAngelReviveOpportunities(room);
       const activatedAngelRevives = activateAngelRevivesForNight(room);
       for (const record of activatedAngelRevives) {
-        appendLogEntry(room, {
-          type: "angel_revive_activated",
-          phase: "night",
-          actorId: record.angelId,
-          targetId: record.targetId,
-          guess: record.guess,
-        });
+        const targetNight = (room.nightCount || 1) - 1;
+        if (targetNight > 0) {
+          room.gameLog = room.gameLog || [];
+          let prevNightLog = room.gameLog.find((n) => n.night === targetNight);
+          if (!prevNightLog) {
+            prevNightLog = { night: targetNight, at: Date.now(), entries: [] };
+            room.gameLog.push(prevNightLog);
+          }
+          prevNightLog.entries.push({
+            type: "angel_revive_activated",
+            phase: "day",
+            actorId: record.angelId,
+            targetId: record.targetId,
+            guess: record.guess,
+          });
+        }
         if (isWolfAlignedPlayer(room, record.targetId)) {
           ctx.io.in(record.targetId).socketsJoin(`wolves_${roomId}`);
         }
@@ -3107,6 +3116,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         emitAngelPrivateState(ctx, roomId, room, record.targetId);
       }
       emitAngelPrivateStateForAll(ctx, roomId, room);
+      emitPublicDayGameLogToRoom(roomId);
       checkAndEndGame(roomId, "angel_revive_expired");
       if (room.gameOver) return;
 
@@ -5864,6 +5874,15 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       checkAndEndGame(roomId, "soi_mu_investigation_failed");
+    }
+  });
+
+  socket.on("requestMyRole", ({ roomId }: { roomId: string }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    const role = room.playerRoles?.[clientId];
+    if (role) {
+      socket.emit("yourRole", role);
     }
   });
 }

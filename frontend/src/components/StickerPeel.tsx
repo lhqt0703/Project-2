@@ -1,4 +1,5 @@
-import React, { useRef, useEffect, useMemo, useState, CSSProperties } from 'react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { gsap } from 'gsap';
 import { Draggable } from 'gsap/Draggable';
 import './StickerPeel.css';
@@ -44,12 +45,9 @@ interface CSSVars extends CSSProperties {
 
 const StickerPeel: React.FC<StickerPeelProps> = ({
   imageSrc,
-  createdAt,
   isOwner = false,
   isPasted = false,
   pastedAt,
-  startDragEvent,
-  onDeleteClick,
   onDragStart,
   onDragUpdate,
   onDragEnd,
@@ -61,7 +59,6 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
   peelEasing = 'power3.out',
   peelHoverEasing = 'power2.out',
   width = 120,
-  initialPosition = 'center',
   peelDirection = 0,
   className = '',
   x = 0.5,

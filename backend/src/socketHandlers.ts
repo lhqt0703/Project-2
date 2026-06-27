@@ -1,5 +1,7 @@
 import type { Socket } from "socket.io";
 import type { ServerContext } from "./serverContext.js";
+import path from "path";
+import fs from "fs";
 import { getServerContext } from "./serverContext.js";
 import {
   desiredLayoutHeightPx,
@@ -1687,13 +1689,18 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
   const VIP_REAL_NAMES: Record<string, string> = {
     "046fa88a-a719-47c3-8b97-ddfc8337cf83": "Phúc 🍫",
+    "79b02851-1b5d-46fb-8935-5d8031dc9a7f": "Nhật",
     "f7d9652f-ac74-4557-81a2-7c2731a77d37": "Din Phạm",
     "397d9740-e21b-4ade-941f-25912aefd591": "Hà Việt",
     "client_1780242307126_pmozg54dmra": "San",
-    "client_1780242348813_swid1tk0trh": "Huythuhai",
+    "client_1780242348813_swid1tk0trh": "Huy",
     "8dfc1d63-988f-460d-8569-8a1964be99a0": "Cường",
     "ec0c6c66-9ce7-4d86-ac12-25824af15b79": "Việt Thắng",
-    "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd": "Duy"
+    "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd": "Duy",
+    "c3baa0ec-1bef-40a3-9812-27236222029b": "Hy",
+    "0c28a7b3-f332-4bce-b435-b1c63937f6b2": "Phát",
+    "c3a97ba3-250d-49c7-8d00-436bc8056bf5": "Hiếu",
+    "6a0d0c5d-6e85-4021-920b-9224f8306d6f": "Huy Hà",
   };
 
   // Register all socket event handlers
@@ -2988,6 +2995,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     ctx.io.to(roomId).emit("phaseChanged", phase);
 
     if (phase === "day") {
+      if (ensureRoomGameRules(room).twoHeartsFirstTwoNights && room.nightCount === 2) {
+        room.sharedHeartsVisible = false;
+        room.playerHearts = {};
+      }
       room.stickers = [];
       ctx.io.to(`wolves_${roomId}`).emit("stickersSync", []);
       ctx.io.to(`lovers_${roomId}`).emit("stickersSync", []);
@@ -3290,7 +3301,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       return;
     }
 
-    if (room.dayDeadline && Date.now() >= room.dayDeadline) return;
+    if (!room.dayPaused && room.dayDeadline && Date.now() >= room.dayDeadline) return;
 
     room.dayVotes = room.dayVotes || {};
 
@@ -4475,12 +4486,49 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
   socket.on("hostSetPlayerAvatar", ({ roomId, targetId, playerAvatar }: { roomId: string; targetId: string; playerAvatar: string }) => {
     const room = rooms[roomId];
     if (!room) return;
-    if (clientId !== room.hostId) return;
+    if (clientId !== room.hostId && clientId !== targetId) return;
     const player = room.players.find((p) => p.id === targetId);
     if (!player) return;
 
     if (typeof playerAvatar === "string" && playerAvatar.trim()) {
-      player.playerAvatar = playerAvatar.trim();
+      let finalAvatar = playerAvatar.trim();
+      const match = finalAvatar.match(/^M unknownID (\d+)\.(avif|png|jpg|jpeg)$/i);
+      if (match) {
+        try {
+          const avaDir = path.join(process.cwd(), "../frontend/src/assets/Ava");
+          if (fs.existsSync(avaDir)) {
+            const files = fs.readdirSync(avaDir);
+            const escapedId = targetId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const idRegex = new RegExp(`^${escapedId}\\s+M-(\\d+)\\.(avif|png|jpg|jpeg)$`, 'i');
+            
+            let maxNum = 0;
+            for (const file of files) {
+              const m = file.match(idRegex);
+              if (m && typeof m[1] === "string") {
+                const num = parseInt(m[1], 10);
+                if (num > maxNum) {
+                  maxNum = num;
+                }
+              }
+            }
+            const nextNum = maxNum + 1;
+            const ext = match[2];
+            const newFileName = `${targetId} M-${nextNum}.${ext}`;
+            
+            const oldPath = path.join(avaDir, finalAvatar);
+            const newPath = path.join(avaDir, newFileName);
+            
+            if (fs.existsSync(oldPath)) {
+              fs.renameSync(oldPath, newPath);
+              console.log(`[Avatar Rename] Đã đổi tên avatar: ${finalAvatar} -> ${newFileName}`);
+              finalAvatar = newFileName;
+            }
+          }
+        } catch (e) {
+          console.error("Lỗi khi tự động đổi tên file avatar VIP:", e);
+        }
+      }
+      player.playerAvatar = finalAvatar;
     } else {
       delete player.playerAvatar;
     }
@@ -4534,6 +4582,27 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       ctx.io.to(`wolves_${roomId}`).emit("stickerPlaced", newSticker);
     } else if (newSticker.channel === "lovers" && isLover) {
       ctx.io.to(`lovers_${roomId}`).emit("stickerPlaced", newSticker);
+    }
+  });
+
+  socket.on("placePlayerMessage", ({ roomId, message }: { roomId: string; message: { id: string; text: string; channel: "wolf" | "lovers"; createdAt: number } }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (room.gameOver || room.phase !== "night") return;
+
+    const isWolf = isWolfAlignedPlayer(room, clientId);
+    const isLover = isLovePairMember(room, clientId);
+    if (!isWolf && !isLover) return;
+
+    const newMessage = {
+      ...message,
+      senderId: clientId
+    };
+
+    if (newMessage.channel === "wolf" && isWolf) {
+      ctx.io.to(`wolves_${roomId}`).emit("playerMessagePlaced", newMessage);
+    } else if (newMessage.channel === "lovers" && isLover) {
+      ctx.io.to(`lovers_${roomId}`).emit("playerMessagePlaced", newMessage);
     }
   });
 
@@ -4763,7 +4832,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const voters = getTrialVoters(room);
     if (!voters.includes(clientId)) return;
 
-    if (room.trialVerdictDeadline && Date.now() >= room.trialVerdictDeadline) return;
+    if (!room.dayPaused && room.trialVerdictDeadline && Date.now() >= room.trialVerdictDeadline) return;
 
     room.trialVotes = room.trialVotes || {};
     if (vote !== "live" && vote !== "die") {
@@ -5273,6 +5342,14 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       targetIds: [targetId],
     });
 
+    const ctx = getServerContext();
+    if (ctx) {
+      if (room.hostId) {
+        ctx.io.to(room.hostId).emit("witchPotionEffectTriggered", { targetId, type: "heal" });
+      }
+      socket.emit("witchPotionEffectTriggered", { targetId, type: "heal" });
+    }
+
     emitWitchPendingDeath(roomId);
     emitHostNightActionProgress(roomId);
   });
@@ -5317,6 +5394,15 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       actorIds: [clientId],
       targetIds: [targetId],
     });
+
+    const ctx2 = getServerContext();
+    if (ctx2) {
+      if (room.hostId) {
+        ctx2.io.to(room.hostId).emit("witchPotionEffectTriggered", { targetId, type: "poison" });
+      }
+      socket.emit("witchPotionEffectTriggered", { targetId, type: "poison" });
+    }
+
     emitHostNightActionProgress(roomId);
 
     const targetRole = room.playerRoles?.[targetId];

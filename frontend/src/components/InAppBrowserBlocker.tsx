@@ -237,7 +237,6 @@ export default function InAppBrowserBlocker() {
           {/* Main action button */}
           <button
             onClick={handleOpenBrowser}
-            className="button-gradient visible"
             style={{
               width: '100%',
               height: '50px',
@@ -340,7 +339,8 @@ export default function InAppBrowserBlocker() {
               position: 'fixed',
               inset: 0,
               zIndex: 26,
-              backgroundColor: 'rgba(0, 0, 0, 0.85)',
+              backgroundColor: 'rgba(0, 0, 0, 0.65)',
+              backdropFilter: "blur(4px)",
               pointerEvents: 'auto',
             }}
             onClick={() => setShowIOSHint(false)}
@@ -389,7 +389,7 @@ export default function InAppBrowserBlocker() {
                   cursor: 'pointer',
                 }}
               >
-                Tôi đã hiểu
+                OK~
               </button>
             </div>
 
@@ -427,7 +427,7 @@ export default function InAppBrowserBlocker() {
                   boxShadow: '0 4px 15px rgba(255, 152, 0, 0.4)',
                 }}
               >
-                Nhấn ở đây nè!
+                Ấn ở đây nè
               </div>
               <svg
                 width="48"

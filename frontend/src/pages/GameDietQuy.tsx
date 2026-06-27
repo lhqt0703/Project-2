@@ -5,11 +5,16 @@ import { useRoomContext } from "../context/RoomContext";
 import PlayerPositions, { AVA_IMAGES, getAvatarUrlByFileName } from "../components/PlayerPositions";
 import GameLogPanel from "../components/GameLogPanel";
 import ConfirmModal from "../components/ConfirmModal";
-import RoleCharacterPortrait from "../components/RoleCharacterPortrait";
+import RoleCharacterPortrait, { HYBRID_BACKGROUND_ASSET } from "../components/RoleCharacterPortrait";
 import type { GamePhase } from "./gameRoles/socketEvents";
+import type { NightActionRole } from "../context/RoomContext";
+import { ELEMENTAL_ROLE_SET } from "../constants/elemental";
 import { useGameSocketSync } from "./gameRoles/useGameSocketSync";
 import { useDayVoteRole } from "./gameRoles/useDayVoteRole";
+import { useMock8Test } from "./gameRoles/useMock8Test";
 import { useDietQuyRole } from "./gameRoles/useDietQuyRole";
+import angleCircleLeftSvg from "../assets/angle-circle-left.svg";
+import angleCircleRightSvg from "../assets/angle-circle-right.svg";
 import { ScoreboardModal } from "../components/ScoreboardModal";
 import RoleCard3D from "../components/RoleCard3D";
 import Masonry from "../components/Masonry";
@@ -19,27 +24,37 @@ import ChieuBg from "../assets/nền chiều.avif";
 import { gsap } from "gsap";
 import { GameRoleStatusBar } from "../components/GameRoleStatusBar";
 import medalSvg from "../assets/medal.svg";
-import angleCircleLeftSvg from "../assets/angle-circle-left.svg";
-import angleCircleRightSvg from "../assets/angle-circle-right.svg";
+import trashIcon from "../assets/trash-x.svg";
 import GridMotionOverlay from "../components/GridMotionOverlay";
 import RoleCompanionOverlay from "../components/RoleCompanionOverlay";
 import { AvifIcon } from "../components/AvifIcon";
 import { CountdownButton } from "../components/CountdownButton";
 import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
+import StickerPeel from "../components/StickerPeel";
+import { getStickerUrlByFileName } from "../utils/stickerAssets";
+import { VIP_REAL_NAMES } from "../constants/vip";
 
-
-const VIP_REAL_NAMES: Record<string, string> = {
-  "046fa88a-a719-47c3-8b97-ddfc8337cf83": "Phúc 🍫",
-  "f7d9652f-ac74-4557-81a2-7c2731a77d37": "Din Phạm",
-  "397d9740-e21b-4ade-941f-25912aefd591": "Hà Việt",
-  "client_1780242307126_pmozg54dmra": "San",
-  "client_1780242348813_swid1tk0trh": "Huythuhai",
-  "8dfc1d63-988f-460d-8569-8a1964be99a0": "Cường",
-  "ec0c6c66-9ce7-4d86-ac12-25824af15b79": "Việt Thắng",
-  "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd": "Duy"
+const DIET_QUY_DIET_QUY_ROLE_SKILL_HINTS: Record<string, string> = {
+  "Thợ giặt": "Hãy chờ Quản trò gửi thông tin về 1 vai trò Dân làng của 1 trong 2 người chơi",
+  "Thủ thư": "Hãy chờ Quản trò gửi thông tin về 1 vai trò Tay sai của 1 trong 2 người chơi (hoặc không có)",
+  "Điều tra viên": "Hãy chờ Quản trò gửi thông tin về 1 vai trò Ác quỷ của 1 trong 2 người chơi",
+  "Đầu bếp": "Hãy chờ Quản trò gửi thông tin số lượng cặp người chơi xấu ngồi cạnh nhau",
+  "Đồng cảm": "Hãy chờ Quản trò gửi thông tin số lượng người chơi xấu ngồi sát cạnh bạn",
+  "Thầy bói": "Chọn đúng 2 người chơi trên vòng tròn để kiểm tra xem có ai là Quỷ không",
+  "Chôn cất": "Hãy chờ Quản trò gửi thông tin về vai trò thực sự của người vừa bị treo cổ ban ngày",
+  "Nhà sư": "Chọn một người chơi khác mà bạn muốn bảo vệ khỏi sự tấn công của Ác Quỷ đêm nay hoặc không hành động để bỏ qua",
+  "Nuôi quạ": "Chọn một người chơi để tìm hiểu vai trò thực sự của họ nếu bạn bị chết trong đêm nay",
+  "Trinh nữ": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
+  "Diệt quỷ": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
+  "Chiến sĩ": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
+  "Thị trưởng": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
+  "Độc thủ": "Chọn một người chơi để đầu độc kỹ năng của họ trong đêm nay hoặc không hành động để bỏ qua",
+  "Gián điệp": "Hãy xem toàn bộ danh sách vai trò hiện tại (tất cả mọi người) trên màn hình của bạn",
+  "Phò": "Chọn một người chơi để quyến rũ họ, bảo vệ họ khỏi Ác quỷ hoặc chặn kỹ năng của họ đêm nay",
+  "Ác Quỷ": "Chọn cắn một người chơi đêm nay để tiêu diệt họ hoặc không hành động để bỏ qua",
+  "Người ẩn dật": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
+  "Thánh nhân": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu"
 };
-
-type TargetRoleDisplayOrder = "player-role" | "role-player";
 
 const renderInfoCard = (text: string) => (
   <div 
@@ -68,35 +83,70 @@ const renderInfoCard = (text: string) => (
   </div>
 );
 
-const DIET_QUY_ROLE_SKILL_HINTS: Record<string, string> = {
-  "Thợ giặt": "Hãy chờ Quản trò gửi thông tin về 1 vai trò Dân làng của 1 trong 2 người chơi",
-  "Thủ thư": "Hãy chờ Quản trò gửi thông tin về 1 vai trò Tay sai của 1 trong 2 người chơi (hoặc không có)",
-  "Điều tra viên": "Hãy chờ Quản trò gửi thông tin về 1 vai trò Ác quỷ của 1 trong 2 người chơi",
-  "Đầu bếp": "Hãy chờ Quản trò gửi thông tin số lượng cặp người chơi xấu ngồi cạnh nhau",
-  "Đồng cảm": "Hãy chờ Quản trò gửi thông tin số lượng người chơi xấu ngồi sát cạnh bạn",
-  "Thầy bói": "Chọn đúng 2 người chơi trên vòng tròn để kiểm tra xem có ai là Quỷ không",
-  "Chôn cất": "Hãy chờ Quản trò gửi thông tin về vai trò thực sự của người vừa bị treo cổ ban ngày",
-  "Nhà sư": "Chọn một người chơi khác mà bạn muốn bảo vệ khỏi sự tấn công của Ác Quỷ đêm nay hoặc không hành động để bỏ qua",
-  "Nuôi quạ": "Chọn một người chơi để tìm hiểu vai trò thực sự của họ nếu bạn bị chết trong đêm nay",
-  "Trinh nữ": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
-  "Diệt quỷ": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
-  "Chiến sĩ": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
-  "Thị trưởng": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
-  "Độc thủ": "Chọn một người chơi để đầu độc kỹ năng của họ trong đêm nay hoặc không hành động để bỏ qua",
-  "Gián điệp": "Hãy xem toàn bộ danh sách vai trò hiện tại (tất cả mọi người) trên màn hình của bạn",
-  "Phò": "Chọn một người chơi để quyến rũ họ, bảo vệ họ khỏi Ác quỷ hoặc chặn kỹ năng của họ đêm nay",
-  "Ác Quỷ": "Chọn cắn một người chơi đêm nay để tiêu diệt họ hoặc không hành động để bỏ qua",
-  "Người ẩn dật": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
-  "Thánh nhân": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu"
-};
+const HUNTER_BULLET_ANIM_MS = 4000;
+type TargetRoleDisplayOrder = "player-role" | "role-player";
 
 export default function GameDietQuy() {
-  const { role, room, setRoom } = useRoomContext();
+  const { role: contextRole, room, setRoom } = useRoomContext();
   const nav = useNavigate();
   const location = useLocation();
-  const query = new URLSearchParams(location.search);
+  const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const roomId = query.get("roomId");
+  const [roleOverride, setRoleOverride] = useState<string | null>("Thần tình yêu");
+  const role = roomId === "mock-8" ? roleOverride : contextRole;
+  const debugAnim = query.get("debugAnim") === "1";
+  const [windowDimensions, setWindowDimensions] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight,
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+    };
+  }, []);
+
   const sync = useGameSocketSync({ roomId, setRoom });
+  const [dismissedStickerIds, setDismissedStickerIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setDismissedStickerIds([]);
+  }, [sync.phase]);
+
+  const handleSendPlayerMessage = useCallback((text: string, channel: "wolf" | "lovers") => {
+    if (roomId === "mock-8") {
+      const id = Math.random().toString(36).substring(2, 9);
+      const msg = {
+        id,
+        senderId: clientId || "me",
+        text,
+        channel,
+        createdAt: Date.now()
+      };
+      sync.setPlayerMessages((prev: any) => [...prev, msg]);
+      return;
+    }
+
+    const id = Math.random().toString(36).substring(2, 9);
+    socket.emit("placePlayerMessage", {
+      roomId,
+      message: {
+        id,
+        text,
+        channel,
+        createdAt: Date.now()
+      }
+    });
+  }, [roomId, clientId, sync]);
   const phase: GamePhase = sync.phase;
   const isDusk = phase === "dusk";
   const isDayDiscussion =
@@ -109,12 +159,190 @@ export default function GameDietQuy() {
   const isPositionEditor = !!room?.positionEditors?.includes(clientId);
   const canControlTrialFlow = isHost || isPositionEditor;
   const isCurrentPlayerDead = !!clientId && deadPlayers.includes(clientId);
-  const isCurrentPlayerDeadForNightActions = isCurrentPlayerDead;
-  const deadPlayersForNightActions = deadPlayers;
-  const shouldBlockDeadNightRoleReveal = phase === "night" && isCurrentPlayerDeadForNightActions;
-  const shouldHidePlayerRoleText = !isHost && (!!room?.hidePlayerRoleText || shouldBlockDeadNightRoleReveal);
+  const isCurrentPlayerHiddenRevived = sync.angelReviveState.reviveStage === "hidden";
+  const isCurrentPlayerDeadForNightActions = isCurrentPlayerDead && !isCurrentPlayerHiddenRevived;
 
+  const handleSelectSticker = useCallback((filename: string, channel: "wolf" | "lovers", event?: React.MouseEvent | React.TouchEvent | null) => {
+    const id = `sticker-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    const isStaticPaste = !event; // Nếu không có event -> dán tĩnh luôn (click/tap nhanh)
+
+    let xPct = 0.5;
+    let yPct = 0.5;
+    let clientX = windowDimensions.width / 2;
+    let clientY = windowDimensions.height / 2;
+
+    if (event) {
+      const nativeEvent = 'nativeEvent' in event ? event.nativeEvent : event;
+      if ('touches' in nativeEvent) {
+        const touches = (nativeEvent as TouchEvent).touches;
+        if (touches && touches.length > 0) {
+          clientX = touches[0].clientX;
+          clientY = touches[0].clientY;
+        }
+      } else if ('clientX' in nativeEvent) {
+        clientX = (nativeEvent as MouseEvent).clientX;
+        clientY = (nativeEvent as MouseEvent).clientY;
+      }
+
+      const frameEl = document.querySelector(".player-position-frame");
+      const frameRect = frameEl ? frameEl.getBoundingClientRect() : null;
+      const stickerWidth = 100;
+
+      if (frameRect) {
+        const absX = clientX - frameRect.left - stickerWidth / 2;
+        const absY = clientY - frameRect.top - stickerWidth / 2;
+        xPct = absX / frameRect.width;
+        yPct = absY / frameRect.height;
+      } else {
+        const absX = clientX - stickerWidth / 2;
+        const absY = clientY - stickerWidth / 2;
+        xPct = absX / windowDimensions.width;
+        yPct = absY / windowDimensions.height;
+      }
+    }
+
+    const rotate = Math.floor(Math.random() * 40 - 20);
+    const createdAt = Date.now();
+
+    const sticker: any = {
+      id,
+      imageSrc: filename,
+      x: xPct,
+      y: yPct,
+      rotate,
+      channel,
+      createdAt,
+      owner: clientId,
+      isPasted: isStaticPaste,
+      pastedAt: isStaticPaste ? Date.now() : undefined
+    };
+
+    if (event) {
+      sticker.startDragEvent = 'nativeEvent' in event ? event.nativeEvent : event;
+    }
+
+    // Always update local state for fast UI response
+    sync.setStickers((prev: any) => [...prev, sticker]);
+
+    if (roomId === "mock-8") {
+      return;
+    }
+
+    socket.emit("placeSticker", {
+      roomId,
+      sticker: {
+        id,
+        imageSrc: filename,
+        x: xPct,
+        y: yPct,
+        rotate,
+        channel,
+        createdAt,
+        isPasted: isStaticPaste,
+        pastedAt: isStaticPaste ? Date.now() : undefined
+      }
+    });
+  }, [roomId, sync, clientId, windowDimensions]);
+
+  const handleDragUpdateSticker = useCallback((
+    stickerId: string, 
+    xPct: number, 
+    yPct: number, 
+    channel: "wolf" | "lovers", 
+    isPasted?: boolean, 
+    pastedAt?: number, 
+    rotate?: number
+  ) => {
+    // Always update local state for fast UI response
+    sync.setStickers((prev: any) =>
+      prev.map((s: any) => (s.id === stickerId ? { ...s, x: xPct, y: yPct, isPasted: isPasted ?? s.isPasted, pastedAt: pastedAt ?? s.pastedAt, rotate: rotate ?? s.rotate } : s))
+    );
+
+    if (roomId === "mock-8") {
+      return;
+    }
+
+    socket.emit("moveSticker", {
+      roomId,
+      stickerId,
+      x: xPct,
+      y: yPct,
+      channel,
+      isPasted,
+      pastedAt,
+      rotate
+    });
+  }, [roomId, sync]);
+
+  const handleDragStartSticker = useCallback((stickerId: string, channel: "wolf" | "lovers") => {
+    // Set isPasted to false locally
+    sync.setStickers((prev: any) =>
+      prev.map((s: any) => (s.id === stickerId ? { ...s, isPasted: false } : s))
+    );
+
+    if (roomId === "mock-8") {
+      return;
+    }
+
+    const sticker = sync.stickers.find((s: any) => s.id === stickerId);
+    if (!sticker) return;
+
+    socket.emit("moveSticker", {
+      roomId,
+      stickerId,
+      x: sticker.x,
+      y: sticker.y,
+      channel,
+      isPasted: false,
+      rotate: sticker.rotate
+    });
+  }, [roomId, sync]);
+
+  const handleDeleteSticker = useCallback((stickerId: string, channel: "wolf" | "lovers") => {
+    // Always update local state for fast UI response
+    sync.setStickers((prev: any) => prev.filter((s: any) => s.id !== stickerId));
+
+    if (roomId === "mock-8") {
+      return;
+    }
+
+    socket.emit("deleteSticker", {
+      roomId,
+      stickerId,
+      channel
+    });
+  }, [roomId, sync]);
+  const shouldForceHideAngelReviveIdentity =
+    phase === "day" &&
+    isCurrentPlayerDead &&
+    !sync.gameEnded &&
+    (role === "Thiên Sứ" || sync.angelReviveState.reviveStage === "pending");
+  const deadPlayersForNightActions = useMemo(
+    () => (isCurrentPlayerHiddenRevived && clientId ? deadPlayers.filter((id) => id !== clientId) : deadPlayers),
+    [deadPlayers, isCurrentPlayerHiddenRevived]
+  );
+  const shouldBlockDeadNightRoleReveal = phase === "night" && isCurrentPlayerDeadForNightActions;
+  const shouldHidePlayerRoleText = !isHost && (!!room?.hidePlayerRoleText || shouldBlockDeadNightRoleReveal || shouldForceHideAngelReviveIdentity);
+  const allNightActionsSimultaneous = room?.gameRules?.allNightActionsSimultaneous === true;
+  const isBanSoiAligned = room?.banSoiWolfAligned === true;
+  const isWildWolfConverted = room?.wildWolfConvertedSelf === true;
+  const isBanSoiOrWildConverted = isBanSoiAligned || isWildWolfConverted;
+  const shouldRevealHunterShotInDay = room?.gameRules?.hunterShotPublicInDay !== false;
+  const currentNightTurnRole = (room?.nightTurnRole || null) as NightActionRole | null;
+  const nightTurnPaused = !!room?.nightTurnPaused;
+  const nightTurnDeadline = room?.nightTurnDeadline ?? null;
+  const nightTurnRemainingMs = room?.nightTurnRemainingMs ?? null;
+  const serverTimeOffset = useMemo(() => {
+    if (!room?.serverTime) return 0;
+    return room.serverTime - Date.now();
+  }, [room?.serverTime]);
+  const [nightTurnNow, setNightTurnNow] = useState(() => Date.now() + serverTimeOffset);
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
+  const [isNightInfoVisible, setIsNightInfoVisible] = useState(true);
+  const [draggingStickerId, setDraggingStickerId] = useState<string | null>(null);
+  const [isOverTrash, setIsOverTrash] = useState(false);
+  const [cardFlippedToFront, setCardFlippedToFront] = useState(false);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const [scoreboardOpen, setScoreboardOpen] = useState(false);
   const [hostPlayerActionTargetId, setHostPlayerActionTargetId] = useState<string | null>(null);
@@ -169,10 +397,10 @@ export default function GameDietQuy() {
         return false;
       }
       if (avatarTab === "masked") {
-        return fileName.startsWith("M ");
+        return fileName.includes("M-") || fileName.startsWith("M ");
       }
       if (avatarTab === "normal") {
-        return !fileName.startsWith("M ");
+        return !fileName.includes("M-") && !fileName.startsWith("M ");
       }
       return true;
     });
@@ -193,20 +421,48 @@ export default function GameDietQuy() {
     if (!room || clientId !== room.hostId || !socket) return;
     try {
       const customAvatars = JSON.parse(localStorage.getItem("game-custom-avatars") || "{}");
+      let changed = false;
       room.players.forEach((p) => {
         const savedAvatar = customAvatars[p.id];
-        if (savedAvatar && p.playerAvatar !== savedAvatar) {
-          socket.emit("hostSetPlayerAvatar", {
-            roomId: room.id,
-            targetId: p.id,
-            playerAvatar: savedAvatar,
-          });
+        if (savedAvatar) {
+          if (p.playerAvatar !== savedAvatar) {
+            const isUnknownSaved = /^M unknownID \d+/i.test(savedAvatar);
+            const isAssignedServer = (p.playerAvatar || "").includes("M-");
+            if (isUnknownSaved && isAssignedServer) {
+              customAvatars[p.id] = p.playerAvatar;
+              changed = true;
+            } else {
+              socket.emit("hostSetPlayerAvatar", {
+                roomId: room.id,
+                targetId: p.id,
+                playerAvatar: savedAvatar,
+              });
+            }
+          }
         }
       });
+      if (changed) {
+        localStorage.setItem("game-custom-avatars", JSON.stringify(customAvatars));
+      }
     } catch (e) {
       console.error("Lỗi đồng bộ avatar từ localStorage:", e);
     }
   }, [room?.players, room?.id, clientId, socket]);
+
+  // Tự động đồng bộ ảnh đại diện cá nhân của chính người chơi lên server
+  useEffect(() => {
+    if (!room || !socket) return;
+    const myPlayer = room.players.find(p => p.id === clientId);
+    const mySavedAvatar = localStorage.getItem("werewolfPlayerAvatar");
+    if (myPlayer && mySavedAvatar && myPlayer.playerAvatar !== mySavedAvatar) {
+      socket.emit("hostSetPlayerAvatar", {
+        roomId: room.id,
+        targetId: clientId,
+        playerAvatar: mySavedAvatar
+      });
+    }
+  }, [room?.players, room?.id, clientId, socket]);
+
   const [targetRoleDisplayOrderByPlayerId, setTargetRoleDisplayOrderByPlayerId] = useState<Record<string, TargetRoleDisplayOrder>>({});
   const [hostRuleEliminateTargetId, setHostRuleEliminateTargetId] = useState<string | null>(null);
   const [hostDisconnected, setHostDisconnected] = useState(false);
@@ -248,7 +504,6 @@ export default function GameDietQuy() {
   const [masonryComplete, setMasonryComplete] = useState(false);
   const prevPhaseRef = useRef<string | null>(null);
   const isSelectingLocally = useRef(false);
-  const [cardFlippedToFront, setCardFlippedToFront] = useState(false);
 
   useEffect(() => {
     if (phase === "dusk") {
@@ -329,7 +584,7 @@ export default function GameDietQuy() {
   const lastGameLogCountRef = useRef<number>(0);
   const lastTrialVotesRef = useRef<Record<string, "live" | "die" | null> | null>(null);
   const lastTrialVerdictHighlightSeqRef = useRef<number>(0);
-
+  
   const clearVerdictHighlight = useCallback(() => {
     setAutoTrialHighlight(null);
     setAutoTrialHighlightSuppressed(false);
@@ -404,7 +659,7 @@ export default function GameDietQuy() {
     }
 
     const highlightPayload = {
-      primaryId: targetId,
+      primaryId: null,
       secondaryIds: liveVoterIds,
       dangerIds: dieVoterIds,
     };
@@ -445,6 +700,192 @@ export default function GameDietQuy() {
   }, [clearVerdictHighlight, sync.gameLogNights]);
 
   const canViewLog = room?.isReplay === true || (!isDusk && (isHost || phase === "day" || !!sync.gameEnded));
+  const canViewRoles = isHost || !!sync.gameEnded;
+
+  useEffect(() => {
+    if (phase !== "night") return;
+    if (nightTurnPaused) return;
+    setNightTurnNow(Date.now() + serverTimeOffset);
+    const t = setInterval(() => setNightTurnNow(Date.now() + serverTimeOffset), 1000);
+    return () => clearInterval(t);
+  }, [nightTurnPaused, phase, serverTimeOffset]);
+
+  const isSimultaneousNight = phase === "night" && allNightActionsSimultaneous;
+
+  const witchBonusApplies = useMemo(() => {
+    const rules = room?.gameRules;
+    if (!rules) return false;
+    const nonWolf = rules.nonWolfNightActionDurationSec || 0;
+    const wolf = rules.wolfNightActionDurationSec || 0;
+    return nonWolf > 0 && wolf === nonWolf;
+  }, [room?.gameRules]);
+
+  const witchBonusNeedsUsablePotion = room?.gameRules?.witchBonusTimeRequiresUsablePotion !== false;
+  const witchHasUsablePotion = !(
+    sync.witchPotions?.healUsed === true &&
+    sync.witchPotions?.poisonUsed === true
+  );
+  const myNightActionExtraMs = useMemo(() => {
+    if (!clientId) return 0;
+    const value = room?.nightActionExtraTimeMsByPlayerId?.[clientId] || 0;
+    return Math.max(0, Math.floor(value));
+  }, [room?.nightActionExtraTimeMsByPlayerId]);
+  const baseWolfDeadline = room?.wolfDeadline ?? sync.wolfDeadline ?? null;
+
+  const isWolfTeamRole =
+    role === "Độc thủ" ||
+    role === "Gián điệp" ||
+    role === "Phò" ||
+    role === "Ác Quỷ";
+
+  const myWolfDeadline = useMemo(() => {
+    if (!isSimultaneousNight) return baseWolfDeadline;
+    const activeBaseDeadline = baseWolfDeadline ?? nightTurnDeadline ?? null;
+    if (!activeBaseDeadline) return null;
+    return activeBaseDeadline + myNightActionExtraMs;
+  }, [baseWolfDeadline, isSimultaneousNight, myNightActionExtraMs, nightTurnDeadline]);
+
+  const mySimultaneousDeadline = useMemo(() => {
+    if (!isSimultaneousNight) return null;
+    if (!role) return null;
+    if (role === "Bán sói" && !isBanSoiOrWildConverted) return null;
+    if (!NIGHT_ACTION_ROLE_SET.has(role) && !ELEMENTAL_ROLE_SET.has(role)) return null;
+
+    if (isWolfTeamRole) return myWolfDeadline;
+    if (role === "Linh sói") {
+      if (!sync.spiritWolfDecisionTargetId) return null;
+      const spiritBaseDeadline = room ? room.spiritWolfDecisionDeadline ?? null : sync.spiritWolfDecisionDeadline ?? null;
+      if (!spiritBaseDeadline) return null;
+      return spiritBaseDeadline + myNightActionExtraMs;
+    }
+
+    const baseDeadline = nightTurnDeadline ?? null;
+    if (!baseDeadline) return null;
+    let deadline = baseDeadline + myNightActionExtraMs;
+    if (
+      role === "Phù thủy" &&
+      witchBonusApplies &&
+      (!witchBonusNeedsUsablePotion || witchHasUsablePotion)
+    ) {
+      deadline += 10_000;
+    }
+    return deadline;
+  }, [
+    isBanSoiOrWildConverted,
+    isSimultaneousNight,
+    isWolfTeamRole,
+    myNightActionExtraMs,
+    myWolfDeadline,
+    nightTurnDeadline,
+    role,
+    room?.spiritWolfDecisionDeadline,
+    sync.spiritWolfDecisionDeadline,
+    sync.spiritWolfDecisionTargetId,
+    witchBonusApplies,
+    witchBonusNeedsUsablePotion,
+    witchHasUsablePotion,
+  ]);
+
+
+  const isSequentialNight = phase === "night" && !allNightActionsSimultaneous;
+
+  const nightTurnRemainingSec = useMemo(() => {
+    if (!isSequentialNight || !currentNightTurnRole) return null;
+    if (nightTurnPaused) {
+      if (nightTurnRemainingMs == null) return null;
+      return Math.max(0, Math.ceil(nightTurnRemainingMs / 1000));
+    }
+    if (!nightTurnDeadline) return null;
+    return Math.max(0, Math.ceil((nightTurnDeadline - nightTurnNow) / 1000));
+  }, [currentNightTurnRole, isSequentialNight, nightTurnDeadline, nightTurnNow, nightTurnPaused, nightTurnRemainingMs]);
+
+  const simultaneousRemainingSec = useMemo(() => {
+    if (!isSimultaneousNight) return null;
+    if (nightTurnPaused) {
+      if (nightTurnRemainingMs == null) return null;
+      return Math.max(0, Math.ceil(nightTurnRemainingMs / 1000));
+    }
+    if (!mySimultaneousDeadline) return null;
+    return Math.max(0, Math.ceil((mySimultaneousDeadline - nightTurnNow) / 1000));
+  }, [isSimultaneousNight, mySimultaneousDeadline, nightTurnNow, nightTurnPaused, nightTurnRemainingMs]);
+
+  const isRoomSimultaneousCountdownExpired = useMemo(() => {
+    if (!isSimultaneousNight || nightTurnPaused) return false;
+    if (!nightTurnDeadline) return false;
+    return nightTurnDeadline <= nightTurnNow;
+  }, [isSimultaneousNight, nightTurnPaused, nightTurnDeadline, nightTurnNow]);
+
+  const canHostToggleNightTimer = useMemo(() => {
+    if (phase !== "night" || !!sync.gameEnded) return false;
+    if (isSequentialNight) return !!currentNightTurnRole;
+    if (!allNightActionsSimultaneous) return false;
+    const wolfDeadline = room?.wolfDeadline ?? sync.wolfDeadline ?? null;
+    const spiritDeadline = room?.spiritWolfDecisionDeadline ?? sync.spiritWolfDecisionDeadline ?? null;
+    return nightTurnPaused || !!nightTurnDeadline || !!wolfDeadline || !!spiritDeadline;
+  }, [
+    allNightActionsSimultaneous,
+    currentNightTurnRole,
+    isSequentialNight,
+    nightTurnDeadline,
+    nightTurnPaused,
+    phase,
+    room?.spiritWolfDecisionDeadline,
+    room?.wolfDeadline,
+    sync.gameEnded,
+    sync.spiritWolfDecisionDeadline,
+    sync.wolfDeadline,
+  ]);
+
+  const isSeerTurnActive = useMemo(() => {
+    if (phase !== "night") return false;
+    if (allNightActionsSimultaneous) return true;
+    return currentNightTurnRole === "Tiên tri";
+  }, [allNightActionsSimultaneous, currentNightTurnRole, phase]);
+
+  const doesNightTurnMatchMyRole = useMemo(() => {
+    if (!currentNightTurnRole) return false;
+    if (currentNightTurnRole === "Sói") return isWolfTeamRole;
+    if (role === "Bán sói" && !isBanSoiOrWildConverted) return false;
+    return role === currentNightTurnRole;
+  }, [currentNightTurnRole, isBanSoiOrWildConverted, isWolfTeamRole, role]);
+
+  const isNightActionTimeExpired = useMemo(() => {
+    if (phase !== "night" || sync.gameEnded) return false;
+    if (isSequentialNight) {
+      if (!doesNightTurnMatchMyRole) return false;
+      return nightTurnRemainingSec !== null && nightTurnRemainingSec <= 0;
+    } else {
+      if (mySimultaneousDeadline) {
+        return simultaneousRemainingSec !== null && simultaneousRemainingSec <= 0;
+      }
+      return isRoomSimultaneousCountdownExpired;
+    }
+  }, [
+    phase,
+    sync.gameEnded,
+    isSequentialNight,
+    doesNightTurnMatchMyRole,
+    nightTurnRemainingSec,
+    mySimultaneousDeadline,
+    simultaneousRemainingSec,
+    isRoomSimultaneousCountdownExpired,
+  ]);
+
+  useEffect(() => {
+    if (phase !== "night") {
+      setIsNightInfoVisible(true);
+      return;
+    }
+    if (isNightActionTimeExpired) {
+      setIsNightInfoVisible(false);
+    } else {
+      setIsNightInfoVisible(true);
+    }
+  }, [isNightActionTimeExpired, phase]);
+
+  const hasSecretConditionalRolePrompt =
+    !!sync.spiritWolfDecisionTargetId &&
+    (allNightActionsSimultaneous || currentNightTurnRole === "Linh sói");
 
   useEffect(() => {
     if (!roomId) return;
@@ -641,8 +1082,11 @@ export default function GameDietQuy() {
     if (!isHost && sync.gameEnded && frozenRoomSnapshot) {
       return (frozenRoomSnapshot.deadPlayers || []) as string[];
     }
+    if (isCurrentPlayerHiddenRevived && clientId) {
+      return deadPlayers.filter((id) => id !== clientId);
+    }
     return deadPlayers;
-  }, [deadPlayers, frozenRoomSnapshot, isHost, sync.gameEnded]);
+  }, [deadPlayers, frozenRoomSnapshot, isCurrentPlayerHiddenRevived, isHost, sync.gameEnded]);
 
   const playerNamesById = useMemo(() => {
     const map: Record<string, string> = {};
@@ -662,46 +1106,190 @@ export default function GameDietQuy() {
     return map;
   }, [roomForDisplay?.players]);
 
+  const logPanel = canViewLog ? (
+    <GameLogPanel
+      nights={sync.gameLogNights || []}
+      rolesByPlayerId={sync.revealedRolesByPlayerId || {}}
+      playerNamesById={playerNamesById}
+      playerRealNamesById={playerRealNamesById}
+      viewMode={viewMode}
+      onViewModeChange={handleViewModeChange}
+      targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
+      onHighlightPlayer={handleLogHighlightPlayer}
+      canViewNightLogs={true}
+      isHost={isHost}
+      myPlayerId={clientId || undefined}
+      myRole={role || undefined}
+      loveState={sync.loveState}
+      wolves={sync.wolves}
+      wolfBadgeRoles={sync.wolfBadgeRolesByPlayerId}
+      gameRules={room?.gameRules}
+      gameEnded={!!sync.gameEnded}
+      isReplay={room?.isReplay}
+    />
+  ) : null;
+
+  const visibleLoveRoleBadges = useMemo(() => {
+    if (!clientId) return {};
+    const partnerId = sync.loveState.partnerId;
+    if (!partnerId || !sync.loveState.pairIds.includes(clientId)) return {};
+    if (!sync.gameEnded) {
+      if (phase !== "night") return {};
+      if (!allNightActionsSimultaneous && !doesNightTurnMatchMyRole) return {};
+    }
+    const partnerRole = sync.loveState.rolesByPlayerId?.[partnerId];
+    return partnerRole ? { [partnerId]: partnerRole } : {};
+  }, [
+    allNightActionsSimultaneous,
+    doesNightTurnMatchMyRole,
+    phase,
+    sync.gameEnded,
+    sync.loveState.pairIds,
+    sync.loveState.partnerId,
+    sync.loveState.rolesByPlayerId,
+  ]);
+
+  const dayVoteWeightsByVoterId = useMemo(() => {
+    const publicRoles = roomForDisplay?.publicRevealedRolesByPlayerId || {};
+    const entries = Object.entries(publicRoles).filter(([, publicRole]) => publicRole === "Trưởng làng");
+    if (!entries.length) return undefined;
+    return Object.fromEntries(entries.map(([playerId]) => [playerId, 2]));
+  }, [roomForDisplay?.publicRevealedRolesByPlayerId]);
+
   const roomForRoles = useMemo(
     () =>
       room ??
       ({
         players: [],
+        wolfVotes: undefined,
+        wolfVotes2: undefined,
         deadPlayers: [],
         playerRoles: {},
       } as any),
     [room]
   );
 
-  const currentNightTurnPlayerId = room?.nightTurnPlayerId ?? null;
+  const [hunterBulletAnim, setHunterBulletAnim] = useState<
+    | {
+        fromPlayerId: string;
+        toPlayerId: string;
+        startedAt: number;
+        durationMs: number;
+        assetSrc?: string;
+        alt?: string;
+        rotationOffsetDeg?: number;
+        kind: "hunter" | "love";
+      }
+    | null
+  >(null);
+  const hunterBulletTimeoutRef = useRef<number | null>(null);
+  const lastHunterShotRef = useRef<{ hunterId: string; targetId: string } | null>(null);
+  const lastDayVoteNoticeSeqRef = useRef(0);
+  const lastTrialVerdictNoticeSeqRef = useRef(0);
 
-  const nightTurnPaused = room?.nightTurnPaused ?? false;
-  const nightTurnRemainingMs = room?.nightTurnRemainingMs ?? null;
-  const nightTurnDeadline = room?.nightTurnDeadline ?? null;
-  const serverTimeOffset = useMemo(() => {
-    if (!room?.serverTime) return 0;
-    return room.serverTime - Date.now();
-  }, [room?.serverTime]);
+  const playHunterShotAnim = useCallback((
+    hunterId: string,
+    targetId: string,
+    options?: { assetSrc?: string; alt?: string; rotationOffsetDeg?: number; kind?: "hunter" | "love" }
+  ) => {
+    if (!hunterId || !targetId || hunterId === targetId) return;
 
-  const [nightTurnNow, setNightTurnNow] = useState(() => Date.now() + serverTimeOffset);
+    if (hunterBulletTimeoutRef.current) {
+      window.clearTimeout(hunterBulletTimeoutRef.current);
+      hunterBulletTimeoutRef.current = null;
+    }
+
+    const duration = options?.kind === "love" ? 4400 : HUNTER_BULLET_ANIM_MS;
+
+    setHunterBulletAnim({
+      fromPlayerId: hunterId,
+      toPlayerId: targetId,
+      startedAt: performance.now(),
+      durationMs: duration,
+      assetSrc: options?.assetSrc,
+      alt: options?.alt,
+      rotationOffsetDeg: options?.rotationOffsetDeg,
+      kind: options?.kind ?? "hunter",
+    });
+
+    hunterBulletTimeoutRef.current = window.setTimeout(() => {
+      setHunterBulletAnim(null);
+      hunterBulletTimeoutRef.current = null;
+    }, duration);
+  }, []);
 
   useEffect(() => {
-    if (phase !== "night") return;
-    if (nightTurnPaused) return;
-    setNightTurnNow(Date.now() + serverTimeOffset);
-    const t = setInterval(() => setNightTurnNow(Date.now() + serverTimeOffset), 1000);
-    return () => clearInterval(t);
-  }, [nightTurnPaused, phase, serverTimeOffset]);
+    const shot = sync.hunterShot;
+    if (!shot?.hunterId || !shot?.targetId) return;
 
-  const nightTurnRemainingSec = useMemo(() => {
-    if (phase !== "night" || !currentNightTurnPlayerId) return null;
-    if (nightTurnPaused) {
-      if (nightTurnRemainingMs == null) return null;
-      return Math.max(0, Math.ceil(nightTurnRemainingMs / 1000));
+    lastHunterShotRef.current = { hunterId: shot.hunterId, targetId: shot.targetId };
+    if (phase === "day" && !shouldRevealHunterShotInDay) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      playHunterShotAnim(shot.hunterId, shot.targetId);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [phase, playHunterShotAnim, shouldRevealHunterShotInDay, sync.hunterShot, sync.hunterShotSeq]);
+
+  useEffect(() => {
+    const shot = sync.loveArrowShot;
+    if (!shot?.cupidId || !shot?.targetId) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      playHunterShotAnim(shot.cupidId, shot.targetId, {
+        assetSrc: encodeURI("/Mũi tên.svg"),
+        alt: "Mũi tên",
+        rotationOffsetDeg: -45,
+        kind: "love",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [playHunterShotAnim, sync.loveArrowShot, sync.loveArrowShotSeq]);
+
+  const mock8 = useMock8Test({
+    roomId,
+    room,
+    deadPlayers,
+    playHunterShotAnim,
+    setIsNightInfoVisible,
+    setCardFlippedToFront,
+    debugAnim,
+    roleOverride,
+    setRoleOverride,
+  });
+
+  const handleToggleNightInfoVisible = useCallback((visible: boolean | ((prev: boolean) => boolean)) => {
+    if (room?.id === "mock-8") {
+      // Danh sách các vai trò để kiểm thử giao diện
+      const TEST_ROLES = ["Thần tình yêu", "Phù thủy", "Sói Dại", "Tiên tri", "Bảo vệ", "Thợ săn"];
+      const currentRole = roleOverride || "Thần tình yêu";
+      const nextIndex = (TEST_ROLES.indexOf(currentRole) + 1) % TEST_ROLES.length;
+      const nextRole = TEST_ROLES[nextIndex]!;
+      setRoleOverride(nextRole);
+      // Luôn bật hiển thị để giao diện role mới được vẽ ra
+      setIsNightInfoVisible(true);
+      setCardFlippedToFront(true);
+    } else {
+      setIsNightInfoVisible(visible);
     }
-    if (!nightTurnDeadline) return null;
-    return Math.max(0, Math.ceil((nightTurnDeadline - nightTurnNow) / 1000));
-  }, [currentNightTurnPlayerId, phase, nightTurnDeadline, nightTurnNow, nightTurnPaused, nightTurnRemainingMs]);
+  }, [room?.id, roleOverride, setRoleOverride, setIsNightInfoVisible, setCardFlippedToFront]);
+
+  const deadPlayersOverrideForRender = useMemo(() => {
+    if (!hunterBulletAnim) return displayDeadPlayers;
+    const { fromPlayerId, toPlayerId } = hunterBulletAnim;
+    return displayDeadPlayers.filter((id) => id !== fromPlayerId && id !== toPlayerId);
+  }, [displayDeadPlayers, hunterBulletAnim]);
+
+  const shouldDelayConfirmModals =
+    phase === "day" && shouldRevealHunterShotInDay && hunterBulletAnim?.kind === "hunter";
+  const canShowConfirmModals = !shouldDelayConfirmModals;
+
+  const seerMaxChecksTonight = useMemo(() => {
+    const buff = sync.elementalBuffResult;
+    if (!buff || buff.buffId !== "seer-check-two") return 1;
+    if (buff.appliesNight !== room?.nightCount) return 1;
+    return 2;
+  }, [sync.elementalBuffResult, room?.nightCount]);
 
   const [dietQuyNightStartPlayerId, setDietQuyNightStartPlayerId] = useState<string | null>(null);
   const [selectedDirection, setSelectedDirection] = useState<"clockwise" | "counter_clockwise" | null>(null);
@@ -718,25 +1306,91 @@ export default function GameDietQuy() {
     }
   }, [phase]);
 
-  const dietQuy = useDietQuyRole({
+  const dayVote = useDayVoteRole({
     roomId,
     phase,
-    role,
     room: roomForRoles,
-    deadPlayers: deadPlayersForNightActions,
+    deadPlayers,
+    dayVotes: sync.dayVotes,
+    dayLocked: sync.dayLocked,
+    dayDiscussionDeadline: room?.dayDiscussionDeadline ?? sync.dayDiscussionDeadline,
+    dayDeadline: room?.dayDeadline ?? sync.dayDeadline,
+    dayVoters: sync.dayVoters,
+    trialTargetId: room?.trialTargetId ?? sync.trialTargetId,
+    trialStage: room?.trialStage ?? sync.trialStage,
+    trialDefenseDeadline: room?.trialDefenseDeadline ?? sync.trialDefenseDeadline,
+    trialVerdictDeadline: room?.trialVerdictDeadline ?? sync.trialVerdictDeadline,
+    trialInteractionCut: room?.trialInteractionCut ?? sync.trialInteractionCut,
+    trialInteractionActiveIds: room?.trialInteractionActiveIds ?? sync.trialInteractionActiveIds,
+    trialSelectedInteractorId: room?.trialSelectedInteractorId ?? sync.trialSelectedInteractorId,
+    trialSelectedInteractorIds: room?.trialSelectedInteractorIds ?? sync.trialSelectedInteractorIds,
+    trialInteractionSelectionLimit: room?.trialInteractionSelectionLimit ?? sync.trialInteractionSelectionLimit,
+    trialVotes: sync.trialVotes,
+    serverTimeOffset,
+    dayPaused: !!(room?.dayPaused ?? sync.dayPaused),
+    dayRemainingMs: room?.dayRemainingMs ?? sync.dayRemainingMs,
   });
 
+  const dietQuy = useDietQuyRole({ roomId, phase, role, room, deadPlayers });
+
+  const confirmSlayerAction = () => {
+    if (!roomId || !slayerTargetId) return;
+    socket.emit("dietQuySlayerAbility", { roomId, targetId: slayerTargetId });
+    setShowSlayerConfirm(false);
+    setSlayerSelectMode(false);
+    setSlayerTargetId(null);
+  };
+
   const hasVisibleActionPanel = useMemo(() => {
-    if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions) return false;
-    if (isHost) return false;
-    return room?.nightTurnPlayerId === clientId && room?.nightTurnRole === role;
-  }, [phase, role, isCurrentPlayerDeadForNightActions, isHost, room, clientId]);
+    if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions || !isNightInfoVisible) return false;
+    if (role === "Phù thủy") return true;
+    if (role === "Tay Buôn") return true;
+    if (ELEMENTAL_ROLE_SET.has(role) && sync.elementalActionMode === "buff" && (allNightActionsSimultaneous || currentNightTurnRole === role)) return true;
+    if (role === "Thần tình yêu") {
+      return !!love.targetId;
+    }
+    return false;
+  }, [phase, role, isCurrentPlayerDeadForNightActions, sync.elementalActionMode, allNightActionsSimultaneous, currentNightTurnRole, loveActionPlacement, love.targetId]);
 
   const renderSkillHint = () => {
-    if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions) return null;
+    if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions || !isNightInfoVisible) return null;
     
-    let hintText = DIET_QUY_ROLE_SKILL_HINTS[role] || "Hãy ngủ yên và chờ đợi ngày mới bắt đầu";
+    let hintText = "";
+    if (role === "Thần tình yêu") {
+      if (!love.targetId) {
+        hintText = "Hãy chọn một người mà bạn muốn ghép đôi bản thân với họ";
+      } else {
+        if (love.canUseEscape) {
+          hintText = "Bạn có thể gửi tín hiệu muốn ra khỏi làng cho nửa kia và nếu cả hai đều đồng ý thì cả bạn và người đó sẽ đều né được mọi sự kiện nhắm vào trong đêm, tuy nhiên điều này sẽ chỉ có thể thực hiện được một lần";
+        } else {
+          hintText = "Hãy cẩn trọng và cố gắng sống sót, vì nửa kia cũng như vì chính bản thân bạn";
+        }
+      }
+    } else {
+      let baseHintText = DIET_QUY_ROLE_SKILL_HINTS[role] || "";
+      if (role === "Bán sói") {
+        if (isBanSoiAligned || isWildWolfConverted) {
+          baseHintText = DIET_QUY_ROLE_SKILL_HINTS["Sói"];
+        } else {
+          baseHintText = "Bạn hiện vẫn là một dân làng nên chưa có khả năng thực hiện hành động đêm. Nhưng hãy cẩn thận vì nếu bạn bị sói tấn công thì dòng máu sói của bạn sẽ trỗi dậy";
+        }
+      }
+      if (!baseHintText && ELEMENTAL_ROLE_SET.has(role)) {
+        baseHintText = "Chọn một người mà bạn nghĩ họ cũng là dân làng nắm giữ nguyên tố";
+      }
+      
+      hintText = baseHintText;
+      if (love.isPaired) {
+        if (love.canUseEscape) {
+          hintText = baseHintText + "<br><br>* Bạn có thể gửi tín hiệu muốn ra khỏi làng cho nửa kia và nếu cả hai đều đồng ý thì cả bạn và người đó sẽ đều né được mọi sự kiện nhắm vào trong đêm, tuy nhiên điều này sẽ chỉ có thể thực hiện được một lần";
+        } else {
+          hintText = baseHintText + "<br><br>* Hãy cẩn trọng và cố gắng sống sót, vì nửa kia cũng như vì chính bản thân bạn";
+        }
+      }
+    }
     
+    if (!hintText) return null;
+
     return (
       <>
         <style>{`
@@ -755,8 +1409,8 @@ export default function GameDietQuy() {
           }
           @media (max-width: 768px) {
             .role-skill-hint {
-              max-width: 62% !important;
-              margin-left: 8px !important;
+              max-width: 58% !important;
+              
               margin-right: auto !important;
             }
           }
@@ -787,19 +1441,10 @@ export default function GameDietQuy() {
             fontStyle: "italic",
             opacity: 0.9,
           }}
-        >
-          {hintText}
-        </div>
+          dangerouslySetInnerHTML={{ __html: hintText }}
+        />
       </>
     );
-  };
-
-  const confirmSlayerAction = () => {
-    if (!roomId || !slayerTargetId) return;
-    socket.emit("dietQuySlayerAbility", { roomId, targetId: slayerTargetId });
-    setSlayerSelectMode(false);
-    setSlayerTargetId(null);
-    setShowSlayerConfirm(false);
   };
 
   const roleBadgesForDisplay = useMemo(() => {
@@ -841,64 +1486,155 @@ export default function GameDietQuy() {
     clientId
   ]);
 
-  const canShowConfirmModals = true;
+  const isLocalPlayerAbleToAct = useMemo(() => {
+    if (room?.id === "mock-8") return true;
+    if (!clientId || !room || room.gameOver) return false;
+    const isDead = deadPlayers.includes(clientId);
 
-  const dayVoteWeightsByVoterId = useMemo(() => {
-    const publicRoles = roomForDisplay?.publicRevealedRolesByPlayerId || {};
-    const entries = Object.entries(publicRoles).filter(([, publicRole]) => publicRole === "Trưởng làng");
-    if (!entries.length) return undefined;
-    return Object.fromEntries(entries.map(([playerId]) => [playerId, 2]));
-  }, [roomForDisplay?.publicRevealedRolesByPlayerId]);
+    if (isDead) {
+      if (role === "Thiên Sứ") {
+        return sync.angelReviveState?.canRevive === true;
+      }
+      return false;
+    }
 
-  const dayVote = useDayVoteRole({
-    roomId,
+    if (phase === "night") {
+      const isMyNightTurnActive = allNightActionsSimultaneous || doesNightTurnMatchMyRole;
+      if (!isMyNightTurnActive) return false;
+
+      if (role === "Phù thủy") {
+        const potions = sync.witchPotions;
+        const hasPoison = potions ? !potions.poisonUsed : true;
+        const hasHeal = potions ? !potions.healUsed : true;
+        const pendingDeaths = sync.witchPendingDeathTargetIds || [];
+        return hasPoison || (hasHeal && pendingDeaths.length > 0);
+      }
+
+      if (role === "Bảo vệ") {
+        return true;
+      }
+
+      if (role === "Tiên tri") {
+        return true;
+      }
+
+      if (role === "Thợ săn") {
+        return true;
+      }
+
+      if (isWolfTeamRole) {
+        return !sync.wolfBiteDisabled;
+      }
+
+      if (role === "Hộ nhân") {
+        return !sync.protectorHasUsed && !sync.protectorTargetId;
+      }
+
+      if (role === "Thần tình yêu") {
+        const currentNight = room.nightCount || 0;
+        const loveChoiceLastNight = room?.gameRules?.loveCanChoosePartnerFirstTwoNights ? 2 : 1;
+        const canChoosePartner = currentNight >= 1 && currentNight <= loveChoiceLastNight && !sync.loveState?.targetId;
+        return canChoosePartner;
+      }
+
+      if (role === "Kẻ nguyền rủa" || role === "Kẻ bị nguyền") {
+        const hasUsesRemaining = sync.cursedUsesRemaining === null || sync.cursedUsesRemaining > 0;
+        return hasUsesRemaining && !sync.cursedTargetId;
+      }
+
+      if (role && ["Băng Giá", "Sấm Sét", "Lửa", "Bóng Tối"].includes(role)) {
+        return true;
+      }
+
+      if (role === "Tay Buôn") {
+        const hasMerchantTradeTonight = !!sync.merchantPrivateState?.trade && sync.merchantPrivateState.trade.actorId === clientId;
+        const availableStockCount = sync.merchantPrivateState?.availableStockIds?.length ?? 0;
+        return !hasMerchantTradeTonight && availableStockCount > 0;
+      }
+    }
+
+    return false;
+  }, [
+    clientId,
+    room,
+    role,
     phase,
-    room: roomForRoles,
     deadPlayers,
-    dayVotes: sync.dayVotes,
-    dayLocked: sync.dayLocked,
-    dayDiscussionDeadline: room?.dayDiscussionDeadline ?? sync.dayDiscussionDeadline,
-    dayDeadline: room?.dayDeadline ?? sync.dayDeadline,
-    dayVoters: sync.dayVoters,
-    trialTargetId: room?.trialTargetId ?? sync.trialTargetId,
-    trialStage: room?.trialStage ?? sync.trialStage,
-    trialDefenseDeadline: room?.trialDefenseDeadline ?? sync.trialDefenseDeadline,
-    trialVerdictDeadline: room?.trialVerdictDeadline ?? sync.trialVerdictDeadline,
-    trialInteractionCut: room?.trialInteractionCut ?? sync.trialInteractionCut,
-    trialInteractionActiveIds: room?.trialInteractionActiveIds ?? sync.trialInteractionActiveIds,
-    trialSelectedInteractorId: room?.trialSelectedInteractorId ?? sync.trialSelectedInteractorId,
-    trialSelectedInteractorIds: room?.trialSelectedInteractorIds ?? sync.trialSelectedInteractorIds,
-    trialInteractionSelectionLimit: room?.trialInteractionSelectionLimit ?? sync.trialInteractionSelectionLimit,
-    trialVotes: sync.trialVotes,
-    serverTimeOffset,
-    dayPaused: !!(room?.dayPaused ?? sync.dayPaused),
-    dayRemainingMs: room?.dayRemainingMs ?? sync.dayRemainingMs,
-  });
+    sync.angelReviveState,
+    sync.witchPotions,
+    sync.witchPendingDeathTargetIds,
+    sync.wolfBiteDisabled,
+    sync.protectorHasUsed,
+    sync.protectorTargetId,
+    sync.loveState,
+    sync.cursedUsesRemaining,
+    sync.cursedTargetId,
+    sync.merchantPrivateState,
+    allNightActionsSimultaneous,
+    doesNightTurnMatchMyRole,
+    isWolfTeamRole
+  ]);
 
-  const lastDayVoteNoticeSeqRef = useRef(0);
-  const lastTrialVerdictNoticeSeqRef = useRef(0);
+  const [showActionGlow, setShowActionGlow] = useState(false);
+  void showActionGlow;
+  const lastGlowTriggeredKeyRef = useRef("");
 
-  const logPanel = canViewLog ? (
-    <GameLogPanel
-      nights={sync.gameLogNights || []}
-      rolesByPlayerId={sync.revealedRolesByPlayerId || {}}
-      playerNamesById={playerNamesById}
-      playerRealNamesById={playerRealNamesById}
-      viewMode={viewMode}
-      onViewModeChange={handleViewModeChange}
-      targetRoleDisplayOrderByPlayerId={targetRoleDisplayOrderByPlayerId}
-      onHighlightPlayer={handleLogHighlightPlayer}
-      canViewNightLogs={true}
-      isHost={isHost}
-      myPlayerId={clientId || undefined}
-      myRole={role || undefined}
-      loveState={sync.loveState}
-      wolves={sync.wolves}
-      wolfBadgeRoles={sync.wolfBadgeRolesByPlayerId}
-      gameRules={room?.gameRules}
-      gameEnded={!!sync.gameEnded}
-      isReplay={room?.isReplay}
-    />
+  const currentGlowKey = useMemo(() => {
+    if (!isLocalPlayerAbleToAct || !room) return "";
+    const nightCount = room.nightCount || 0;
+    if (phase === "day") {
+      return `${nightCount}-day-revive`;
+    }
+    if (phase === "night") {
+      if (role === "Phù thủy") {
+        const potions = sync.witchPotions;
+        const hasPoison = potions ? !potions.poisonUsed : true;
+        const hasHeal = potions ? !potions.healUsed : true;
+        const pendingDeaths = sync.witchPendingDeathTargetIds || [];
+        if (hasPoison) {
+          return `${nightCount}-night-witch-poison`;
+        }
+        if (hasHeal && pendingDeaths.length > 0) {
+          return `${nightCount}-night-witch-heal`;
+        }
+      }
+      return `${nightCount}-night-action`;
+    }
+    return "";
+  }, [isLocalPlayerAbleToAct, room, phase, role, sync.witchPotions, sync.witchPendingDeathTargetIds]);
+
+  useEffect(() => {
+    if (!currentGlowKey) {
+      setShowActionGlow(false);
+      return;
+    }
+    if (lastGlowTriggeredKeyRef.current !== currentGlowKey) {
+      lastGlowTriggeredKeyRef.current = currentGlowKey;
+      setShowActionGlow(true);
+    }
+  }, [currentGlowKey]);
+
+  const canStartVillageChiefExtraVote =
+    role === "Trưởng làng" &&
+    phase === "day" &&
+    !!room?.villageChiefExtraVoteReady &&
+    !room?.villageChiefExtraVoteUsed &&
+    !!clientId &&
+    !deadPlayers.includes(clientId) &&
+    !sync.dayDeadline &&
+    !sync.dayDiscussionDeadline &&
+    sync.trialStage === "none" &&
+    !sync.gameEnded;
+
+  const villageChiefExtraVotePanel = canStartVillageChiefExtraVote ? (
+    <div style={{ marginTop: 12 }}>
+      <button
+        onClick={() => socket.emit("villageChiefStartExtraVote", { roomId })}
+        style={{ padding: "8px 12px", cursor: "pointer" }}
+      >
+        Mở thêm một lượt biểu quyết
+      </button>
+    </div>
   ) : null;
 
   useEffect(() => {
@@ -949,7 +1685,12 @@ export default function GameDietQuy() {
       showNotice("Trò chơi kết thúc", "Quản trò đã cho ngừng ván chơi này");
       return;
     }
-    const winnerText = (sync.gameEnded.winner as string) === "demons" ? "Phe Quỷ" : "Phe Dân";
+    const winnerText =
+      sync.gameEnded.winner === "wolves"
+        ? "Phe Sói"
+        : sync.gameEnded.winner === "lovers"
+          ? "Cặp đôi"
+          : "Phe Dân";
     showNotice("Trò chơi kết thúc", `${winnerText} chiến thắng`);
     shootWinnerConfettiFromSides(sync.gameEnded.winner, sync.loveState);
   }, [showNotice, sync.gameEnded, sync.loveState]);
@@ -979,6 +1720,13 @@ export default function GameDietQuy() {
     lastTrialVerdictNoticeSeqRef.current = seq;
 
     const targetName = room?.players.find((p) => p.id === sync.trialVerdictFinished?.targetId)?.name || "người bị biểu quyết";
+    if (sync.trialVerdictFinished.chiefRevealed) {
+      showNotice(
+        "Kết quả cuối",
+        `${targetName} hiện lên và nói:\n"Rồi rồi mày không thoát được đâu con trai, tu bi cân tì niu"`
+      );
+      return;
+    }
     if (sync.trialVerdictFinished.executed) {
       const executedNotices = [
         `${targetName} bị bắn xử tử`,
@@ -995,20 +1743,18 @@ export default function GameDietQuy() {
   }, [room?.players, showNotice, sync.trialVerdictFinished, sync.trialVerdictFinishedSeq]);
 
   const handlePlayerClick = (playerId: string) => {
-    if (sync.gameEnded) return;
-    if (isHost && (phase === "day" || phase === "dusk")) {
-      setDietQuyNightStartPlayerId(playerId);
-      return;
-    }
+    if (dayVote.onPlayerClick(playerId)) return;
     if (slayerSelectMode) {
       if (deadPlayers.includes(playerId)) return;
       setSlayerTargetId(playerId);
       setShowSlayerConfirm(true);
       return;
     }
+    if (isHost && (phase === "day" || phase === "dusk")) {
+      setDietQuyNightStartPlayerId((prev) => (prev === playerId ? null : playerId));
+      return;
+    }
     if (dietQuy.onPlayerClick(playerId)) return;
-    if (deadPlayers.includes(playerId)) return;
-    if (dayVote.onPlayerClick(playerId)) return;
   };
 
   const handlePlayerDoubleClick = (playerId: string) => {
@@ -1018,9 +1764,13 @@ export default function GameDietQuy() {
     setHostPlayerActionTargetId(playerId);
   };
 
-  const handleBackToRoomClick = () => {
+  const requestReturnToRoom = () => {
     if (!roomId) return;
     socket.emit("requestReturnToRoom", { roomId });
+  };
+
+  const handleBackToRoomClick = () => {
+    requestReturnToRoom();
   };
 
   const handleEndGameConfirm = () => {
@@ -1069,7 +1819,16 @@ export default function GameDietQuy() {
   const rulesRestartTextAnimationName = rulesRestartOverlay
     ? `gameRulesRestartText_${rulesRestartOverlay.key}`
     : "";
-  const shouldRevealMyRole = !isHost && !!role && (!shouldHidePlayerRoleText || !!sync.gameEnded);
+  const isRoleRevealLimitedToCurrentNightTurn = isSequentialNight && !sync.gameEnded;
+  const shouldRevealMyRole =
+    room?.id === "mock-8"
+      ? true
+      : (!isHost &&
+         !!role &&
+         (!!sync.gameEnded ||
+           (!shouldBlockDeadNightRoleReveal &&
+             (phase === "night" ? isNightInfoVisible : true) &&
+             (isRoleRevealLimitedToCurrentNightTurn ? doesNightTurnMatchMyRole : !shouldHidePlayerRoleText))));
 
   const masonryItems = useMemo(() => {
     const roles = room?.roles || [];
@@ -1090,29 +1849,26 @@ export default function GameDietQuy() {
       setCardFlippedToFront(false);
     }
   }, [role, shouldRevealMyRole]);
-
   const shouldShowRolePortrait = shouldRevealMyRole;
+  const loveHybridBackgroundAsset =
+    clientId && sync.loveState.targetWolfAligned && sync.loveState.pairIds.includes(clientId)
+      ? HYBRID_BACKGROUND_ASSET
+      : null;
   const visiblePlayerCount = (roomForDisplay?.players || []).filter((p: any) => p.id !== roomForDisplay?.hostId).length;
   const playerFrameHeightPx = visiblePlayerCount > 18 ? 570 : 470;
-  const rolePortraitImagesForGame = useMemo(
-    () => import.meta.glob<string>("../assets/*.png", { eager: true, import: "default" }),
-    []
-  );
   const rolePortraitAvifImagesForGame = useMemo(
-    () => import.meta.glob<string>("../assets/C *.avif", { eager: true, import: "default" }),
+    () => import.meta.glob<string>("../assets/Diệt Quỷ/C *.avif", { eager: true, import: "default" }),
     []
   );
   const normalizeRoleName = useCallback((value: string) => value.normalize("NFC").trim().toLowerCase(), []);
   const getAssetNameFromPath = useCallback((path: string) => path.split("/").pop()?.replace(/\.(png|avif)$/i, "") ?? "", []);
   const rolePortraitByNameForGame = useMemo(
     () => {
-      const pngEntries = Object.entries(rolePortraitImagesForGame).map(([path, src]) => [normalizeRoleName(getAssetNameFromPath(path)), src]);
       const avifEntries = Object.entries(rolePortraitAvifImagesForGame).map(([path, src]) => [normalizeRoleName(getAssetNameFromPath(path)), src]);
-      return Object.fromEntries([...pngEntries, ...avifEntries]);
+      return Object.fromEntries(avifEntries);
     },
-    [getAssetNameFromPath, normalizeRoleName, rolePortraitImagesForGame, rolePortraitAvifImagesForGame]
+    [getAssetNameFromPath, normalizeRoleName, rolePortraitAvifImagesForGame]
   );
-
   const normalizedRole = shouldShowRolePortrait && role ? normalizeRoleName(role) : null;
   const companionAssetCandidates = useMemo(() => {
     if (!normalizedRole || !role) return [] as string[];
@@ -1127,14 +1883,21 @@ export default function GameDietQuy() {
     }
     return null;
   }, [companionAssetCandidates, normalizeRoleName, rolePortraitByNameForGame]);
+  const showVillageChiefDyingFrame =
+    phase === "night" &&
+    !isHost &&
+    role === "Trưởng làng" &&
+    !!clientId &&
+    !sync.gameEnded &&
+    (room?.villageChiefDyingFramePlayerIds || []).includes(clientId);
 
   if (!room) {
     return (
-      <div
-        className="page-shell game-page"
-        style={{
-          padding: "1.25rem",
-          minHeight: "100vh",
+      <div 
+        className="page-shell game-page" 
+        style={{ 
+          padding: "1.25rem", 
+          minHeight: "100vh", 
           backgroundColor: "#0f1115",
           display: "flex",
           alignItems: "center",
@@ -1144,58 +1907,213 @@ export default function GameDietQuy() {
     );
   }
 
-  const isDuskTransitionPending = room?.phase === "dusk" && !duskRevealGameUI;
+  const isDuskTransitionPending = room.phase === "dusk" && !duskRevealGameUI;
   const gameUIOpacity = isDuskTransitionPending ? 0 : 1;
   const gameUIPointerEvents = isDuskTransitionPending ? "none" : "auto";
-  const deadPlayersOverrideForRender = displayDeadPlayers;
 
-  const countdownSeconds = nightTurnRemainingSec;
+  const hasNightAction = useMemo(() => {
+    if (!role) return false;
+    if (role === "Bán sói" && !isBanSoiOrWildConverted) return false;
+    if (isWolfTeamRole) return true;
+    if (role === "Linh sói") return !!sync.spiritWolfDecisionTargetId;
+    return NIGHT_ACTION_ROLE_SET.has(role) || ELEMENTAL_ROLE_SET.has(role);
+  }, [role, isBanSoiOrWildConverted, isWolfTeamRole, sync.spiritWolfDecisionTargetId]);
+  void hasNightAction;
+
+  const hostNightRemainingSec = useMemo(() => {
+    if (phase !== "night") return null;
+
+    // Tự động cộng thêm 10 giây thời gian của Phù thủy cho Host nếu Phù thủy còn sống và có bonus
+    let witchExtraMs = 0;
+    if (isSimultaneousNight && room?.players && sync.revealedRolesByPlayerId) {
+      const witchPlayer = room.players.find(p => sync.revealedRolesByPlayerId?.[p.id] === "Phù thủy");
+      const isWitchAlive = !!witchPlayer && !deadPlayers.includes(witchPlayer.id);
+
+      const rules = room?.gameRules;
+      const nonWolf = rules?.nonWolfNightActionDurationSec || 0;
+      const wolf = rules?.wolfNightActionDurationSec || 0;
+      const witchBonusApplies = nonWolf > 0 && wolf === nonWolf;
+
+      if (isWitchAlive && witchBonusApplies) {
+        witchExtraMs = 10000;
+      }
+    }
+
+    if (nightTurnPaused) {
+      if (nightTurnRemainingMs == null) return null;
+      return Math.max(0, Math.ceil((nightTurnRemainingMs + witchExtraMs) / 1000));
+    }
+    if (!nightTurnDeadline) return null;
+    return Math.max(0, Math.ceil((nightTurnDeadline + witchExtraMs - nightTurnNow) / 1000));
+  }, [phase, nightTurnPaused, nightTurnRemainingMs, nightTurnDeadline, nightTurnNow, isSimultaneousNight, room?.players, sync.revealedRolesByPlayerId, deadPlayers, room?.gameRules]);
+
+  const countdownSeconds = isHost
+    ? hostNightRemainingSec
+    : (isSequentialNight
+        ? nightTurnRemainingSec
+        : (mySimultaneousDeadline ? simultaneousRemainingSec : hostNightRemainingSec)
+      );
+
   const showCountdown = !sync.gameEnded && (
     isHost ? (phase === "night" && countdownSeconds !== null) : (
-      phase === "night" && currentNightTurnPlayerId === clientId && !isCurrentPlayerDeadForNightActions && countdownSeconds !== null
+      !isCurrentPlayerDeadForNightActions && (
+        (isSequentialNight && currentNightTurnRole && doesNightTurnMatchMyRole && nightTurnRemainingSec !== null) ||
+        (isSimultaneousNight && countdownSeconds !== null)
+      )
     )
   );
 
+
+
   return (
-    <div
-      className={`page-shell game-page${shouldShowRolePortrait ? " has-role-portrait" : ""}`}
-      style={{
-        padding: "1.25rem",
-        opacity: gameUIOpacity,
-        transition: "opacity 0.4s ease-in-out",
+    <div 
+      className={`page-shell game-page${shouldShowRolePortrait ? " has-role-portrait" : ""}`} 
+      style={{ 
         pointerEvents: gameUIPointerEvents,
-        isolation: "isolate"
+        opacity: gameUIOpacity,
       }}
     >
+      {new URLSearchParams(window.location.search).get("debugWitch") === "1" && (
+        <div style={{
+          position: "fixed",
+          top: 80,
+          right: 20,
+          zIndex: 999999,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          background: "rgba(15, 23, 42, 0.9)",
+          padding: 12,
+          borderRadius: 8,
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)"
+        }}>
+          <div style={{ fontSize: "12px", fontWeight: "bold", color: "#94a3b8", marginBottom: 4 }}>WITCH TEST PANEL</div>
+          <button
+            onClick={() => {
+              const alive = room?.players
+                ?.map((p: any) => p.id)
+                ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
+              if (alive.length > 0) {
+                const to = alive[Math.floor(Math.random() * alive.length)]!;
+                sync.setWitchPotionEffect({
+                  targetId: to,
+                  type: "heal",
+                  startedAt: performance.now()
+                });
+              }
+            }}
+            style={{
+              padding: "8px 12px",
+              background: "rgba(168, 85, 247, 0.2)",
+              border: "1px solid rgba(168, 85, 247, 0.4)",
+              color: "#d8b4fe",
+              borderRadius: 4,
+              cursor: "pointer",
+              fontSize: "12px",
+              fontWeight: "bold"
+            }}
+          >
+            Test Cứu (Rainbow)
+          </button>
+          <button
+            onClick={() => {
+              const alive = room?.players
+                ?.map((p: any) => p.id)
+                ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
+              if (alive.length > 0) {
+                const to = alive[Math.floor(Math.random() * alive.length)]!;
+                sync.setWitchPotionEffect({
+                  targetId: to,
+                  type: "poison",
+                  startedAt: performance.now()
+                });
+              }
+            }}
+            style={{
+              padding: "8px 12px",
+              background: "rgba(244, 63, 94, 0.2)",
+              border: "1px solid rgba(244, 63, 94, 0.4)",
+              color: "#fda4af",
+              borderRadius: 4,
+              cursor: "pointer",
+              fontSize: "12px",
+              fontWeight: "bold"
+            }}
+          >
+            Test Giết (Rose Red)
+          </button>
+        </div>
+      )}
       {(phase === "day" || phase === "dusk") && (
         <div
+          className="game-bg-layer"
           style={{
-            position: "fixed",
-            inset: 0,
-            backgroundImage: `url(${phase === "day" ? RoomBg : ChieuBg})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            backgroundRepeat: "no-repeat",
-            filter: "blur(4px)",
-            zIndex: -1,
-            transform: "scale(1.08)",
+            backgroundImage: `url(${phase === "day" ? RoomBg : ChieuBg})`
           }}
         />
       )}
-      <GameRoleStatusBar
-        isHost={isHost}
-        role={role}
-        cardFlippedToFront={cardFlippedToFront}
-        lowPerformanceMode={lowPerformanceMode}
-        setLowPerformanceMode={setLowPerformanceMode}
-        showLowPerfToast={showLowPerfToast}
-        isAnimatingLeaf={isAnimatingLeaf}
-        setIsAnimatingLeaf={setIsAnimatingLeaf}
-        phase={phase}
-        roles={room?.roles}
-        gameMode={room?.gameMode}
-      />
+      {showVillageChiefDyingFrame && (
+        <>
+          <style>{`
+            @keyframes villageChiefDyingFramePulse {
+              0%, 100% {
+                opacity: 0.42;
+                box-shadow:
+                  inset 0 0 0 3px rgba(236, 58, 58, 0.62),
+                  inset 0 0 42px 12px rgba(236, 58, 58, 0.22);
+              }
+              50% {
+                opacity: 0.84;
+                box-shadow:
+                  inset 0 0 0 5px rgba(255, 79, 79, 0.9),
+                  inset 0 0 70px 20px rgba(255, 49, 49, 0.34);
+              }
+            }
+          `}</style>
+          <div
+            aria-hidden="true"
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 27,
+              pointerEvents: "none",
+              borderRadius: 0,
+              animation: "villageChiefDyingFramePulse 1400ms ease-in-out infinite",
+            }}
+          />
+        </>
+      )}
 
+      {(() => {
+        const isLover = roomId === "mock-8" ? true : (sync.loveState?.pairIds?.includes(clientId || "") === true);
+        const showStickersButton = roomId === "mock-8" || (phase === "night" && !sync.gameEnded && !isCurrentPlayerDeadForNightActions && (isWolfTeamRole || isLover));
+        const isWolfForStatus = roomId === "mock-8" ? true : isWolfTeamRole;
+        return (
+          <GameRoleStatusBar
+            isHost={isHost}
+            role={role}
+            cardFlippedToFront={cardFlippedToFront}
+            lowPerformanceMode={lowPerformanceMode}
+            setLowPerformanceMode={setLowPerformanceMode}
+            showLowPerfToast={showLowPerfToast}
+            isAnimatingLeaf={isAnimatingLeaf}
+            setIsAnimatingLeaf={setIsAnimatingLeaf}
+            phase={phase}
+            roles={room?.roles}
+            gameMode={room?.gameMode}
+            showEyeIcon={phase === "night" && !sync.gameEnded && !isCurrentPlayerDeadForNightActions}
+            isNightInfoVisible={isNightInfoVisible}
+            setIsNightInfoVisible={handleToggleNightInfoVisible}
+            showStickersButton={showStickersButton}
+            isWolf={isWolfForStatus}
+            isLover={isLover}
+            onSelectSticker={handleSelectSticker}
+            onSendPlayerMessage={handleSendPlayerMessage}
+          />
+        );
+      })()}
+      
       {sync.gameEnded && (
         <h2>
           {sync.gameEnded.winner === "nobody" ? (
@@ -1203,13 +2121,16 @@ export default function GameDietQuy() {
           ) : (
             <>
               Kết thúc:{" "}
-              {(sync.gameEnded.winner as string) === "demons" ? "Phe Quỷ" : "Phe Dân"}{" "}
+              {sync.gameEnded.winner === "wolves"
+                ? "Phe Sói"
+                : sync.gameEnded.winner === "lovers"
+                  ? "Cặp đôi"
+                  : "Phe Dân"}{" "}
               chiến thắng
             </>
           )}
         </h2>
       )}
-
       {!sync.gameEnded && (
         <>
           {phase === "dusk" ? (
@@ -1278,16 +2199,38 @@ export default function GameDietQuy() {
               )}
             </>
           ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: "2rem", flexWrap: "wrap" }}>
+            //Height 46 để cố định chiều cao của cái dòng div này cho nó đừng có nhảy layout khi hiển thị nút đếm ngược
+            <div id="infoThờiGian" style={{ display: "flex", alignItems: "center", gap: "0.9rem", flexWrap: "wrap", height: "46px" }}> 
               {phase === "day" ? (
-                <h1 style={{ margin: 0, display: "flex", alignItems: "center" }}><AvifIcon name="🌞" style={{ marginRight: 8 }} /> Ngày {displayNightNumber}</h1>
+                <h1 
+                  onClick={room?.id === "mock-8" ? (mock8.handleHeaderClick || undefined) : undefined}
+                  style={{ 
+                    margin: 0, 
+                    display: "flex", 
+                    alignItems: "center", 
+                    cursor: (room?.id === "mock-8" && mock8.handleHeaderClick) ? "pointer" : "default" 
+                  }}
+                >
+                  <AvifIcon name="🌞" style={{ marginRight: 8 }} /> Ngày {displayNightNumber}
+                </h1>
               ) : (
-                <h1 style={{ margin: 0, display: "flex", alignItems: "center" }}><AvifIcon name="🌙" style={{ marginRight: 8 }} /> Đêm {displayNightNumber}</h1>
+                <h1 
+                  onClick={room?.id === "mock-8" ? (mock8.handleHeaderClick || undefined) : undefined}
+                  style={{ 
+                    margin: 0, 
+                    display: "flex", 
+                    alignItems: "center", 
+                    cursor: (room?.id === "mock-8" && mock8.handleHeaderClick) ? "pointer" : "default" 
+                  }}
+                >
+                  <AvifIcon name="🌙" style={{ marginRight: 8 }} /> Đêm {displayNightNumber}
+                </h1>
               )}
+
               <CountdownButton
-                showCountdown={!!showCountdown}
-                countdownSeconds={countdownSeconds}
-                isPaused={!!nightTurnPaused}
+                showCountdown={room?.id === "mock-8" ? true : !!showCountdown}
+                countdownSeconds={room?.id === "mock-8" ? mock8.countdownSeconds : countdownSeconds}
+                isPaused={room?.id === "mock-8" ? mock8.isPaused : !!nightTurnPaused}
               />
               <CountdownButton
                 showCountdown={phase === "day" && !sync.gameEnded && dayVote.remainingSec !== null}
@@ -1299,44 +2242,462 @@ export default function GameDietQuy() {
         </>
       )}
 
-
-
-      {phase === "night" && room.nightTurnPlayerId && isHost && (
-        <div style={{
-          marginTop: "0.5rem",
-          fontWeight: 700,
-          background: "rgba(231, 76, 60, 0.15)",
-          padding: "8px 16px",
-          borderRadius: 8,
-          border: "1px solid rgba(231, 76, 60, 0.3)",
-          display: "inline-block",
-          color: "#fff"
-        }}>
-          <AvifIcon name="🌙" style={{ marginRight: 6 }} /> Lượt của: <span style={{ color: "var(--accent)", textShadow: "0 0 8px var(--accent)" }}>{room.players.find((p: any) => p.id === room.nightTurnPlayerId)?.name || "Người chơi"}</span>
-          {room.nightTurnRole && ` (${room.nightTurnRole})`}
+      {isSequentialNight && currentNightTurnRole && isHost && (
+        <div style={{ marginTop: "0.5rem", fontWeight: 700 }}>
+          Lượt hiện tại: {currentNightTurnRole}
           {nightTurnRemainingSec !== null ? ` - còn ${nightTurnRemainingSec}s` : ""}
           {nightTurnPaused ? " (đang tạm ngưng)" : ""}
         </div>
       )}
 
+      {isHost && hasSecretConditionalRolePrompt && (
+        <div style={{ marginTop: "0.5rem", fontWeight: 700 }}>
+          🤐 Có vai trò kích hoạt bí mật đang chờ phản ứng
+        </div>
+      )}
+      {(() => {
+        const buff = sync.elementalBuffResult;
+        if (!buff?.buffId) return null;
+        const currentNight = room?.nightCount || 0;
+        if (buff.appliesNight == null) return null;
+        const isActiveTonight = buff.appliesNight === currentNight && phase === "night";
+        const isPending = buff.appliesNight > currentNight;
+        return (
+          <div style={{ marginTop: "0.75rem", padding: "0.75rem", borderRadius: "0.5rem", background: "rgba(109, 68, 232, 0.12)", border: "0.0625rem solid rgba(109, 68, 232, 0.3)" }}>
+            <div style={{ fontWeight: 700, color: "#6d44e8" }}>
+              ✨ Buff nguyên tố {isActiveTonight ? "đang kích hoạt" : isPending ? `sẽ kích hoạt đêm ${buff.appliesNight}` : `đã kích hoạt đêm ${buff.appliesNight}`}
+            </div>
+            <div style={{ marginTop: "0.25rem" }}>
+              <span style={{ fontWeight: 600 }}>{buff.label}</span>
+              {" "}(Tier {buff.tier})
+              {buff.randomTieBreak ? (
+                <span style={{ fontStyle: "italic", opacity: 0.75 }}> - Được chọn ngẫu nhiên do hòa phiếu</span>
+              ) : null}
+            </div>
+          </div>
+        );
+      })()}
 
 
 
+      {(isHost || !!sync.gameEnded || hostDisconnected) && (
+        <div className="game-top-actions" style={{ marginTop: "0.75rem" }}>
+          {!!sync.gameEnded && room?.scoreResult && (
+            <button
+              onClick={() => setScoreboardOpen(true)}
+              style={{
+                background: "linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%)",
+                color: "#fff",
+                border: "none",
+                fontWeight: 700,
+                cursor: "pointer",
+                padding: "8px 16px",
+                borderRadius: "8px",
+                boxShadow: "0 4px 12px rgba(155, 89, 182, 0.3)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px"
+              }}
+            >
+              <img src={medalSvg} alt="medal" style={{ width: "18px", height: "18px" }} />
+              Xem điểm
+            </button>
+          )}
+          {!hostDisconnected && (
+            <button onClick={handleBackToRoomClick}>Quay về phòng chờ</button>
+          )}
+          {hostDisconnected && (
+            <button onClick={() => {
+              setNoticeModal(null);
+              nav("/lobby");
+            }}>Quay về sảnh chờ</button>
+          )}
+        </div>
+      )}
 
+      {debugAnim && (
+        <div className="game-top-actions" style={{ marginTop: "0.625rem" }}>
+          <button
+            onClick={() => {
+              if (!room) return;
+              const alive = room.players
+                .map(p => p.id)
+                .filter(id => !deadPlayers.includes(id));
+              if (alive.length < 2) return;
+              const from = alive[Math.floor(Math.random() * alive.length)]!;
+              let to = from;
+              for (let i = 0; i < 10 && to === from; i++) {
+                to = alive[Math.floor(Math.random() * alive.length)]!;
+              }
+              if (to === from) return;
+              playHunterShotAnim(from, to);
+            }}
+          >
+            Test shot
+          </button>
 
+          <button
+            onClick={() => {
+              const last = lastHunterShotRef.current;
+              if (!last) return;
+              playHunterShotAnim(last.hunterId, last.targetId);
+            }}
+          >
+            Replay last shot
+          </button>
 
+          <div style={{ opacity: 0.7, fontSize: "0.75rem", alignSelf: "center" }}>
+            Tip: Shift+H để random shot
+          </div>
+        </div>
+      )}
 
+      {/* Hiển thị bố cục vị trí người chơi khi có room.positions */}
+      {roomForDisplay?.positions && (phase !== "dusk" || isHost) && (() => {
+        const activeReplayEvent = roomForDisplay?.isReplay && roomForDisplay?.replayEvents && roomForDisplay?.replayIndex !== undefined
+          ? roomForDisplay.replayEvents[roomForDisplay.replayIndex - 1]
+          : null;
+        const replayActorIds = activeReplayEvent?.actorIds || [];
+        const replayTargetIds = activeReplayEvent?.targetIds || [];
 
+        return (
+          <>
+            <div style={{ margin: "2rem auto", position: "relative" }}>
+              {isHost && (phase === "day" || phase === "dusk") && (
+                <>
+                  <style>{`
+                    @keyframes highlightBlink {
+                      0%, 100% { border-color: rgba(255, 255, 255, 0.1); box-shadow: none; }
+                      50% { border-color: #f1c40f; box-shadow: 0 0 20px #f1c40f; }
+                    }
+                    .angle-btn {
+                      transition: all 0.3s ease-in-out !important;
+                    }
+                    .angle-btn:hover {
+                      transform: scale(1.08) !important;
+                      border-color: var(--accent) !important;
+                      box-shadow: 0 0 15px rgba(255, 255, 255, 0.2) !important;
+                      opacity: 1 !important;
+                    }
+                  `}</style>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDirection("counter_clockwise")}
+                    className="angle-btn"
+                    onAnimationEnd={() => setTriggerBlink(false)}
+                    style={{
+                      width: "56px",
+                      height: "56px",
+                      borderRadius: "50%",
+                      background: selectedDirection === "counter_clockwise" ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.05)",
+                      border: selectedDirection === "counter_clockwise" ? "2px solid var(--accent)" : "1px solid rgba(255, 255, 255, 0.1)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      opacity: selectedDirection === "counter_clockwise" ? 1 : (selectedDirection === "clockwise" ? 0.25 : 0.7),
+                      animation: triggerBlink ? "highlightBlink 1.2s ease-in-out 2" : "none",
+                      boxShadow: selectedDirection === "counter_clockwise" ? "0 0 15px var(--accent)" : "none",
+                      padding: 0,
+                      outline: "none",
+                      position: "absolute",
+                      left: "15px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      zIndex: 100
+                    }}
+                    title="Ngược chiều kim đồng hồ"
+                  >
+                    <img src={angleCircleLeftSvg} style={{ width: "32px", height: "32px", filter: "brightness(0) invert(1)", display: "block" }} />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDirection("clockwise")}
+                    className="angle-btn"
+                    onAnimationEnd={() => setTriggerBlink(false)}
+                    style={{
+                      width: "56px",
+                      height: "56px",
+                      borderRadius: "50%",
+                      background: selectedDirection === "clockwise" ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.05)",
+                      border: selectedDirection === "clockwise" ? "2px solid var(--accent)" : "1px solid rgba(255, 255, 255, 0.1)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      opacity: selectedDirection === "clockwise" ? 1 : (selectedDirection === "counter_clockwise" ? 0.25 : 0.7),
+                      animation: triggerBlink ? "highlightBlink 1.2s ease-in-out 2" : "none",
+                      boxShadow: selectedDirection === "clockwise" ? "0 0 15px var(--accent)" : "none",
+                      padding: 0,
+                      outline: "none",
+                      position: "absolute",
+                      right: "15px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      zIndex: 100
+                    }}
+                    title="Theo chiều kim đồng hồ"
+                  >
+                    <img src={angleCircleRightSvg} style={{ width: "32px", height: "32px", filter: "brightness(0) invert(1)", display: "block" }} />
+                  </button>
+                </>
+              )}
+              
+              <PlayerPositions
+                mode="view"
+                roomOverride={roomForDisplay}
+                setRoom={setRoom}
+                viewMode={viewMode}
+                onPlayerClick={handlePlayerClick}
+                onPlayerDoubleClick={handlePlayerDoubleClick}
+                activeMessages={sync.playerMessages}
+                onDismissMessage={(id) => sync.setPlayerMessages((prev: any) => prev.filter((m: any) => m.id !== id))}
+                isNightInfoVisible={isNightInfoVisible}
+                seerResults={null}
+                deadPlayersOverride={deadPlayersOverrideForRender}
+                bulletAnimation={hunterBulletAnim}
+                witchPotionEffect={sync.witchPotionEffect}
+                onWitchPotionEffectComplete={() => sync.setWitchPotionEffect(null)}
+                highlightPlayerId={highlightPlayerId}
+                secondaryHighlightPlayerIds={secondaryHighlightPlayerIds}
+                cursedHighlightPlayerIds={[]}
+                cursedHighlightIsDanger={false}
+                verdictLivePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.secondaryIds}
+                verdictDiePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.dangerIds}
+                showRoleBadges={!!roleBadgesForDisplay}
+                roleBadges={roleBadgesForDisplay}
+                activeNightRole={isHost && isSequentialNight ? currentNightTurnRole : null}
+                suppressNightActionProgress={autoTrialHighlightSuppressed}
+                selectedOutlinePlayerId={
+                  (isHost && (phase === "day" || phase === "dusk") ? dietQuyNightStartPlayerId : null) ||
+                  dietQuy.playerPositionsProps.selectedOutlinePlayerId ||
+                  slayerTargetId ||
+                  null
+                }
+                selectedOutlinePlayerIds={[]}
+                dangerPlayerIds={dangerHighlightPlayerIds}
+                showWolfVoteBadges={false}
+                wolfVoteVoterIds={[]}
+                voteWeightsByVoterId={dayVote.playerPositionsProps.showWolfVoteBadges ? dayVoteWeightsByVoterId : undefined}
+                showWolfBadges={false}
+                wolfBadgePlayerIds={[]}
+                wolfBadgeRoles={{}}
+                cheesePlayerIds={[]}
+                trialOrangePlayerId={dayVote.playerPositionsProps.trialOrangePlayerId}
+                trialWhitePlayerIds={dayVote.playerPositionsProps.trialWhitePlayerIds}
+                trialGreenPlayerId={dayVote.playerPositionsProps.trialGreenPlayerId}
+                replayActorIds={replayActorIds}
+                replayTargetIds={replayTargetIds}
+                dietQuyOrangeHighlightPlayerIds={dietQuy.playerPositionsProps.dietQuyOrangeHighlightPlayerIds}
+                dietQuyRedHighlightPlayerIds={dietQuy.playerPositionsProps.dietQuyRedHighlightPlayerIds}
+                showVoteReview={dayVote.playerPositionsProps.showVoteReview}
+                dayVotes={dayVote.playerPositionsProps.dayVotes}
+              >
+                {phase === "night" && !sync.gameEnded && (
+                  <div
+                    className="stickers-board"
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      pointerEvents: "none",
+                      zIndex: 999,
+                      opacity: isNightInfoVisible ? 1 : 0,
+                      transition: "opacity 0.3s ease",
+                      touchAction: "none"
+                    }}
+                  >
+                    {sync.stickers
+                      .filter((s: any) => !dismissedStickerIds.includes(s.id))
+                      .map((sticker: any) => {
+                        const resolvedUrl = getStickerUrlByFileName(sticker.imageSrc);
+                        if (!resolvedUrl) return null;
+
+                        return (
+                          <StickerPeel
+                            key={sticker.id}
+                            imageSrc={resolvedUrl}
+                            createdAt={sticker.createdAt}
+                            isOwner={sticker.owner === clientId}
+                            isPasted={sticker.isPasted}
+                            pastedAt={sticker.pastedAt}
+                            startDragEvent={sticker.startDragEvent}
+                            onDismiss={() => setDismissedStickerIds(prev => [...prev, sticker.id])}
+                            onDragStart={() => {
+                              if (sticker.owner === clientId) {
+                                setDraggingStickerId(sticker.id);
+                                handleDragStartSticker(sticker.id, sticker.channel);
+                              }
+                            }}
+                            onDragUpdate={(_x, _y, overTrash, _rotateVal) => {
+                              if (sticker.owner === clientId) {
+                                setIsOverTrash(overTrash);
+                              }
+                            }}
+                            onRelease={() => {
+                              if (sticker.owner === clientId) {
+                                setDraggingStickerId(null);
+                                setIsOverTrash(false);
+                              }
+                            }}
+                            onDragEnd={(isDeleted, finalX, finalY, finalRotation) => {
+                              if (sticker.owner === clientId) {
+                                if (isDeleted) {
+                                  handleDeleteSticker(sticker.id, sticker.channel);
+                                } else {
+                                  setDraggingStickerId(null);
+                                  setIsOverTrash(false);
+                                  handleDragUpdateSticker(
+                                    sticker.id,
+                                    finalX,
+                                    finalY,
+                                    sticker.channel,
+                                    true,
+                                    Date.now(),
+                                    finalRotation !== undefined ? finalRotation : sticker.rotate
+                                  );
+                                }
+                              }
+                            }}
+                            onDeleteClick={() => handleDeleteSticker(sticker.id, sticker.channel)}
+                            onAnimationEnd={() => {
+                              if (sticker.owner === clientId) {
+                                handleDeleteSticker(sticker.id, sticker.channel);
+                              }
+                            }}
+                            rotate={sticker.rotate}
+                            x={sticker.x}
+                            y={sticker.y}
+                          />
+                        );
+                      })}
+                  </div>
+                )}
+              </PlayerPositions>
+              {!hasVisibleActionPanel && renderSkillHint()}
+            
+            </div>
+            <RoleCharacterPortrait
+              role={shouldShowRolePortrait ? role : null}
+              backgroundAssetOverride={null}
+              gameMode="diet_quy"
+            />
+            <RoleCompanionOverlay
+              companionRoleSrc={shouldRevealMyRole && !(sync.gameEnded && canViewLog) ? companionRoleSrc : null}
+              normalizedRole={normalizedRole}
+              playerFrameHeightPx={playerFrameHeightPx}
+              seerResults={null}
+            />
+          </>
+        );
+      })()}
+
+      {!sync.gameEnded && dietQuy.panel}
+
+      {/* Game controls */}
+      {canShowGameControls && (
+        <div className="game-host-controls">
+          
+          {isHost && (
+            <button onClick={() => socket.emit("restartGame", { roomId })}>
+              Chia bài lại
+            </button>
+          )}
+          {phase === "night" && !sync.gameEnded && (
+            <button
+              onClick={() =>
+                socket.emit("changePhase", { roomId, phase: "day" })
+              }
+            >
+              Bắt đầu ngày
+            </button>
+          )}
+          {phase === "night" && !sync.gameEnded && isSequentialNight && (
+            <button
+              onClick={() => socket.emit("hostNightTurnNext", { roomId })}
+              disabled={!currentNightTurnRole}
+              style={{ opacity: currentNightTurnRole ? 1 : 0.6 }}
+            >
+              Chuyển sang lượt tiếp theo
+            </button>
+          )}
+          {canHostToggleNightTimer && (
+            countdownSeconds !== null && countdownSeconds <= 0 ? (
+              <button
+                onClick={() => socket.emit("hostAddAllNightTurnTime", { roomId })}
+                disabled={isSequentialNight ? !currentNightTurnRole : false}
+                style={{ opacity: isSequentialNight && !currentNightTurnRole ? 0.6 : 1 }}
+              >
+                Cộng thêm thời gian
+              </button>
+            ) : (
+              <button
+                onClick={() => socket.emit("hostToggleNightTurnPause", { roomId })}
+                disabled={isSequentialNight ? !currentNightTurnRole : false}
+                style={{ opacity: isSequentialNight && !currentNightTurnRole ? 0.6 : 1 }}
+              >
+                {nightTurnPaused ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
+              </button>
+            )
+          )}
+          {phase === "day" && !sync.gameEnded && dayVote.remainingSec !== null && (
+            <button
+              onClick={() => socket.emit("hostToggleDayPause", { roomId })}
+            >
+              {!!(room?.dayPaused ?? sync.dayPaused) ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
+            </button>
+          )}
+          {canShowStartDayVotingControl && (
+            <button
+              onClick={() => socket.emit("hostStartDayVoting", { roomId })}
+              disabled={!isDayDiscussion}
+              style={{ opacity: isDayDiscussion ? 1 : 0.6 }}
+            >
+              Bắt đầu biểu quyết
+            </button>
+          )}
+          {canShowFinishTrialInteractionControl && (
+            <button onClick={() => socket.emit("hostForceFinishDayVote", { roomId })}>
+              Kết thúc tương tác ngay
+            </button>
+          )}
+          {isHost && phase === "day" && !sync.gameEnded && (sync.dayDeadline || sync.trialStage === "verdict") && (
+            <button onClick={() => socket.emit("hostForceFinishDayVote", { roomId })}>
+              Chốt vote ngay
+            </button>
+          )}
+          {canShowAddTrialInteractionControl && (
+            <button onClick={() => socket.emit("trialAddInteractionTurn", { roomId })}>
+              Bổ sung lượt tương tác
+            </button>
+          )}
+          {isHost && (
+            <button onClick={() => socket.emit("hostTogglePlayerRoleText", { roomId })}>
+              {room?.hidePlayerRoleText ? "Hiện vai trò người chơi" : "Ẩn vai trò người chơi"}
+            </button>
+          )}
+          {isHost && !sync.gameEnded && (
+            <button 
+              onClick={() => setEndGameConfirmOpen(true)}
+              style={{ background: "#e74c3c", color: "#fff" }}
+            >
+              Kết thúc ngay trò chơi
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Slayer Button Day */}
       {phase === "day" && role === "Diệt quỷ" && !isCurrentPlayerDead && !room?.dietQuySlayerUsed && (
         <div style={{ margin: "15px auto", textAlign: "center" }}>
           <button
-            onClick={() => setSlayerSelectMode(p => !p)}
+            onClick={() => setSlayerSelectMode(!slayerSelectMode)}
             style={{
               padding: "10px 20px",
               background: slayerSelectMode ? "#e74c3c" : "var(--accent)",
               color: "#fff",
               border: "none",
-              borderRadius: 8,
+              borderRadius: "8px",
               cursor: "pointer",
               fontWeight: "bold",
               boxShadow: "0 4px 12px rgba(0,0,0,0.2)"
@@ -1350,6 +2711,19 @@ export default function GameDietQuy() {
         </div>
       )}
 
+      {/* Slayer Confirm Modal */}
+      <ConfirmModal
+        open={showSlayerConfirm && !!slayerTargetId}
+        title="Xác nhận diệt quỷ"
+        message={`Bạn có chắc chắn muốn sử dụng kỹ năng Slayer bắn ${room?.players.find(p => p.id === slayerTargetId)?.name}? (Kỹ năng chỉ dùng được 1 lần duy nhất trong game)`}
+        onConfirm={confirmSlayerAction}
+        onCancel={() => {
+          setShowSlayerConfirm(false);
+          setSlayerTargetId(null);
+        }}
+      />
+
+      {/* Host Setup Night controls */}
       {isHost && (phase === "day" || phase === "dusk") && !sync.gameEnded && (
         <div style={{
           background: "var(--surface-muted)",
@@ -1428,198 +2802,7 @@ export default function GameDietQuy() {
         </div>
       )}
 
-      {(isHost || !!sync.gameEnded || hostDisconnected) && (
-        <div className="game-top-actions" style={{ marginTop: "0.75rem" }}>
-          {!!sync.gameEnded && room?.scoreResult && (
-            <button
-              onClick={() => setScoreboardOpen(true)}
-              style={{
-                background: "linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%)",
-                color: "#fff",
-                border: "none",
-                fontWeight: 700,
-                cursor: "pointer",
-                padding: "8px 16px",
-                borderRadius: "8px",
-                boxShadow: "0 4px 12px rgba(155, 89, 182, 0.3)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px"
-              }}
-            >
-              <img src={medalSvg} alt="medal" style={{ width: "18px", height: "18px" }} />
-              Xem điểm
-            </button>
-          )}
-          {!hostDisconnected && (
-            <button onClick={handleBackToRoomClick}>
-              Về phòng chờ
-            </button>
-          )}
-        </div>
-      )}
-
-      {roomForDisplay?.positions && (phase !== "dusk" || isHost) && (() => {
-        const replayActorIds: string[] = [];
-        const replayTargetIds: string[] = [];
-
-        return (
-          <>
-            <div
-              style={{
-                height: playerFrameHeightPx,
-                width: "100%",
-                maxWidth: "60rem",
-                margin: "0 auto",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                position: "relative"
-              }}
-            >
-              {isHost && (phase === "day" || phase === "dusk") && !sync.gameEnded && (
-                <>
-                  <style>{`
-                    @keyframes highlightBlink {
-                      0%, 100% {
-                        opacity: 0.4;
-                        transform: scale(1);
-                        box-shadow: 0 0 5px rgba(255, 255, 255, 0.1);
-                        border-color: rgba(255, 255, 255, 0.1);
-                      }
-                      50% {
-                        opacity: 1;
-                        transform: scale(1.1);
-                        box-shadow: 0 0 20px var(--accent);
-                        border-color: var(--accent);
-                      }
-                    }
-                    .angle-btn {
-                      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-                    }
-                    .angle-btn:hover {
-                      transform: scale(1.08) !important;
-                      border-color: var(--accent) !important;
-                      box-shadow: 0 0 15px rgba(255, 255, 255, 0.2) !important;
-                      opacity: 1 !important;
-                    }
-                  `}</style>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDirection("counter_clockwise")}
-                    className="angle-btn"
-                    onAnimationEnd={() => setTriggerBlink(false)}
-                    style={{
-                      width: "56px",
-                      height: "56px",
-                      borderRadius: "50%",
-                      background: selectedDirection === "counter_clockwise" ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.05)",
-                      border: selectedDirection === "counter_clockwise" ? "2px solid var(--accent)" : "1px solid rgba(255, 255, 255, 0.1)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      cursor: "pointer",
-                      opacity: selectedDirection === "counter_clockwise" ? 1 : (selectedDirection === "clockwise" ? 0.25 : 0.7),
-                      animation: triggerBlink ? "highlightBlink 1.2s ease-in-out 2" : "none",
-                      boxShadow: selectedDirection === "counter_clockwise" ? "0 0 15px var(--accent)" : "none",
-                      padding: 0,
-                      outline: "none",
-                      position: "absolute",
-                      left: "15px",
-                      zIndex: 100
-                    }}
-                    title="Ngược chiều kim đồng hồ"
-                  >
-                    <img src={angleCircleLeftSvg} style={{ width: "32px", height: "32px", filter: "brightness(0) invert(1)", display: "block" }} />
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDirection("clockwise")}
-                    className="angle-btn"
-                    onAnimationEnd={() => setTriggerBlink(false)}
-                    style={{
-                      width: "56px",
-                      height: "56px",
-                      borderRadius: "50%",
-                      background: selectedDirection === "clockwise" ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.05)",
-                      border: selectedDirection === "clockwise" ? "2px solid var(--accent)" : "1px solid rgba(255, 255, 255, 0.1)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      cursor: "pointer",
-                      opacity: selectedDirection === "clockwise" ? 1 : (selectedDirection === "counter_clockwise" ? 0.25 : 0.7),
-                      animation: triggerBlink ? "highlightBlink 1.2s ease-in-out 2" : "none",
-                      boxShadow: selectedDirection === "clockwise" ? "0 0 15px var(--accent)" : "none",
-                      padding: 0,
-                      outline: "none",
-                      position: "absolute",
-                      right: "15px",
-                      zIndex: 100
-                    }}
-                    title="Theo chiều kim đồng hồ"
-                  >
-                    <img src={angleCircleRightSvg} style={{ width: "32px", height: "32px", filter: "brightness(0) invert(1)", display: "block" }} />
-                  </button>
-                </>
-              )}
-              <PlayerPositions
-                mode="view"
-                roomOverride={roomForDisplay}
-                viewMode={viewMode}
-                onPlayerClick={handlePlayerClick}
-                onPlayerDoubleClick={handlePlayerDoubleClick}
-                deadPlayersOverride={deadPlayersOverrideForRender}
-                highlightPlayerId={highlightPlayerId}
-                secondaryHighlightPlayerIds={secondaryHighlightPlayerIds}
-                dangerPlayerIds={dangerHighlightPlayerIds}
-                verdictLivePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.secondaryIds}
-                verdictDiePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.dangerIds}
-                showRoleBadges={!!roleBadgesForDisplay}
-                roleBadges={roleBadgesForDisplay}
-                selectedOutlinePlayerId={
-                  (isHost && (phase === "day" || phase === "dusk") ? dietQuyNightStartPlayerId : null) ||
-                  dietQuy.playerPositionsProps.selectedOutlinePlayerId ||
-                  dayVote.playerPositionsProps.selectedOutlinePlayerId ||
-                  null
-                }
-                dietQuyOrangeHighlightPlayerIds={dietQuy.playerPositionsProps.dietQuyOrangeHighlightPlayerIds}
-                dietQuyRedHighlightPlayerIds={dietQuy.playerPositionsProps.dietQuyRedHighlightPlayerIds}
-                selectedOutlinePlayerIds={[]}
-                showWolfVoteBadges={dayVote.playerPositionsProps.showWolfVoteBadges}
-                wolfVoteVoterIds={
-                  dayVote.playerPositionsProps.showWolfVoteBadges
-                    ? dayVote.playerPositionsProps.wolfVoteVoterIds
-                    : []
-                }
-                voteWeightsByVoterId={dayVote.playerPositionsProps.showWolfVoteBadges ? dayVoteWeightsByVoterId : undefined}
-                showWolfBadges={false}
-                wolfBadgePlayerIds={[]}
-                wolfBadgeRoles={{}}
-                cheesePlayerIds={[]}
-                trialOrangePlayerId={dayVote.playerPositionsProps.trialOrangePlayerId}
-                trialWhitePlayerIds={dayVote.playerPositionsProps.trialWhitePlayerIds}
-                trialGreenPlayerId={dayVote.playerPositionsProps.trialGreenPlayerId}
-                replayActorIds={replayActorIds}
-                replayTargetIds={replayTargetIds}
-                suppressNightActionProgress={autoTrialHighlightSuppressed}
-              />
-              {!hasVisibleActionPanel && renderSkillHint()}
-            </div>
-            <RoleCharacterPortrait
-              role={shouldShowRolePortrait ? role : null}
-              backgroundAssetOverride={null}
-            />
-            <RoleCompanionOverlay
-              companionRoleSrc={shouldRevealMyRole && !(sync.gameEnded && canViewLog) ? companionRoleSrc : null}
-              normalizedRole={normalizedRole}
-              playerFrameHeightPx={playerFrameHeightPx}
-              seerResults={null}
-            />
-          </>
-        );
-      })()}
-
+      {/* Info Cards Panel for Clocktower info */}
       <div id="info-TiếtLộ" style={{
         display: "flex",
         flexDirection: "column",
@@ -1628,150 +2811,34 @@ export default function GameDietQuy() {
         margin: "25px auto",
         textAlign: "center"
       }}>
-        {/* Chef info */}
         {role === "Đầu bếp" && dietQuy.chefInfo !== null && (
           renderInfoCard(`Thông tin Đầu bếp: Có ${dietQuy.chefInfo} cặp người chơi phe ác ngồi cạnh nhau.`)
         )}
-
-        {/* Empath info */}
         {role === "Đồng cảm" && dietQuy.empathInfo !== null && (
           renderInfoCard(`Thông tin Đồng cảm: Có ${dietQuy.empathInfo} người ngồi cạnh là phe ác.`)
         )}
-
-        {/* Undertaker info */}
         {role === "Chôn cất" && dietQuy.undertakerInfo !== null && (
           renderInfoCard(`Người bị treo cổ hôm nay có vai trò thực sự là ${dietQuy.undertakerInfo}.`)
         )}
-
-        {/* Washerwoman info */}
         {role === "Thợ giặt" && dietQuy.washerwomanInfo && (
           renderInfoCard(`Một trong hai người này là ${dietQuy.washerwomanInfo.townsfolkRole}`)
         )}
-
-        {/* Librarian info */}
         {role === "Thủ thư" && dietQuy.librarianInfo && (
           renderInfoCard(`Thông tin Thủ thư: Một trong hai người chơi ${dietQuy.librarianInfo.targetIds.map(id => room.players.find(p => p.id === id)?.name || id).join(" hoặc ")} có vai trò là ${dietQuy.librarianInfo.role}.`)
         )}
-
-        {/* Investigator info */}
         {role === "Điều tra viên" && dietQuy.investigatorInfo && (
           renderInfoCard(`Thông tin Điều tra viên: Một trong hai người chơi ${dietQuy.investigatorInfo.targetIds.map(id => room.players.find(p => p.id === id)?.name || id).join(" hoặc ")} có vai trò là Tay sai ${dietQuy.investigatorInfo.minionRole}.`)
         )}
-
-        {/* Fortune Teller result */}
         {role === "Thầy bói" && dietQuy.fortuneTellerResult !== null && (
           renderInfoCard(`Thông tin Thầy bói: ${dietQuy.fortuneTellerResult === "yes" ? "Có ít nhất một người là Quỷ (hoặc Red Charm) trong 2 người bạn đã kiểm tra." : "Không có ai là Quỷ (hoặc Red Charm) trong 2 người bạn đã kiểm tra."}`)
         )}
-
-        {/* Ravenkeeper result */}
-        {role === "Nuôi quạ" && dietQuy.ravenkeeperResult !== null && (
-          renderInfoCard(`Thông tin Nuôi quạ: Người chơi bạn chọn có vai trò thực sự là ${dietQuy.ravenkeeperResult}.`)
-        )}
       </div>
-
-
-      {!sync.gameEnded && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start" }}>
-          {dietQuy.panel}
-          {hasVisibleActionPanel && renderSkillHint()}
-        </div>
-      )}
-
-      {/* Game controls */}
-      {canShowGameControls && (
-        <div className="game-host-controls">
-          {isHost && (
-            <button onClick={() => socket.emit("restartGame", { roomId })}>
-              Chia bài lại
-            </button>
-          )}
-          {phase === "night" && !sync.gameEnded && (
-            <button
-              onClick={() =>
-                socket.emit("changePhase", { roomId, phase: "day" })
-              }
-            >
-              Bắt đầu ngày
-            </button>
-          )}
-          {phase === "night" && !sync.gameEnded && (
-            <button
-              onClick={() => socket.emit("hostNightTurnNext", { roomId })}
-              disabled={!currentNightTurnPlayerId}
-              style={{ opacity: currentNightTurnPlayerId ? 1 : 0.6 }}
-            >
-              Chuyển sang lượt tiếp theo
-            </button>
-          )}
-          {phase === "night" && !sync.gameEnded && (
-            countdownSeconds !== null && countdownSeconds <= 0 ? (
-              <button
-                onClick={() => socket.emit("hostAddAllNightTurnTime", { roomId })}
-                disabled={!currentNightTurnPlayerId}
-                style={{ opacity: currentNightTurnPlayerId ? 1 : 0.6 }}
-              >
-                Cộng thêm thời gian
-              </button>
-            ) : (
-              <button
-                onClick={() => socket.emit("hostToggleNightTurnPause", { roomId })}
-                disabled={!currentNightTurnPlayerId}
-                style={{ opacity: currentNightTurnPlayerId ? 1 : 0.6 }}
-              >
-                {nightTurnPaused ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
-              </button>
-            )
-          )}
-          {phase === "day" && !sync.gameEnded && dayVote.remainingSec !== null && (
-            <button
-              onClick={() => socket.emit("hostToggleDayPause", { roomId })}
-            >
-              {!!(room?.dayPaused ?? sync.dayPaused) ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
-            </button>
-          )}
-          {canShowStartDayVotingControl && (
-            <button
-              onClick={() => socket.emit("hostStartDayVoting", { roomId })}
-              disabled={!isDayDiscussion}
-              style={{ opacity: isDayDiscussion ? 1 : 0.6 }}
-            >
-              Bắt đầu biểu quyết
-            </button>
-          )}
-          {canShowFinishTrialInteractionControl && (
-            <button onClick={() => socket.emit("hostForceFinishDayVote", { roomId })}>
-              Kết thúc tương tác ngay
-            </button>
-          )}
-          {isHost && phase === "day" && !sync.gameEnded && (sync.dayDeadline || sync.trialStage === "verdict") && (
-            <button onClick={() => socket.emit("hostForceFinishDayVote", { roomId })}>
-              Chốt vote ngay
-            </button>
-          )}
-          {canShowAddTrialInteractionControl && (
-            <button onClick={() => socket.emit("trialAddInteractionTurn", { roomId })}>
-              Bổ sung lượt tương tác
-            </button>
-          )}
-          {isHost && (
-            <button onClick={() => socket.emit("hostTogglePlayerRoleText", { roomId })}>
-              {room?.hidePlayerRoleText ? "Hiện vai trò người chơi" : "Ẩn vai trò người chơi"}
-            </button>
-          )}
-          {isHost && !sync.gameEnded && (
-            <button
-              onClick={() => setEndGameConfirmOpen(true)}
-              style={{ background: "#e74c3c", color: "#fff" }}
-            >
-              Kết thúc ngay trò chơi
-            </button>
-          )}
-        </div>
-      )}
 
       {isHost && logPanel}
 
+      
       {!isHost && dayVote.panel}
+      {!isHost && villageChiefExtraVotePanel}
       {!isHost && logPanel}
 
       {rulesRestartOverlay && (
@@ -1847,21 +2914,6 @@ export default function GameDietQuy() {
         onCancel={() => setEndGameConfirmOpen(false)}
       />
 
-      {slayerTargetId && (
-        <ConfirmModal
-          open={showSlayerConfirm}
-          title="Xác nhận diệt quỷ"
-          message={`Bạn có chắc chắn muốn tiêu diệt ${room.players.find(p => p.id === slayerTargetId)?.name || "người chơi này"} không? Chức năng chỉ được dùng một lần duy nhất.`}
-          confirmText="Bắn"
-          cancelText="Hủy"
-          onConfirm={confirmSlayerAction}
-          onCancel={() => {
-            setShowSlayerConfirm(false);
-            setSlayerTargetId(null);
-          }}
-        />
-      )}
-
       {hostPlayerActionTargetId && (
         <div
           style={{
@@ -1875,7 +2927,7 @@ export default function GameDietQuy() {
             padding: 16,
           }}
         >
-          <div
+          <div id="host-god"
             style={{
               width: "min(92vw, 420px)",
               maxHeight: "90vh",
@@ -1916,7 +2968,7 @@ export default function GameDietQuy() {
                 </button>
               </div>
             </div>
-
+            
             <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 12, marginTop: 12 }}>
               <div style={{ fontWeight: 600, marginBottom: 8 }}>Tên thật của người chơi</div>
               <div style={{ display: "flex", gap: 8 }}>
@@ -2063,7 +3115,7 @@ export default function GameDietQuy() {
                     color: editingAvatar ? "#fff" : "rgba(255,255,255,0.3)"
                   }}>
                     {editingAvatar ? (
-                      editingAvatar.startsWith("M ") ? `🖼️ Tách nền: ${editingAvatar.substring(2)}` :
+                      (editingAvatar.includes("M-") || editingAvatar.startsWith("M ")) ? `🖼️ Tách nền: ${editingAvatar.substring(editingAvatar.indexOf(" ") + 1)}` :
                       editingAvatar.startsWith("S ") ? `👤 Thường: ${editingAvatar.substring(2)}` : editingAvatar
                     ) : "Chưa chọn (Ẩn avatar)"}
                   </div>
@@ -2242,9 +3294,24 @@ export default function GameDietQuy() {
                 Gắn ảnh
               </button>
             </div>
+
             {!isHostPlayerActionTargetDead ? (
               <>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+                  <button
+                    disabled={phase !== "night"}
+                    style={{ opacity: phase === "night" ? 1 : 0.55 }}
+                    onClick={() => {
+                      if (!roomId || !hostPlayerActionTargetId || phase !== "night") return;
+                      socket.emit("hostAddNightActionTime", {
+                        roomId,
+                        targetId: hostPlayerActionTargetId,
+                      });
+                      setHostPlayerActionTargetId(null);
+                    }}
+                  >
+                    +10 giây lượt hành động
+                  </button>
                   <button
                     style={{ background: "#e74c3c", color: "#fff" }}
                     onClick={() => {
@@ -2256,6 +3323,11 @@ export default function GameDietQuy() {
                   </button>
                   <button onClick={() => setHostPlayerActionTargetId(null)}>Đóng</button>
                 </div>
+                {phase !== "night" && (
+                  <div style={{ marginTop: 12, fontSize: 13, opacity: 0.72 }}>
+                    Chỉ có thể cộng thời gian khi đang trong ban đêm.
+                  </div>
+                )}
               </>
             ) : (
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
@@ -2282,7 +3354,6 @@ export default function GameDietQuy() {
         }}
         onCancel={() => setHostRuleEliminateTargetId(null)}
       />
-
       <ScoreboardModal
         open={scoreboardOpen}
         onClose={() => setScoreboardOpen(false)}
@@ -2295,6 +3366,67 @@ export default function GameDietQuy() {
           onComplete={() => setDuskTransitionActive(false)}
         />
       )}
+
+
+
+      {/* Trash Zone */}
+      <div
+        id="sticker-trash-zone"
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: "12dvh",
+          zIndex: 1010,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          pointerEvents: "none",
+          transform: draggingStickerId ? "translateY(0)" : "translateY(100%)",
+          opacity: draggingStickerId ? 1 : 0,
+          transition: draggingStickerId
+            ? "transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease"
+            : "transform 0.35s cubic-bezier(0.3, 0, 0.8, 0.15), opacity 0.35s ease-in",
+          overflow: "hidden"
+        }}
+      >
+        {/* Lớp nền đen mặc định */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.3) 60%, transparent 100%)",
+            zIndex: -1
+          }}
+        />
+        
+        {/* Lớp nền đỏ khi rê sticker vào - Transition opacity tạo hiệu ứng chuyển màu gradient cực mượt */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "linear-gradient(to top, rgba(239, 68, 68, 0.95) 0%, rgba(239, 68, 68, 0.4) 60%, transparent 100%)",
+            opacity: isOverTrash ? 1 : 0,
+            transition: "opacity 0.3s ease-in-out",
+            zIndex: -1
+          }}
+        />
+
+        <img
+          src={trashIcon}
+          alt="Thùng rác"
+          style={{
+            width: "36px",
+            height: "36px",
+            filter: isOverTrash 
+              ? "invert(21%) sepia(84%) saturate(7415%) hue-rotate(354deg) brightness(93%) contrast(92%)"
+              : "invert(100%) brightness(200%)",
+            transform: isOverTrash ? "translateY(-10px) scale(1.15)" : "translateY(0) scale(1.0)",
+            transition: "transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), filter 0.25s ease"
+          }}
+        />
+      </div>
     </div>
   );
 }

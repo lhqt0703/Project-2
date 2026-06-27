@@ -23,6 +23,7 @@ export default function Game() {
     if (room && room.id === roomId) return;
 
     if (roomId === "mock-8") {
+      const isDebugHeartExplosion = new URLSearchParams(window.location.search).get("debugHeartExplosion") === "1";
       setRoom({
         id: "mock-8",
         hostId: "P1",
@@ -47,11 +48,24 @@ export default function Game() {
           { playerId: "P8", x: 0.585, y: 0.7 },
         ],
         phase: "night",
-        nightCount: 1,
+        nightCount: isDebugHeartExplosion ? 2 : 1,
         nightTurnRemainingMs: 690 * 1000,
         nightTurnPaused: true,
         deadPlayers: [],
-        gameRules: DEFAULT_ROOM_GAME_RULES,
+        gameRules: {
+          ...DEFAULT_ROOM_GAME_RULES,
+          twoHeartsFirstTwoNights: true,
+        },
+        sharedHeartsVisible: isDebugHeartExplosion ? true : undefined,
+        playerHearts: isDebugHeartExplosion ? {
+          P2: 2,
+          P3: 2,
+          P4: 2,
+          P5: 2,
+          P6: 2,
+          P7: 2,
+          P8: 2,
+        } : undefined,
       });
       return;
     }

@@ -1,4 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { gsap } from "gsap";
+import Physics2DPlugin from "../libs/Physics2DPlugin";
 import { socket, clientId } from "../socket";
 import { useRoomContext } from "../context/RoomContext";
 import { getDeterministicSlots1to18, getDeterministicSlots19Plus } from "./layouts";
@@ -7,15 +10,18 @@ import Orb from "./Orb";
 import { AvifIcon } from "./AvifIcon";
 
 import PlayerShotEffect from "./PlayerShotEffect";
+import SplashCursor from "./SplashCursor";
+import heartIcon from "../assets/icon/tim.avif";
 
 import nenLungAsset from "../assets/nền lưng.avif";
-import avaPhucMasked from "../assets/Ava/M 046fa88a-a719-47c3-8b97-ddfc8337cf83.avif";
-import avaDinMasked from "../assets/Ava/M f7d9652f-ac74-4557-81a2-7c2731a77d37.avif";
-import avaHaVietMasked from "../assets/Ava/M 397d9740-e21b-4ade-941f-25912aefd591.png"; // chú ý .png
-import avaSanMasked from "../assets/Ava/M client_1780242307126_pmozg54dmra.avif";
-import avaCuongMasked from "../assets/Ava/M 8dfc1d63-988f-460d-8569-8a1964be99a0.avif";
-import avaVietThangMasked from "../assets/Ava/M ec0c6c66-9ce7-4d86-ac12-25824af15b79.avif";
-import avaDuyMasked from "../assets/Ava/M 9bc9009c-13b3-4ba6-bbdd-a7189b477ccd.avif";
+import boardSvg from "../assets/board.svg";
+import avaPhucMasked from "../assets/Ava/046fa88a-a719-47c3-8b97-ddfc8337cf83 M-1.avif";
+import avaDinMasked from "../assets/Ava/f7d9652f-ac74-4557-81a2-7c2731a77d37 M-1.avif";
+import avaHaVietMasked from "../assets/Ava/397d9740-e21b-4ade-941f-25912aefd591 M-1.avif";
+import avaSanMasked from "../assets/Ava/client_1780242307126_pmozg54dmra M-1.avif";
+import avaCuongMasked from "../assets/Ava/8dfc1d63-988f-460d-8569-8a1964be99a0 M-1.avif";
+import avaVietThangMasked from "../assets/Ava/ec0c6c66-9ce7-4d86-ac12-25824af15b79 M-1.avif";
+import avaDuyMasked from "../assets/Ava/9bc9009c-13b3-4ba6-bbdd-a7189b477ccd M-1.avif";
 
 export const AVA_IMAGES = import.meta.glob<string>("../assets/Ava/*", {
   eager: true,
@@ -40,6 +46,72 @@ export const MASKED_AVATAR_MAP: Record<string, string> = {
   "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd": avaDuyMasked
 };
 
+const triggerHeartExplosion = (x: number, y: number, containerEl: HTMLDivElement | null, count: number) => {
+  if (!containerEl || count <= 0) return;
+
+  let confettiContainer = document.getElementById("cupid-confetti-viewport-container");
+  if (!confettiContainer) {
+    confettiContainer = document.createElement("div");
+    confettiContainer.id = "cupid-confetti-viewport-container";
+    Object.assign(confettiContainer.style, {
+      position: "fixed",
+      top: "0",
+      left: "0",
+      width: "100vw",
+      height: "100dvh",
+      pointerEvents: "none",
+      overflow: "hidden",
+      zIndex: "99999",
+    });
+    document.body.appendChild(confettiContainer);
+  }
+
+  const rect = containerEl.getBoundingClientRect();
+  const targetX = rect.left + x * rect.width;
+  const targetY = rect.top + y * rect.height;
+
+  const gravity = 2200;
+
+  for (let i = 0; i < count; i++) {
+    const img = document.createElement("img");
+    img.src = heartIcon;
+    img.style.position = "absolute";
+    img.style.pointerEvents = "none";
+    img.style.left = `${targetX}px`;
+    img.style.top = `${targetY}px`;
+    img.style.width = "14px";
+    img.style.height = "auto";
+    img.style.zIndex = "99999";
+    img.style.transform = "translate(-50%, -50%)";
+
+    confettiContainer.appendChild(img);
+
+    const angle = Math.random() * Math.PI * 2 * (180 / Math.PI);
+    const velocity = gsap.utils.random(200, 600);
+    const duration = 1.0 + Math.random() * 0.6;
+
+    gsap.to(img, {
+      physics2D: {
+        angle: angle,
+        velocity: velocity,
+        gravity: gravity,
+      },
+      rotation: gsap.utils.random(-180, 180),
+      duration: duration,
+      ease: "power1.out",
+    });
+
+    gsap.to(img, {
+      opacity: 0,
+      duration: 0.3,
+      delay: duration - 0.3,
+      ease: "power1.out",
+      onComplete: () => {
+        img.remove();
+      },
+    });
+  }
+};
 
 export interface PlayerPosition {
   playerId: string;
@@ -75,6 +147,7 @@ interface RoomLike {
     nonWolfNightActionDurationSec?: number;
     wolfNightActionDurationSec?: number;
     witchBonusTimeRequiresUsablePotion?: boolean;
+    twoHeartsFirstTwoNights?: boolean;
   };
 }
 
@@ -363,6 +436,220 @@ const getRoleBadgeStyle = (role: string) => {
   };
 };
 
+function BlankVoteBoard({ visible }: { visible: boolean }) {
+  const [showText, setShowText] = useState(false);
+
+  const handleBoardClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (showText) return;
+    setShowText(true);
+    setTimeout(() => {
+      setShowText(false);
+    }, 2000);
+  };
+
+  return (
+    <div
+      onClick={handleBoardClick}
+      onPointerDown={(e) => e.stopPropagation()}
+      style={{
+        position: "relative",
+        top: "-1.85rem",
+        right: "-0.7rem",
+        width: "1.8rem",
+        height: "1.8rem",
+        cursor: "pointer",
+        rotate: "20deg",
+        zIndex: 10,
+        opacity: visible ? 1 : 0,
+        transform: visible ? "scale(1)" : "scale(0)",
+        transformOrigin: "bottom center",
+        transition: "opacity 0.35s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <img
+        src={boardSvg}
+        alt="Board"
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          position: "relative",
+          top: "-15%",
+          zIndex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            width: "14px",
+            height: "14px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "opacity 0.2s ease",
+            opacity: showText ? 0 : 1,
+            pointerEvents: "none",
+          }}
+        >
+          <AvifIcon name="⭕" style={{ width: "100%", height: "100%" }} />
+        </span>
+        <span
+          style={{
+            position: "absolute",
+            fontSize: "6.5px",
+            fontWeight: "bold",
+            color: "#451a03",
+            textAlign: "center",
+            lineHeight: 1,
+            transition: "opacity 0.2s ease",
+            opacity: showText ? 1 : 0,
+            pointerEvents: "none",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+          }}
+        >
+          <span>Phiếu</span>
+          <span>trống</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+interface PlayerMessageBubbleProps {
+  playerId: string;
+  message: { id: string; text: string; channel: "wolf" | "lovers"; createdAt: number };
+  circleSizePx: number;
+  onDismiss: () => void;
+  visible?: boolean;
+  x: number;
+  y: number;
+}
+
+const PlayerMessageBubble: React.FC<PlayerMessageBubbleProps> = ({
+  playerId,
+  message,
+  circleSizePx,
+  onDismiss,
+  visible = true,
+  x,
+  y
+}) => {
+  const [isSelfVisible, setIsSelfVisible] = useState(true);
+  const bubbleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const lifespanMs = 8000;
+    const elapsed = Date.now() - message.createdAt;
+    const remainingTime = Math.max(0, lifespanMs - elapsed);
+
+    const timer = setTimeout(() => {
+      handleDismiss();
+    }, remainingTime);
+
+    return () => clearTimeout(timer);
+  }, [message]);
+
+  const handleDismiss = () => {
+    if (!isSelfVisible) return;
+    setIsSelfVisible(false);
+    if (bubbleRef.current) {
+      gsap.to(bubbleRef.current, {
+        opacity: 0,
+        scale: 0.8,
+        y: -10,
+        duration: 0.25,
+        ease: "power2.out",
+        onComplete: onDismiss
+      });
+    } else {
+      onDismiss();
+    }
+  };
+
+  const isWolf = message.channel === "wolf";
+  const bgGradient = isWolf
+    ? "linear-gradient(135deg, #8C5A3C, #5C3A24)"
+    : "linear-gradient(135deg, #ff6a6a, #f72257)";
+  const borderCol = isWolf ? "#A76F53" : "#f96b84";
+  const shadowCol = isWolf ? "rgba(140, 90, 60, 0.4)" : "rgba(247, 34, 87, 0.4)";
+
+  return (
+    <div
+      ref={bubbleRef}
+      onClick={(e) => {
+        e.stopPropagation();
+        handleDismiss();
+      }}
+      style={{
+        position: "absolute",
+        left: `${x * 100}%`,
+        top: `${y * 100}%`,
+        transform: `translate(-50%, -100%) translateY(-${circleSizePx / 2 + 8}px)`,
+        width: "max-content",
+        maxWidth: `${circleSizePx * 2.5}px`,
+        background: bgGradient,
+        border: `1px solid ${borderCol}`,
+        borderRadius: "12px",
+        padding: "8px 12px",
+        color: "#fff",
+        fontSize: "13px",
+        fontWeight: "500",
+        lineHeight: "1.4",
+        textAlign: "center",
+        boxShadow: `0 4px 12px ${shadowCol}`,
+        zIndex: 99999,
+        cursor: "pointer",
+        wordBreak: "break-word",
+        animation: "slideUpBubble 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards",
+        userSelect: "none",
+        pointerEvents: "auto",
+        display: (visible && isSelfVisible) ? "block" : "none"
+      }}
+    >
+      <style>{`
+        @keyframes slideUpBubble {
+          from {
+            opacity: 0;
+            transform: translate(-50%, -100%) translateY(-${circleSizePx / 2 + 8 - 10}px) scale(0.9);
+          }
+          to {
+            opacity: 1;
+            transform: translate(-50%, -100%) translateY(-${circleSizePx / 2 + 8}px) scale(1);
+          }
+        }
+        .bubble-arrow {
+          position: absolute;
+          top: 100%;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 0;
+          height: 0;
+          border-left: 6px solid transparent;
+          border-right: 6px solid transparent;
+          border-top: 6px solid ${isWolf ? "#5C3A24" : "#f72257"};
+        }
+      `}</style>
+      <div>{message.text}</div>
+      <div className="bubble-arrow" />
+    </div>
+  );
+};
+
 export default function PlayerPositions({
   onPlayerClick,
   onPlayerDoubleClick,
@@ -400,6 +687,15 @@ export default function PlayerPositions({
   dietQuyOrangeHighlightPlayerIds,
   dietQuyRedHighlightPlayerIds,
   viewMode = "nick-names",
+  showVoteReview,
+  dayVotes,
+  activeMessages = [],
+  onDismissMessage,
+  isNightInfoVisible = true,
+  children,
+  setRoom,
+  witchPotionEffect,
+  onWitchPotionEffectComplete,
 }: {
   onPlayerClick: (playerId: string) => void;
   onPlayerDoubleClick?: (playerId: string) => void;
@@ -437,8 +733,17 @@ export default function PlayerPositions({
   dietQuyOrangeHighlightPlayerIds?: string[];
   dietQuyRedHighlightPlayerIds?: string[];
   viewMode?: "real-names" | "nick-names" | "real-names-roles" | "nick-names-roles";
+  showVoteReview?: boolean;
+  dayVotes?: Record<string, string | null> | null;
+  activeMessages?: any[];
+  onDismissMessage?: (messageId: string) => void;
+  isNightInfoVisible?: boolean;
+  children?: React.ReactNode;
+  setRoom?: React.Dispatch<React.SetStateAction<any>>;
+  witchPotionEffect?: { targetId: string; type: "heal" | "poison"; startedAt: number } | null;
+  onWitchPotionEffectComplete?: () => void;
 }) {
-  const { room: contextRoom } = useRoomContext();
+  const { room: contextRoom, role } = useRoomContext();
   const room: RoomLike | null = roomOverride ?? (contextRoom as RoomLike | null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [revealDisconnectedToAll, setRevealDisconnectedToAll] = useState<boolean>(false);
@@ -460,13 +765,18 @@ export default function PlayerPositions({
     setCompactCircles(room.compactCircles ?? false);
   }, [room.compactCircles]);
 
+  const [containerSize, setContainerSize] = useState({ width: 600, height: 470 });
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
     const updateScale = () => {
-      const width = el.getBoundingClientRect().width || 600;
+      const rect = el.getBoundingClientRect();
+      const width = rect.width || 600;
+      const height = rect.height || 470;
       setFrameScale(clamp(width / 600, 0.55, 1));
+      setContainerSize({ width, height });
     };
 
     updateScale();
@@ -623,6 +933,62 @@ export default function PlayerPositions({
   useEffect(() => {
     animPositionsRef.current = (localPositions && localPositions.length ? localPositions : (room.positions || [])) as PlayerPosition[];
   }, [localPositions, room.positions]);
+
+  useEffect(() => {
+    if (Physics2DPlugin) {
+      gsap.registerPlugin(Physics2DPlugin);
+    }
+  }, []);
+
+  const prevPlayerHeartsRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    if (room?.playerHearts) {
+      if (Object.keys(room.playerHearts).length > 0) {
+        prevPlayerHeartsRef.current = room.playerHearts;
+      }
+    }
+  }, [room?.playerHearts]);
+
+  const [pendingHeartExplosion, setPendingHeartExplosion] = useState(false);
+  const prevSharedHeartsVisibleRef = useRef<boolean | undefined>(undefined);
+
+  useEffect(() => {
+    const prevSharedHeartsVisible = prevSharedHeartsVisibleRef.current;
+    const currentSharedHeartsVisible = room?.sharedHeartsVisible;
+    prevSharedHeartsVisibleRef.current = currentSharedHeartsVisible;
+
+    if (prevSharedHeartsVisible === true && currentSharedHeartsVisible === false) {
+      if (room?.gameRules?.twoHeartsFirstTwoNights && (room?.phase === "day" || room?.id === "mock-8")) {
+        setPendingHeartExplosion(true);
+      }
+    }
+  }, [room?.sharedHeartsVisible, room?.gameRules?.twoHeartsFirstTwoNights, room?.phase, room?.id]);
+
+  useEffect(() => {
+    if (pendingHeartExplosion && !bulletAnimation) {
+      const alivePlayers = (room?.players || []).filter(p => p.id !== room?.hostId && !(room?.deadPlayers || []).includes(p.id));
+      alivePlayers.forEach(p => {
+        const pos = localPositions.find(pos => pos.playerId === p.id);
+        if (pos) {
+          const hpCount = prevPlayerHeartsRef.current[p.id] ?? 2;
+          if (hpCount > 0) {
+            const circleRadiusPx = circleSizePx / 2;
+            const badgeLeft = -circleRadiusPx - scalePx(6, 3);
+            const badgeTop = -circleRadiusPx - hpBadgeTopPx;
+            const badgeWidth = scalePx(48, 32);
+            const badgeHeight = scalePx(20, 14);
+            const dxPx = badgeLeft + badgeWidth / 2;
+            const dyPx = badgeTop + badgeHeight / 2;
+            const dxPct = dxPx / containerSize.width;
+            const dyPct = dyPx / containerSize.height;
+
+            triggerHeartExplosion(pos.x + dxPct, pos.y + dyPct, containerRef.current, hpCount);
+          }
+        }
+      });
+      setPendingHeartExplosion(false);
+    }
+  }, [pendingHeartExplosion, bulletAnimation, room?.players, room?.deadPlayers, localPositions, room?.hostId, circleSizePx, hpBadgeTopPx, containerSize, frameScale]);
 
     const [recoilState, setRecoilState] = useState<{ elapsedMs: number; totalMs: number } | null>(null);
 
@@ -941,6 +1307,50 @@ export default function PlayerPositions({
     }
   };
 
+  const linesToDraw: Array<{ id: string; startX: number; startY: number; endX: number; endY: number }> = [];
+
+  if (dayVotes && trialOrangePlayerId) {
+    Object.entries(dayVotes).forEach(([voterId, targetId]) => {
+      if (!targetId || targetId === trialOrangePlayerId) return;
+      if ((deadPlayersOverride || []).includes(voterId)) return;
+
+      const fromPos = localPositions.find((pos) => pos.playerId === voterId);
+      const toPos = localPositions.find((pos) => pos.playerId === targetId);
+      if (fromPos && toPos) {
+        const W = containerSize.width;
+        const H = containerSize.height;
+
+        const X1 = fromPos.x * W;
+        const Y1 = fromPos.y * H;
+        const X2 = toPos.x * W;
+        const Y2 = toPos.y * H;
+
+        const dx = X2 - X1;
+        const dy = Y2 - Y1;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > circleSizePx) {
+          const R = circleSizePx / 2;
+          const startPadding = R + 4;
+          const endPadding = R + 8;
+
+          const startX = X1 + (startPadding / dist) * dx;
+          const startY = Y1 + (startPadding / dist) * dy;
+          const endX = X2 - (endPadding / dist) * dx;
+          const endY = Y2 - (endPadding / dist) * dy;
+
+          linesToDraw.push({
+            id: `${voterId}-${targetId}`,
+            startX,
+            startY,
+            endX,
+            endY,
+          });
+        }
+      }
+    });
+  }
+
   return (
     <div className="player-position-shell">
       <style>{`
@@ -951,6 +1361,25 @@ export default function PlayerPositions({
           60% { transform: translate(-50%,-50%) translateX(-2px); }
           80% { transform: translate(-50%,-50%) translateX(2px); }
           100% { transform: translate(-50%,-50%) translateX(0); }
+        }
+        @keyframes boardPop {
+          0% {
+            transform: scale(0);
+            opacity: 0;
+          }
+          70% {
+            transform: scale(1.15);
+            opacity: 0.9;
+          }
+          100% {
+            transform: scale(1);
+            opacity: 1;
+          }
+        }
+        @keyframes dashMove {
+          to {
+            stroke-dashoffset: -40;
+          }
         }
         .witch-danger {
           animation: witchDangerShake 500ms infinite;
@@ -1099,6 +1528,74 @@ export default function PlayerPositions({
           </button>
         </div>
       )}
+      {room.id === "mock-8" && (
+        <div className="player-position-toolbar mock-8-toolbar" style={{ marginBottom: 8, display: "flex", gap: "8px", justifyContent: "center", flexWrap: "wrap" }}>
+          <button
+            onClick={() => {
+              const alivePlayers = room.players.filter(p => p.id !== room.hostId && !(room.deadPlayers || []).includes(p.id));
+              alivePlayers.forEach(p => {
+                const pos = localPositions.find(pos => pos.playerId === p.id);
+                if (pos) {
+                  const hpCount = room.playerHearts?.[p.id] ?? 2;
+                  if (hpCount > 0) {
+                    const circleRadiusPx = circleSizePx / 2;
+                    const badgeLeft = -circleRadiusPx - scalePx(6, 3);
+                    const badgeTop = -circleRadiusPx - hpBadgeTopPx;
+                    const badgeWidth = scalePx(48, 32);
+                    const badgeHeight = scalePx(20, 14);
+                    const dxPx = badgeLeft + badgeWidth / 2;
+                    const dyPx = badgeTop + badgeHeight / 2;
+                    const dxPct = dxPx / containerSize.width;
+                    const dyPct = dyPx / containerSize.height;
+
+                    triggerHeartExplosion(pos.x + dxPct, pos.y + dyPct, containerRef.current, hpCount);
+                  }
+                }
+              });
+            }}
+            style={{
+              background: "linear-gradient(135deg, #ec4899, #db2777)",
+              color: "white",
+              border: "none",
+              padding: "6px 12px",
+              borderRadius: "6px",
+              fontWeight: "bold",
+              cursor: "pointer",
+              boxShadow: "0 2px 8px rgba(236, 72, 153, 0.4)"
+            }}
+          >
+            💖 Test Văng Tim
+          </button>
+          <button
+            onClick={() => {
+              if (setRoom) {
+                setRoom((prev: any) => {
+                  const currentHeartsVisible = !!prev.sharedHeartsVisible;
+                  return {
+                    ...prev,
+                    sharedHeartsVisible: !currentHeartsVisible,
+                    playerHearts: currentHeartsVisible ? {} : {
+                      P2: 2, P3: 2, P4: 2, P5: 2, P6: 2, P7: 2, P8: 2
+                    }
+                  };
+                });
+              }
+            }}
+            style={{
+              background: "linear-gradient(135deg, #3b82f6, #1d4ed8)",
+              color: "white",
+              border: "none",
+              padding: "6px 12px",
+              borderRadius: "6px",
+              fontWeight: "bold",
+              cursor: "pointer",
+              boxShadow: "0 2px 8px rgba(59, 130, 246, 0.4)"
+            }}
+          >
+            🔄 Bật/Tắt Tim (Test Transition)
+          </button>
+        </div>
+      )}
       {isHost && hasDisconnectedPlayers && (
         <div style={{ marginBottom: 8, textAlign: "center" }}>
           <button
@@ -1139,6 +1636,69 @@ export default function PlayerPositions({
           containerRef={containerRef}
           onRecoilUpdate={setRecoilState}
         />
+        {/* Chỉ render hiệu ứng quăng bình của phù thủy cho Host và Phù Thủy, hoặc khi ở trong mock-8 để test */}
+        {(() => {
+          const isAllowed = (room?.id === "mock-8") || (room?.hostId === clientId) || (room?.playerRoles?.[clientId!] === "Phù thủy" || role === "Phù thủy");
+          if (witchPotionEffect) {
+            console.log("[WitchVFX] isAllowed:", isAllowed, "targetId:", witchPotionEffect.targetId, "type:", witchPotionEffect.type);
+          }
+          return isAllowed && witchPotionEffect ? createPortal(
+            <SplashCursor
+              toPlayerId={witchPotionEffect.targetId}
+              positions={animPositionsRef.current}
+              containerRef={containerRef}
+              onComplete={onWitchPotionEffectComplete}
+              RAINBOW_MODE={witchPotionEffect.type === "heal"}
+              COLOR={witchPotionEffect.type === "poison" ? "#F43F5E" : undefined}
+            />,
+            document.body
+          ) : null;
+        })()}
+        {/* SVG overlay for dashed arrow lines */}
+        {linesToDraw.length > 0 && (
+          <svg
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              pointerEvents: "none",
+              zIndex: 0,
+              opacity: showVoteReview ? 1 : 0,
+              transition: "opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+            }}
+          >
+            <defs>
+              <marker
+                id="dashed-arrowhead"
+                viewBox="0 0 10 10"
+                refX="6"
+                refY="5"
+                markerWidth="6"
+                markerHeight="6"
+                orient="auto-start-reverse"
+              >
+                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#f59e0b" />
+              </marker>
+            </defs>
+            {linesToDraw.map((line) => (
+              <line
+                key={line.id}
+                x1={line.startX}
+                y1={line.startY}
+                x2={line.endX}
+                y2={line.endY}
+                stroke="#f59e0b"
+                strokeWidth="2.5"
+                strokeDasharray="6,4"
+                markerEnd="url(#dashed-arrowhead)"
+                style={{
+                  animation: "dashMove 30s linear infinite",
+                }}
+              />
+            ))}
+          </svg>
+        )}
         {localPositions.filter((pos) => pos.playerId !== room.hostId).map((pos) => {
           const p = room.players.find((x) => x.id === pos.playerId);
           if (!p) return null;
@@ -1149,7 +1709,7 @@ export default function PlayerPositions({
           if (p.playerAvatar) {
             const customUrl = getAvatarUrlByFileName(p.playerAvatar);
             if (customUrl) {
-              if (p.playerAvatar.trim().toUpperCase().startsWith("M ")) {
+              if (p.playerAvatar.trim().toUpperCase().includes("M-")) {
                 maskedAvatarUrl = customUrl;
               } else {
                 avatarUrl = customUrl;
@@ -1211,7 +1771,12 @@ export default function PlayerPositions({
             (!!dangerPlayerIds && dangerPlayerIds.includes(pos.playerId))
             && !verdictDiePlayerIds?.includes(pos.playerId);
           const isHighlighted = !!highlightPlayerId && highlightPlayerId === pos.playerId;
-          const isSecondaryHighlighted = !!secondaryHighlightPlayerIds && secondaryHighlightPlayerIds.includes(pos.playerId);
+          const isSecondaryHighlighted = (!!secondaryHighlightPlayerIds && secondaryHighlightPlayerIds.includes(pos.playerId)) ||
+            (!!showVoteReview && !!trialOrangePlayerId && !!dayVotes && dayVotes[pos.playerId] === trialOrangePlayerId);
+          const isBlankVoter =
+            !isDead &&
+            pos.playerId !== room.hostId &&
+            (!dayVotes || !dayVotes[pos.playerId]);
           const isCursedHighlighted = !!cursedHighlightPlayerIds && cursedHighlightPlayerIds.includes(pos.playerId);
           const isVerdictLiveHighlighted = !!verdictLivePlayerIds && verdictLivePlayerIds.includes(pos.playerId);
           const isVerdictDieHighlighted = !!verdictDiePlayerIds && verdictDiePlayerIds.includes(pos.playerId);
@@ -1455,7 +2020,7 @@ export default function PlayerPositions({
 
               {/* Mid Concentric Rings */}
               {isSecondaryHighlighted && (
-                <div className="player-halo halo-secondary" style={{ inset: -scalePx(10, 6), border: `${scalePx(4, 1)}px solid #ffffff`, boxShadow: "0 0 10px rgba(255, 255, 255, 0.8)" }} />
+                <div className="player-halo" style={{ inset: -scalePx(10, 6), border: `${scalePx(4, 1)}px solid #ffffff`, boxShadow: "0 0 10px rgba(255, 255, 255, 0.8)" }} />
               )}
               {(trialWhitePlayerIds || []).includes(pos.playerId) && (
                 <div className="player-halo halo-trial-white" style={{ inset: -scalePx(10, 6), border: `${scalePx(2, 1)}px solid #f1f5f9` }} />
@@ -1752,12 +2317,45 @@ export default function PlayerPositions({
           };
 
           return (
-            <div key={pos.playerId} {...tokenProps}>
+            <div key={pos.playerId} {...tokenProps} data-player-id={pos.playerId}>
               {innerContent}
+              {isBlankVoter && <BlankVoteBoard visible={!!showVoteReview} />}
             </div>
           );
         })}
       </div>
+
+      {/* Bong bóng chat được đưa ra ngoài frame để không bị overflow hidden cắt mất */}
+      {isNightInfoVisible && activeMessages && activeMessages.length > 0 && (
+        <div
+          className="chat-bubbles-board"
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            zIndex: 1005,
+          }}
+        >
+          {localPositions.filter((pos) => pos.playerId !== room.hostId).map((pos) => {
+            const playerMsg = activeMessages.find(m => m.senderId === pos.playerId);
+            if (!playerMsg) return null;
+            return (
+              <PlayerMessageBubble
+                key={playerMsg.id}
+                playerId={pos.playerId}
+                message={playerMsg}
+                circleSizePx={circleSizePx}
+                onDismiss={() => onDismissMessage?.(playerMsg.id)}
+                visible={isNightInfoVisible}
+                x={pos.x}
+                y={pos.y}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {children}
     </div>
   );
 }

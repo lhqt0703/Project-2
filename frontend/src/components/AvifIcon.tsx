@@ -20,13 +20,28 @@ import birdIcon from "../assets/icon/chim.avif";
 import wingIcon from "../assets/icon/wing.avif";
 import noneIcon from "../assets/icon/none.avif";
 import okIcon from "../assets/icon/ok.avif";
+import lockIcon from "../assets/icon/lock.avif";
+import crownIcon from "../assets/icon/crown_1f451.avif";
+import brokenHeartIcon from "../assets/icon/broken-heart_1f494.avif";
+import clipboardIcon from "../assets/icon/clipboard_1f4cb.avif";
+import handshakeIcon from "../assets/icon/handshake.avif";
+import globeIcon from "../assets/icon/globe.avif";
+import packageIcon from "../assets/icon/package_1f4e6.avif";
+import microbeIcon from "../assets/icon/microbe_1f9a0.avif";
+import memoIcon from "../assets/icon/memo_1f4dd.avif";
+import palmUpIcon from "../assets/icon/palm-up.avif";
+import rocketIcon from "../assets/icon/rocket_1f680.avif";
+import scissorsIcon from "../assets/icon/scissors_2702-fe0f.avif";
+import trophyIcon from "../assets/icon/trophy_1f3c6.avif";
+import sparklesIcon from "../assets/icon/Lấp lánh.avif";
+import skullCrossbonesIcon from "../assets/icon/skull-and-crossbones_2620-fe0f.avif";
 
-const iconMap: Record<string, string> = {
+export const iconMap: Record<string, string> = {
   "🩸": dropOfBloodIcon,
   "🌞": sunWithFaceIcon,
   "🐺": wolfIcon,
   "🌙": crescentMoonIcon,
-  "☮️": leafFlutteringIcon,
+  "🍃": leafFlutteringIcon,
   "☮": leafFlutteringIcon,
   "💥": collisionIcon,
   "🔮": crystalBallIcon,
@@ -50,6 +65,24 @@ const iconMap: Record<string, string> = {
   "🪽": wingIcon,
   "⭕": noneIcon,
   "✅": okIcon,
+  "🔒": lockIcon,
+  "👑": crownIcon,
+  "💔": brokenHeartIcon,
+  "📋": clipboardIcon,
+  "🫱🏾🫲🏽": handshakeIcon,
+  "🤝": handshakeIcon,
+  "🌐": globeIcon,
+  "📦": packageIcon,
+  "🦠": microbeIcon,
+  "📝": memoIcon,
+  "🫴🏽": palmUpIcon,
+  "🚀": rocketIcon,
+  "✂️": scissorsIcon,
+  "✂": scissorsIcon,
+  "🏆": trophyIcon,
+  "✨": sparklesIcon,
+  "☠️": skullCrossbonesIcon,
+  "☠": skullCrossbonesIcon,
 };
 
 interface AvifIconProps {

@@ -1186,7 +1186,7 @@ function LogEntryLine({
 
     case "protector_save":
       return (
-        <LogItem emoji="👼" style={lineStyle}>
+        <LogItem emoji="✨" style={lineStyle}>
           Bất tử của{" "}
           {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getDayLogDisplayMode("player-role")} popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Hộ nhân"}{" "}
           chặn một lần chết lên{" "}
@@ -1307,7 +1307,7 @@ function LogEntryLine({
       if (isPlayerView && myPlayerId) {
         if (myPlayerId === entry.actorId) {
           return (
-            <LogItem emoji="💼" style={lineStyle}>
+            <LogItem emoji="🫴🏽" style={lineStyle}>
               Bạn đã đề nghị giao dịch với{" "}
               <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
             </LogItem>
@@ -1315,14 +1315,14 @@ function LogEntryLine({
         }
         if (myPlayerId === entry.targetId) {
           return (
-            <LogItem emoji="💼" style={lineStyle}>
+            <LogItem emoji="🫴🏽" style={lineStyle}>
               Tay Buôn đã đề nghị giao dịch với bạn
             </LogItem>
           );
         }
       }
       return (
-        <LogItem emoji="💼" style={lineStyle}>
+        <LogItem emoji="🫴🏽" style={lineStyle}>
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đề nghị giao dịch với{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />: {getMerchantItemText(entry.itemId)} / {getMerchantChoiceText(entry.merchantChoice)}
         </LogItem>
@@ -1331,7 +1331,7 @@ function LogEntryLine({
 
     case "merchant_trade_response":
       return (
-        <LogItem emoji="🤝" style={lineStyle}>
+        <LogItem emoji="🫱🏾‍🫲🏽" style={lineStyle}>
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> phản hồi {getMerchantChoiceText(entry.targetChoice)} với giao dịch {getMerchantItemText(entry.itemId)} của{" "}
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> ({getMerchantChoiceText(entry.merchantChoice)}) - {getMerchantTradeResultText(entry.result)}
         </LogItem>
@@ -1341,14 +1341,14 @@ function LogEntryLine({
       const isPlayerView = !isHost && !gameEnded;
       if (isPlayerView && myPlayerId && myPlayerId === entry.targetId) {
         return (
-          <LogItem emoji="🎁" style={lineStyle}>
+          <LogItem emoji="📦" style={lineStyle}>
             Đã nhận {getMerchantItemText(entry.itemId)}
             <span style={{ opacity: 0.72 }}> (hiệu lực đêm {entry.appliesNight})</span>
           </LogItem>
         );
       }
       return (
-        <LogItem emoji="🎁" style={lineStyle}>
+        <LogItem emoji="📦" style={lineStyle}>
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> nhận {getMerchantItemText(entry.itemId)}
           <span style={{ opacity: 0.72 }}> (hiệu lực đêm {entry.appliesNight})</span>
         </LogItem>
@@ -1750,7 +1750,7 @@ function LogEntryLine({
     }
 
     case "no_death":
-      return <LogItem emoji="☮️" style={lineStyle}>Đêm qua không ai bị loại</LogItem>;
+      return <LogItem emoji="🍃" style={lineStyle}>Đêm qua không ai bị loại</LogItem>;
 
     case "elemental_guess": {
       const isPlayerView = !isHost && !gameEnded;
@@ -1974,7 +1974,7 @@ function LogEntryLine({
       const actorThumbEmoji = entry.actorThumb === "up" ? "👍🏽" : "👎🏽";
       const targetThumbEmoji = entry.targetThumb === "up" ? "👍🏽" : "👎🏽";
       return (
-        <LogItem emoji="🤝" style={lineStyle}>
+        <LogItem emoji="🫱🏾‍🫲🏽" style={lineStyle}>
           <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onHighlightPlayer={onHighlightPlayer} />{" "}
           chọn{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.actorId]} onHighlightPlayer={onHighlightPlayer} />{" "}

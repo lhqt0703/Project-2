@@ -41,18 +41,7 @@ import { CountdownButton } from "../components/CountdownButton";
 import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
 import StickerPeel from "../components/StickerPeel";
 import { getStickerUrlByFileName } from "../utils/stickerAssets";
-
-
-const VIP_REAL_NAMES: Record<string, string> = {
-  "046fa88a-a719-47c3-8b97-ddfc8337cf83": "Phúc 🍫",
-  "f7d9652f-ac74-4557-81a2-7c2731a77d37": "Din Phạm",
-  "397d9740-e21b-4ade-941f-25912aefd591": "Hà Việt",
-  "client_1780242307126_pmozg54dmra": "San",
-  "client_1780242348813_swid1tk0trh": "Huythuhai",
-  "8dfc1d63-988f-460d-8569-8a1964be99a0": "Cường",
-  "ec0c6c66-9ce7-4d86-ac12-25824af15b79": "Việt Thắng",
-  "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd": "Duy"
-};
+import { VIP_REAL_NAMES } from "../constants/vip";
 
 const WOLF_TEAM_REVEAL_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
 const NIGHT_ACTION_ROLE_SET = new Set([
@@ -70,7 +59,7 @@ const NIGHT_ACTION_ROLE_SET = new Set([
   "Kẻ bị nguyền",
   "Tay Buôn",
 ]);
-const HUNTER_BULLET_ANIM_MS = 1000;
+const HUNTER_BULLET_ANIM_MS = 4000;
 type TargetRoleDisplayOrder = "player-role" | "role-player";
 
 function doesRoleMatchNightTurn(roleName: string | null | undefined, nightTurnRole: NightActionRole | null) {
@@ -129,6 +118,37 @@ export default function GameDaNghich() {
   }, []);
 
   const sync = useGameSocketSync({ roomId, setRoom });
+  const [dismissedStickerIds, setDismissedStickerIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setDismissedStickerIds([]);
+  }, [sync.phase]);
+
+  const handleSendPlayerMessage = useCallback((text: string, channel: "wolf" | "lovers") => {
+    if (roomId === "mock-8") {
+      const id = Math.random().toString(36).substring(2, 9);
+      const msg = {
+        id,
+        senderId: clientId || "me",
+        text,
+        channel,
+        createdAt: Date.now()
+      };
+      sync.setPlayerMessages((prev: any) => [...prev, msg]);
+      return;
+    }
+
+    const id = Math.random().toString(36).substring(2, 9);
+    socket.emit("placePlayerMessage", {
+      roomId,
+      message: {
+        id,
+        text,
+        channel,
+        createdAt: Date.now()
+      }
+    });
+  }, [roomId, clientId, sync]);
   const phase: GamePhase = sync.phase;
   const isDusk = phase === "dusk";
   const isDayDiscussion =
@@ -379,10 +399,10 @@ export default function GameDaNghich() {
         return false;
       }
       if (avatarTab === "masked") {
-        return fileName.startsWith("M ");
+        return fileName.includes("M-") || fileName.startsWith("M ");
       }
       if (avatarTab === "normal") {
-        return !fileName.startsWith("M ");
+        return !fileName.includes("M-") && !fileName.startsWith("M ");
       }
       return true;
     });
@@ -403,18 +423,45 @@ export default function GameDaNghich() {
     if (!room || clientId !== room.hostId || !socket) return;
     try {
       const customAvatars = JSON.parse(localStorage.getItem("game-custom-avatars") || "{}");
+      let changed = false;
       room.players.forEach((p) => {
         const savedAvatar = customAvatars[p.id];
-        if (savedAvatar && p.playerAvatar !== savedAvatar) {
-          socket.emit("hostSetPlayerAvatar", {
-            roomId: room.id,
-            targetId: p.id,
-            playerAvatar: savedAvatar,
-          });
+        if (savedAvatar) {
+          if (p.playerAvatar !== savedAvatar) {
+            const isUnknownSaved = /^M unknownID \d+/i.test(savedAvatar);
+            const isAssignedServer = (p.playerAvatar || "").includes("M-");
+            if (isUnknownSaved && isAssignedServer) {
+              customAvatars[p.id] = p.playerAvatar;
+              changed = true;
+            } else {
+              socket.emit("hostSetPlayerAvatar", {
+                roomId: room.id,
+                targetId: p.id,
+                playerAvatar: savedAvatar,
+              });
+            }
+          }
         }
       });
+      if (changed) {
+        localStorage.setItem("game-custom-avatars", JSON.stringify(customAvatars));
+      }
     } catch (e) {
       console.error("Lỗi đồng bộ avatar từ localStorage:", e);
+    }
+  }, [room?.players, room?.id, clientId, socket]);
+
+  // Tự động đồng bộ ảnh đại diện cá nhân của chính người chơi lên server
+  useEffect(() => {
+    if (!room || !socket) return;
+    const myPlayer = room.players.find(p => p.id === clientId);
+    const mySavedAvatar = localStorage.getItem("werewolfPlayerAvatar");
+    if (myPlayer && mySavedAvatar && myPlayer.playerAvatar !== mySavedAvatar) {
+      socket.emit("hostSetPlayerAvatar", {
+        roomId: room.id,
+        targetId: clientId,
+        playerAvatar: mySavedAvatar
+      });
     }
   }, [room?.players, room?.id, clientId, socket]);
 
@@ -614,7 +661,7 @@ export default function GameDaNghich() {
     }
 
     const highlightPayload = {
-      primaryId: targetId,
+      primaryId: null,
       secondaryIds: liveVoterIds,
       dangerIds: dieVoterIds,
     };
@@ -1516,8 +1563,7 @@ export default function GameDaNghich() {
           }
           @media (max-width: 768px) {
             .role-skill-hint {
-              max-width: 58% !important;
-              
+              max-width: 69% !important;
               margin-right: auto !important;
             }
           }
@@ -1531,19 +1577,18 @@ export default function GameDaNghich() {
         <div 
           className="role-skill-hint"
           style={{
-            background: "rgba(18, 14, 38, 0.65)",
+            background: "rgba(38, 14, 14, 0.15)",
             backdropFilter: "blur(10px)",
-            WebkitBackdropFilter: "blur(10px)",
-            border: "1px solid rgba(168, 85, 247, 0.22)",
+            border: "1px solid rgba(247, 85, 85, 0.22)",
             borderRadius: "10px",
             padding: "8px 12px",
             color: "#e2e8f0",
-            fontSize: "0.85rem",
+            fontSize: "0.69rem",
             lineHeight: "1.4",
             boxShadow: "0 6px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
             textAlign: "left",
             pointerEvents: "auto",
-            marginTop: "10px",
+            marginTop: "12px",
             zIndex: 5,
             fontStyle: "italic",
             opacity: 0.9,
@@ -2100,6 +2145,78 @@ export default function GameDaNghich() {
         opacity: gameUIOpacity,
       }}
     >
+      {new URLSearchParams(window.location.search).get("debugWitch") === "1" && (
+        <div style={{
+          position: "fixed",
+          top: 80,
+          right: 20,
+          zIndex: 999999,
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          background: "rgba(15, 23, 42, 0.9)",
+          padding: 12,
+          borderRadius: 8,
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)"
+        }}>
+          <div style={{ fontSize: "12px", fontWeight: "bold", color: "#94a3b8", marginBottom: 4 }}>WITCH TEST PANEL</div>
+          <button
+            onClick={() => {
+              const alive = room?.players
+                ?.map((p: any) => p.id)
+                ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
+              if (alive.length > 0) {
+                const to = alive[Math.floor(Math.random() * alive.length)]!;
+                sync.setWitchPotionEffect({
+                  targetId: to,
+                  type: "heal",
+                  startedAt: performance.now()
+                });
+              }
+            }}
+            style={{
+              padding: "8px 12px",
+              background: "rgba(168, 85, 247, 0.2)",
+              border: "1px solid rgba(168, 85, 247, 0.4)",
+              color: "#d8b4fe",
+              borderRadius: 4,
+              cursor: "pointer",
+              fontSize: "12px",
+              fontWeight: "bold"
+            }}
+          >
+            Test Cứu (Rainbow)
+          </button>
+          <button
+            onClick={() => {
+              const alive = room?.players
+                ?.map((p: any) => p.id)
+                ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
+              if (alive.length > 0) {
+                const to = alive[Math.floor(Math.random() * alive.length)]!;
+                sync.setWitchPotionEffect({
+                  targetId: to,
+                  type: "poison",
+                  startedAt: performance.now()
+                });
+              }
+            }}
+            style={{
+              padding: "8px 12px",
+              background: "rgba(244, 63, 94, 0.2)",
+              border: "1px solid rgba(244, 63, 94, 0.4)",
+              color: "#fda4af",
+              borderRadius: 4,
+              cursor: "pointer",
+              fontSize: "12px",
+              fontWeight: "bold"
+            }}
+          >
+            Test Giết (Rose Red)
+          </button>
+        </div>
+      )}
       {(phase === "day" || phase === "dusk") && (
         <div
           className="game-bg-layer"
@@ -2164,6 +2281,7 @@ export default function GameDaNghich() {
             isWolf={isWolfForStatus}
             isLover={isLover}
             onSelectSticker={handleSelectSticker}
+            onSendPlayerMessage={handleSendPlayerMessage}
           />
         );
       })()}
@@ -2378,9 +2496,12 @@ export default function GameDaNghich() {
                 .map(p => p.id)
                 .filter(id => !deadPlayers.includes(id));
               if (alive.length < 2) return;
-              const from = alive[0]!;
-              const to = alive.find(id => id !== from) || null;
-              if (!to) return;
+              const from = alive[Math.floor(Math.random() * alive.length)]!;
+              let to = from;
+              for (let i = 0; i < 10 && to === from; i++) {
+                to = alive[Math.floor(Math.random() * alive.length)]!;
+              }
+              if (to === from) return;
               playHunterShotAnim(from, to);
             }}
           >
@@ -2413,16 +2534,22 @@ export default function GameDaNghich() {
 
         return (
           <>
-            <div style={{ margin: "2rem auto" }}>
+            <div style={{ margin: "2rem auto 0" }}>
               <PlayerPositions
                 mode="view"
                 roomOverride={roomForDisplay}
+                setRoom={setRoom}
                 viewMode={viewMode}
                 onPlayerClick={handlePlayerClick}
                 onPlayerDoubleClick={handlePlayerDoubleClick}
+                activeMessages={sync.playerMessages}
+                onDismissMessage={(id) => sync.setPlayerMessages((prev: any) => prev.filter((m: any) => m.id !== id))}
+                isNightInfoVisible={isNightInfoVisible}
                 seerResults={(isSeerTurnActive && isNightInfoVisible) ? seer.seerResults : null}
                 deadPlayersOverride={deadPlayersOverrideForRender}
                 bulletAnimation={hunterBulletAnim}
+                witchPotionEffect={sync.witchPotionEffect}
+                onWitchPotionEffectComplete={() => sync.setWitchPotionEffect(null)}
                 highlightPlayerId={highlightPlayerId}
                 secondaryHighlightPlayerIds={secondaryHighlightPlayerIds}
                 cursedHighlightPlayerIds={cursed.playerPositionsProps.cursedHighlightPlayerIds}
@@ -2477,8 +2604,89 @@ export default function GameDaNghich() {
                 trialGreenPlayerId={dayVote.playerPositionsProps.trialGreenPlayerId}
                 replayActorIds={replayActorIds}
                 replayTargetIds={replayTargetIds}
-              />
-              {!hasVisibleActionPanel && renderSkillHint()}
+                showVoteReview={dayVote.playerPositionsProps.showVoteReview}
+                dayVotes={dayVote.playerPositionsProps.dayVotes}
+              >
+                {phase === "night" && !sync.gameEnded && (
+                  <div
+                    className="stickers-board"
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      pointerEvents: "none",
+                      zIndex: 999,
+                      opacity: isNightInfoVisible ? 1 : 0,
+                      transition: "opacity 0.3s ease",
+                      touchAction: "none"
+                    }}
+                  >
+                    {sync.stickers
+                      .filter((s: any) => !dismissedStickerIds.includes(s.id))
+                      .map((sticker: any) => {
+                        const resolvedUrl = getStickerUrlByFileName(sticker.imageSrc);
+                        if (!resolvedUrl) return null;
+
+                        return (
+                          <StickerPeel
+                            key={sticker.id}
+                            imageSrc={resolvedUrl}
+                            createdAt={sticker.createdAt}
+                            isOwner={sticker.owner === clientId}
+                            isPasted={sticker.isPasted}
+                            pastedAt={sticker.pastedAt}
+                            startDragEvent={sticker.startDragEvent}
+                            onDismiss={() => setDismissedStickerIds(prev => [...prev, sticker.id])}
+                            onDragStart={() => {
+                              if (sticker.owner === clientId) {
+                                setDraggingStickerId(sticker.id);
+                                handleDragStartSticker(sticker.id, sticker.channel);
+                              }
+                            }}
+                            onDragUpdate={(_x, _y, overTrash, _rotateVal) => {
+                              if (sticker.owner === clientId) {
+                                setIsOverTrash(overTrash);
+                              }
+                            }}
+                            onRelease={() => {
+                              if (sticker.owner === clientId) {
+                                setDraggingStickerId(null);
+                                setIsOverTrash(false);
+                              }
+                            }}
+                            onDragEnd={(isDeleted, finalX, finalY, finalRotation) => {
+                              if (sticker.owner === clientId) {
+                                if (isDeleted) {
+                                  handleDeleteSticker(sticker.id, sticker.channel);
+                                } else {
+                                  setDraggingStickerId(null);
+                                  setIsOverTrash(false);
+                                  handleDragUpdateSticker(
+                                    sticker.id,
+                                    finalX,
+                                    finalY,
+                                    sticker.channel,
+                                    true,
+                                    Date.now(),
+                                    finalRotation !== undefined ? finalRotation : sticker.rotate
+                                  );
+                                }
+                              }
+                            }}
+                            onDeleteClick={() => handleDeleteSticker(sticker.id, sticker.channel)}
+                            onAnimationEnd={() => {
+                              if (sticker.owner === clientId) {
+                                handleDeleteSticker(sticker.id, sticker.channel);
+                              }
+                            }}
+                            rotate={sticker.rotate}
+                            x={sticker.x}
+                            y={sticker.y}
+                          />
+                        );
+                      })}
+                  </div>
+                )}
+              </PlayerPositions>
             </div>
             <RoleCharacterPortrait
               role={shouldShowRolePortrait ? role : null}
@@ -2508,7 +2716,6 @@ export default function GameDaNghich() {
       {shouldRevealMyRole && !sync.gameEnded && loveActionPlacement === "general" && love.actionButton && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start", marginTop: 10 }}>
           {love.actionButton}
-          {role === "Thần tình yêu" && renderSkillHint()}
         </div>
       )}
 
@@ -2526,7 +2733,6 @@ export default function GameDaNghich() {
             {merchant.panel}
             {loveActionPlacement === "role-actions" ? love.actionButton : null}
           </div>
-          {hasVisibleActionPanel && (role !== "Thần tình yêu" || loveActionPlacement === "role-actions") && renderSkillHint()}
         </div>
       )}
       {!sync.gameEnded && angel.panel}
@@ -2640,9 +2846,9 @@ export default function GameDaNghich() {
             {wolf.panel}
             {loveActionPlacement === "wolf" ? love.actionButton : null}
           </div>
-          {role === "Thần tình yêu" && loveActionPlacement === "wolf" && love.actionButton && renderSkillHint()}
         </div>
       )}
+      {renderSkillHint()}
       {!isHost && dayVote.panel}
       {!isHost && villageChiefExtraVotePanel}
       {!isHost && logPanel}
@@ -2921,7 +3127,7 @@ export default function GameDaNghich() {
                     color: editingAvatar ? "#fff" : "rgba(255,255,255,0.3)"
                   }}>
                     {editingAvatar ? (
-                      editingAvatar.startsWith("M ") ? `🖼️ Tách nền: ${editingAvatar.substring(2)}` :
+                      (editingAvatar.includes("M-") || editingAvatar.startsWith("M ")) ? `🖼️ Tách nền: ${editingAvatar.substring(editingAvatar.indexOf(" ") + 1)}` :
                       editingAvatar.startsWith("S ") ? `👤 Thường: ${editingAvatar.substring(2)}` : editingAvatar
                     ) : "Chưa chọn (Ẩn avatar)"}
                   </div>
@@ -3173,83 +3379,7 @@ export default function GameDaNghich() {
         />
       )}
 
-      {/* Board dán sticker */}
-      {phase === "night" && !sync.gameEnded && (
-        <div
-          className="stickers-board"
-          style={{
-            position: "fixed",
-            inset: 0,
-            pointerEvents: "none",
-            zIndex: 999,
-            opacity: isNightInfoVisible ? 1 : 0,
-            transition: "opacity 0.3s ease",
-            touchAction: "none"
-          }}
-        >
-          {sync.stickers.map((sticker: any) => {
-            const resolvedUrl = getStickerUrlByFileName(sticker.imageSrc);
-            if (!resolvedUrl) return null;
 
-            return (
-              <StickerPeel
-                key={sticker.id}
-                imageSrc={resolvedUrl}
-                createdAt={sticker.createdAt}
-                isOwner={sticker.owner === clientId}
-                isPasted={sticker.isPasted}
-                pastedAt={sticker.pastedAt}
-                startDragEvent={sticker.startDragEvent}
-                onDragStart={() => {
-                  if (sticker.owner === clientId) {
-                    setDraggingStickerId(sticker.id);
-                    handleDragStartSticker(sticker.id, sticker.channel);
-                  }
-                }}
-                onDragUpdate={(_x, _y, overTrash, _rotateVal) => {
-                  if (sticker.owner === clientId) {
-                    setIsOverTrash(overTrash);
-                  }
-                }}
-                onRelease={() => {
-                  if (sticker.owner === clientId) {
-                    setDraggingStickerId(null);
-                    setIsOverTrash(false);
-                  }
-                }}
-                onDragEnd={(isDeleted, finalX, finalY, finalRotation) => {
-                  if (sticker.owner === clientId) {
-                    if (isDeleted) {
-                      handleDeleteSticker(sticker.id, sticker.channel);
-                    } else {
-                      setDraggingStickerId(null);
-                      setIsOverTrash(false);
-                      handleDragUpdateSticker(
-                        sticker.id,
-                        finalX,
-                        finalY,
-                        sticker.channel,
-                        true,
-                        Date.now(),
-                        finalRotation !== undefined ? finalRotation : sticker.rotate
-                      );
-                    }
-                  }
-                }}
-                onDeleteClick={() => handleDeleteSticker(sticker.id, sticker.channel)}
-                onAnimationEnd={() => {
-                  if (sticker.owner === clientId) {
-                    handleDeleteSticker(sticker.id, sticker.channel);
-                  }
-                }}
-                rotate={sticker.rotate}
-                x={sticker.x}
-                y={sticker.y}
-              />
-            );
-          })}
-        </div>
-      )}
 
       {/* Trash Zone */}
       <div

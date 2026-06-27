@@ -108,10 +108,10 @@ export default function Room() {
         return false;
       }
       if (avatarTab === "masked") {
-        return fileName.startsWith("M ");
+        return fileName.includes("M-") || fileName.startsWith("M ");
       }
       if (avatarTab === "normal") {
-        return !fileName.startsWith("M ");
+        return !fileName.includes("M-") && !fileName.startsWith("M ");
       }
       return true;
     });
@@ -498,18 +498,45 @@ export default function Room() {
     if (!room || clientId !== room.hostId || !socket) return;
     try {
       const customAvatars = JSON.parse(localStorage.getItem("game-custom-avatars") || "{}");
+      let changed = false;
       room.players.forEach((p) => {
         const savedAvatar = customAvatars[p.id];
-        if (savedAvatar && p.playerAvatar !== savedAvatar) {
-          socket.emit("hostSetPlayerAvatar", {
-            roomId: room.id,
-            targetId: p.id,
-            playerAvatar: savedAvatar,
-          });
+        if (savedAvatar) {
+          if (p.playerAvatar !== savedAvatar) {
+            const isUnknownSaved = /^M unknownID \d+/i.test(savedAvatar);
+            const isAssignedServer = (p.playerAvatar || "").includes("M-");
+            if (isUnknownSaved && isAssignedServer) {
+              customAvatars[p.id] = p.playerAvatar;
+              changed = true;
+            } else {
+              socket.emit("hostSetPlayerAvatar", {
+                roomId: room.id,
+                targetId: p.id,
+                playerAvatar: savedAvatar,
+              });
+            }
+          }
         }
       });
+      if (changed) {
+        localStorage.setItem("game-custom-avatars", JSON.stringify(customAvatars));
+      }
     } catch (e) {
       console.error("Lỗi đồng bộ avatar từ localStorage:", e);
+    }
+  }, [room?.players, room?.id, clientId, socket]);
+
+  // Tự động đồng bộ ảnh đại diện cá nhân của chính người chơi lên server
+  useEffect(() => {
+    if (!room || !socket) return;
+    const myPlayer = room.players.find(p => p.id === clientId);
+    const mySavedAvatar = localStorage.getItem("werewolfPlayerAvatar");
+    if (myPlayer && mySavedAvatar && myPlayer.playerAvatar !== mySavedAvatar) {
+      socket.emit("hostSetPlayerAvatar", {
+        roomId: room.id,
+        targetId: clientId,
+        playerAvatar: mySavedAvatar
+      });
     }
   }, [room?.players, room?.id, clientId, socket]);
 
@@ -1028,7 +1055,7 @@ export default function Room() {
                     color: editingAvatar ? "#fff" : "rgba(255,255,255,0.3)"
                   }}>
                     {editingAvatar ? (
-                      editingAvatar.startsWith("M ") ? `🖼️ Tách nền: ${editingAvatar.substring(2)}` :
+                      (editingAvatar.includes("M-") || editingAvatar.startsWith("M ")) ? `🖼️ Tách nền: ${editingAvatar.substring(editingAvatar.indexOf(" ") + 1)}` :
                       editingAvatar.startsWith("S ") ? `👤 Thường: ${editingAvatar.substring(2)}` : editingAvatar
                     ) : "Chưa chọn (Ẩn avatar)"}
                   </div>

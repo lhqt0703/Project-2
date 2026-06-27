@@ -19,6 +19,7 @@ interface StickerPeelProps {
   onDragEnd?: (isDeleted: boolean, x: number, y: number, rotate?: number) => void;
   onAnimationEnd?: () => void;
   onRelease?: () => void;
+  onDismiss?: () => void;
   rotate?: number;
   peelBackHoverPct?: number;
   peelBackActivePct?: number;
@@ -53,6 +54,7 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
   onDragEnd,
   onAnimationEnd,
   onRelease,
+  onDismiss,
   rotate = 30,
   peelBackHoverPct = 30,
   peelBackActivePct = 40,
@@ -134,7 +136,7 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
       // Đồng bộ vị trí tức thời trước khi hiện
       const frameRect = getFrameRect();
       if (frameRect) {
-        gsap.set(target, { x: frameRect.left + x * frameRect.width, y: frameRect.top + y * frameRect.height });
+        gsap.set(target, { x: x * frameRect.width, y: y * frameRect.height });
       }
 
       gsap.set(target, { opacity: 0 });
@@ -197,7 +199,7 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
   useEffect(() => {
     if (!localIsPasted || localIsDragging || isDeleting || isFlyingAway || !localPastedAt) return;
 
-    const lifespanMs = 4000;
+    const lifespanMs = 8000;
     const start = localPastedAt;
     const elapsed = Date.now() - start;
     const remainingTime = Math.max(0, lifespanMs - elapsed);
@@ -249,8 +251,8 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
     setScale(currentScale);
 
     if (!isDraggingRef.current) {
-      const targetX = frameRect.left + x * frameRect.width;
-      const targetY = frameRect.top + y * frameRect.height;
+      const targetX = x * frameRect.width;
+      const targetY = y * frameRect.height;
 
       if (!isPositioned) {
         const initialOpacity = (isPasted || isOwner) ? 1 : 0;
@@ -326,8 +328,11 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
         return;
       }
 
-      const xVal = e.clientX - scaledWidth / 2;
-      const yVal = e.clientY - scaledWidth / 2;
+      const frameRect = getFrameRect();
+      const boardLeft = frameRect ? frameRect.left : 0;
+      const boardTop = frameRect ? frameRect.top : 0;
+      const xVal = e.clientX - boardLeft - scaledWidth / 2;
+      const yVal = e.clientY - boardTop - scaledWidth / 2;
 
       gsap.set(target, { x: xVal, y: yVal });
 
@@ -361,11 +366,11 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
       const frameRect = getFrameRect();
       if (!frameRect) return;
 
-      const xVal = e.clientX - scaledWidth / 2;
-      const yVal = e.clientY - scaledWidth / 2;
+      const xVal = e.clientX - frameRect.left - scaledWidth / 2;
+      const yVal = e.clientY - frameRect.top - scaledWidth / 2;
       
-      const finalXPct = (xVal - frameRect.left) / frameRect.width;
-      const finalYPct = (yVal - frameRect.top) / frameRect.height;
+      const finalXPct = xVal / frameRect.width;
+      const finalYPct = yVal / frameRect.height;
       const trashHeight = window.innerHeight * 0.1;
       const isOverTrash = e.clientY > window.innerHeight - trashHeight;
 
@@ -461,8 +466,8 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
         const frameRect = getFrameRect();
         if (!frameRect) return;
 
-        const finalXPct = (this.x - frameRect.left) / frameRect.width;
-        const finalYPct = (this.y - frameRect.top) / frameRect.height;
+        const finalXPct = this.x / frameRect.width;
+        const finalYPct = this.y / frameRect.height;
 
         if (isOverTrash) {
           setIsDeleting(true);
@@ -563,8 +568,12 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
         const target = dragTargetRef.current;
         if (!target) return;
 
-        const midX = (touch1.clientX + touch2.clientX) / 2 - scaledWidth / 2;
-        const midY = (touch1.clientY + touch2.clientY) / 2 - scaledWidth / 2;
+        const frameRect = getFrameRect();
+        const boardLeft = frameRect ? frameRect.left : 0;
+        const boardTop = frameRect ? frameRect.top : 0;
+
+        const midX = (touch1.clientX + touch2.clientX) / 2 - boardLeft - scaledWidth / 2;
+        const midY = (touch1.clientY + touch2.clientY) / 2 - boardTop - scaledWidth / 2;
 
         if (target) {
           if (!hasCenteredRef.current) {
@@ -611,8 +620,12 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
         const target = dragTargetRef.current;
         if (!target) return;
 
-        const midX = (touch1.clientX + touch2.clientX) / 2 - scaledWidth / 2;
-        const midY = (touch1.clientY + touch2.clientY) / 2 - scaledWidth / 2;
+        const frameRect = getFrameRect();
+        const boardLeft = frameRect ? frameRect.left : 0;
+        const boardTop = frameRect ? frameRect.top : 0;
+
+        const midX = (touch1.clientX + touch2.clientX) / 2 - boardLeft - scaledWidth / 2;
+        const midY = (touch1.clientY + touch2.clientY) / 2 - boardTop - scaledWidth / 2;
 
         if (!isRotatingRef.current) {
           isRotatingRef.current = true;
@@ -697,8 +710,11 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
         if (!target) return;
 
         const touch = e.touches[0];
-        const x = touch.clientX + dragOffsetXRef.current;
-        const y = touch.clientY + dragOffsetYRef.current;
+        const frameRect = getFrameRect();
+        const boardLeft = frameRect ? frameRect.left : 0;
+        const boardTop = frameRect ? frameRect.top : 0;
+        const x = touch.clientX - boardLeft + dragOffsetXRef.current;
+        const y = touch.clientY - boardTop + dragOffsetYRef.current;
 
         gsap.set(target, { x, y });
 
@@ -758,8 +774,8 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
           const frameRect = getFrameRect();
           if (!frameRect) return;
 
-          const finalXPct = (x - frameRect.left) / frameRect.width;
-          const finalYPct = (y - frameRect.top) / frameRect.height;
+          const finalXPct = x / frameRect.width;
+          const finalYPct = y / frameRect.height;
 
           const trashHeight = window.innerHeight * 0.1;
           
@@ -857,10 +873,39 @@ const StickerPeel: React.FC<StickerPeelProps> = ({
     ]
   );
 
+  const handleStickerClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!localIsPasted || isDeleting || isFlyingAway) return;
+    if (isDraggingRef.current) return;
+
+    if (onDismiss) {
+      const target = dragTargetRef.current;
+      if (target) {
+        if (draggableInstanceRef.current) {
+          draggableInstanceRef.current.kill();
+          draggableInstanceRef.current = null;
+        }
+        gsap.to(target, {
+          opacity: 0,
+          scale: 0.8,
+          duration: 0.3,
+          ease: 'power2.out',
+          onComplete: () => {
+            if (onDismiss) onDismiss();
+            if (onAnimationEnd) onAnimationEnd();
+          }
+        });
+      } else {
+        onDismiss();
+      }
+    }
+  };
+
   return (
     <div 
       className={`draggable ${className} ${isOwner ? 'owner-draggable' : 'observer-draggable'}`} 
       ref={dragTargetRef} 
+      onClick={handleStickerClick}
       style={{
         ...cssVars,
         opacity: isPositioned ? undefined : 0,

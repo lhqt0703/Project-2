@@ -17,7 +17,7 @@ import GridMotionOverlay from "../components/GridMotionOverlay";
 import type { GameLogNight as SharedGameLogNight } from "./gameRoles/socketEvents";
 import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
 
-const HUNTER_BULLET_ANIM_MS = 1000;
+const HUNTER_BULLET_ANIM_MS = 4000;
 
 export default function GameSoiMu() {
   const { room, setRoom } = useRoomContext();
@@ -116,6 +116,12 @@ export default function GameSoiMu() {
   // Wrong choice highlight states
   const [soiMuWrongChoiceHighlightId, setSoiMuWrongChoiceHighlightId] = useState<string | null>(null);
   const [soiMuWrongChoiceOpacity, setSoiMuWrongChoiceOpacity] = useState(1);
+
+  const [witchPotionEffect, setWitchPotionEffect] = useState<{
+    targetId: string;
+    type: "heal" | "poison";
+    startedAt: number;
+  } | null>(null);
 
   // Confirm Modals
   const [quitConfirmOpen, setQuitConfirmOpen] = useState(false);
@@ -342,6 +348,14 @@ export default function GameSoiMu() {
       setHunterShotSeq((prev) => prev + 1);
     };
 
+    const handleWitchPotionEffectTriggered = (payload: { targetId: string; type: "heal" | "poison" }) => {
+      setWitchPotionEffect({
+        targetId: payload.targetId,
+        type: payload.type,
+        startedAt: performance.now(),
+      });
+    };
+
     socket.on("roomUpdated", handleRoomUpdated);
     socket.on("gameLogUpdated", handleGameLogUpdated);
     socket.on("rolesRevealUpdated", handleRolesRevealUpdated);
@@ -351,6 +365,7 @@ export default function GameSoiMu() {
     socket.on("returnToRoomResult", handleReturnResult);
     socket.on("forceReturnToRoom", handleForceReturnToRoom);
     socket.on("hunterShot", handleHunterShot);
+    socket.on("witchPotionEffectTriggered", handleWitchPotionEffectTriggered);
 
     return () => {
       socket.off("roomUpdated", handleRoomUpdated);
@@ -362,6 +377,7 @@ export default function GameSoiMu() {
       socket.off("returnToRoomResult", handleReturnResult);
       socket.off("forceReturnToRoom", handleForceReturnToRoom);
       socket.off("hunterShot", handleHunterShot);
+      socket.off("witchPotionEffectTriggered", handleWitchPotionEffectTriggered);
     };
   }, [roomId, isHost, nav, setRoom]);
 
@@ -904,7 +920,11 @@ export default function GameSoiMu() {
               trialGreenPlayerId={trialGreenPlayerId}
               verdictDiePlayerIds={verdictDiePlayerIds}
               bulletAnimation={hunterBulletAnim}
+              witchPotionEffect={witchPotionEffect}
+              onWitchPotionEffectComplete={() => setWitchPotionEffect(null)}
               viewMode={viewMode}
+              showVoteReview={dayVote.playerPositionsProps.showVoteReview}
+              dayVotes={dayVote.playerPositionsProps.dayVotes}
             />
           </div>
         )}

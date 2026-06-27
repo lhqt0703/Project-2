@@ -60,6 +60,11 @@ export function useDayVoteRole({
 }) {
   const [localSelectedTarget, setLocalSelectedTarget] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now() + serverTimeOffset);
+  const [isVoteReviewActive, setIsVoteReviewActive] = useState(false);
+
+  useEffect(() => {
+    setIsVoteReviewActive(false);
+  }, [trialStage]);
 
   useEffect(() => {
     if (phase !== "day") return;
@@ -128,7 +133,7 @@ export function useDayVoteRole({
     if (deadPlayers.includes(playerId)) return true;
 
     if (dayLocked?.[clientId]) return true;
-    if (dayDeadline && Date.now() + serverTimeOffset >= dayDeadline) return true;
+    if (!dayPaused && dayDeadline && Date.now() + serverTimeOffset >= dayDeadline) return true;
 
     if (localSelectedTarget === playerId) {
       setLocalSelectedTarget(null);
@@ -189,7 +194,7 @@ export function useDayVoteRole({
                     style={{ margin: "4px 0", padding: "8px 12px", cursor: "pointer" }}
                     disabled={!!dayLocked?.[clientId]}
                   >
-                    ⭕ Bỏ phiếu trống
+                    <AvifIcon name="⭕" style={{ marginRight: 4 }} /> Bỏ phiếu trống
                   </button>
                 </div>
                 {dayLocked?.[clientId] && (
@@ -205,42 +210,60 @@ export function useDayVoteRole({
             <div style={{ marginTop: 6, opacity: 0.85 }}>
               Lượt tương tác còn lại của bị cáo: {remainingInteractionTurns}
             </div>
-            {!isTrialTarget && (
-              alreadyChosenByTrialTarget || hasInteracted ? (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              {!isTrialTarget && (
+                alreadyChosenByTrialTarget || hasInteracted ? (
+                  <button
+                    onClick={() => {
+                      if (!canToggleInteraction) return;
+                      socket.emit("trialToggleInteraction", { roomId, active: !hasInteracted });
+                    }}
+                    style={{ padding: "8px 12px", cursor: "pointer" }}
+                    disabled={!canToggleInteraction}
+                  >
+                    {alreadyChosenByTrialTarget ? "Đã tương tác" : "Hủy tương tác"}
+                  </button>
+                ) : (
+                  <StarBorder
+                    as="button"
+                    onClick={() => {
+                      if (!canToggleInteraction) return;
+                      socket.emit("trialToggleInteraction", { roomId, active: !hasInteracted });
+                    }}
+                    style={{ cursor: "pointer" }}
+                    disabled={!canToggleInteraction}
+                    color="white"
+                    speed="6s"
+                  >
+                    Tương tác
+                  </StarBorder>
+                )
+              )}
+              {isTrialTarget && (
                 <button
-                  onClick={() => {
-                    if (!canToggleInteraction) return;
-                    socket.emit("trialToggleInteraction", { roomId, active: !hasInteracted });
-                  }}
-                  style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer" }}
-                  disabled={!canToggleInteraction}
+                  onClick={() => socket.emit("trialCutInteraction", { roomId })}
+                  style={{ padding: "8px 12px", cursor: "pointer" }}
                 >
-                  {alreadyChosenByTrialTarget ? "Đã tương tác" : "Hủy tương tác"}
+                  ✂️ Cắt tương tác
                 </button>
-              ) : (
-                <StarBorder
-                  as="button"
-                  onClick={() => {
-                    if (!canToggleInteraction) return;
-                    socket.emit("trialToggleInteraction", { roomId, active: !hasInteracted });
-                  }}
-                  style={{ marginTop: 8, cursor: "pointer" }}
-                  disabled={!canToggleInteraction}
-                  color="white"
-                  speed="6s"
-                >
-                  Tương tác
-                </StarBorder>
-              )
-            )}
-            {isTrialTarget && (
+              )}
               <button
-                onClick={() => socket.emit("trialCutInteraction", { roomId })}
-                style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer" }}
+                onClick={() => setIsVoteReviewActive(prev => !prev)}
+                style={{
+                  padding: "8px 12px",
+                  cursor: "pointer",
+                  background: "rgba(255, 255, 255, 0.08)",
+                  color: isVoteReviewActive ? "#fff" : "#cbd5e1",
+                  border: isVoteReviewActive ? "2px solid #cbd5e1" : "1px solid rgba(255, 255, 255, 0.15)",
+                  borderRadius: "6px",
+                  transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                  width: "11rem",
+                  textAlign: "center",
+                }}
               >
-                ✂️ Cắt tương tác
+                {isVoteReviewActive ? "Ẩn các biểu quyết" : "Xem lại biểu quyết"}
               </button>
-            )}
+            </div>
           </>
         )}
 
@@ -248,15 +271,15 @@ export function useDayVoteRole({
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               onClick={() => socket.emit("trialVoteLifeDeath", { roomId, vote: "live" })}
-              style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer" }}
+              style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center" }}
             >
-              ✅ Vote Sống{myTrialVote === "live" ? " (đã chọn)" : ""}
+              <AvifIcon name="✅" style={{ marginRight: 4 }} /> Vote Sống{myTrialVote === "live" ? " (đã chọn)" : ""}
             </button>
             <button
               onClick={() => socket.emit("trialVoteLifeDeath", { roomId, vote: "die" })}
-              style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer" }}
+              style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center" }}
             >
-              ☠️ Vote Chết{myTrialVote === "die" ? " (đã chọn)" : ""}
+              <AvifIcon name="☠️" style={{ marginRight: 4 }} /> Vote Chết{myTrialVote === "die" ? " (đã chọn)" : ""}
             </button>
           </div>
         )}
@@ -278,6 +301,8 @@ export function useDayVoteRole({
       trialOrangePlayerId: trialTargetId,
       trialWhitePlayerIds: trialInteractionActiveIds,
       trialGreenPlayerId: trialSelectedInteractorId,
+      showVoteReview: isVoteReviewActive,
+      dayVotes: dayVotes,
     },
   };
 }

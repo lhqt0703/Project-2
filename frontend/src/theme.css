@@ -38,7 +38,7 @@ body {
   /* font-family: "Google Sans Flex"; */
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
 }
-h1#Ma-phong {
+h1#Ma-phong, h1#Sanh-cho {
   margin: 0;
   font-size: 1.5rem !important;
   line-height: 1;
@@ -443,10 +443,6 @@ input {
     margin: 0 auto;
   }
 
-  .lobby-page {
-    padding: 14px !important;
-  }
-
   .lobby-page > div {
     max-width: 430px !important;
   }
@@ -466,6 +462,7 @@ input {
     width: 100%;
   }
 
+  .lobby-page,
   .room-page,
   .game-page,
   .roleselect-page {

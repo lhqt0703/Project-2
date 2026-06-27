@@ -4,6 +4,9 @@ import { useState, useEffect } from "react";
 import { DEFAULT_ROOM_GAME_RULES } from "../context/RoomContext";
 import Aurora from "../components/Aurora";
 import ArrowLeft from "../assets/arrow-left.svg";
+import { AVA_IMAGES, getAvatarUrlByFileName } from "../components/PlayerPositions";
+import { AvifIcon } from "../components/AvifIcon";
+import { VIP_REAL_NAMES } from "../constants/vip";
 
 const PLAYER_NAME_STORAGE_KEY = "werewolfPlayerName";
 const ALLOWED_CREATOR_IDS = [
@@ -15,8 +18,31 @@ const ALLOWED_CREATOR_IDS = [
 
 export default function Lobby() {
   const nav = useNavigate();
+  const realName = VIP_REAL_NAMES[clientId];
+  const greeting = realName ? `Chào ${realName}` : "Chào Huy Hà";
   const [name, setName] = useState(() => localStorage.getItem(PLAYER_NAME_STORAGE_KEY) || "");
   const [roomIdInput, setRoomIdInput] = useState("");
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [myAvatar, setMyAvatar] = useState(() => localStorage.getItem("werewolfPlayerAvatar") || "");
+
+  const myAvatars = Object.keys(AVA_IMAGES)
+    .map((path) => path.split("/").pop() || "")
+    .filter((fileName) => fileName.toLowerCase().includes(clientId.toLowerCase()))
+    .sort();
+
+  const currentAvatarUrl = getAvatarUrlByFileName(myAvatar);
+
+  const selectAvatar = (fileName: string) => {
+    setMyAvatar(fileName);
+    localStorage.setItem("werewolfPlayerAvatar", fileName);
+    setShowAvatarModal(false);
+  };
+
+  const clearAvatar = () => {
+    setMyAvatar("");
+    localStorage.removeItem("werewolfPlayerAvatar");
+    setShowAvatarModal(false);
+  };
 
   const query = new URLSearchParams(window.location.search);
   const gameMode = query.get("mode") || "da_nghich";
@@ -139,9 +165,15 @@ export default function Lobby() {
           flex-direction: column;
           gap: 20px;
         }
-        .lobby-card:hover {
-          border-color: rgba(255, 255, 255, 0.12);
-          box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        @keyframes modalFadeIn {
+          from {
+            opacity: 0;
+            transform: scale(0.95) translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
         }
       `}</style>
 
@@ -163,39 +195,74 @@ export default function Lobby() {
         display: "grid",
         gap: 24
       }}>
-
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <button
           onClick={() => nav('/')}
           aria-label="Quay lại"
           style={{
             border: "none",
             background: "transparent",
-            padding: "0 8px",
+            padding: "0",
             cursor: "pointer",
-            width: 36,
-            margin: "0 0 -10px",
+            width: 28,
+            height: 28,
+            margin: "0",
           }}
         >
-          <img src={ArrowLeft} alt="Quay lại" style={{ width: 20, height: 20, filter: "brightness(0.75)", display: "block" }} />
+          <img src={ArrowLeft} alt="Quay lại" style={{ width: 22, height: 22, filter: "brightness(0.75)", display: "block" }} />
         </button>
+        <h1 id="Sanh-cho">Sảnh Chờ</h1></div>
 
         {/* Lobby Header Card */}
         <div className="lobby-card" style={{ position: "relative", padding: "32px 36px" }}>
-
-          <h1 style={{
-            margin: 0,
-            fontSize: 42,
-            fontWeight: 900,
-            letterSpacing: "-0.03em",
-            background: "linear-gradient(135deg, #ffffff 30%, #a5b4fc 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent"
-          }}>
-            Sảnh Chờ
-          </h1>
-          <p style={{ margin: 0, lineHeight: 1.6, color: "rgba(244,246,251,0.72)", fontSize: 16 }}>
-            Hãy nhập tên của bạn và mã phòng để bắt đầu tham gia trò chơi cùng mọi người
-          </p>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h1 style={{
+              margin: 0,
+              fontSize: 42,
+              fontWeight: 900,
+              letterSpacing: "-0.03em",
+              background: "linear-gradient(135deg, #ffffff 30%, #a5b4fc 100%)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent"
+            }}>
+              {greeting}
+            </h1>
+            
+            {/* Player Circle Token */}
+            <div 
+              onClick={() => setShowAvatarModal(true)}
+              style={{
+                width: 60,
+                height: 60,
+                borderRadius: "50%",
+                border: "2px solid rgba(255, 255, 255, 0.2)",
+                background: currentAvatarUrl ? `url(${currentAvatarUrl})` : "rgba(255, 255, 255, 0.05)",
+                backgroundPosition: "center",
+                backgroundSize: "cover",
+                backgroundRepeat: "no-repeat",
+                cursor: "pointer",
+                transition: "all 0.25s ease",
+                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: currentAvatarUrl ? undefined : 24,
+                color: "#ff8f42",
+                overflow: "hidden"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "#ff8f42";
+                e.currentTarget.style.transform = "scale(1.05)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.2)";
+                e.currentTarget.style.transform = "scale(1)";
+              }}
+              title="Đổi Avatar VIP"
+            >
+              {!currentAvatarUrl && ""}
+            </div>
+          </div>
         </div>
 
         {/* Action Sections Grid */}
@@ -260,6 +327,143 @@ export default function Lobby() {
           </section>
         </div>
       </div>
+      {showAvatarModal && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          backgroundColor: "rgba(4, 6, 15, 0.8)",
+          backdropFilter: "blur(12px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          padding: 16
+        }}>
+          <div className="lobby-card" style={{
+            width: "100%",
+            maxWidth: 480,
+            maxHeight: "85vh",
+            overflowY: "auto",
+            position: "relative",
+            animation: "modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#ff8f42" }}>Chọn Avatar</h2>
+              <div 
+                onClick={() => setShowAvatarModal(false)}
+                style={{
+                  border: "none",
+                  background: "rgba(255, 255, 255, 0.05)",
+                  color: "#fff",
+                  width: 32,
+                  height: 32,
+                  borderRadius: "50%",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: "bold",
+                }}
+              >
+                ✕
+              </div>
+            </div>
+            
+
+            {myAvatars.length === 0 ? (
+              <div style={{
+                textAlign: "center",
+                padding: "32px 16px",
+                background: "rgba(255, 255, 255, 0.02)",
+                borderRadius: 16,
+                border: "1px dashed rgba(255, 255, 255, 0.1)",
+                color: "rgba(255,255,255,0.4)",
+                fontSize: 12,
+              }}>
+                <AvifIcon name="🔒" style={{ width: 37, height: 37, display: "block", margin: "0 auto 8px", opacity: 0.4 }} />
+                Bạn chưa được gán Avatar VIP nào trên hệ thống<br></br>Hãy liên hệ Quản Trò để biết thêm chi tiết
+              </div>
+            ) : (
+              <>
+                <p style={{ margin: "0 0 16px 0", fontSize: 14, color: "rgba(255,255,255,0.6)" }}>
+                  Dưới đây là các avatar VIP đã có của bạn
+                </p>
+                <div style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gap: 16,
+                  padding: 4
+                }}>
+                  {myAvatars.map((fileName) => {
+                    const url = getAvatarUrlByFileName(fileName);
+                    const isSelected = myAvatar === fileName;
+                    const isMFormat = fileName.includes("M-");
+                    let numberDisplay = "VIP";
+                    if (isMFormat && fileName.split(" ")[1]) {
+                      numberDisplay = `VIP #${fileName.split(" ")[1].split(".")[0].substring(2)}`;
+                    }
+                    return (
+                      <div 
+                        key={fileName}
+                        onClick={() => selectAvatar(fileName)}
+                        style={{
+                          position: "relative",
+                          aspectRatio: "1/1",
+                          borderRadius: 16,
+                          background: url ? `url(${url})` : "rgba(255,255,255,0.05)",
+                          backgroundPosition: "center",
+                          backgroundSize: "cover",
+                          backgroundRepeat: "no-repeat",
+                          cursor: "pointer",
+                          border: isSelected ? "3px solid #ff8f42" : "2px solid rgba(255,255,255,0.1)",
+                          boxShadow: isSelected ? "0 0 16px rgba(255, 143, 66, 0.4)" : "none",
+                          transition: "all 0.2s ease"
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isSelected) e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.4)";
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isSelected) e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.1)";
+                        }}
+                      >
+                        <div style={{
+                          position: "absolute",
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          padding: "4px 8px",
+                          background: "rgba(0,0,0,0.6)",
+                          backdropFilter: "blur(4px)",
+                          borderBottomLeftRadius: 12,
+                          borderBottomRightRadius: 12,
+                          fontSize: 11,
+                          textAlign: "center",
+                          color: isSelected ? "#ff8f42" : "#fff",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap"
+                        }}>
+                          {numberDisplay}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {myAvatar && (
+              <button 
+                onClick={clearAvatar}
+                className="lobby-btn lobby-btn-secondary"
+                style={{ marginTop: 16, width: "100%" }}
+              >
+                Gỡ Avatar hiện tại
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

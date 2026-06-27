@@ -37,6 +37,10 @@ function getOrCreateClientId() {
   const existing = window.localStorage.getItem(CLIENT_ID_STORAGE_KEY);
   if (existing) return existing;
 
+
+  /* 
+  Cách 1 (Ưu tiên): Sử dụng tính năng sinh mã ngẫu nhiên bảo mật của trình duyệt là crypto.randomUUID(). Cách này tạo ra các ID dạng ngẫu nhiên như 046fa88a-.... Hầu hết các trình duyệt hiện đại chạy trên giao thức an toàn https:// đều dùng cách này.
+  Cách 2 (Dự phòng): Nếu trình duyệt quá cũ hoặc chạy trên giao thức không an toàn (http:// - nơi trình duyệt khóa tính năng crypto), hệ thống sẽ tự tạo ID thủ công bằng công thức: client_ + Thời gian hiện tại + Ký tự ngẫu nhiên */
   const nextId =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()

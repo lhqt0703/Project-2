@@ -48,6 +48,14 @@ import type {
 import { ELEMENTAL_BUFF_LABELS, ELEMENTAL_BUFFS } from "../../constants/elemental";
 import { EMPTY_MERCHANT_PRIVATE_STATE } from "../../constants/merchant";
 
+export interface PlayerMessage {
+  id: string;
+  senderId: string;
+  text: string;
+  channel: "wolf" | "lovers";
+  createdAt: number;
+}
+
 const EMPTY_LOVE_STATE: LoveStatePayload = {
   cupidId: null,
   targetId: null,
@@ -98,6 +106,11 @@ export function useGameSocketSync({
 
   const [witchPendingDeathTargetIds, setWitchPendingDeathTargetIds] = useState<string[]>([]);
   const [witchPotions, setWitchPotions] = useState<WitchPotionsPayload | null>(null);
+  const [witchPotionEffect, setWitchPotionEffect] = useState<{
+    targetId: string;
+    type: "heal" | "poison";
+    startedAt: number;
+  } | null>(null);
 
   const [guardianProtectedSeq, setGuardianProtectedSeq] = useState(0);
   const [guardianProtectedTargetId, setGuardianProtectedTargetId] = useState<string | null>(null);
@@ -114,6 +127,7 @@ export function useGameSocketSync({
   const [loveArrowShot, setLoveArrowShot] = useState<LoveArrowShotPayload | null>(null);
   const [loveState, setLoveState] = useState<LoveStatePayload>(EMPTY_LOVE_STATE);
   const [stickers, setStickers] = useState<Sticker[]>([]);
+  const [playerMessages, setPlayerMessages] = useState<PlayerMessage[]>([]);
 
   const [wolfLocked, setWolfLocked] = useState<WolfLockedUpdatedPayload | null>(null);
   const [wolfDeadline, setWolfDeadline] = useState<number | null>(null);
@@ -710,6 +724,13 @@ export function useGameSocketSync({
       setStickers((prev) => prev.filter((s) => s.id !== stickerId));
     };
 
+    const handlePlayerMessagePlaced = (newMessage: PlayerMessage) => {
+      setPlayerMessages((prev) => {
+        const filtered = prev.filter((m) => m.senderId !== newMessage.senderId);
+        return [...filtered, newMessage];
+      });
+    };
+
     const handleDayVotesUpdated = (votes: DayVotesUpdatedPayload) => {
       setDayVotes(votes);
       setRoom((prev: any) => (prev ? { ...prev, wolfVotes: votes } : prev));
@@ -845,6 +866,16 @@ export function useGameSocketSync({
     socket.on("witchPendingDeath", handleWitchPendingDeath);
     socket.on("witchPotionsUpdated", handleWitchPotionsUpdated);
 
+    const handleWitchPotionEffectTriggered = (payload: { targetId: string; type: "heal" | "poison" }) => {
+      console.log("[WitchVFX] Nhận socket event witchPotionEffectTriggered:", payload);
+      setWitchPotionEffect({
+        targetId: payload.targetId,
+        type: payload.type,
+        startedAt: performance.now(),
+      });
+    };
+    socket.on("witchPotionEffectTriggered", handleWitchPotionEffectTriggered);
+
     socket.on("hunterTargetUpdated", handleHunterTargetUpdated);
     socket.on("hunterShot", handleHunterShot);
     socket.on("loveArrowShot", handleLoveArrowShot);
@@ -854,6 +885,7 @@ export function useGameSocketSync({
     socket.on("stickerPlaced", handleStickerPlaced);
     socket.on("stickerMoved", handleStickerMoved);
     socket.on("stickerDeleted", handleStickerDeleted);
+    socket.on("playerMessagePlaced", handlePlayerMessagePlaced);
 
     socket.on("dayVotesUpdated", handleDayVotesUpdated);
     socket.on("dayLockedUpdated", handleDayLockedUpdated);
@@ -907,6 +939,7 @@ export function useGameSocketSync({
 
       socket.off("witchPendingDeath", handleWitchPendingDeath);
       socket.off("witchPotionsUpdated", handleWitchPotionsUpdated);
+      socket.off("witchPotionEffectTriggered", handleWitchPotionEffectTriggered);
 
       socket.off("hunterTargetUpdated", handleHunterTargetUpdated);
       socket.off("hunterShot", handleHunterShot);
@@ -917,6 +950,7 @@ export function useGameSocketSync({
       socket.off("stickerPlaced", handleStickerPlaced);
       socket.off("stickerMoved", handleStickerMoved);
       socket.off("stickerDeleted", handleStickerDeleted);
+      socket.off("playerMessagePlaced", handlePlayerMessagePlaced);
 
       socket.off("dayVotesUpdated", handleDayVotesUpdated);
       socket.off("dayLockedUpdated", handleDayLockedUpdated);
@@ -963,6 +997,8 @@ export function useGameSocketSync({
       angelReviveState,
       witchPendingDeathTargetIds,
       witchPotions,
+      witchPotionEffect,
+      setWitchPotionEffect,
       guardianProtectedSeq,
       guardianProtectedTargetId,
       protectorTargetSeq,
@@ -977,6 +1013,8 @@ export function useGameSocketSync({
       loveState,
       stickers,
       setStickers,
+      playerMessages,
+      setPlayerMessages,
       wolfLocked,
       wolfDeadline,
       wolves,
@@ -1034,6 +1072,7 @@ export function useGameSocketSync({
       angelReviveState,
       witchPendingDeathTargetIds,
       witchPotions,
+      witchPotionEffect,
       guardianProtectedSeq,
       guardianProtectedTargetId,
       protectorTargetSeq,
@@ -1048,6 +1087,8 @@ export function useGameSocketSync({
       loveState,
       stickers,
       setStickers,
+      playerMessages,
+      setPlayerMessages,
       wolfLocked,
       wolfDeadline,
       wolves,

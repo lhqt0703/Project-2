@@ -5,6 +5,7 @@ interface StickerSelectorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectSticker: (filename: string, channel: "wolf" | "lovers", event: React.MouseEvent | React.TouchEvent | null) => void;
+  onSendPlayerMessage?: (text: string, channel: "wolf" | "lovers") => void;
   isWolf: boolean;
   isLover: boolean;
 }
@@ -214,21 +215,94 @@ const LoverHeartIcon: React.FC<{ active: boolean; onClick?: () => void; style?: 
   );
 };
 
+const SendIcon: React.FC<{ activeChannel: "wolf" | "lovers" }> = ({ activeChannel }) => {
+  const isWolf = activeChannel === "wolf";
+  if (isWolf) {
+    return (
+      <svg fill="none" height="18" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="m22.1012 10.5616-19.34831-9.43824c-.1664-.08117-.53427-.12336-.53427-.12336-.67302 0-1.21862.5456-1.21862 1.21862v.03517c0 .16352.02005.32643.05971.48507l1.85597 7.42384.32326 1.3817c.07012.2997.07012.6115 0 .9112l-.32326 1.3817-1.85597 7.4238c-.03966.1587-.05971.3216-.05971.4851v.0352c0 .673.5456 1.2186 1.21862 1.2186.18515 0 .36787-.0422.53427-.1234l19.34831-9.4382c.5499-.2682.8988-.8265.8988-1.4384s-.3489-1.1702-.8988-1.4384z"
+          fill="#8C5A3C"
+        />
+        <path
+          d="m2.91553 13.838c.05069-.2028.22197-.352.42968-.375l8.15769-.9063c.2829-.0314.4971-.272.4971-.5566 0-.2847-.2142-.5233-.4971-.5547l-8.15769-.9063c-.2027-.0225-.37071-.1651-.42581-.3604l.31954 1.3657c.07012.2998.07012.6116 0 .9113z"
+          fill="#5C3A24"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg fill="none" height="18" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="send_gradient" gradientUnits="userSpaceOnUse" x1="0" x2="24" y1="0" y2="24">
+          <stop offset=".0833333" stopColor="#ff6a6a"/>
+          <stop offset="1" stopColor="#f72257"/>
+        </linearGradient>
+      </defs>
+      <path
+        d="m22.1012 10.5616-19.34831-9.43824c-.1664-.08117-.53427-.12336-.53427-.12336-.67302 0-1.21862.5456-1.21862 1.21862v.03517c0 .16352.02005.32643.05971.48507l1.85597 7.42384.32326 1.3817c.07012.2997.07012.6115 0 .9112l-.32326 1.3817-1.85597 7.4238c-.03966.1587-.05971.3216-.05971.4851v.0352c0 .673.5456 1.2186 1.21862 1.2186.18515 0 .36787-.0422.53427-.1234l19.34831-9.4382c.5499-.2682.8988-.8265.8988-1.4384s-.3489-1.1702-.8988-1.4384z"
+        fill="url(#send_gradient)"
+      />
+      <path
+        d="m2.91553 13.838c.05069-.2028.22197-.352.42968-.375l8.15769-.9063c.2829-.0314.4971-.272.4971-.5566 0-.2847-.2142-.5233-.4971-.5547l-8.15769-.9063c-.2027-.0225-.37071-.1651-.42581-.3604l.31954 1.3657c.07012.2998.07012.6116 0 .9113z"
+        fill="#850026"
+      />
+    </svg>
+  );
+};
+
+let lastSelectedChannel: "wolf" | "lovers" | null = null;
+
 export const StickerSelectorModal: React.FC<StickerSelectorModalProps> = ({
   isOpen,
   onClose,
   onSelectSticker,
+  onSendPlayerMessage,
   isWolf,
   isLover,
 }) => {
   const isBoth = isWolf && isLover;
-  const [activeChannel, setActiveChannel] = useState<"wolf" | "lovers">(isWolf ? "wolf" : "lovers");
+  const [activeChannel, setActiveChannel] = useState<"wolf" | "lovers">(() => {
+    if (lastSelectedChannel) {
+      if (lastSelectedChannel === "wolf" && isWolf) return "wolf";
+      if (lastSelectedChannel === "lovers" && isLover) return "lovers";
+    }
+    return isWolf ? "wolf" : "lovers";
+  });
   const [animatingTarget, setAnimatingTarget] = useState<"wolf" | "lovers" | null>(null);
   const [showText, setShowText] = useState<string | null>(null);
+  const [chatText, setChatText] = useState("");
+
+  const handleSendMessage = () => {
+    if (!chatText.trim()) return;
+    if (onSendPlayerMessage) {
+      onSendPlayerMessage(chatText.trim(), activeChannel);
+    }
+    setChatText("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
 
   useEffect(() => {
     if (isOpen) {
-      setActiveChannel(isWolf ? "wolf" : "lovers");
+      if (lastSelectedChannel) {
+        if (lastSelectedChannel === "wolf" && !isWolf) {
+          setActiveChannel("lovers");
+          lastSelectedChannel = "lovers";
+        } else if (lastSelectedChannel === "lovers" && !isLover) {
+          setActiveChannel("wolf");
+          lastSelectedChannel = "wolf";
+        } else {
+          setActiveChannel(lastSelectedChannel);
+        }
+      } else {
+        setActiveChannel(isWolf ? "wolf" : "lovers");
+      }
       setAnimatingTarget(null);
       setShowText(null);
     }
@@ -237,6 +311,7 @@ export const StickerSelectorModal: React.FC<StickerSelectorModalProps> = ({
   const handleWolfClick = () => {
     if (animatingTarget) return;
     setActiveChannel("wolf");
+    lastSelectedChannel = "wolf";
     setAnimatingTarget("wolf");
     setShowText("Phe sói");
     setTimeout(() => {
@@ -250,6 +325,7 @@ export const StickerSelectorModal: React.FC<StickerSelectorModalProps> = ({
   const handleLoverClick = () => {
     if (animatingTarget) return;
     setActiveChannel("lovers");
+    lastSelectedChannel = "lovers";
     setAnimatingTarget("lovers");
     setShowText("Nửa kia");
     setTimeout(() => {
@@ -346,6 +422,10 @@ export const StickerSelectorModal: React.FC<StickerSelectorModalProps> = ({
           .sticker-grid-item:hover {
             background: rgba(255, 255, 255, 0.08);
             transform: scale(1.12);
+          }
+          .sticker-chat-input-container:focus-within {
+            border-color: rgba(255, 255, 255, 0.24) !important;
+            background: rgba(255, 255, 255, 0.12) !important;
           }
         `}</style>
         
@@ -454,6 +534,58 @@ export const StickerSelectorModal: React.FC<StickerSelectorModalProps> = ({
               onClose={onClose}
             />
           ))}
+        </div>
+
+        {/* Khung Chat */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            position: "relative",
+            background: "rgba(255, 255, 255, 0.08)",
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            borderRadius: "10px",
+            padding: "6px 10px",
+            gap: "8px",
+            marginTop: "4px",
+            transition: "all 0.2s ease"
+          }}
+          className="sticker-chat-input-container"
+        >
+          <input
+            type="text"
+            placeholder="Nhập tin nhắn..."
+            value={chatText}
+            onChange={(e) => setChatText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            style={{
+              flex: 1,
+              background: "transparent",
+              border: "none",
+              outline: "none",
+              color: "#fff",
+              fontSize: "13px",
+              padding: 0,
+              width: "100%"
+            }}
+          />
+          <button
+            onClick={handleSendMessage}
+            disabled={!chatText.trim()}
+            style={{
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              cursor: chatText.trim() ? "pointer" : "default",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: chatText.trim() ? 1 : 0.4,
+              transition: "all 0.2s ease",
+            }}
+          >
+            <SendIcon activeChannel={activeChannel} />
+          </button>
         </div>
       </div>
     </div>

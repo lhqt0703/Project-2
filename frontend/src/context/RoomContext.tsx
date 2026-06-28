@@ -59,6 +59,7 @@ export interface RoomGameRules {
   merchantHideReceivedItemName: boolean;
   loveEscapeImmuneSimultaneous: boolean;
   wolfCanBiteWolf?: boolean;
+  wolfBonusBiteSmoothTied?: boolean;
 }
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -83,6 +84,7 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   merchantHideReceivedItemName: false,
   loveEscapeImmuneSimultaneous: true,
   wolfCanBiteWolf: false,
+  wolfBonusBiteSmoothTied: true,
 };
 
 export interface RoomData {
@@ -127,6 +129,8 @@ export interface RoomData {
   pendingGameRules?: RoomGameRules;
   banSoiWolfAligned?: boolean;
   banSoiWolfAlignedPending?: boolean;
+  spiritWolfWolfAligned?: boolean;
+  spiritWolfWolfAlignedPending?: boolean;
   wildWolfConvertAvailableTonight?: boolean;
   wildWolfConvertRequestedTonight?: boolean;
   wildWolfConvertedSelf?: boolean;

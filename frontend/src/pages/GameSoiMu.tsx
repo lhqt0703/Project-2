@@ -127,6 +127,8 @@ export default function GameSoiMu() {
   const [quitConfirmOpen, setQuitConfirmOpen] = useState(false);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [eliminateConfirmTarget, setEliminateConfirmTarget] = useState<any | null>(null);
+  const [restartConfirmOpen, setRestartConfirmOpen] = useState(false);
   const boardRoomOverride = useMemo(() => {
     if (!room || !isHost) return room;
     return {
@@ -444,11 +446,7 @@ export default function GameSoiMu() {
     const p = room.players.find((player: any) => player.id === targetId);
     if (!p || room.deadPlayers?.includes(targetId)) return;
 
-    const confirm = window.confirm(`Bạn có chắc muốn loại người chơi "${p.name}" vì phạm luật không?`);
-    if (confirm) {
-      socket.emit("hostEliminatePlayerForRules", { roomId: room.id, targetId });
-      setHostPlayerActionTargetId(null);
-    }
+    setEliminateConfirmTarget(p);
   };
 
   // Chuyển phase game (Host điều khiển)
@@ -460,10 +458,7 @@ export default function GameSoiMu() {
   // Chia bài lại
   const handleRestartGame = () => {
     if (!room || !isHost) return;
-    const confirm = window.confirm("Bạn có chắc muốn chia bài lại và bắt đầu ván mới không?");
-    if (confirm) {
-      socket.emit("restartGame", { roomId: room.id });
-    }
+    setRestartConfirmOpen(true);
   };
 
   // Kết thúc ngay trò chơi
@@ -931,77 +926,73 @@ export default function GameSoiMu() {
       </div>
 
       {/* Player controls */}
-      {!isHost && !isDusk && !amIDead && (
-        <>
-          {(isNight || showInvestigationUI) && (
-            <div style={{ maxWidth: "600px", margin: "1rem auto", display: "flex", flexDirection: "column", gap: 12 }}>
-              {isNight && (
-                <>
-                  <div style={{ fontSize: "14px", color: "rgba(255, 255, 255, 0.7)" }}>
-                    {isLocked ? "Hành động của bạn đã được khóa" : "Chọn một mục tiêu mà bạn muốn:"}
-                  </div>
+      {!isHost && !isDusk && !amIDead && (isNight || showInvestigationUI) && (
+        <div style={{ maxWidth: "600px", margin: "1rem auto", display: "flex", flexDirection: "column", gap: 12 }}>
+          {isNight && (
+            <>
+              <div style={{ fontSize: "14px", color: "rgba(255, 255, 255, 0.7)" }}>
+                {isLocked ? "Hành động của bạn đã được khóa" : "Chọn một mục tiêu mà bạn muốn:"}
+              </div>
 
-                  {/* Tay Buôn thumb selection */}
-                  {hasMerchantInGame && (
-                    <div style={{ display: "flex", gap: 10, margin: "8px 0" }}>
-                      <button
-                        className={`btn-thumb ${thumbDecision === "up" ? "active-up" : ""}`}
-                        onClick={() => handleChooseThumb("up")}
-                        disabled={isLocked}
-                      >
-                        👍🏽
-                      </button>
-                      <button
-                        className={`btn-thumb ${thumbDecision === "down" ? "active-down" : ""}`}
-                        onClick={() => handleChooseThumb("down")}
-                        disabled={isLocked}
-                      >
-                        👎🏽
-                      </button>
-                    </div>
-                  )}
-
+              {/* Tay Buôn thumb selection */}
+              {hasMerchantInGame && (
+                <div style={{ display: "flex", gap: 10, margin: "8px 0" }}>
                   <button
-                    className="btn-action btn-primary"
-                    onClick={handleLockNightAction}
-                    disabled={isLocked || !selectedTargetId || (hasMerchantInGame && !thumbDecision)}
+                    className={`btn-thumb ${thumbDecision === "up" ? "active-up" : ""}`}
+                    onClick={() => handleChooseThumb("up")}
+                    disabled={isLocked}
                   >
-                    {isLocked ? "Đã khóa lựa chọn" : "Xác nhận hành động"}
+                    👍🏽
                   </button>
-                </>
-              )}
-
-              {/* Tiên tri Day UI */}
-              {showInvestigationUI && (
-                <div style={{
-                  background: "rgba(245, 158, 11, 0.1)",
-                  border: "1px solid rgba(245, 158, 11, 0.3)",
-                  padding: "16px",
-                  borderRadius: "12px",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 12
-                }}>
-                  <div style={{ fontWeight: 800, color: "#f59e0b" }}>⚠️ Chọn lại mục tiêu bạn đã chọn đêm qua</div>
                   <button
-                    className="btn-action"
-                    style={{ background: "#f59e0b", color: "#000", fontWeight: 900 }}
-                    onClick={handleConfirmDayTarget}
-                    disabled={!daySelectedTargetId}
+                    className={`btn-thumb ${thumbDecision === "down" ? "active-down" : ""}`}
+                    onClick={() => handleChooseThumb("down")}
+                    disabled={isLocked}
                   >
-                    Xác nhận lựa chọn
+                    👎🏽
                   </button>
                 </div>
               )}
-            </div>
+
+              <button
+                className="btn-action btn-primary"
+                onClick={handleLockNightAction}
+                disabled={isLocked || !selectedTargetId || (hasMerchantInGame && !thumbDecision)}
+              >
+                {isLocked ? "Đã khóa lựa chọn" : "Xác nhận hành động"}
+              </button>
+            </>
           )}
 
-          {dayVote.panel && (
-            <div style={{ maxWidth: "600px", margin: "1rem auto 0 auto" }}>
-              {dayVote.panel}
+          {/* Tiên tri Day UI */}
+          {showInvestigationUI && (
+            <div style={{
+              background: "rgba(245, 158, 11, 0.1)",
+              border: "1px solid rgba(245, 158, 11, 0.3)",
+              padding: "16px",
+              borderRadius: "12px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 12
+            }}>
+              <div style={{ fontWeight: 800, color: "#f59e0b" }}>⚠️ Chọn lại mục tiêu bạn đã chọn đêm qua</div>
+              <button
+                className="btn-action"
+                style={{ background: "#f59e0b", color: "#000", fontWeight: 900 }}
+                onClick={handleConfirmDayTarget}
+                disabled={!daySelectedTargetId}
+              >
+                Xác nhận lựa chọn
+              </button>
             </div>
           )}
-        </>
+        </div>
+      )}
+
+      {!isHost && !isDusk && dayVote.panel && (
+        <div style={{ maxWidth: "600px", margin: "1rem auto 0 auto" }}>
+          {dayVote.panel}
+        </div>
       )}
 
       {/* Host Controls */}
@@ -1208,6 +1199,31 @@ export default function GameSoiMu() {
         closeText="Đóng"
         onConfirm={() => setErrorMsg(null)}
         onCancel={() => setErrorMsg(null)}
+      />
+
+      <ConfirmModal
+        open={!!eliminateConfirmTarget}
+        title="Xác nhận loại người chơi"
+        message={eliminateConfirmTarget ? `Bạn có chắc muốn loại người chơi "${eliminateConfirmTarget.name}" vì phạm luật không?` : ""}
+        onConfirm={() => {
+          if (eliminateConfirmTarget) {
+            socket.emit("hostEliminatePlayerForRules", { roomId: room.id, targetId: eliminateConfirmTarget.id });
+            setHostPlayerActionTargetId(null);
+          }
+          setEliminateConfirmTarget(null);
+        }}
+        onCancel={() => setEliminateConfirmTarget(null)}
+      />
+
+      <ConfirmModal
+        open={restartConfirmOpen}
+        title="Xác nhận bắt đầu lại"
+        message="Bạn có chắc muốn chia bài lại và bắt đầu ván mới không?"
+        onConfirm={() => {
+          socket.emit("restartGame", { roomId: room.id });
+          setRestartConfirmOpen(false);
+        }}
+        onCancel={() => setRestartConfirmOpen(false)}
       />
     </div>
   );

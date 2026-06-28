@@ -717,11 +717,6 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     const votes = room.wolfVotes || {};
     const votes2 = room.wolfVotes2 || {};
     const activeWolves = getActiveWolves(room);
-    const forceWolfBiteFirstNight =
-      rules.twoHeartsFirstTwoNights &&
-      rules.forceWolfBiteFirstNight &&
-      (room.nightCount || 0) === 1 &&
-      activeWolves.length > 0;
 
     appendLogEntry(
       room,
@@ -730,11 +725,6 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
         : buildWolfVoteBreakdown(room, votes)
     );
 
-    const randomFrom = <T,>(items: T[]): T | null => {
-      if (!items.length) return null;
-      return items[Math.floor(Math.random() * items.length)] ?? null;
-    };
-
     const getRandomEligibleWolfTarget = () => {
       const dead = new Set(room.deadPlayers || []);
       const attackAt = room.wolfAttackResolvedAt || Date.now();
@@ -742,99 +732,21 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
         .filter((playerId) => !dead.has(playerId))
         .filter((playerId) => rules.wolfCanBiteWolf || !isWolfAlignedPlayer(room, playerId))
         .filter((playerId) => !isLovePairMemberAwayAt(room, playerId, attackAt, true));
-      return randomFrom(candidates);
+      if (!candidates.length) return null;
+      return candidates[Math.floor(Math.random() * candidates.length)] ?? null;
     };
 
-    const counts: Record<string, number> = {};
-    activeWolves.forEach((wolfId) => {
-      const target = votes[wolfId];
-      if (!target) return;
-      counts[target] = (counts[target] || 0) + 1;
-    });
+    const results = calculateWolfBiteResults(
+      room,
+      votes,
+      votes2,
+      activeWolves,
+      rules,
+      getRandomEligibleWolfTarget
+    );
 
-    const entries = Object.entries(counts);
-    if (entries.length === 0) {
-      room.killedTonight = forceWolfBiteFirstNight ? getRandomEligibleWolfTarget() : null;
-    } else {
-      entries.sort((a, b) => b[1] - a[1]);
-      if (entries.length > 1 && entries[0]![1] === entries[1]![1]) {
-        const topCount = entries[0]![1];
-        const tiedTargets = entries.filter(([, count]) => count === topCount).map(([targetId]) => targetId);
-        room.killedTonight = forceWolfBiteFirstNight ? randomFrom(tiedTargets) : null;
-      } else {
-        room.killedTonight = entries[0]![0];
-      }
-    }
-
-    room.killedTonightExtra = null;
-    if (room.wolfBonusBiteThisNight) {
-      const votingWolves = activeWolves.filter((wid) => !!votes[wid] || !!votes2[wid]);
-
-      if (votingWolves.length <= 1) {
-        const wid = votingWolves[0];
-        const t1 = wid ? votes[wid] : null;
-        const t2 = wid ? votes2[wid] : null;
-        if (t1 && t2 && t1 !== t2) {
-          room.killedTonight = t1;
-          room.killedTonightExtra = t2;
-        } else {
-          room.killedTonight = t1 || t2 || null;
-          room.killedTonightExtra = null;
-        }
-      } else {
-        const combinedCounts: Record<string, number> = {};
-        for (const wid of votingWolves) {
-          const t1 = votes[wid];
-          const t2 = votes2[wid];
-          const uniq = new Set<string>();
-          if (t1) uniq.add(t1);
-          if (t2) uniq.add(t2);
-          for (const t of uniq) {
-            combinedCounts[t] = (combinedCounts[t] || 0) + 1;
-          }
-        }
-
-        const eligible = Object.entries(combinedCounts).filter(([, c]) => c >= 2);
-        if (eligible.length === 0) {
-          room.killedTonight = null;
-          room.killedTonightExtra = null;
-        } else {
-          eligible.sort((a, b) => b[1] - a[1]);
-          const topCount = eligible[0]![1];
-          const topTied = eligible.filter(([, c]) => c === topCount);
-          if (topTied.length >= 3) {
-            room.killedTonight = null;
-            room.killedTonightExtra = null;
-          } else if (topTied.length === 2) {
-            room.killedTonight = topTied[0]![0];
-            room.killedTonightExtra = topTied[1]![0];
-          } else {
-            room.killedTonight = eligible[0]![0];
-
-            const remaining = eligible.filter(([pid]) => pid !== room.killedTonight);
-            if (remaining.length) {
-              const secondCount = remaining[0]![1];
-              const secondTied = remaining.filter(([, c]) => c === secondCount);
-              if (secondTied.length === 1) {
-                room.killedTonightExtra = remaining[0]![0];
-              } else {
-                room.killedTonightExtra = null;
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (forceWolfBiteFirstNight && !room.killedTonight) {
-      const selectedTargets = Object.keys(counts);
-      room.killedTonight = selectedTargets.length
-        ? randomFrom(selectedTargets)
-        : getRandomEligibleWolfTarget();
-      if (room.killedTonightExtra === room.killedTonight) {
-        room.killedTonightExtra = null;
-      }
-    }
+    room.killedTonight = results.killedTonight;
+    room.killedTonightExtra = results.killedTonightExtra;
 
     ctx.io.to(roomId).emit("wolfVoteFinished", {
       target: room.killedTonight,
@@ -939,4 +851,160 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     advanceDietQuyNightTurn,
     finishWolfVoting,
   };
+}
+
+export function calculateWolfBiteResults(
+  room: any,
+  votes: Record<string, string | null>,
+  votes2: Record<string, string | null>,
+  activeWolves: string[],
+  rules: any,
+  getRandomEligibleWolfTarget: () => string | null
+): { killedTonight: string | null; killedTonightExtra: string | null } {
+  const forceWolfBiteFirstNight =
+    rules.twoHeartsFirstTwoNights &&
+    rules.forceWolfBiteFirstNight &&
+    (room.nightCount || 0) === 1 &&
+    activeWolves.length > 0;
+
+  const randomFrom = <T,>(items: T[]): T | null => {
+    if (!items.length) return null;
+    return items[Math.floor(Math.random() * items.length)] ?? null;
+  };
+
+  const counts: Record<string, number> = {};
+  activeWolves.forEach((wolfId) => {
+    const target = votes[wolfId];
+    if (!target) return;
+    counts[target] = (counts[target] || 0) + 1;
+  });
+
+  let killedTonight: string | null = null;
+  let killedTonightExtra: string | null = null;
+
+  const entries = Object.entries(counts);
+  if (entries.length === 0) {
+    killedTonight = forceWolfBiteFirstNight ? getRandomEligibleWolfTarget() : null;
+  } else {
+    entries.sort((a, b) => b[1] - a[1]);
+    if (entries.length > 1 && entries[0]![1] === entries[1]![1]) {
+      const topCount = entries[0]![1];
+      const tiedTargets = entries.filter(([, count]) => count === topCount).map(([targetId]) => targetId);
+      killedTonight = forceWolfBiteFirstNight ? randomFrom(tiedTargets) : null;
+    } else {
+      killedTonight = entries[0]![0];
+    }
+  }
+
+  if (room.wolfBonusBiteThisNight) {
+    const votingWolves = activeWolves.filter((wid) => !!votes[wid] || !!votes2[wid]);
+
+    if (votingWolves.length <= 1) {
+      const wid = votingWolves[0];
+      const t1 = wid ? votes[wid] : null;
+      const t2 = wid ? votes2[wid] : null;
+      if (t1 && t2 && t1 !== t2) {
+        killedTonight = t1;
+        killedTonightExtra = t2;
+      } else {
+        killedTonight = t1 || t2 || null;
+        killedTonightExtra = null;
+      }
+    } else {
+      const combinedCounts: Record<string, number> = {};
+      for (const wid of votingWolves) {
+        const t1 = votes[wid];
+        const t2 = votes2[wid];
+        const uniq = new Set<string>();
+        if (t1) uniq.add(t1);
+        if (t2) uniq.add(t2);
+        for (const t of uniq) {
+          combinedCounts[t] = (combinedCounts[t] || 0) + 1;
+        }
+      }
+
+      if (rules.wolfBonusBiteSmoothTied) {
+        const eligible = Object.entries(combinedCounts);
+        if (eligible.length === 0) {
+          killedTonight = null;
+          killedTonightExtra = null;
+        } else {
+          eligible.sort((a, b) => b[1] - a[1]);
+          const voteGroups: Record<number, string[]> = {};
+          eligible.forEach(([pid, count]) => {
+            if (!voteGroups[count]) {
+              voteGroups[count] = [];
+            }
+            voteGroups[count].push(pid);
+          });
+
+          const sortedVotes = Object.keys(voteGroups)
+            .map(Number)
+            .sort((a, b) => b - a);
+
+          const max1 = sortedVotes[0];
+          const S1 = max1 !== undefined ? voteGroups[max1]! : [];
+
+          if (S1.length >= 3) {
+            killedTonight = null;
+            killedTonightExtra = null;
+          } else if (S1.length === 2) {
+            killedTonight = S1[0]!;
+            killedTonightExtra = S1[1]!;
+          } else {
+            killedTonight = S1[0]!;
+            const max2 = sortedVotes[1];
+            const S2 = max2 !== undefined ? voteGroups[max2]! : [];
+            if (S2.length === 1) {
+              killedTonightExtra = S2[0]!;
+            } else {
+              killedTonightExtra = null;
+            }
+          }
+        }
+      } else {
+        const eligible = Object.entries(combinedCounts).filter(([, c]) => c >= 2);
+        if (eligible.length === 0) {
+          killedTonight = null;
+          killedTonightExtra = null;
+        } else {
+          eligible.sort((a, b) => b[1] - a[1]);
+          const topCount = eligible[0]![1];
+          const topTied = eligible.filter(([, c]) => c === topCount);
+          if (topTied.length >= 3) {
+            killedTonight = null;
+            killedTonightExtra = null;
+          } else if (topTied.length === 2) {
+            killedTonight = topTied[0]![0];
+            killedTonightExtra = topTied[1]![0];
+          } else {
+            killedTonight = eligible[0]![0];
+
+            const remaining = eligible.filter(([pid]) => pid !== killedTonight);
+            if (remaining.length) {
+              const secondCount = remaining[0]![1];
+              const secondTied = remaining.filter(([, c]) => c === secondCount);
+              if (secondTied.length === 1) {
+                killedTonightExtra = remaining[0]![0];
+              } else {
+                killedTonightExtra = null;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (forceWolfBiteFirstNight && !killedTonight) {
+    const selectedTargets = Object.keys(counts);
+    killedTonight = selectedTargets.length
+      ? randomFrom(selectedTargets)
+      : getRandomEligibleWolfTarget();
+    if (killedTonightExtra === killedTonight) {
+      killedTonightExtra = null;
+    }
+  }
+
+  return { killedTonight, killedTonightExtra };
 }

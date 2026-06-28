@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import ConfirmModal from "../../components/ConfirmModal";
 
 import { socket, clientId } from "../../socket";
 import {
@@ -123,6 +124,7 @@ export function useMerchantRole({
   const [selectedNight, setSelectedNight] = useState<number | null>(null);
   const [showOfferModal, setShowOfferModal] = useState(false);
   const [detailItem, setDetailItem] = useState<{ itemId: MerchantItemId; night: number } | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const currentNight = room.nightCount || 0;
   const isCurrentMerchantDead = !!clientId && deadPlayers.includes(clientId);
   const visibleDetailItemId =
@@ -174,11 +176,11 @@ export function useMerchantRole({
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;
     if (playerId === clientId) {
-      alert("Bạn không thể tự giao dịch với chính mình");
+      setInfoMessage("Bạn không thể tự giao dịch với chính mình");
       return true;
     }
     if (state.lastTargetId && state.lastTargetId === playerId) {
-      alert("Không thể chọn cùng một người hai đêm liên tiếp");
+      setInfoMessage("Không thể chọn cùng một người hai đêm liên tiếp");
       return true;
     }
 
@@ -304,7 +306,8 @@ export function useMerchantRole({
     >
       <div
         style={{
-          background: "var(--surface)",
+          background: "linear-gradient(145deg, rgba(14, 16, 20, 0.5) 0%, rgba(15, 17, 21, 0.7) 100%)",
+          backdropFilter: "blur(12px)",
           color: "var(--text)",
           padding: 24,
           borderRadius: 12,
@@ -312,10 +315,10 @@ export function useMerchantRole({
           boxShadow: "0 2px 16px rgba(0,0,0,0.25)",
         }}
       >
-        <h2 style={{ marginTop: 0 }}>Tạo giao dịch</h2>
-        <p>Giao dịch với <b>{targetName}</b></p>
+        <h2 style={{ marginTop: 0 }}>Để lại hộp đồ cho <b>{targetName}</b></h2>
+        {/* <p>Để lại hộp đồ cho <b>{targetName}</b></p> */}
         <div style={{ display: "grid", gap: 8 }}>
-          <span style={{ fontWeight: 700 }}>Món đồ</span>
+          <span style={{ fontWeight: 700 }}>Hàng hiện có</span>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {state.availableStockIds.map((itemId) =>
               renderMerchantItemTile({
@@ -330,11 +333,12 @@ export function useMerchantRole({
 
         {effectiveSelectedItemId ? (
           <div style={{ marginTop: 10, opacity: 0.75 }}>
-            {MERCHANT_ITEM_DESCRIPTIONS[effectiveSelectedItemId]}
+            Công dụng: {MERCHANT_ITEM_DESCRIPTIONS[effectiveSelectedItemId]}
           </div>
         ) : null}
 
-        <div style={{ display: "flex", gap: 10, marginTop: 18 }}>
+        <div style={{ display: "flex", gap: 10, marginTop: 18, alignItems: "center" }}>
+          Dạng khóa:
           <button
             onClick={() => setSelectedDecision("up")}
             style={{
@@ -422,7 +426,19 @@ export function useMerchantRole({
 
   return {
     onPlayerClick,
-    modal: offerModal,
+    modal: (
+      <>
+        {offerModal}
+        <ConfirmModal
+          open={!!infoMessage}
+          title="Giao dịch không hợp lệ"
+          message={infoMessage || ""}
+          infoOnly
+          onConfirm={() => setInfoMessage(null)}
+          onCancel={() => setInfoMessage(null)}
+        />
+      </>
+    ),
     panel: (
       <>
         {detailModal}

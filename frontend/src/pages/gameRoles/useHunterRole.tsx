@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { socket, clientId } from "../../socket";
 import type { GamePhase } from "./socketEvents";
 import ConfirmModal from "../../components/ConfirmModal";
+import { useTargetSelection } from "./useTargetSelection";
 
 export function useHunterRole({
   roomId,
@@ -28,9 +29,18 @@ export function useHunterRole({
   nightActionDeadline: number | null;
   nightActionNow: number;
 }) {
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [lockedTargetId, setLockedTargetId] = useState<string | null>(null);
+  const {
+    selectedPlayerId,
+    setSelectedPlayerId,
+    showConfirm,
+    setShowConfirm,
+    lockedTargetId,
+    setLockedTargetId,
+    selectTarget,
+    cancelSelection,
+    lockSelection,
+    clearSelection,
+  } = useTargetSelection();
   const prevPhaseRef = useRef<GamePhase>(phase);
 
   useEffect(() => {
@@ -38,17 +48,13 @@ export function useHunterRole({
     if (prev === phase) return;
 
     if (phase === "night") {
-      setSelectedPlayerId(null);
-      setLockedTargetId(null);
-      setShowConfirm(false);
+      clearSelection();
     } else {
-      setSelectedPlayerId(null);
-      setShowConfirm(false);
-      setLockedTargetId(null);
+      clearSelection();
     }
 
     prevPhaseRef.current = phase;
-  }, [phase]);
+  }, [phase, clearSelection]);
 
   useEffect(() => {
     // Keep local UI in sync with server-confirmed private state
@@ -60,11 +66,9 @@ export function useHunterRole({
       setShowConfirm(false);
     } else {
       // server cleared (new night / after resolve)
-      setSelectedPlayerId(null);
-      setLockedTargetId(null);
-      setShowConfirm(false);
+      clearSelection();
     }
-  }, [hunterTargetId, hunterTargetSeq, phase]);
+  }, [hunterTargetId, hunterTargetSeq, phase, clearSelection, setSelectedPlayerId, setLockedTargetId, setShowConfirm]);
 
   const canAct = useMemo(() => {
     if (roomId === "mock-8") return role === "Thợ săn" && phase === "night";
@@ -95,40 +99,30 @@ export function useHunterRole({
       }
 
       if (roomId === "mock-8") {
-        setSelectedPlayerId(playerId);
-        setShowConfirm(true);
+        selectTarget(playerId);
         return true;
       }
 
       if (playerId === clientId) return true; // Không cho chọn chính mình
 
-      setSelectedPlayerId(playerId);
-      setShowConfirm(true);
+      selectTarget(playerId);
       return true;
     },
-    [canAct, lockedTargetId, roomId]
+    [canAct, lockedTargetId, roomId, selectTarget]
   );
 
   const confirm = useCallback(() => {
     if (!canAct) return;
     if (!roomId || !selectedPlayerId) return;
     // lock ngay khi đã bấm xác nhận
-    setLockedTargetId(selectedPlayerId);
-    setShowConfirm(false);
+    lockSelection(selectedPlayerId);
     if (roomId === "mock-8") return;
     socket.emit("hunterChooseTarget", { roomId, targetId: selectedPlayerId });
-  }, [canAct, roomId, selectedPlayerId]);
-
-  const cancel = useCallback(() => {
-    setShowConfirm(false);
-    setSelectedPlayerId(null);
-  }, []);
+  }, [canAct, roomId, selectedPlayerId, lockSelection]);
 
   const resetOnPhaseChange = useCallback((_nextPhase: GamePhase) => {
-    setSelectedPlayerId(null);
-    setShowConfirm(false);
-    setLockedTargetId(null);
-  }, []);
+    clearSelection();
+  }, [clearSelection]);
 
   const modal = (
     <ConfirmModal
@@ -136,7 +130,7 @@ export function useHunterRole({
       title="Xác nhận lựa chọn"
       message="Bạn có chắc muốn chọn người này?"
       onConfirm={confirm}
-      onCancel={cancel}
+      onCancel={cancelSelection}
     />
   );
 

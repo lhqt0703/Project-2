@@ -37,6 +37,7 @@ export function useCursedRole({
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [selectedNight, setSelectedNight] = useState<number | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const currentNight = nightCount || 0;
   const hasUsesRemaining = cursedUsesRemaining === null || cursedUsesRemaining > 0;
 
@@ -68,7 +69,7 @@ export function useCursedRole({
   const onPlayerClick = useCallback((playerId: string) => {
     if (!canAct) return false;
     if (cursedLastTargetId && cursedLastTargetId === playerId) {
-      alert("Không thể chọn cùng một người hai đêm liên tiếp.");
+      setInfoMessage("Không thể chọn cùng một người hai đêm liên tiếp.");
       return true;
     }
     setSelectedPlayerId(playerId);
@@ -87,17 +88,27 @@ export function useCursedRole({
   return {
     onPlayerClick,
     modal: (
-      <ConfirmModal
-        open={isConfirmOpen}
-        title="Xác nhận đánh hơi"
-        message="Bạn có chắc muốn chọn người này không?"
-        onConfirm={confirm}
-        onCancel={() => {
-          setShowConfirm(false);
-          setSelectedPlayerId(null);
-          setSelectedNight(null);
-        }}
-      />
+      <>
+        <ConfirmModal
+          open={isConfirmOpen}
+          title="Xác nhận đánh hơi"
+          message="Bạn có chắc muốn chọn người này không?"
+          onConfirm={confirm}
+          onCancel={() => {
+            setShowConfirm(false);
+            setSelectedPlayerId(null);
+            setSelectedNight(null);
+          }}
+        />
+        <ConfirmModal
+          open={!!infoMessage}
+          title="Thông báo"
+          message={infoMessage || ""}
+          infoOnly
+          onConfirm={() => setInfoMessage(null)}
+          onCancel={() => setInfoMessage(null)}
+        />
+      </>
     ),
     playerPositionsProps: {
       selectedOutlinePlayerId:

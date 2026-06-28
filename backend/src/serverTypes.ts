@@ -57,6 +57,7 @@ export interface RoomGameRules {
   merchantHideReceivedItemName: boolean;
   loveEscapeImmuneSimultaneous: boolean;
   wolfCanBiteWolf?: boolean;
+  wolfBonusBiteSmoothTied?: boolean;
 }
 
 export interface Room {
@@ -280,6 +281,7 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   merchantHideReceivedItemName: false,
   loveEscapeImmuneSimultaneous: true,
   wolfCanBiteWolf: false,
+  wolfBonusBiteSmoothTied: true,
 };
 
 const NIGHT_ACTION_ROLE_SET = new Set<NightActionOrderRole>([
@@ -394,11 +396,13 @@ export function buildRoomGameRules(input?: Partial<RoomGameRules> | null, gameMo
       merchantHideReceivedItemName: false,
       loveEscapeImmuneSimultaneous: merged.loveEscapeImmuneSimultaneous ?? true,
       wolfCanBiteWolf: false,
+      wolfBonusBiteSmoothTied: false,
     };
   }
   return {
     ...merged,
     wolfCanBiteWolf: merged.wolfCanBiteWolf ?? false,
+    wolfBonusBiteSmoothTied: merged.wolfBonusBiteSmoothTied ?? true,
     forceWolfBiteFirstNight: merged.twoHeartsFirstTwoNights && merged.forceWolfBiteFirstNight,
   };
 }

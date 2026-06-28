@@ -281,7 +281,6 @@ test("Love Escape Immunity Rules: check isLovePairMemberAwayAt under different c
 test("Wolf Can Bite Wolf Rule: check getRandomEligibleWolfTarget behavior", async () => {
   const { isWolfAlignedPlayer } = await import("../roomState.js");
   const { buildRoomGameRules } = await import("../serverTypes.js");
-  const { default: nightFlow } = await import("../nightFlow.js");
 
   // We mock a room state where we have two wolves and no other players
   const room = {
@@ -324,8 +323,8 @@ test("Wolf Can Bite Wolf Rule: check getRandomEligibleWolfTarget behavior", asyn
   
   const getCandidates = () => {
     return getParticipantIds(room)
-      .filter((playerId) => !dead.has(playerId))
-      .filter((playerId) => rules.wolfCanBiteWolf || !isWolfAlignedPlayer(room, playerId));
+      .filter((playerId: string) => !dead.has(playerId))
+      .filter((playerId: string) => rules.wolfCanBiteWolf || !isWolfAlignedPlayer(room, playerId));
   };
 
   // With wolfCanBiteWolf = true, candidates should include wolves (p1, p2)

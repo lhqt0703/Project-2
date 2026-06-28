@@ -594,7 +594,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
   function canWaitForWildWolfConversionAfterLocked(room: Room) {
     const wildWolfId = getWildWolfId(room);
     if (!wildWolfId) return false;
-    if (!room.wolfDeadline || Date.now() >= room.wolfDeadline) return false;
+    if (room.wolfDeadline && Date.now() >= room.wolfDeadline) return false;
     return (
       room.wildWolfConvertAvailableTonight === true &&
       room.wildWolfConvertRequestedTonight !== true &&
@@ -1771,10 +1771,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.positions = ensureNonOverlappingPositions(getParticipantIds(room), room.positions, opts);
     leaveOtherGameRooms(roomId);
     socket.join(roomId);
-    syncPrivateRoleStateForSocket(socket, roomId, room, clientId);
-
     socket.emit("roomJoined", toPublicRoom(room));
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    syncPrivateRoleStateForSocket(socket, roomId, room, clientId); // Cần sync sau emit roomUpdated để tránh bị ghi đè reset wolfMaxTargets trở về 1 khiến sói không thể chọn nhiều mục tiêu
   });
 
   socket.on("getRoom", (roomId) => {
@@ -1789,8 +1788,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         room.players[playerIndex] = { ...room.players[playerIndex]!, connected: true };
         ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       }
-      syncPrivateRoleStateForSocket(socket, roomId, room, clientId);
       socket.emit("roomUpdated", toPublicRoom(room));
+      syncPrivateRoleStateForSocket(socket, roomId, room, clientId);
       if (clientId === room.hostId) {
         syncPendingRoleInterventionsToHost(roomId);
         emitGameLogToSocket(roomId, clientId);

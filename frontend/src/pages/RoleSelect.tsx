@@ -197,6 +197,12 @@ export default function RoleSelect() {
     roleVotes?: Record<string, string[]>;
   } | null>(null);
   const [pendingRolesApply, setPendingRolesApply] = useState<string[] | null>(null);
+  const [wolfMismatchData, setWolfMismatchData] = useState<{
+    currentWolfCount: number;
+    maxAllowedWolfCount: number;
+    playerCount: number;
+  } | null>(null);
+  const [infoModal, setInfoModal] = useState<{ title: string; message: string } | null>(null);
   const didInitFromServer = useRef(false);
 
   const amIHost = roomSnapshot?.hostId === clientId;
@@ -280,25 +286,7 @@ export default function RoleSelect() {
 
     const handleWolfMismatch = (data: WolfRoleMismatchData) => {
       if (!roomId) return;
-
-      const ok = window.confirm(
-        `Danh sách vai trò hiện tại có ${data.currentWolfCount} sói/quỷ, vượt quá mức tối đa ${data.maxAllowedWolfCount} cho phòng ${data.playerCount} người.\n\n` +
-        `Hệ thống sẽ tự giảm bớt số lượng sói/quỷ để tránh phe ác thắng ngay khi bắt đầu.\n` +
-        `Nhấn OK để hệ thống tự điều chỉnh và tiếp tục khởi tạo ván chơi mới.\n` +
-        `Nhấn Hủy để ở lại màn hình chọn vai trò.`
-      );
-
-      if (!ok) {
-        return;
-      }
-
-      const rolesToUse = buildFinalRoles();
-      socket.emit("rolesSelected", {
-        roomId,
-        roles: rolesToUse,
-        applyMode: "restart-now",
-        forceAdjustWolfCount: true,
-      });
+      setWolfMismatchData(data);
     };
 
     const handleRolesReady = () => {
@@ -349,7 +337,10 @@ export default function RoleSelect() {
     const gameInProgress = !!roomSnapshot?.phase && !roomSnapshot.gameOver;
 
     if (currentRoles.length < playerCount) {
-      alert(`Bạn đang thiếu ${playerCount - currentRoles.length} vai trò. Hãy chọn thêm vai trò trước khi xác nhận.`);
+      setInfoModal({
+        title: "Thiếu vai trò",
+        message: `Bạn đang thiếu ${playerCount - currentRoles.length} vai trò. Hãy chọn thêm vai trò trước khi xác nhận.`,
+      });
       return;
     }
 
@@ -605,6 +596,42 @@ export default function RoleSelect() {
           });
           setPendingRolesApply(null);
         }}
+      />
+
+      <ConfirmModal
+        open={!!wolfMismatchData}
+        title="Xác nhận điều chỉnh vai trò"
+        message={
+          wolfMismatchData
+            ? `Danh sách vai trò hiện tại có ${wolfMismatchData.currentWolfCount} sói/quỷ, vượt quá mức tối đa ${wolfMismatchData.maxAllowedWolfCount} cho phòng ${wolfMismatchData.playerCount} người.\n\n` +
+              `Hệ thống sẽ tự giảm bớt số lượng sói/quỷ để tránh phe ác thắng ngay khi bắt đầu.\n` +
+              `Nhấn OK để hệ thống tự điều chỉnh và tiếp tục khởi tạo ván chơi mới.\n` +
+              `Nhấn Hủy để ở lại màn hình chọn vai trò.`
+            : ""
+        }
+        confirmText="OK"
+        cancelText="Hủy"
+        onConfirm={() => {
+          if (!roomId || !wolfMismatchData) return;
+          const rolesToUse = buildFinalRoles();
+          socket.emit("rolesSelected", {
+            roomId,
+            roles: rolesToUse,
+            applyMode: "restart-now",
+            forceAdjustWolfCount: true,
+          });
+          setWolfMismatchData(null);
+        }}
+        onCancel={() => setWolfMismatchData(null)}
+      />
+
+      <ConfirmModal
+        open={!!infoModal}
+        title={infoModal?.title || "Thông báo"}
+        message={infoModal?.message || ""}
+        infoOnly
+        onConfirm={() => setInfoModal(null)}
+        onCancel={() => setInfoModal(null)}
       />
     </div>
   );

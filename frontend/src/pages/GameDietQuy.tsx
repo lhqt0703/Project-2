@@ -95,6 +95,11 @@ export default function GameDietQuy() {
   const [roleOverride, setRoleOverride] = useState<string | null>("Thần tình yêu");
   const role = roomId === "mock-8" ? roleOverride : contextRole;
   const debugAnim = query.get("debugAnim") === "1";
+  const debugCupid = query.get("debugCupid") === "1";
+  const debugHeartExplosion = query.get("debugHeartExplosion") === "1";
+  const debugWitch = query.get("debugWitch") === "1";
+  const isDebugMode = roomId === "mock-8" || debugAnim || debugCupid || debugHeartExplosion || debugWitch;
+  const [testHeartExplosionTrigger, setTestHeartExplosionTrigger] = useState(0);
   const [windowDimensions, setWindowDimensions] = useState({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -1135,6 +1140,7 @@ export default function GameDietQuy() {
     if (!partnerId || !sync.loveState.pairIds.includes(clientId)) return {};
     if (!sync.gameEnded) {
       if (phase !== "night") return {};
+      if (!isNightInfoVisible) return {};
       if (!allNightActionsSimultaneous && !doesNightTurnMatchMyRole) return {};
     }
     const partnerRole = sync.loveState.rolesByPlayerId?.[partnerId];
@@ -1147,6 +1153,7 @@ export default function GameDietQuy() {
     sync.loveState.pairIds,
     sync.loveState.partnerId,
     sync.loveState.rolesByPlayerId,
+    isNightInfoVisible,
   ]);
 
   const dayVoteWeightsByVoterId = useMemo(() => {
@@ -1448,6 +1455,7 @@ export default function GameDietQuy() {
   };
 
   const roleBadgesForDisplay = useMemo(() => {
+    const loveRoleBadges = visibleLoveRoleBadges;
     const publicRoleBadges = roomForDisplay?.publicRevealedRolesByPlayerId || {};
     const allRoleBadges = sync.revealedRolesByPlayerId || {};
 
@@ -1471,7 +1479,7 @@ export default function GameDietQuy() {
         extraBadges[roomForDisplay.dietQuyRavenkeeperTargetId] = dietQuy.ravenkeeperResult;
       }
     }
-    return { ...publicRoleBadges, ...extraBadges };
+    return { ...publicRoleBadges, ...extraBadges, ...loveRoleBadges };
   }, [
     isHost,
     roomForDisplay?.publicRevealedRolesByPlayerId,
@@ -1483,7 +1491,8 @@ export default function GameDietQuy() {
     dietQuy.ravenkeeperResult,
     roomForDisplay?.dietQuyExecutedPlayerId,
     roomForDisplay?.dietQuyRavenkeeperTargetId,
-    clientId
+    clientId,
+    visibleLoveRoleBadges,
   ]);
 
   const isLocalPlayerAbleToAct = useMemo(() => {
@@ -1973,78 +1982,7 @@ export default function GameDietQuy() {
         opacity: gameUIOpacity,
       }}
     >
-      {new URLSearchParams(window.location.search).get("debugWitch") === "1" && (
-        <div style={{
-          position: "fixed",
-          top: 80,
-          right: 20,
-          zIndex: 999999,
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-          background: "rgba(15, 23, 42, 0.9)",
-          padding: 12,
-          borderRadius: 8,
-          border: "1px solid rgba(255, 255, 255, 0.1)",
-          boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)"
-        }}>
-          <div style={{ fontSize: "12px", fontWeight: "bold", color: "#94a3b8", marginBottom: 4 }}>WITCH TEST PANEL</div>
-          <button
-            onClick={() => {
-              const alive = room?.players
-                ?.map((p: any) => p.id)
-                ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
-              if (alive.length > 0) {
-                const to = alive[Math.floor(Math.random() * alive.length)]!;
-                sync.setWitchPotionEffect({
-                  targetId: to,
-                  type: "heal",
-                  startedAt: performance.now()
-                });
-              }
-            }}
-            style={{
-              padding: "8px 12px",
-              background: "rgba(168, 85, 247, 0.2)",
-              border: "1px solid rgba(168, 85, 247, 0.4)",
-              color: "#d8b4fe",
-              borderRadius: 4,
-              cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: "bold"
-            }}
-          >
-            Test Cứu (Rainbow)
-          </button>
-          <button
-            onClick={() => {
-              const alive = room?.players
-                ?.map((p: any) => p.id)
-                ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
-              if (alive.length > 0) {
-                const to = alive[Math.floor(Math.random() * alive.length)]!;
-                sync.setWitchPotionEffect({
-                  targetId: to,
-                  type: "poison",
-                  startedAt: performance.now()
-                });
-              }
-            }}
-            style={{
-              padding: "8px 12px",
-              background: "rgba(244, 63, 94, 0.2)",
-              border: "1px solid rgba(244, 63, 94, 0.4)",
-              color: "#fda4af",
-              borderRadius: 4,
-              cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: "bold"
-            }}
-          >
-            Test Giết (Rose Red)
-          </button>
-        </div>
-      )}
+
       {(phase === "day" || phase === "dusk") && (
         <div
           className="game-bg-layer"
@@ -2315,42 +2253,6 @@ export default function GameDietQuy() {
         </div>
       )}
 
-      {debugAnim && (
-        <div className="game-top-actions" style={{ marginTop: "0.625rem" }}>
-          <button
-            onClick={() => {
-              if (!room) return;
-              const alive = room.players
-                .map(p => p.id)
-                .filter(id => !deadPlayers.includes(id));
-              if (alive.length < 2) return;
-              const from = alive[Math.floor(Math.random() * alive.length)]!;
-              let to = from;
-              for (let i = 0; i < 10 && to === from; i++) {
-                to = alive[Math.floor(Math.random() * alive.length)]!;
-              }
-              if (to === from) return;
-              playHunterShotAnim(from, to);
-            }}
-          >
-            Test shot
-          </button>
-
-          <button
-            onClick={() => {
-              const last = lastHunterShotRef.current;
-              if (!last) return;
-              playHunterShotAnim(last.hunterId, last.targetId);
-            }}
-          >
-            Replay last shot
-          </button>
-
-          <div style={{ opacity: 0.7, fontSize: "0.75rem", alignSelf: "center" }}>
-            Tip: Shift+H để random shot
-          </div>
-        </div>
-      )}
 
       {/* Hiển thị bố cục vị trí người chơi khi có room.positions */}
       {roomForDisplay?.positions && (phase !== "dusk" || isHost) && (() => {
@@ -2459,6 +2361,7 @@ export default function GameDietQuy() {
                 bulletAnimation={hunterBulletAnim}
                 witchPotionEffect={sync.witchPotionEffect}
                 onWitchPotionEffectComplete={() => sync.setWitchPotionEffect(null)}
+                testHeartExplosionTrigger={testHeartExplosionTrigger}
                 highlightPlayerId={highlightPlayerId}
                 secondaryHighlightPlayerIds={secondaryHighlightPlayerIds}
                 cursedHighlightPlayerIds={[]}
@@ -2480,6 +2383,7 @@ export default function GameDietQuy() {
                 showWolfVoteBadges={false}
                 wolfVoteVoterIds={[]}
                 voteWeightsByVoterId={dayVote.playerPositionsProps.showWolfVoteBadges ? dayVoteWeightsByVoterId : undefined}
+                wolfMaxTargets={sync.wolfMaxTargets}
                 showWolfBadges={false}
                 wolfBadgePlayerIds={[]}
                 wolfBadgeRoles={{}}
@@ -2575,6 +2479,193 @@ export default function GameDietQuy() {
                 )}
               </PlayerPositions>
               {!hasVisibleActionPanel && renderSkillHint()}
+              {isDebugMode && (() => {
+                const btnStyle = {
+                  width: "28px",
+                  height: "28px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: "50%",
+                  border: "1px solid rgba(255, 255, 255, 0.2)",
+                  background: "rgba(0, 0, 0, 0.4)",
+                  cursor: "pointer",
+                  fontSize: "0.9rem",
+                  transition: "all 0.2s",
+                };
+                return (
+                  <div style={{
+                    marginTop: "8px",
+                    padding: "6px 12px",
+                    background: "rgba(15, 23, 42, 0.85)",
+                    backdropFilter: "blur(12px)",
+                    borderRadius: "8px",
+                    border: "1px solid rgba(139, 92, 246, 0.3)",
+                    boxShadow: "0 4px 16px rgba(0, 0, 0, 0.5)",
+                    maxWidth: "550px",
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "10px",
+                    boxSizing: "border-box",
+                    zIndex: 9999,
+                    pointerEvents: "auto",
+                    marginLeft: "auto",
+                    marginRight: "auto"
+                  }}>
+                    {/* Left side: Role switcher */}
+                    {roomId === "mock-8" && (
+                      <div style={{ display: "flex", gap: "4px", alignItems: "center", fontSize: "0.75rem", color: "#cbd5e1" }}>
+                        <span style={{ color: "#a78bfa", fontWeight: "bold" }}>Mock-8:</span>
+                        <select
+                          value={roleOverride || ""}
+                          onChange={(e) => setRoleOverride(e.target.value || null)}
+                          style={{
+                            background: "rgba(0, 0, 0, 0.5)",
+                            color: "#fff",
+                            border: "1px solid rgba(255, 255, 255, 0.15)",
+                            borderRadius: "4px",
+                            padding: "2px 4px",
+                            fontSize: "0.72rem",
+                            outline: "none"
+                          }}
+                        >
+                          <option value="Thần tình yêu">Cupid</option>
+                          <option value="Thợ săn">Thợ săn</option>
+                          <option value="Phù thủy">Phù thủy</option>
+                          <option value="Sói Dại">Sói Dại</option>
+                          <option value="Tiên tri">Tiên tri</option>
+                          <option value="Bảo vệ">Bảo vệ</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Right side: Action Emojis */}
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center", marginLeft: "auto" }}>
+                      <button
+                        title="Bắn Thợ Săn (🔫)"
+                        onClick={() => {
+                          if (!room) return;
+                          const alive = room.players
+                            .map(p => p.id)
+                            .filter(id => !deadPlayers.includes(id));
+                          if (alive.length < 2) return;
+                          const from = alive[Math.floor(Math.random() * alive.length)]!;
+                          let to = from;
+                          for (let i = 0; i < 10 && to === from; i++) {
+                            to = alive[Math.floor(Math.random() * alive.length)]!;
+                          }
+                          if (to === from) return;
+                          playHunterShotAnim(from, to);
+                        }}
+                        style={{ ...btnStyle, borderColor: "rgba(239, 68, 68, 0.4)", background: "rgba(239, 68, 68, 0.15)" }}
+                        onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                        onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                      >
+                        🔫
+                      </button>
+
+                      <button
+                        title="Cupid Bắn (🏹)"
+                        onClick={() => {
+                          if (!room) return;
+                          const alive = room.players
+                            .map((p: any) => p.id)
+                            .filter((id: string) => !deadPlayers.includes(id));
+                          if (alive.length === 0) return;
+                          const to = alive[Math.floor(Math.random() * alive.length)]!;
+                          playHunterShotAnim("P1", to, {
+                            assetSrc: encodeURI("/Mũi tên.svg"),
+                            alt: "Mũi tên",
+                            rotationOffsetDeg: -45,
+                            kind: "love",
+                          });
+                        }}
+                        style={{ ...btnStyle, borderColor: "rgba(244, 63, 94, 0.4)", background: "rgba(244, 63, 94, 0.15)" }}
+                        onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                        onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                      >
+                        🏹
+                      </button>
+                      <button
+                        title="Test Văng Tim (💖)"
+                        onClick={() => {
+                          setTestHeartExplosionTrigger(prev => prev + 1);
+                        }}
+                        style={{ ...btnStyle, borderColor: "rgba(236, 72, 153, 0.4)", background: "rgba(236, 72, 153, 0.15)" }}
+                        onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                        onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                      >
+                        💖
+                      </button>
+                      <button
+                        title="Bật/Tắt Tim (🔄)"
+                        onClick={() => {
+                          setRoom((prev: any) => {
+                            if (!prev) return prev;
+                            const currentHeartsVisible = !!prev.sharedHeartsVisible;
+                            return {
+                              ...prev,
+                              sharedHeartsVisible: !currentHeartsVisible,
+                              playerHearts: currentHeartsVisible ? {} : {
+                                P2: 2, P3: 2, P4: 2, P5: 2, P6: 2, P7: 2, P8: 2
+                              }
+                            };
+                          });
+                        }}
+                        style={{ ...btnStyle, borderColor: "rgba(59, 130, 246, 0.4)", background: "rgba(59, 130, 246, 0.15)" }}
+                        onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                        onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                      >
+                        🔄
+                      </button>
+                      <button
+                        title="Phù Thủy Cứu (🧪)"
+                        onClick={() => {
+                          const alive = room?.players
+                            ?.map((p: any) => p.id)
+                            ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
+                          if (alive.length > 0) {
+                            const to = alive[Math.floor(Math.random() * alive.length)]!;
+                            sync.setWitchPotionEffect({
+                              targetId: to,
+                              type: "heal",
+                              startedAt: performance.now()
+                            });
+                          }
+                        }}
+                        style={{ ...btnStyle, borderColor: "rgba(168, 85, 247, 0.4)", background: "rgba(168, 85, 247, 0.15)" }}
+                        onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                        onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                      >
+                        🧪
+                      </button>
+                      <button
+                        title="Phù Thủy Giết (💀)"
+                        onClick={() => {
+                          const alive = room?.players
+                            ?.map((p: any) => p.id)
+                            ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
+                          if (alive.length > 0) {
+                            const to = alive[Math.floor(Math.random() * alive.length)]!;
+                            sync.setWitchPotionEffect({
+                              targetId: to,
+                              type: "poison",
+                              startedAt: performance.now()
+                            });
+                          }
+                        }}
+                        style={{ ...btnStyle, borderColor: "rgba(244, 63, 94, 0.4)", background: "rgba(244, 63, 94, 0.15)" }}
+                        onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                        onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                      >
+                        💀
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             
             </div>
             <RoleCharacterPortrait

@@ -51,7 +51,7 @@ export default function ConfirmModal({
       >
         <h2>{title}</h2>
         <p style={{ whiteSpace: "pre-line", lineHeight: 1.55 }}>{message}</p>
-        <div style={{ display: "flex", gap: 16, marginTop: 24 }}>
+        <div style={{ display: "flex", gap: 16, marginTop: 24, justifyContent: "flex-end" }}>
           {infoOnly ? (
             <button onClick={onConfirm}>{closeText}</button>
           ) : (

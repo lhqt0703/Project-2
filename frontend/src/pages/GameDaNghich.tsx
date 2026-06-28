@@ -79,7 +79,7 @@ const ROLE_SKILL_HINTS: Record<string, string> = {
   "Sói con": "chọn một người để cắn và hãy cẩn trọng đến việc thống nhất lựa chọn với những sói khác",
   "Sói Dại": "chọn một người để cắn và hãy cẩn trọng đến việc thống nhất lựa chọn với những sói khác",
   "Bán sói": "Bạn không cần hành động đêm khi chưa bị cắn và sẽ trở thành phe sói nếu đã bị cắn",
-  "Tay Buôn": "Chọn một người và vật phẩm để tạo giao dịch hoặc không hành động gì để bỏ qua",
+  "Tay Buôn": "Chọn một món đồ và dạng khóa để gửi cho người mà bạn muốn hoặc không hành động gì để bỏ qua",
   "Kẻ bị nguyền": "Chọn một người mà bạn muốn ngửi xem liệu người đó và 2 người bên cạnh liệu có sói hay không",
   "Linh sói": " ",
   "Thần tình yêu": "Chọn một người mà bạn muốn ghép đôi bản thân với họ",
@@ -97,6 +97,11 @@ export default function GameDaNghich() {
   const [roleOverride, setRoleOverride] = useState<string | null>("Thần tình yêu");
   const role = roomId === "mock-8" ? roleOverride : contextRole;
   const debugAnim = query.get("debugAnim") === "1";
+  const debugCupid = query.get("debugCupid") === "1";
+  const debugHeartExplosion = query.get("debugHeartExplosion") === "1";
+  const debugWitch = query.get("debugWitch") === "1";
+  const isDebugMode = roomId === "mock-8" || debugAnim || debugCupid || debugHeartExplosion || debugWitch;
+  const [testHeartExplosionTrigger, setTestHeartExplosionTrigger] = useState(0);
   const [windowDimensions, setWindowDimensions] = useState({
     width: window.innerWidth,
     height: window.innerHeight,
@@ -1137,6 +1142,7 @@ export default function GameDaNghich() {
     if (!partnerId || !sync.loveState.pairIds.includes(clientId)) return {};
     if (!sync.gameEnded) {
       if (phase !== "night") return {};
+      if (!isNightInfoVisible) return {};
       if (!allNightActionsSimultaneous && !doesNightTurnMatchMyRole) return {};
     }
     const partnerRole = sync.loveState.rolesByPlayerId?.[partnerId];
@@ -1149,6 +1155,7 @@ export default function GameDaNghich() {
     sync.loveState.pairIds,
     sync.loveState.partnerId,
     sync.loveState.rolesByPlayerId,
+    isNightInfoVisible,
   ]);
 
   const dayVoteWeightsByVoterId = useMemo(() => {
@@ -1495,16 +1502,7 @@ export default function GameDaNghich() {
     angelState: sync.angelReviveState,
   });
 
-  const hasVisibleActionPanel = useMemo(() => {
-    if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions || !isNightInfoVisible) return false;
-    if (role === "Phù thủy") return true;
-    if (role === "Tay Buôn") return true;
-    if (ELEMENTAL_ROLE_SET.has(role) && sync.elementalActionMode === "buff" && (allNightActionsSimultaneous || currentNightTurnRole === role)) return true;
-    if (role === "Thần tình yêu") {
-      return !!love.targetId;
-    }
-    return false;
-  }, [phase, role, isCurrentPlayerDeadForNightActions, sync.elementalActionMode, allNightActionsSimultaneous, currentNightTurnRole, loveActionPlacement, love.targetId]);
+  // ponytail: hasVisibleActionPanel was declared but never read, so deleted
 
   const renderSkillHint = () => {
     if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions || !isNightInfoVisible) return null;
@@ -1529,8 +1527,23 @@ export default function GameDaNghich() {
           baseHintText = "Bạn hiện vẫn là một dân làng nên chưa có khả năng thực hiện hành động đêm. Nhưng hãy cẩn thận vì nếu bạn bị sói tấn công thì dòng máu sói của bạn sẽ trỗi dậy";
         }
       }
+      if (role === "Tiên tri" && seer.seerResults && seer.seerResults.length > 0) {
+        const lastResult = seer.seerResults[seer.seerResults.length - 1];
+        if (lastResult) {
+          const targetPlayer = roomForDisplay?.players?.find((p: any) => p.id === lastResult.playerId);
+          const targetName = targetPlayer ? targetPlayer.name : "Người chơi";
+          baseHintText = lastResult.isWolf 
+            ? `${targetName} có lẽ thật sự là sói . . .` 
+            : `${targetName} có lẽ là một con người`;
+        }
+      }
       if (!baseHintText && ELEMENTAL_ROLE_SET.has(role)) {
         baseHintText = "Chọn một người mà bạn nghĩ họ cũng là dân làng nắm giữ nguyên tố";
+      }
+
+      const isWolfTeamAction = role === "Sói" || role === "Sói con" || role === "Sói Dại" || (role === "Bán sói" && (isBanSoiAligned || isWildWolfConverted));
+      if (isWolfTeamAction && sync.wolfMaxTargets >= 2) {
+        baseHintText = baseHintText.replace("chọn một người", 'Chọn <span class="breath-glow-2">2</span> người');
       }
       
       hintText = baseHintText;
@@ -1545,41 +1558,83 @@ export default function GameDaNghich() {
     
     if (!hintText) return null;
 
+    const isWolf =
+      isWolfTeamRole ||
+      (role === "Linh sói" && !!room?.spiritWolfWolfAligned) ||
+      (role === "Thiên Sứ" && sync.angelReviveState.selectedGuess === "wolves");
+
+    const isHybrid =
+      role === "Thần tình yêu" ||
+      role === "Tay Buôn" ||
+      (role === "Thiên Sứ" && !sync.angelReviveState.selectedGuess) ||
+      (role === "Linh sói" && !room?.spiritWolfWolfAligned) ||
+      !!loveHybridBackgroundAsset;
+
+    let borderStyle = "1px solid rgba(85, 99, 247, 0.22)";
+    let backgroundStyle = "rgba(14, 18, 38, 0.65)";
+
+    if (isHybrid) {
+      borderStyle = "1px solid transparent";
+      backgroundStyle = "linear-gradient(rgba(18, 14, 38, 0.65), rgba(18, 14, 38, 0.65)) padding-box, linear-gradient(135deg, rgba(85, 99, 247, 0.22), rgba(247, 85, 85, 0.22)) border-box";
+    } else if (isWolf) {
+      borderStyle = "1px solid rgba(247, 85, 85, 0.22)";
+      backgroundStyle = "rgba(38, 14, 14, 0.65)";
+    }
+
     return (
       <>
         <style>{`
-          @keyframes fadeInUp {
-            from {
+          @keyframes fadeBlurIn {
+            0% {
               opacity: 0;
-              transform: translateY(8px);
+              filter: blur(5px);
+              transform: translateY(4px);
             }
-            to {
-              opacity: 1;
+            100% {
+              opacity: 0.9;
+              filter: blur(0px);
               transform: translateY(0);
             }
           }
+          @keyframes breathGlow {
+            0%, 100% {
+              text-shadow: 0 0 2px rgba(244, 63, 94, 0.4);
+              opacity: 0.8;
+            }
+            50% {
+              text-shadow: 0 0 8px rgba(244, 63, 94, 0.9), 0 0 12px rgba(244, 63, 94, 0.4);
+              opacity: 1;
+            }
+          }
+          .breath-glow-2 {
+            color: #F43F5E;
+            font-weight: bold;
+            animation: breathGlow 2s ease-in-out infinite;
+            display: inline-block;
+          }
           .role-skill-hint {
-            animation: fadeInUp 0.4s ease-out forwards;
+            animation: fadeBlurIn 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
           }
           @media (max-width: 768px) {
             .role-skill-hint {
-              max-width: 69% !important;
+              max-width: ${role === "Sói Dại" ? "63%" : role === "Tay Buôn" ? "57%" : role === "Phù thủy" ? "61%" : role === "Tiên tri" ? "71%" : role === "Bảo vệ" ? "76%" : role === "Thần tình yêu" ? "57.5%" : "62%"} !important;
               margin-right: auto !important;
             }
           }
           @media (min-width: 769px) {
             .role-skill-hint {
               max-width: 550px !important;
-              margin: 0 auto !important;
+              margin-right: auto !important;
             }
           }
         `}</style>
         <div 
+          key={hintText}
           className="role-skill-hint"
           style={{
-            background: "rgba(38, 14, 14, 0.15)",
+            background: backgroundStyle,
             backdropFilter: "blur(10px)",
-            border: "1px solid rgba(247, 85, 85, 0.22)",
+            border: borderStyle,
             borderRadius: "10px",
             padding: "8px 12px",
             color: "#e2e8f0",
@@ -2145,78 +2200,7 @@ export default function GameDaNghich() {
         opacity: gameUIOpacity,
       }}
     >
-      {new URLSearchParams(window.location.search).get("debugWitch") === "1" && (
-        <div style={{
-          position: "fixed",
-          top: 80,
-          right: 20,
-          zIndex: 999999,
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-          background: "rgba(15, 23, 42, 0.9)",
-          padding: 12,
-          borderRadius: 8,
-          border: "1px solid rgba(255, 255, 255, 0.1)",
-          boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)"
-        }}>
-          <div style={{ fontSize: "12px", fontWeight: "bold", color: "#94a3b8", marginBottom: 4 }}>WITCH TEST PANEL</div>
-          <button
-            onClick={() => {
-              const alive = room?.players
-                ?.map((p: any) => p.id)
-                ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
-              if (alive.length > 0) {
-                const to = alive[Math.floor(Math.random() * alive.length)]!;
-                sync.setWitchPotionEffect({
-                  targetId: to,
-                  type: "heal",
-                  startedAt: performance.now()
-                });
-              }
-            }}
-            style={{
-              padding: "8px 12px",
-              background: "rgba(168, 85, 247, 0.2)",
-              border: "1px solid rgba(168, 85, 247, 0.4)",
-              color: "#d8b4fe",
-              borderRadius: 4,
-              cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: "bold"
-            }}
-          >
-            Test Cứu (Rainbow)
-          </button>
-          <button
-            onClick={() => {
-              const alive = room?.players
-                ?.map((p: any) => p.id)
-                ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
-              if (alive.length > 0) {
-                const to = alive[Math.floor(Math.random() * alive.length)]!;
-                sync.setWitchPotionEffect({
-                  targetId: to,
-                  type: "poison",
-                  startedAt: performance.now()
-                });
-              }
-            }}
-            style={{
-              padding: "8px 12px",
-              background: "rgba(244, 63, 94, 0.2)",
-              border: "1px solid rgba(244, 63, 94, 0.4)",
-              color: "#fda4af",
-              borderRadius: 4,
-              cursor: "pointer",
-              fontSize: "12px",
-              fontWeight: "bold"
-            }}
-          >
-            Test Giết (Rose Red)
-          </button>
-        </div>
-      )}
+
       {(phase === "day" || phase === "dusk") && (
         <div
           className="game-bg-layer"
@@ -2487,42 +2471,6 @@ export default function GameDaNghich() {
         </div>
       )}
 
-      {debugAnim && (
-        <div className="game-top-actions" style={{ marginTop: "0.625rem" }}>
-          <button
-            onClick={() => {
-              if (!room) return;
-              const alive = room.players
-                .map(p => p.id)
-                .filter(id => !deadPlayers.includes(id));
-              if (alive.length < 2) return;
-              const from = alive[Math.floor(Math.random() * alive.length)]!;
-              let to = from;
-              for (let i = 0; i < 10 && to === from; i++) {
-                to = alive[Math.floor(Math.random() * alive.length)]!;
-              }
-              if (to === from) return;
-              playHunterShotAnim(from, to);
-            }}
-          >
-            Test shot
-          </button>
-
-          <button
-            onClick={() => {
-              const last = lastHunterShotRef.current;
-              if (!last) return;
-              playHunterShotAnim(last.hunterId, last.targetId);
-            }}
-          >
-            Replay last shot
-          </button>
-
-          <div style={{ opacity: 0.7, fontSize: "0.75rem", alignSelf: "center" }}>
-            Tip: Shift+H để random shot
-          </div>
-        </div>
-      )}
 
       {/* Hiển thị bố cục vị trí người chơi khi có room.positions */}
       {roomForDisplay?.positions && (phase !== "dusk" || isHost) && (() => {
@@ -2550,6 +2498,7 @@ export default function GameDaNghich() {
                 bulletAnimation={hunterBulletAnim}
                 witchPotionEffect={sync.witchPotionEffect}
                 onWitchPotionEffectComplete={() => sync.setWitchPotionEffect(null)}
+                testHeartExplosionTrigger={testHeartExplosionTrigger}
                 highlightPlayerId={highlightPlayerId}
                 secondaryHighlightPlayerIds={secondaryHighlightPlayerIds}
                 cursedHighlightPlayerIds={cursed.playerPositionsProps.cursedHighlightPlayerIds}
@@ -2595,6 +2544,7 @@ export default function GameDaNghich() {
                     : wolf.playerPositionsProps.wolfVoteVoterIds
                 }
                 voteWeightsByVoterId={dayVote.playerPositionsProps.showWolfVoteBadges ? dayVoteWeightsByVoterId : undefined}
+                wolfMaxTargets={sync.wolfMaxTargets}
                 showWolfBadges={(phase !== "night" || isNightInfoVisible) && wolf.playerPositionsProps.showWolfBadges}
                 wolfBadgePlayerIds={wolf.playerPositionsProps.wolfBadgePlayerIds}
                 wolfBadgeRoles={wolf.playerPositionsProps.wolfBadgeRoles}
@@ -2726,6 +2676,7 @@ export default function GameDaNghich() {
 
       {shouldRevealMyRole && !sync.gameEnded && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start" }}>
+          {role === "Tay Buôn" && renderSkillHint()}
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
             {witch.panel}
             {protector.panel}
@@ -2848,7 +2799,184 @@ export default function GameDaNghich() {
           </div>
         </div>
       )}
-      {renderSkillHint()}
+      {role !== "Tay Buôn" && renderSkillHint()}
+      {isDebugMode && (() => {
+        const btnStyle = {
+          width: "18px",
+          height: "18px",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: "50%",
+          border: "1px solid rgba(255, 255, 255, 0.2)",
+          background: "rgba(0, 0, 0, 0.4)",
+          cursor: "pointer",
+          fontSize: "0.5rem",
+          transition: "all 0.2s",
+        };
+        return (
+          <div style={{
+            marginTop: "18px",
+            maxWidth: "450px",
+            width: "100%",
+            display: "flex",
+            justifyContent: "flex-start",
+            flexDirection: "column",
+            gap: "10px",
+            zIndex: 9999,
+            pointerEvents: "auto",
+          }}>
+            {/* Left side: Role switcher */}
+            {roomId === "mock-8" && (
+              <div style={{ display: "flex", gap: "4px", alignItems: "center", fontSize: "0.75rem", color: "#cbd5e1" }}>
+                <select
+                  value={roleOverride || ""}
+                  onChange={(e) => setRoleOverride(e.target.value || null)}
+                  style={{
+                    background: "rgba(0, 0, 0, 0.5)",
+                    color: "#fff",
+                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                    borderRadius: "4px",
+                    padding: "2px 4px",
+                    fontSize: "0.72rem",
+                    outline: "none"
+                  }}
+                >
+                  <option value="Thần tình yêu">💘</option>
+                  <option value="Thợ săn">🏹</option>
+                  <option value="Phù thủy">🧙</option>
+                  <option value="Sói Dại">🐺</option>
+                  <option value="Tiên tri">🔮</option>
+                  <option value="Bảo vệ">🛡️</option>
+                </select>
+              </div>
+            )}
+
+            {/* Right side: Action Emojis */}
+            <div style={{ display: "flex", gap: "10px", alignItems: "center", }}>
+              <div
+                title="Bắn Thợ Săn (🔫)"
+                onClick={() => {
+                  if (!room) return;
+                  const alive = room.players
+                    .map(p => p.id)
+                    .filter(id => !deadPlayers.includes(id));
+                  if (alive.length < 2) return;
+                  const from = alive[Math.floor(Math.random() * alive.length)]!;
+                  let to = from;
+                  for (let i = 0; i < 10 && to === from; i++) {
+                    to = alive[Math.floor(Math.random() * alive.length)]!;
+                  }
+                  if (to === from) return;
+                  playHunterShotAnim(from, to);
+                }}
+                style={{ ...btnStyle, borderColor: "rgba(239, 68, 68, 0.4)", background: "rgba(239, 68, 68, 0.15)" }}
+                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              >
+                🔫
+              </div>
+
+              <div
+                title="Cupid Bắn (🏹)"
+                onClick={() => {
+                  if (!room) return;
+                  const alive = room.players
+                    .map((p: any) => p.id)
+                    .filter((id: string) => !deadPlayers.includes(id));
+                  if (alive.length === 0) return;
+                  const to = alive[Math.floor(Math.random() * alive.length)]!;
+                  playHunterShotAnim("P1", to, {
+                    assetSrc: encodeURI("/Mũi tên.svg"),
+                    alt: "Mũi tên",
+                    rotationOffsetDeg: -45,
+                    kind: "love",
+                  });
+                }}
+                style={{ ...btnStyle, borderColor: "rgba(244, 63, 94, 0.4)", background: "rgba(244, 63, 94, 0.15)" }}
+                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              >
+                🏹
+              </div>
+              <div
+                title="Test Văng Tim (💖)"
+                onClick={() => {
+                  setTestHeartExplosionTrigger(prev => prev + 1);
+                }}
+                style={{ ...btnStyle, borderColor: "rgba(236, 72, 153, 0.4)", background: "rgba(236, 72, 153, 0.15)" }}
+                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              >
+                💖
+              </div>
+              <div
+                title="Bật/Tắt Tim (🔄)"
+                onClick={() => {
+                  setRoom((prev: any) => {
+                    if (!prev) return prev;
+                    const currentHeartsVisible = !!prev.sharedHeartsVisible;
+                    return {
+                      ...prev,
+                      sharedHeartsVisible: !currentHeartsVisible,
+                      playerHearts: currentHeartsVisible ? {} : {
+                        P2: 2, P3: 2, P4: 2, P5: 2, P6: 2, P7: 2, P8: 2
+                      }
+                    };
+                  });
+                }}
+                style={{ ...btnStyle, borderColor: "rgba(59, 130, 246, 0.4)", background: "rgba(59, 130, 246, 0.15)" }}
+                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              >
+                🔄
+              </div>
+              <div
+                title="Phù Thủy Cứu (🧪)"
+                onClick={() => {
+                  const alive = room?.players
+                    ?.map((p: any) => p.id)
+                    ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
+                  if (alive.length > 0) {
+                    const to = alive[Math.floor(Math.random() * alive.length)]!;
+                    sync.setWitchPotionEffect({
+                      targetId: to,
+                      type: "heal",
+                      startedAt: performance.now()
+                    });
+                  }
+                }}
+                style={{ ...btnStyle, borderColor: "rgba(168, 85, 247, 0.4)", background: "rgba(168, 85, 247, 0.15)" }}
+                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              >
+                🧪
+              </div>
+              <div
+                title="Phù Thủy Giết (💀)"
+                onClick={() => {
+                  const alive = room?.players
+                    ?.map((p: any) => p.id)
+                    ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
+                  if (alive.length > 0) {
+                    const to = alive[Math.floor(Math.random() * alive.length)]!;
+                    sync.setWitchPotionEffect({
+                      targetId: to,
+                      type: "poison",
+                      startedAt: performance.now()
+                    });
+                  }
+                }}
+                style={{ ...btnStyle, borderColor: "rgba(244, 63, 94, 0.4)", background: "rgba(244, 63, 94, 0.15)" }}
+                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              >
+                💀
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {!isHost && dayVote.panel}
       {!isHost && villageChiefExtraVotePanel}
       {!isHost && logPanel}

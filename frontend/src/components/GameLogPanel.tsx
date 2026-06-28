@@ -1151,38 +1151,44 @@ function LogEntryLine({
         </LogItem>
       );
 
-    case "guardian_protect":
+    case "guardian_protect": {
+      const isPlayerActor = !isHost && !gameEnded && myPlayerId && entry.actorId === myPlayerId;
       if (entry.actorId && entry.targetId && entry.actorId === entry.targetId) {
         return (
           <LogItem emoji="🛡️" style={lineStyle}>
-            <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã tự bảo vệ bản thân
+            {isPlayerActor ? "Đã" : <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />} tự bảo vệ bản thân
           </LogItem>
         );
       }
       return (
         <LogItem emoji="🛡️" style={lineStyle}>
-          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={entry.targetId ? [entry.targetId] : []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Bảo vệ"} bảo vệ{" "}
+          {isPlayerActor ? "Đã" : (entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={entry.targetId ? [entry.targetId] : []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Bảo vệ")} bảo vệ{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={entry.actorId ? [entry.actorId] : []} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
         </LogItem>
       );
+    }
 
-    case "protector_bless":
+    case "protector_bless": {
+      const isPlayerActor = !isHost && !gameEnded && myPlayerId && entry.actorId === myPlayerId;
       return (
         <LogItem emoji="✨" style={lineStyle}>
-          <RoleSpan
-            playerId={entry.actorId}
-            rolesByPlayerId={rolesByPlayerId}
-            playerNamesById={playerNamesById}
-            displayMode="player"
-            popupMode="none"
-            secondaryHighlightIds={[entry.targetId]}
-            onEliminationFocusChange={onEliminationFocusChange}
-            onHighlightPlayer={onHighlightPlayer}
-          />{" "}trao bất tử cho{" "}
+          {isPlayerActor ? "Đã" : (
+            <RoleSpan
+              playerId={entry.actorId}
+              rolesByPlayerId={rolesByPlayerId}
+              playerNamesById={playerNamesById}
+              displayMode="player"
+              popupMode="none"
+              secondaryHighlightIds={[entry.targetId]}
+              onEliminationFocusChange={onEliminationFocusChange}
+              onHighlightPlayer={onHighlightPlayer}
+            />
+          )} trao bất tử cho{" "}
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />
           {entry.permanent ? <span style={{ opacity: 0.75 }}> đến cuối game</span> : null}
         </LogItem>
       );
+    }
 
     case "protector_save":
       return (
@@ -1217,28 +1223,33 @@ function LogEntryLine({
         </LogItem>
       );
 
-    case "witch_heal":
+    case "witch_heal": {
+      const isPlayerActor = !isHost && !gameEnded && myPlayerId && entry.actorId === myPlayerId;
       return (
         <LogItem emoji="🧪" style={lineStyle}>
-          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Phù thủy"} dùng bình cứu cho{" "}
+          {isPlayerActor ? "Đã" : (entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Phù thủy")} dùng bình cứu cho{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
         </LogItem>
       );
+    }
 
-    case "witch_poison":
+    case "witch_poison": {
+      const isPlayerActor = !isHost && !gameEnded && myPlayerId && entry.actorId === myPlayerId;
       return (
         <LogItem emoji="🧪" style={lineStyle}>
-          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Phù thủy"} dùng bình giết{" "}
+          {isPlayerActor ? "Đã" : (entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Phù thủy")} dùng bình giết{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
         </LogItem>
       );
+    }
 
     case "seer_check": {
+      const isPlayerActor = !isHost && !gameEnded && myPlayerId && entry.actorId === myPlayerId;
       const targetRoleTooltip = `${getPlayerName(entry.targetId, playerNamesById)} là ${getRoleName(entry.targetId, rolesByPlayerId)}`;
       if (entry.blockedByMerchantItem === "invisibility-cloak") {
         return (
           <LogItem emoji="🔮" style={lineStyle}>
-            {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Tiên tri"} soi{" "}
+            {isPlayerActor ? "Đã" : (entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Tiên tri")} soi{" "}
             {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="tooltipOnly" tooltipDetail={targetRoleTooltip} secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
             nhưng {getMerchantItemText(entry.blockedByMerchantItem)} chặn lại khiến kết quả ra{" "}
             <span style={{ fontWeight: 600, color: "#27ae60" }}>Dân</span>
@@ -1247,7 +1258,7 @@ function LogEntryLine({
       }
       return (
         <LogItem emoji="🔮" style={lineStyle}>
-          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Tiên tri"} soi{" "}
+          {isPlayerActor ? "Đã" : (entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Tiên tri")} soi{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="tooltipOnly" tooltipDetail={targetRoleTooltip} secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
           {" ra "}
           <span style={{ fontWeight: 600, color: entry.isWolf ? "#e74c3c" : "#27ae60" }}>
@@ -1257,19 +1268,22 @@ function LogEntryLine({
       );
     }
 
-    case "hunter_mark":
+    case "hunter_mark": {
+      const isPlayerActor = !isHost && !gameEnded && myPlayerId && entry.actorId === myPlayerId;
       return (
         <LogItem emoji="🎯" style={lineStyle}>
-          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Thợ săn"} ghim{" "}
+          {isPlayerActor ? "Đã" : (entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Thợ săn")} ghim{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
         </LogItem>
       );
+    }
 
-    case "hunter_shot":
+    case "hunter_shot": {
+      const isPlayerActor = !isHost && !gameEnded && myPlayerId && entry.actorId === myPlayerId;
       if (entry.blockedByMerchantItem === "iron-armor") {
         return (
           <LogItem emoji="💥" style={lineStyle}>
-            {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Thợ săn"} bắn{" "}
+            {isPlayerActor ? "Đã" : (entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Thợ săn")} bắn{" "}
             {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
             nhưng {getMerchantItemText(entry.blockedByMerchantItem)} đã chặn lại viên đạn
           </LogItem>
@@ -1277,10 +1291,11 @@ function LogEntryLine({
       }
       return (
         <LogItem emoji="💥" style={lineStyle}>
-          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Thợ săn"} bắn{" "}
+          {isPlayerActor ? "Đã" : (entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Thợ săn")} bắn{" "}
           {entry.targetId && <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" secondaryHighlightIds={[entry.actorId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
         </LogItem>
       );
+    }
 
     case "cursed_sniff": {
       const blockedIds = entry.blockedByMintPlayerIds || [];

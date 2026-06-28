@@ -433,50 +433,14 @@ export default function DevSpawn() {
             </div>
             <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
               <button
-                onClick={() => openMockGame({ debugAnim: true })}
+                onClick={() => openMockGame({ debugAnim: true, debugCupid: true, debugHeartExplosion: true, debugWitch: true })}
                 style={{
                   flex: 1,
                   padding: "10px",
                   borderRadius: "8px",
-                  border: "1px solid rgba(239, 68, 68, 0.4)",
-                  background: "rgba(239, 68, 68, 0.15)",
-                  color: "#fca5a5",
-                  fontWeight: 600,
-                  fontSize: "0.875rem",
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                }}
-              >
-                Test Thợ Săn Bắn
-              </button>
-              <button
-                onClick={() => openMockGame({ debugCupid: true })}
-                style={{
-                  flex: 1,
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid rgba(244, 63, 94, 0.4)",
-                  background: "rgba(244, 63, 94, 0.15)",
-                  color: "#fda4af",
-                  fontWeight: 600,
-                  fontSize: "0.875rem",
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                }}
-              >
-                Test Cupid Bắn
-              </button>
-            </div>
-            <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
-              <button
-                onClick={() => openMockGame({ debugHeartExplosion: true })}
-                style={{
-                  flex: 1,
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid rgba(236, 72, 153, 0.4)",
-                  background: "rgba(236, 72, 153, 0.15)",
-                  color: "#fbcfe8",
+                  border: "1px solid rgba(139, 92, 246, 0.4)",
+                  background: "rgba(139, 92, 246, 0.15)",
+                  color: "#d8b4fe",
                   fontWeight: 600,
                   fontSize: "0.875rem",
                   cursor: "pointer",
@@ -484,26 +448,7 @@ export default function DevSpawn() {
                   textAlign: "center"
                 }}
               >
-                Test Văng Tim (Mock-8)
-              </button>
-            </div>
-            <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
-              <button
-                onClick={() => openMockGame({ debugWitch: true })}
-                style={{
-                  flex: 1,
-                  padding: "10px",
-                  borderRadius: "8px",
-                  border: "1px solid rgba(168, 85, 247, 0.4)",
-                  background: "rgba(168, 85, 247, 0.15)",
-                  color: "#d8b4fe",
-                  fontWeight: 600,
-                  fontSize: "0.875rem",
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                }}
-              >
-                Test Phù Thủy (Mock-8)
+                Mở Phòng Thử Nghiệm Tổng Hợp (Mock-8) 🧪
               </button>
             </div>
 

@@ -8,6 +8,7 @@ import { getDeterministicSlots1to18, getDeterministicSlots19Plus } from "./layou
 import ElementalVFX from "./ElementalVFX";
 import Orb from "./Orb";
 import { AvifIcon } from "./AvifIcon";
+import ConfirmModal from "./ConfirmModal";
 
 import PlayerShotEffect from "./PlayerShotEffect";
 import SplashCursor from "./SplashCursor";
@@ -149,6 +150,7 @@ interface RoomLike {
     witchBonusTimeRequiresUsablePotion?: boolean;
     twoHeartsFirstTwoNights?: boolean;
   };
+  playerRoles?: Record<string, string>;
 }
 
 type BulletAnimation = {
@@ -541,7 +543,6 @@ interface PlayerMessageBubbleProps {
 }
 
 const PlayerMessageBubble: React.FC<PlayerMessageBubbleProps> = ({
-  playerId,
   message,
   circleSizePx,
   onDismiss,
@@ -671,6 +672,7 @@ export default function PlayerPositions({
   showWolfVoteBadges,
   wolfVoteVoterIds,
   voteWeightsByVoterId,
+  wolfMaxTargets = 1,
   showWolfBadges,
   wolfBadgePlayerIds,
   wolfBadgeRoles,
@@ -693,9 +695,9 @@ export default function PlayerPositions({
   onDismissMessage,
   isNightInfoVisible = true,
   children,
-  setRoom,
   witchPotionEffect,
   onWitchPotionEffectComplete,
+  testHeartExplosionTrigger,
 }: {
   onPlayerClick: (playerId: string) => void;
   onPlayerDoubleClick?: (playerId: string) => void;
@@ -717,6 +719,7 @@ export default function PlayerPositions({
   showWolfVoteBadges?: boolean;
   wolfVoteVoterIds?: string[];
   voteWeightsByVoterId?: Record<string, number>;
+  wolfMaxTargets?: number;
   showWolfBadges?: boolean;
   wolfBadgePlayerIds?: string[];
   wolfBadgeRoles?: Record<string, string>;
@@ -742,6 +745,7 @@ export default function PlayerPositions({
   setRoom?: React.Dispatch<React.SetStateAction<any>>;
   witchPotionEffect?: { targetId: string; type: "heal" | "poison"; startedAt: number } | null;
   onWitchPotionEffectComplete?: () => void;
+  testHeartExplosionTrigger?: number;
 }) {
   const { room: contextRoom, role } = useRoomContext();
   const room: RoomLike | null = roomOverride ?? (contextRoom as RoomLike | null);
@@ -754,6 +758,7 @@ export default function PlayerPositions({
   const [swapSource, setSwapSource] = useState<string | null>(null);
   const [compactCircles, setCompactCircles] = useState<boolean>(() => room?.compactCircles ?? false);
   const [frameScale, setFrameScale] = useState(1);
+  const [showAutoArrangeConfirm, setShowAutoArrangeConfirm] = useState(false);
   const [nightActionNow, setNightActionNow] = useState(() => Date.now());
 
   if (!room) return null;
@@ -966,31 +971,65 @@ export default function PlayerPositions({
 
   useEffect(() => {
     if (pendingHeartExplosion && !bulletAnimation) {
-      const alivePlayers = (room?.players || []).filter(p => p.id !== room?.hostId && !(room?.deadPlayers || []).includes(p.id));
-      alivePlayers.forEach(p => {
-        const pos = localPositions.find(pos => pos.playerId === p.id);
-        if (pos) {
-          const hpCount = prevPlayerHeartsRef.current[p.id] ?? 2;
-          if (hpCount > 0) {
-            const circleRadiusPx = circleSizePx / 2;
-            const badgeLeft = -circleRadiusPx - scalePx(6, 3);
-            const badgeTop = -circleRadiusPx - hpBadgeTopPx;
-            const badgeWidth = scalePx(48, 32);
-            const badgeHeight = scalePx(20, 14);
-            const dxPx = badgeLeft + badgeWidth / 2;
-            const dyPx = badgeTop + badgeHeight / 2;
-            const dxPct = dxPx / containerSize.width;
-            const dyPct = dyPx / containerSize.height;
+      const timer = window.setTimeout(() => {
+        const alivePlayers = (room?.players || []).filter(p => p.id !== room?.hostId && !(room?.deadPlayers || []).includes(p.id));
+        alivePlayers.forEach(p => {
+          const pos = localPositions.find(pos => pos.playerId === p.id);
+          if (pos) {
+            const hpCount = prevPlayerHeartsRef.current[p.id] ?? 2;
+            if (hpCount > 0) {
+              const circleRadiusPx = circleSizePx / 2;
+              const badgeLeft = -circleRadiusPx - scalePx(6, 3);
+              const badgeTop = -circleRadiusPx - hpBadgeTopPx;
+              const badgeWidth = scalePx(48, 32);
+              const badgeHeight = scalePx(20, 14);
+              const dxPx = badgeLeft + badgeWidth / 2;
+              const dyPx = badgeTop + badgeHeight / 2;
+              const dxPct = dxPx / containerSize.width;
+              const dyPct = dyPx / containerSize.height;
 
-            triggerHeartExplosion(pos.x + dxPct, pos.y + dyPct, containerRef.current, hpCount);
+              triggerHeartExplosion(pos.x + dxPct, pos.y + dyPct, containerRef.current, hpCount);
+            }
           }
-        }
-      });
-      setPendingHeartExplosion(false);
+        });
+        setPendingHeartExplosion(false);
+      }, 1000);
+
+      return () => window.clearTimeout(timer);
     }
   }, [pendingHeartExplosion, bulletAnimation, room?.players, room?.deadPlayers, localPositions, room?.hostId, circleSizePx, hpBadgeTopPx, containerSize, frameScale]);
 
-    const [recoilState, setRecoilState] = useState<{ elapsedMs: number; totalMs: number } | null>(null);
+  const prevTestHeartExplosionTriggerRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevTestHeartExplosionTriggerRef.current;
+    prevTestHeartExplosionTriggerRef.current = testHeartExplosionTrigger;
+    if (prev !== undefined && testHeartExplosionTrigger !== undefined && testHeartExplosionTrigger > prev) {
+      if (room) {
+        const alivePlayers = room.players.filter(p => p.id !== room.hostId && !(room.deadPlayers || []).includes(p.id));
+        alivePlayers.forEach(p => {
+          const pos = localPositions.find(pos => pos.playerId === p.id);
+          if (pos) {
+            const hpCount = room.playerHearts?.[p.id] ?? 2;
+            if (hpCount > 0) {
+              const circleRadiusPx = circleSizePx / 2;
+              const badgeLeft = -circleRadiusPx - scalePx(6, 3);
+              const badgeTop = -circleRadiusPx - hpBadgeTopPx;
+              const badgeWidth = scalePx(48, 32);
+              const badgeHeight = scalePx(20, 14);
+              const dxPx = badgeLeft + badgeWidth / 2;
+              const dyPx = badgeTop + badgeHeight / 2;
+              const dxPct = dxPx / containerSize.width;
+              const dyPct = dyPx / containerSize.height;
+
+              triggerHeartExplosion(pos.x + dxPct, pos.y + dyPct, containerRef.current, hpCount);
+            }
+          }
+        });
+      }
+    }
+  }, [testHeartExplosionTrigger, room, localPositions, circleSizePx, hpBadgeTopPx, containerSize]);
+
+  const [recoilState, setRecoilState] = useState<{ elapsedMs: number; totalMs: number } | null>(null);
 
   const bulletRecoil = (() => {
     if (!bulletAnimation || !recoilState || bulletAnimation.kind === "love") return null;
@@ -1056,13 +1095,13 @@ export default function PlayerPositions({
     }
   };
 
-  const autoArrange = () => {
+  const autoArrange = (force = false) => {
     if (!isEditor) return;
     if (!containerRef.current) return;
 
-    if (room.autoArrangeUsed) {
-      const ok = window.confirm("Bạn chắc chắn muốn tự xếp lại vị trí không?");
-      if (!ok) return;
+    if (room.autoArrangeUsed && !force) {
+      setShowAutoArrangeConfirm(true);
+      return;
     }
 
     const rect = containerRef.current.getBoundingClientRect();
@@ -1351,6 +1390,95 @@ export default function PlayerPositions({
     });
   }
 
+  // Tính toán trạng thái vote của Sói (chỉ tính khi phase là night và đang hiển thị wolf vote badges)
+  const isNightPhase = room?.phase === "night";
+  const wolfVoteStatuses = (() => {
+    if (!isNightPhase || !showWolfVoteBadges || !room) return null;
+
+    const voterIds = wolfVoteVoterIds && wolfVoteVoterIds.length
+      ? wolfVoteVoterIds
+      : Object.keys({ ...(wolfVotes || {}), ...(wolfVotes2 || {}) });
+
+    const getPlayerVoteCount = (pId: string) => {
+      if (!wolfVotes && !wolfVotes2) return 0;
+      return voterIds.reduce((total, wid) => {
+        const votedThis = (wolfVotes?.[wid] === pId) || (wolfVotes2?.[wid] === pId);
+        return votedThis ? total + (voteWeightsByVoterId?.[wid] || 1) : total;
+      }, 0);
+    };
+
+    const activePlayers = room.players.filter((p) => p.id !== room.hostId);
+    const votesMap = new Map<string, number>();
+    const eligibleList: { id: string; count: number }[] = [];
+    
+    activePlayers.forEach((ap) => {
+      const voteCount = getPlayerVoteCount(ap.id);
+      votesMap.set(ap.id, voteCount);
+      if (voteCount > 0) {
+        eligibleList.push({ id: ap.id, count: voteCount });
+      }
+    });
+
+    // Xác định những ai là winner dựa trên thuật toán kết toán
+    const winners = new Set<string>();
+    const isTwoBites = wolfMaxTargets && wolfMaxTargets >= 2;
+
+    if (eligibleList.length > 0) {
+      // Sắp xếp các mục tiêu giảm dần theo số vote
+      eligibleList.sort((a, b) => b.count - a.count);
+
+      // Phân nhóm theo số vote
+      const voteGroups: Record<number, string[]> = {};
+      eligibleList.forEach(({ id, count }) => {
+        if (!voteGroups[count]) {
+          voteGroups[count] = [];
+        }
+        voteGroups[count].push(id);
+      });
+
+      const sortedVotes = Object.keys(voteGroups)
+        .map(Number)
+        .sort((a, b) => b - a);
+
+      const max1 = sortedVotes[0];
+      const S1 = max1 !== undefined ? voteGroups[max1]! : [];
+
+      if (isTwoBites) {
+        if (S1.length === 2) {
+          winners.add(S1[0]!);
+          winners.add(S1[1]!);
+        } else if (S1.length === 1) {
+          winners.add(S1[0]!);
+          const max2 = sortedVotes[1];
+          const S2 = max2 !== undefined ? voteGroups[max2]! : [];
+          if (S2.length === 1) {
+            winners.add(S2[0]!);
+          }
+        }
+      } else {
+        // Cắn thường 1 mục tiêu
+        if (S1.length === 1) {
+          winners.add(S1[0]!);
+        }
+      }
+    }
+
+    // Gán trạng thái cho mỗi người chơi
+    const statuses: Record<string, "winner" | "tied"> = {};
+    activePlayers.forEach((ap) => {
+      const v = votesMap.get(ap.id) || 0;
+      if (v > 0) {
+        if (winners.has(ap.id)) {
+          statuses[ap.id] = "winner";
+        } else {
+          statuses[ap.id] = "tied";
+        }
+      }
+    });
+
+    return statuses;
+  })();
+
   return (
     <div className="player-position-shell">
       <style>{`
@@ -1522,80 +1650,13 @@ export default function PlayerPositions({
           <button onClick={() => setSwapSource(prev => prev ? null : "SELECTING")}>
             {swapSource ? "Hủy đổi chỗ" : "Đổi chỗ"}
           </button>
-          <button onClick={autoArrange}>Tự xếp</button>
+          <button onClick={() => autoArrange()}>Tự xếp</button>
           <button onClick={toggleCircleSize}>
             {compactCircles ? "Kích thước chuẩn" : "Đổi kích thước"}
           </button>
         </div>
       )}
-      {room.id === "mock-8" && (
-        <div className="player-position-toolbar mock-8-toolbar" style={{ marginBottom: 8, display: "flex", gap: "8px", justifyContent: "center", flexWrap: "wrap" }}>
-          <button
-            onClick={() => {
-              const alivePlayers = room.players.filter(p => p.id !== room.hostId && !(room.deadPlayers || []).includes(p.id));
-              alivePlayers.forEach(p => {
-                const pos = localPositions.find(pos => pos.playerId === p.id);
-                if (pos) {
-                  const hpCount = room.playerHearts?.[p.id] ?? 2;
-                  if (hpCount > 0) {
-                    const circleRadiusPx = circleSizePx / 2;
-                    const badgeLeft = -circleRadiusPx - scalePx(6, 3);
-                    const badgeTop = -circleRadiusPx - hpBadgeTopPx;
-                    const badgeWidth = scalePx(48, 32);
-                    const badgeHeight = scalePx(20, 14);
-                    const dxPx = badgeLeft + badgeWidth / 2;
-                    const dyPx = badgeTop + badgeHeight / 2;
-                    const dxPct = dxPx / containerSize.width;
-                    const dyPct = dyPx / containerSize.height;
 
-                    triggerHeartExplosion(pos.x + dxPct, pos.y + dyPct, containerRef.current, hpCount);
-                  }
-                }
-              });
-            }}
-            style={{
-              background: "linear-gradient(135deg, #ec4899, #db2777)",
-              color: "white",
-              border: "none",
-              padding: "6px 12px",
-              borderRadius: "6px",
-              fontWeight: "bold",
-              cursor: "pointer",
-              boxShadow: "0 2px 8px rgba(236, 72, 153, 0.4)"
-            }}
-          >
-            💖 Test Văng Tim
-          </button>
-          <button
-            onClick={() => {
-              if (setRoom) {
-                setRoom((prev: any) => {
-                  const currentHeartsVisible = !!prev.sharedHeartsVisible;
-                  return {
-                    ...prev,
-                    sharedHeartsVisible: !currentHeartsVisible,
-                    playerHearts: currentHeartsVisible ? {} : {
-                      P2: 2, P3: 2, P4: 2, P5: 2, P6: 2, P7: 2, P8: 2
-                    }
-                  };
-                });
-              }
-            }}
-            style={{
-              background: "linear-gradient(135deg, #3b82f6, #1d4ed8)",
-              color: "white",
-              border: "none",
-              padding: "6px 12px",
-              borderRadius: "6px",
-              fontWeight: "bold",
-              cursor: "pointer",
-              boxShadow: "0 2px 8px rgba(59, 130, 246, 0.4)"
-            }}
-          >
-            🔄 Bật/Tắt Tim (Test Transition)
-          </button>
-        </div>
-      )}
       {isHost && hasDisconnectedPlayers && (
         <div style={{ marginBottom: 8, textAlign: "center" }}>
           <button
@@ -2041,24 +2102,41 @@ export default function PlayerPositions({
               )}
 
               {/* Badges and Indicators */}
-              {showWolfVoteBadges && effectiveWolfCount >= 2 && voteCountForThis > 0 && (
-                <div style={{
-                  position: "absolute",
-                  top: -badgeOffsetPx,
-                  right: -badgeOffsetPx,
-                  background: "linear-gradient(135deg, #ef5350, #c62828)",
-                  color: "#fff",
-                  borderRadius: badgeOffsetPx,
-                  padding: badgePadding,
-                  fontSize: badgeFontSizePx,
-                  fontWeight: "bold",
-                  zIndex: 2,
-                  boxShadow: "0 2px 6px rgba(198, 40, 40, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2)",
-                  border: "1px solid rgba(255, 255, 255, 0.15)",
-                }}>
-                  {voteCountForThis}/{effectiveWolfCount}
-                </div>
-              )}
+              {showWolfVoteBadges && effectiveWolfCount >= 2 && voteCountForThis > 0 && (() => {
+                const status = wolfVoteStatuses?.[pos.playerId] || "tied";
+                let badgeBg = "linear-gradient(135deg, #ef5350, #c62828)"; // mặc định màu đỏ (tied)
+                let badgeShadow = "0 2px 6px rgba(198, 40, 40, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2)";
+
+                if (isNightPhase) {
+                  if (status === "winner") {
+                    badgeBg = "linear-gradient(135deg, #009688, #4CAF50)";
+                    badgeShadow = "0 2px 6px rgba(0, 150, 136, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2)";
+                  }
+                } else {
+                  // Biểu quyết ban ngày (treo cổ) luôn hiển thị màu đỏ mặc định
+                  badgeBg = "linear-gradient(135deg, #ef5350, #c62828)";
+                  badgeShadow = "0 2px 6px rgba(198, 40, 40, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2)";
+                }
+
+                return (
+                  <div style={{
+                    position: "absolute",
+                    top: -badgeOffsetPx,
+                    right: -badgeOffsetPx,
+                    background: badgeBg,
+                    color: "#fff",
+                    borderRadius: badgeOffsetPx,
+                    padding: badgePadding,
+                    fontSize: badgeFontSizePx,
+                    fontWeight: "bold",
+                    zIndex: 2,
+                    boxShadow: badgeShadow,
+                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                  }}>
+                    {voteCountForThis}/{effectiveWolfCount}
+                  </div>
+                );
+              })()}
               {nightActionProgress === "pending" && (
                 <div
                   style={{
@@ -2354,6 +2432,17 @@ export default function PlayerPositions({
           })}
         </div>
       )}
+
+      <ConfirmModal
+        open={showAutoArrangeConfirm}
+        title="Xác nhận"
+        message="Bạn chắc chắn muốn tự xếp lại vị trí không?"
+        onConfirm={() => {
+          setShowAutoArrangeConfirm(false);
+          autoArrange(true);
+        }}
+        onCancel={() => setShowAutoArrangeConfirm(false)}
+      />
 
       {children}
     </div>

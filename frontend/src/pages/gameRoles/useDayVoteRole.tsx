@@ -3,6 +3,7 @@ import { socket, clientId } from "../../socket";
 import type { DayLockedUpdatedPayload, DayVotesUpdatedPayload, GamePhase, TrialVotesUpdatedPayload } from "./socketEvents";
 import StarBorder from "../../components/StarBorder";
 import { AvifIcon } from "../../components/AvifIcon";
+import ConfirmModal from "../../components/ConfirmModal";
 
 
 type Player = { id: string; name: string; connected?: boolean };
@@ -61,6 +62,8 @@ export function useDayVoteRole({
   const [localSelectedTarget, setLocalSelectedTarget] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now() + serverTimeOffset);
   const [isVoteReviewActive, setIsVoteReviewActive] = useState(false);
+  const [showDayVoteConfirm, setShowDayVoteConfirm] = useState(false);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setIsVoteReviewActive(false);
@@ -163,9 +166,9 @@ export function useDayVoteRole({
   }, [dayPaused, dayRemainingMs, activeCountdownDeadline, now]);
 
   const panel =
-    phase === "day" && clientId && !deadPlayers.includes(clientId) ? (
+    phase === "day" && clientId ? (
       <div>
-        {trialStage === "none" && (
+        {trialStage === "none" && !deadPlayers.includes(clientId) && (
           <>
             {dayDeadline && (
               <>
@@ -173,13 +176,10 @@ export function useDayVoteRole({
                   <button
                     onClick={() => {
                       if (!localSelectedTarget) {
-                        alert("Bạn chưa chọn mục tiêu biểu quyết.");
+                        setInfoMessage("Bạn chưa chọn mục tiêu biểu quyết.");
                         return;
                       }
-                      const targetName = room.players.find(p => p.id === localSelectedTarget)?.name || "người chơi";
-                      const ok = window.confirm(`Xác nhận chọn biểu quyết ${targetName}?`);
-                      if (!ok) return;
-                      socket.emit("dayLockVote", { roomId });
+                      setShowDayVoteConfirm(true);
                     }}
                     style={{ margin: "4px 0", padding: "8px 12px", cursor: "pointer" }}
                     disabled={!!dayLocked?.[clientId]}
@@ -211,7 +211,7 @@ export function useDayVoteRole({
               Lượt tương tác còn lại của bị cáo: {remainingInteractionTurns}
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-              {!isTrialTarget && (
+              {!isTrialTarget && !deadPlayers.includes(clientId) && (
                 alreadyChosenByTrialTarget || hasInteracted ? (
                   <button
                     onClick={() => {
@@ -283,6 +283,26 @@ export function useDayVoteRole({
             </button>
           </div>
         )}
+
+        <ConfirmModal
+          open={showDayVoteConfirm}
+          title="Xác nhận biểu quyết"
+          message={localSelectedTarget ? `Xác nhận chọn biểu quyết ${room.players.find(p => p.id === localSelectedTarget)?.name || "người chơi"}?` : ""}
+          onConfirm={() => {
+            socket.emit("dayLockVote", { roomId });
+            setShowDayVoteConfirm(false);
+          }}
+          onCancel={() => setShowDayVoteConfirm(false)}
+        />
+
+        <ConfirmModal
+          open={!!infoMessage}
+          title="Thông báo"
+          message={infoMessage || ""}
+          infoOnly
+          onConfirm={() => setInfoMessage(null)}
+          onCancel={() => setInfoMessage(null)}
+        />
       </div>
     ) : null;
 

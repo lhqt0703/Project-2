@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { socket, clientId } from "../../socket";
 import type { GamePhase } from "./socketEvents";
 import { AvifIcon } from "../../components/AvifIcon";
+import { getAvatarUrlByFileName, MASKED_AVATAR_MAP } from "../../components/PlayerPositions";
+import nenLungAsset from "../../assets/nền lưng.avif";
+import ConfirmModal from "../../components/ConfirmModal";
 
 
-type Player = { id: string; name: string; connected?: boolean };
+type Player = { id: string; name: string; connected?: boolean; playerAvatar?: string };
 
 type RoomLike = {
   players: Player[];
@@ -17,7 +20,107 @@ type RoomLike = {
   wildWolfConvertedSelf?: boolean;
   gameRules?: {
     wolfNightActionDurationSec?: number;
+    wolfCanBiteWolf?: boolean;
   };
+};
+
+const MiniToken = ({ playerId, players }: { playerId: string; players: Player[] }) => {
+  const p = players.find((x) => x.id === playerId);
+  if (!p) return null;
+
+  let avatarUrl: string | undefined = undefined;
+  let maskedAvatarUrl: string | undefined = undefined;
+
+  if (p.playerAvatar) {
+    const customUrl = getAvatarUrlByFileName(p.playerAvatar);
+    if (customUrl) {
+      if (p.playerAvatar.trim().toUpperCase().startsWith("M ")) {
+        maskedAvatarUrl = customUrl;
+      } else {
+        avatarUrl = customUrl;
+      }
+    }
+  }
+
+  if (!avatarUrl && !maskedAvatarUrl) {
+    maskedAvatarUrl = MASKED_AVATAR_MAP[playerId];
+    if (playerId.startsWith("dev-")) {
+      const parts = playerId.split("-");
+      const lastPart = parts[parts.length - 1];
+      const idx = parseInt(lastPart, 10);
+      if (!isNaN(idx) && idx >= 1 && idx <= 7) {
+        const VIP_IDS = [
+          "046fa88a-a719-47c3-8b97-ddfc8337cf83",
+          "f7d9652f-ac74-4557-81a2-7c2731a77d37",
+          "397d9740-e21b-4ade-941f-25912aefd591",
+          "client_1780242307126_pmozg54dmra",
+          "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "ec0c6c66-9ce7-4d86-ac12-25824af15b79",
+          "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd"
+        ];
+        const vipId = VIP_IDS[idx - 1];
+        if (!maskedAvatarUrl) maskedAvatarUrl = MASKED_AVATAR_MAP[vipId];
+      }
+    }
+  }
+
+  return (
+    <div
+      title={p.name}
+      style={{
+        width: 24,
+        height: 24,
+        borderRadius: "50%",
+        backgroundImage: maskedAvatarUrl 
+          ? `url(${nenLungAsset})` 
+          : (avatarUrl ? `url(${avatarUrl})` : undefined),
+        backgroundPosition: "center",
+        backgroundSize: "cover",
+        backgroundRepeat: "no-repeat",
+        position: "relative",
+        border: "1px solid rgba(255, 255, 255, 0.45)",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.5)",
+        overflow: maskedAvatarUrl ? "visible" : "hidden",
+        flexShrink: 0
+      }}
+    >
+      {maskedAvatarUrl && (
+        <>
+          <div style={{ position: "absolute", inset: 0, borderRadius: "50%", overflow: "hidden" }}>
+            <img
+              src={maskedAvatarUrl}
+              alt=""
+              style={{
+                position: "absolute",
+                bottom: 0,
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: "115%",
+                height: "115%",
+                objectFit: "contain",
+                objectPosition: "bottom center",
+              }}
+            />
+          </div>
+          <img
+            src={maskedAvatarUrl}
+            alt=""
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: "115%",
+              height: "115%",
+              objectFit: "contain",
+              objectPosition: "bottom center",
+              clipPath: "inset(0 0 20% 0)",
+            }}
+          />
+        </>
+      )}
+    </div>
+  );
 };
 
 export function useWolfRole({
@@ -61,6 +164,12 @@ export function useWolfRole({
   const hasSubmittedLockRef = useRef(false);
   const [wildWolfConversionPickerOpen, setWildWolfConversionPickerOpen] = useState(false);
   const [wildWolfLocalConversionTarget, setWildWolfLocalConversionTarget] = useState<string | null>(null);
+  const [confirmConfig, setConfirmConfig] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    infoOnly?: boolean;
+  } | null>(null);
 
   const isBanSoiAligned = room.banSoiWolfAligned === true;
   const isWildWolfConverted = room.wildWolfConvertedSelf === true;
@@ -77,10 +186,9 @@ export function useWolfRole({
 
   const activeWolvesAlive = useMemo(() => {
     const effective = (activeWolves.length ? activeWolves : wolves)
-      .filter(id => !deadPlayers.includes(id))
-      .filter(id => room.players.find(p => p.id === id)?.connected !== false);
+      .filter(id => !deadPlayers.includes(id));
     return effective;
-  }, [activeWolves, deadPlayers, room.players, wolves]);
+  }, [activeWolves, deadPlayers, wolves]);
 
   const isWolfTurnActive = useMemo(() => {
     if (roomId === "mock-8") return phase === "night";
@@ -103,7 +211,6 @@ export function useWolfRole({
   }, [isWolfTeam, isWolfTurnActive]);
 
   useEffect(() => {
-    // If the server says we are unlocked, sync our local lock state.
     if (clientId && wolfLocked) {
       const serverLocked = !!wolfLocked[clientId];
       if (!serverLocked && hasSubmittedLock) {
@@ -112,6 +219,26 @@ export function useWolfRole({
       }
     }
   }, [clientId, wolfLocked, hasSubmittedLock]);
+
+  useEffect(() => {
+    if (clientId && isWolfTeam && isWolfTurnActive && room.wolfVotes) {
+      const serverVote = room.wolfVotes[clientId] || null;
+      if (serverVote !== localSelectedTarget) {
+        setLocalSelectedTarget(serverVote);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.wolfVotes, clientId, isWolfTeam, isWolfTurnActive]);
+
+  useEffect(() => {
+    if (clientId && isWolfTeam && isWolfTurnActive && room.wolfVotes2) {
+      const serverVote2 = room.wolfVotes2[clientId] || null;
+      if (serverVote2 !== localSelectedTarget2) {
+        setLocalSelectedTarget2(serverVote2);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room.wolfVotes2, clientId, isWolfTeam, isWolfTurnActive]);
 
   const isLocked = useMemo(() => {
     if (clientId && wolfLocked?.[clientId]) return true;
@@ -241,49 +368,159 @@ export function useWolfRole({
     // wolf state is owned by parent sync layer
   }, []);
 
+  const isMultiTargetConversion = wolfMaxTargets >= 2 && wildWolfConversionCandidateIds.length === 2;
+
   const panel =
     isWolfTeam && isWolfTurnActive && clientId && !deadPlayers.includes(clientId) ? (
-      <div style={{ marginTop: 12 }}>
-        {wolfMaxTargets >= 2 && (
-          <div
-            style={{
-              marginTop: 10,
-              marginBottom: 10,
-              padding: "8px 10px",
-              borderRadius: 8,
-              background: "rgba(255, 214, 102, 0.12)",
-              border: "1px solid rgba(173, 120, 20, 0.22)",
-            }}
-          >
-            <b>Đêm nay phe Sói được cắn 2 người</b> (do Sói con đã chết).
-          </div>
-        )}
-        {isWildWolf && room.wildWolfConvertAvailableTonight && (
-          <div style={{ marginBottom: 8 }}>
-            {shouldPulseWildWolfConversion && (
-              <style>{`
-                @keyframes wildWolfConversionPulse {
-                  0%, 100% {
-                    opacity: 0.42;
-                    box-shadow:
-                      inset 0 0 0 2px rgba(236, 58, 58, 0.62),
-                      inset 0 0 12px 4px rgba(236, 58, 58, 0.22);
+      <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <button
+          disabled={isLocked || !canAct || deadlineReached}
+          onClick={() => {
+            if (isLocked) return;
+            if (deadlineReached) return;
+            if (!localSelectedTarget) {
+              setConfirmConfig({
+                title: "",
+                message: "Bạn chưa chọn mục tiêu để cắn",
+                infoOnly: true,
+                onConfirm: () => setConfirmConfig(null),
+              });
+              return;
+            }
+
+            const proceedToBiteConfirm = () => {
+              const name1 = room.players.find(p => p.id === localSelectedTarget)?.name || "đối tượng";
+              const name2 = localSelectedTarget2 ? (room.players.find(p => p.id === localSelectedTarget2)?.name || "đối tượng") : null;
+              const wildWolfNote = isWildWolf && wildWolfConversionRequested
+                ? "\n\nSói Dại sẽ biến mục tiêu đã chọn lây nhiễm thành Sói thường nếu vết cắn được tính."
+                : "";
+
+              setConfirmConfig({
+                title: "Xác nhận cắn",
+                message: name2
+                  ? `Bạn có chắc chắn muốn cắn ${name1} và ${name2}?${wildWolfNote}`
+                  : `Bạn có chắc chắn muốn cắn ${name1}?${wildWolfNote}`,
+                onConfirm: () => {
+                  hasSubmittedLockRef.current = true;
+                  setHasSubmittedLock(true);
+                  if (roomId !== "mock-8") {
+                    socket.emit("wolfLockVote", { roomId });
                   }
-                  50% {
-                    opacity: 0.84;
-                    box-shadow:
-                      inset 0 0 0 3px rgba(255, 79, 79, 0.9),
-                      inset 0 0 18px 6px rgba(255, 49, 49, 0.34);
-                  }
+                  setConfirmConfig(null);
                 }
-              `}</style>
-            )}
+              });
+            };
+
+            if (wolfMaxTargets >= 2 && !localSelectedTarget2) {
+              setConfirmConfig({
+                title: "Thiếu mục tiêu",
+                message: "Đêm nay bạn có thể chọn 2 mục tiêu. Bạn vẫn chưa chọn mục tiêu thứ 2. Vẫn xác nhận CẮN chứ?",
+                onConfirm: () => {
+                  proceedToBiteConfirm();
+                }
+              });
+            } else {
+              proceedToBiteConfirm();
+            }
+          }}
+          style={{
+            padding: "8px 12px",
+            cursor: isLocked || !canAct || deadlineReached ? "not-allowed" : "pointer",
+            opacity: isLocked || !canAct || deadlineReached ? 0.7 : 1,
+            height: "38px",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 8,
+          }}
+        >
+          <AvifIcon name="🐺" style={{ marginRight: 4 }} /> CẮN!
+        </button>
+
+        {isWildWolf && room.wildWolfConvertAvailableTonight && (
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <style>{`
+              @keyframes wildWolfConversionPulse {
+                0%, 100% {
+                  opacity: 0.42;
+                  box-shadow:
+                    inset 0 0 0 2px rgba(236, 58, 58, 0.62),
+                    inset 0 0 12px 4px rgba(236, 58, 58, 0.22);
+                }
+                50% {
+                  opacity: 0.84;
+                  box-shadow:
+                    inset 0 0 0 3px rgba(255, 79, 79, 0.9),
+                    inset 0 0 18px 6px rgba(255, 49, 49, 0.34);
+                }
+              }
+              .wild-wolf-convert-btn {
+                width: 180px;
+                height: 38px;
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                overflow: hidden;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                border-radius: 8px;
+                border: 1px solid rgba(236, 58, 58, 0.45);
+                background: rgba(236, 58, 58, 0.12);
+                color: #fff;
+                font-weight: 600;
+                font-size: 13px;
+                padding: 0;
+              }
+              .wild-wolf-convert-btn:hover:not(:disabled) {
+                background: rgba(236, 58, 58, 0.22);
+              }
+              .wild-wolf-btn-text {
+                position: absolute;
+                transition: opacity 0.25s ease, transform 0.25s ease;
+                opacity: 1;
+                transform: scale(1);
+                white-space: nowrap;
+              }
+              .wild-wolf-btn-text.hidden {
+                opacity: 0;
+                transform: scale(0.85);
+                pointer-events: none;
+              }
+              .wild-wolf-btn-tokens {
+                position: absolute;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 12px;
+                transition: opacity 0.25s ease, transform 0.25s ease;
+                opacity: 0;
+                transform: scale(0.85);
+                pointer-events: none;
+              }
+              .wild-wolf-btn-tokens.visible {
+                opacity: 1;
+                transform: scale(1);
+                pointer-events: auto;
+              }
+              .wild-wolf-mini-token-wrapper {
+                transition: transform 0.2s ease;
+                cursor: pointer;
+              }
+              .wild-wolf-mini-token-wrapper:hover {
+                transform: scale(1.25);
+              }
+            `}</style>
             <button
               disabled={!canPressWildWolfConversion}
               onClick={() => {
                 if (!canPressWildWolfConversion) return;
                 if (roomId === "mock-8") {
-                  alert("Đã bấm chọn lây nhiễm (giả lập)");
+                  setConfirmConfig({
+                    title: "Thông báo",
+                    message: "Đã bấm chọn lây nhiễm (giả lập)",
+                    infoOnly: true,
+                    onConfirm: () => setConfirmConfig(null),
+                  });
                   return;
                 }
                 if (wildWolfConversionRequested) {
@@ -293,122 +530,70 @@ export function useWolfRole({
                   return;
                 }
                 if (wildWolfConversionCandidateIds.length === 0) {
-                  alert("Bạn cần chọn mục tiêu cắn trước.");
+                  setConfirmConfig({
+                    title: "",
+                    message: "Bạn cần chọn mục tiêu cắn trước",
+                    infoOnly: true,
+                    onConfirm: () => setConfirmConfig(null),
+                  });
                   return;
                 }
-                if (wolfMaxTargets >= 2) {
-                  setWildWolfConversionPickerOpen(true);
+                if (isMultiTargetConversion) {
+                  setWildWolfConversionPickerOpen(!wildWolfConversionPickerOpen);
                   return;
                 }
                 const targetId = wildWolfConversionCandidateIds[0];
                 setWildWolfLocalConversionTarget(targetId);
                 socket.emit("wildWolfToggleConversion", { roomId, active: true, targetId });
               }}
+              className="wild-wolf-convert-btn"
               style={{
-                padding: "8px 12px",
                 cursor: !canPressWildWolfConversion ? "not-allowed" : "pointer",
                 opacity: !canPressWildWolfConversion ? 0.7 : 1,
-                marginRight: 8,
-                borderRadius: 8,
-                border: "1px solid rgba(236, 58, 58, 0.45)",
                 animation: shouldPulseWildWolfConversion ? "wildWolfConversionPulse 1.1s ease-in-out infinite" : undefined,
               }}
             >
-              {wildWolfConversionRequested
-                ? "Hủy lây nhiễm"
-                : wolfMaxTargets >= 2
-                  ? "Chọn mục tiêu lây nhiễm"
-                  : "Biến mục tiêu thành Sói"}
-            </button>
-            {wildWolfConversionRequested && (
-              <span style={{ fontWeight: 700 }}>
-                Đã xác nhận mục tiêu sẽ lây nhiễm
-                {wildWolfLocalConversionTarget ? `: ${wildWolfConversionCandidateNames[wildWolfLocalConversionTarget] || "đối tượng"}` : ""}
+              <span className={`wild-wolf-btn-text ${wildWolfConversionPickerOpen && !wildWolfConversionRequested ? "hidden" : ""}`}>
+                {wildWolfConversionRequested
+                  ? "Hủy lây nhiễm"
+                  : isMultiTargetConversion
+                    ? "Chọn mục tiêu lây nhiễm"
+                    : "Biến mục tiêu thành Sói"}
               </span>
-            )}
-            {wildWolfConversionPickerOpen && !wildWolfConversionRequested && (
-              <div
-                style={{
-                  marginTop: 8,
-                  padding: "8px 10px",
-                  borderRadius: 8,
-                  background: "rgba(236, 58, 58, 0.08)",
-                  border: "1px solid rgba(236, 58, 58, 0.2)",
-                }}
-              >
-                <div style={{ fontWeight: 700, marginBottom: 6 }}>Sói Dại chỉ được lây nhiễm 1 mục tiêu bị cắn.</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+
+              {isMultiTargetConversion && (
+                <span className={`wild-wolf-btn-tokens ${wildWolfConversionPickerOpen && !wildWolfConversionRequested ? "visible" : ""}`}>
                   {wildWolfConversionCandidateIds.map((targetId) => (
-                    <button
+                    <span
                       key={targetId}
-                      type="button"
-                      onClick={() => {
+                      className="wild-wolf-mini-token-wrapper"
+                      title={`Lây nhiễm ${wildWolfConversionCandidateNames[targetId] || "đối tượng"}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
                         setWildWolfLocalConversionTarget(targetId);
                         setWildWolfConversionPickerOpen(false);
                         socket.emit("wildWolfToggleConversion", { roomId, active: true, targetId });
                       }}
-                      style={{ padding: "6px 10px", borderRadius: 8 }}
                     >
-                      Lây nhiễm {wildWolfConversionCandidateNames[targetId] || "đối tượng"}
-                    </button>
+                      <MiniToken playerId={targetId} players={room.players} />
+                    </span>
                   ))}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWildWolfLocalConversionTarget(null);
-                      setWildWolfConversionPickerOpen(false);
-                      socket.emit("wildWolfToggleConversion", { roomId, active: false });
-                    }}
-                    style={{ padding: "6px 10px", borderRadius: 8, opacity: 0.82 }}
-                  >
-                    Không lây nhiễm đêm nay
-                  </button>
-                </div>
-              </div>
-            )}
+                </span>
+              )}
+            </button>
           </div>
         )}
-        <button
-          disabled={isLocked || !canAct || deadlineReached}
-          onClick={() => {
-            if (isLocked) return;
-            if (deadlineReached) return;
-            if (!localSelectedTarget) {
-              alert("Bạn chưa chọn mục tiêu để cắn.");
-              return;
-            }
-            if (wolfMaxTargets >= 2 && !localSelectedTarget2) {
-              const ok2 = window.confirm(
-                "Đêm nay bạn có thể chọn 2 mục tiêu. Bạn vẫn chưa chọn mục tiêu thứ 2. Vẫn xác nhận CẮN chứ?"
-              );
-              if (!ok2) return;
-            }
-            const name1 = room.players.find(p => p.id === localSelectedTarget)?.name || "đối tượng";
-            const name2 = localSelectedTarget2 ? (room.players.find(p => p.id === localSelectedTarget2)?.name || "đối tượng") : null;
-            const wildWolfNote = isWildWolf && wildWolfConversionRequested
-              ? "\n\nSói Dại sẽ biến mục tiêu đã chọn lây nhiễm thành Sói thường nếu vết cắn được tính."
-              : "";
-            const ok = window.confirm(
-              name2
-                ? `Bạn có chắc chắn muốn cắn ${name1} và ${name2}?${wildWolfNote}`
-                : `Bạn có chắc chắn muốn cắn ${name1}?${wildWolfNote}`
-            );
-            if (ok) {
-              hasSubmittedLockRef.current = true;
-              setHasSubmittedLock(true);
-              if (roomId !== "mock-8") {
-                socket.emit("wolfLockVote", { roomId });
-              }
-            }
-          }}
-          style={{
-            padding: "8px 12px",
-            cursor: isLocked || !canAct || deadlineReached ? "not-allowed" : "pointer",
-            opacity: isLocked || !canAct || deadlineReached ? 0.7 : 1,
-          }}
-        >
-          <AvifIcon name="🐺" style={{ marginRight: 4 }} /> CẮN!
-        </button>
+
+        {confirmConfig && (
+          <ConfirmModal
+            open={!!confirmConfig}
+            title={confirmConfig.title}
+            message={confirmConfig.message}
+            infoOnly={confirmConfig.infoOnly}
+            onConfirm={confirmConfig.onConfirm}
+            onCancel={() => setConfirmConfig(null)}
+          />
+        )}
       </div>
     ) : null;
 
@@ -419,7 +604,7 @@ export function useWolfRole({
     playerPositionsProps: {
       selectedOutlinePlayerIds:
         isWolfTeam && isWolfTurnActive
-          ? [localSelectedTarget, localSelectedTarget2].filter(Boolean)
+          ? [effectiveSelectedTarget, effectiveSelectedTarget2].filter(Boolean)
           : [],
       showWolfVoteBadges: isWolfTeam && isWolfTurnActive && !!clientId && !deadPlayers.includes(clientId),
       wolfVoteVoterIds: activeWolvesAlive,

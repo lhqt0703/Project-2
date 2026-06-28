@@ -571,6 +571,22 @@ export default function GameRulesModal({
 
               <label style={rowStyle()}>
                 <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Cơ chế cắn 2 mục tiêu thoáng hơn khi hòa</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Mặc định bật. Khi bật, nếu phe Sói được cắn 2 mục tiêu (khi Sói con chết) và các Sói cắn không thống nhất được mục tiêu thứ 2 thì suất cắn thứ 2 bị hủy (hòa phiếu), thay vì hủy cả 2 suất cắn. Ví dụ: Sói 1 cắn A và B, Sói 2 cắn B thì cắn cả A và B. Sói 1 cắn A và B, Sói 2 cắn A và C thì cắn A (B và C hòa).
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.wolfBonusBiteSmoothTied === true}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("wolfBonusBiteSmoothTied", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>Trưởng làng biết mình đã bị sói cắn</div>
                   <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
                     Khi bật, Trưởng làng và quản trò sẽ thấy máu còn 1 tim trong đêm bị cắn, rồi tim rung vào đêm kế tiếp trước khi hiệu ứng cắn trễ kết toán.

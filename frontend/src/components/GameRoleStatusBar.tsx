@@ -333,13 +333,13 @@ export const GameRoleStatusBar: React.FC<GameRoleStatusBarProps> = ({
             {showStickersButton && onSelectSticker && (
               <div style={{
                 transition: "max-width 0.4s ease, opacity 0.4s ease, transform 0.4s ease",
-                maxWidth: phase === "night" ? "50px" : "0px",
-                opacity: phase === "night" ? 1 : 0,
-                transform: phase === "night" ? "translateX(0)" : "translateX(100px)",
+                maxWidth: (phase === "night" && isNightInfoVisible) ? "50px" : "0px",
+                opacity: (phase === "night" && isNightInfoVisible) ? 1 : 0,
+                transform: (phase === "night" && isNightInfoVisible) ? "translateX(0)" : "translateX(100px)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                pointerEvents: phase === "night" ? "auto" : "none",
+                pointerEvents: (phase === "night" && isNightInfoVisible) ? "auto" : "none",
               }}>
                 <div
                   onClick={() => setIsStickersOpen(true)}

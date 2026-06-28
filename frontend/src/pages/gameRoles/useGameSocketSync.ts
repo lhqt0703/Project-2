@@ -231,11 +231,11 @@ export function useGameSocketSync({
       // reset wolf ui state as phase rotates
       if (newPhase === "day") {
         setActiveWolves([]);
+        setWolfMaxTargets(1);
       }
       setWolfLocked(null);
       setWolfDeadline(null);
       setWolfVotes2(null);
-      setWolfMaxTargets(1);
       setWolfBiteDisabled(false);
       wildWolfConversionRef.current = { available: false, requested: false };
       setRoom((prev: any) => (prev ? {

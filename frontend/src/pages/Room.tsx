@@ -76,6 +76,20 @@ export default function Room() {
   const [pendingRulesUpdate, setPendingRulesUpdate] = useState<RoomData["gameRules"] | null>(null);
   const [showRulesApplyDecisionModal, setShowRulesApplyDecisionModal] = useState(false);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [roleMismatchConfirm, setRoleMismatchConfirm] = useState<{
+    names: string;
+    missingRoles: number;
+    targetRoomId: string;
+  } | null>(null);
+
+  const [wolfMismatchConfirm, setWolfMismatchConfirm] = useState<{
+    data: {
+      currentWolfCount: number;
+      maxAllowedWolfCount: number;
+      playerCount: number;
+    };
+    targetRoomId: string;
+  } | null>(null);
   const [rulesRestartOverlay, setRulesRestartOverlay] = useState<{
     message: string;
     totalMs: number;
@@ -284,16 +298,7 @@ export default function Room() {
       const names = newPlayers.map((p: Player) => p.name).join(", ");
 
       // Auto-add đủ để hết thiếu
-      const ok = window.confirm(
-        `Có người chơi mới (${names}) đã vào phòng sau khi bạn đã xác nhận vai trò.\n` +
-        `Bạn đang thiếu ${missingRoles} vai trò.\n\n` +
-        `Bạn có muốn tự động thêm ${missingRoles} "Dân làng" không?`
-      );
-      if (ok) {
-        socket.emit("addAutoRoles", { roomId: targetRoomId, count: missingRoles });
-      } else {
-        nav(`/roleselect?roomId=${targetRoomId}`);
-      }
+      setRoleMismatchConfirm({ names, missingRoles, targetRoomId });
     };
 
     socket.on("roleMismatch", handleMismatch);
@@ -313,18 +318,7 @@ export default function Room() {
       const targetRoomId = room?.id ?? roomId;
       if (!targetRoomId) return;
 
-      const ok = window.confirm(
-        `Danh sách vai trò hiện tại có ${data.currentWolfCount} sói, vượt quá mức tối đa ${data.maxAllowedWolfCount} cho phòng ${data.playerCount} người.\n\n` +
-        `Hệ thống sẽ tự giảm bớt số lượng sói để tránh phe sói thắng ngay khi bắt đầu.\n` +
-        `Nhấn OK để hệ thống tự điều chỉnh và bắt đầu trò chơi.\n` +
-        `Nhấn Hủy để quay lại màn hình chọn vai trò.`
-      );
-
-      if (ok) {
-        socket.emit("startGame", { roomId: targetRoomId, forceAdjustWolfCount: true });
-      } else {
-        nav(`/roleselect?roomId=${targetRoomId}`);
-      }
+      setWolfMismatchConfirm({ data, targetRoomId });
     };
 
     socket.on("wolfRoleMismatch", handleWolfMismatch);
@@ -1529,6 +1523,65 @@ export default function Room() {
             </div>
           </>
         )}
+
+        <ConfirmModal
+          open={!!roleMismatchConfirm}
+          title="Xác nhận thêm vai trò"
+          message={
+            roleMismatchConfirm
+              ? `Có người chơi mới (${roleMismatchConfirm.names}) đã vào phòng sau khi bạn đã xác nhận vai trò.\n` +
+                `Bạn đang thiếu ${roleMismatchConfirm.missingRoles} vai trò.\n\n` +
+                `Bạn có muốn tự động thêm ${roleMismatchConfirm.missingRoles} "Dân làng" không?`
+              : ""
+          }
+          confirmText="Thêm"
+          cancelText="Hủy"
+          onConfirm={() => {
+            if (roleMismatchConfirm) {
+              socket.emit("addAutoRoles", {
+                roomId: roleMismatchConfirm.targetRoomId,
+                count: roleMismatchConfirm.missingRoles,
+              });
+            }
+            setRoleMismatchConfirm(null);
+          }}
+          onCancel={() => {
+            if (roleMismatchConfirm) {
+              nav(`/roleselect?roomId=${roleMismatchConfirm.targetRoomId}`);
+            }
+            setRoleMismatchConfirm(null);
+          }}
+        />
+
+        <ConfirmModal
+          open={!!wolfMismatchConfirm}
+          title="Xác nhận điều chỉnh vai trò"
+          message={
+            wolfMismatchConfirm
+              ? `Danh sách vai trò hiện tại có ${wolfMismatchConfirm.data.currentWolfCount} sói, vượt quá mức tối đa ${wolfMismatchConfirm.data.maxAllowedWolfCount} cho phòng ${wolfMismatchConfirm.data.playerCount} người.\n\n` +
+                `Hệ thống sẽ tự giảm bớt số lượng sói để tránh phe sói thắng ngay khi bắt đầu.\n` +
+                `Nhấn OK để hệ thống tự điều chỉnh và bắt đầu trò chơi.\n` +
+                `Nhấn Hủy để quay lại màn hình chọn vai trò.`
+              : ""
+          }
+          confirmText="OK"
+          cancelText="Hủy"
+          onConfirm={() => {
+            if (wolfMismatchConfirm) {
+              socket.emit("startGame", {
+                roomId: wolfMismatchConfirm.targetRoomId,
+                forceAdjustWolfCount: true,
+              });
+            }
+            setWolfMismatchConfirm(null);
+          }}
+          onCancel={() => {
+            if (wolfMismatchConfirm) {
+              nav(`/roleselect?roomId=${wolfMismatchConfirm.targetRoomId}`);
+            }
+            setWolfMismatchConfirm(null);
+          }}
+        />
     </div>
   );
 }

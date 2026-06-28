@@ -2,13 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { socket, clientId } from "../../socket";
 import type { GamePhase } from "./socketEvents";
 import ConfirmModal from "../../components/ConfirmModal";
+import { useTargetSelection } from "./useTargetSelection";
 
 export function useGuardianRole({
   roomId,
   phase,
   role,
   deadPlayers,
-  guardianProtectedSeq: _guardianProtectedSeq,
+  guardianProtectedSeq,
   guardianProtectedTargetId,
   allNightActionsSimultaneous,
   currentNightTurnRole,
@@ -28,41 +29,55 @@ export function useGuardianRole({
   nightActionDeadline: number | null;
   nightActionNow: number;
 }) {
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const {
+    selectedPlayerId,
+    setSelectedPlayerId,
+    showConfirm,
+    setShowConfirm,
+    lockedTargetId,
+    setLockedTargetId,
+    selectTarget,
+    cancelSelection,
+    lockSelection,
+    clearSelection,
+  } = useTargetSelection();
+
   const [lastProtectedPrevNight, setLastProtectedPrevNight] = useState<string | null>(null);
-  const [lockedTargetId, setLockedTargetId] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const prevPhaseRef = useRef<GamePhase>(phase);
+  const lockedTargetIdRef = useRef<string | null>(null);
 
+  // Keep lockedTargetIdRef in sync with state
   useEffect(() => {
-    // When server confirms a protection, lock the choice and keep the ring.
-    if (phase === "night" && guardianProtectedTargetId) {
-      setSelectedPlayerId(guardianProtectedTargetId);
-      setLockedTargetId(guardianProtectedTargetId);
-      setShowConfirm(false);
-    }
-  }, [guardianProtectedTargetId, phase]);
+    lockedTargetIdRef.current = lockedTargetId;
+  }, [lockedTargetId]);
 
+  // 1. useEffect chuyển phase (chạy trước để clear state)
   useEffect(() => {
     const prev = prevPhaseRef.current;
     if (prev === phase) return;
 
-    // On phase transitions only
     if (phase === "night") {
-      // New night: clear current-night selection/lock
-      setSelectedPlayerId(null);
-      setShowConfirm(false);
-      setLockedTargetId(null);
+      clearSelection();
     } else {
-      // Switch to day: persist last protected and clear selection
-      setLastProtectedPrevNight(prevLast => lockedTargetId || prevLast);
-      setSelectedPlayerId(null);
-      setShowConfirm(false);
-      setLockedTargetId(null);
+      setLastProtectedPrevNight(prevLast => lockedTargetIdRef.current || prevLast);
+      clearSelection();
     }
 
     prevPhaseRef.current = phase;
-  }, [lockedTargetId, phase]);
+  }, [phase, clearSelection]);
+
+  // 2. useEffect đồng bộ target từ server (chạy sau để override/khôi phục state)
+  useEffect(() => {
+    if (phase !== "night") return;
+    if (guardianProtectedTargetId) {
+      setSelectedPlayerId(guardianProtectedTargetId);
+      setLockedTargetId(guardianProtectedTargetId);
+      setShowConfirm(false);
+    } else {
+      clearSelection();
+    }
+  }, [guardianProtectedTargetId, guardianProtectedSeq, phase, clearSelection, setSelectedPlayerId, setLockedTargetId, setShowConfirm]);
 
   const canAct = useMemo(() => {
     if (roomId === "mock-8") return role === "Bảo vệ" && phase === "night";
@@ -93,38 +108,33 @@ export function useGuardianRole({
     }
 
     if (roomId === "mock-8") {
-      setSelectedPlayerId(playerId);
-      setShowConfirm(true);
+      selectTarget(playerId);
       return true;
     }
 
     // Không bảo vệ cùng người 2 đêm liên tiếp (UX: báo không thể chọn, không mở confirm)
     if (lastProtectedPrevNight && playerId === lastProtectedPrevNight) {
-      alert("Không thể bảo vệ cùng người hai đêm liên tiếp!");
+      setInfoMessage("Không thể bảo vệ cùng người hai đêm liên tiếp!");
       return true;
     }
 
-    setSelectedPlayerId(playerId);
-    setShowConfirm(true);
+    selectTarget(playerId);
     return true;
-  }, [canAct, lastProtectedPrevNight, lockedTargetId, roomId]);
+  }, [canAct, lastProtectedPrevNight, lockedTargetId, roomId, selectTarget]);
 
   const confirm = useCallback(() => {
     if (!canAct) return;
     if (!roomId || !selectedPlayerId) return;
 
     // lock ngay khi đã bấm xác nhận
-    setLockedTargetId(selectedPlayerId);
-    setShowConfirm(false);
+    lockSelection(selectedPlayerId);
     if (roomId === "mock-8") return;
     socket.emit("guardianProtect", { roomId, targetId: selectedPlayerId });
-  }, [canAct, roomId, selectedPlayerId]);
+  }, [canAct, roomId, selectedPlayerId, lockSelection]);
 
   const resetOnPhaseChange = useCallback((_nextPhase: GamePhase) => {
-    setSelectedPlayerId(null);
-    setShowConfirm(false);
-    setLockedTargetId(null);
-  }, []);
+    clearSelection();
+  }, [clearSelection]);
 
   const confirmMessage =
     selectedPlayerId && selectedPlayerId === clientId
@@ -132,13 +142,23 @@ export function useGuardianRole({
       : "Bạn có chắc muốn bảo vệ người này không?";
 
   const modal = (
-    <ConfirmModal
-      open={showConfirm && !!selectedPlayerId}
-      title="Xác nhận bảo vệ"
-      message={confirmMessage}
-      onConfirm={confirm}
-      onCancel={() => setShowConfirm(false)}
-    />
+    <>
+      <ConfirmModal
+        open={showConfirm && !!selectedPlayerId}
+        title="Xác nhận bảo vệ"
+        message={confirmMessage}
+        onConfirm={confirm}
+        onCancel={cancelSelection}
+      />
+      <ConfirmModal
+        open={!!infoMessage}
+        title="Thông báo"
+        message={infoMessage || ""}
+        infoOnly
+        onConfirm={() => setInfoMessage(null)}
+        onCancel={() => setInfoMessage(null)}
+      />
+    </>
   );
 
   return {

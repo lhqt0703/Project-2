@@ -1,5 +1,6 @@
 import express from "express";
 import { createServer } from "http";
+import { exec } from "child_process";
 import { Server } from "socket.io";
 import type { Room } from "./serverTypes.js";
 import { setServerContext } from "./serverContext.js";
@@ -12,6 +13,19 @@ import { registerSocketHandlers } from "./socketHandlers.js";
 
 const app = express();
 const httpServer = createServer(app);
+
+// ponytail: Simple git pull webhook for auto-deployment
+app.post("/deploy", (req, res) => {
+  exec("git pull", (error, stdout, stderr) => {
+    if (error) {
+      console.error(`Deploy error: ${error.message}`);
+      res.status(500).send(`Update failed: ${error.message}`);
+      return;
+    }
+    console.log(`Deploy success:\n${stdout}`);
+    res.send("Updated");
+  });
+});
 
 const io = new Server(httpServer, {
   cors: { origin: "*" },

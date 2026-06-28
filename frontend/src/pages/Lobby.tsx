@@ -19,7 +19,7 @@ const ALLOWED_CREATOR_IDS = [
 export default function Lobby() {
   const nav = useNavigate();
   const realName = VIP_REAL_NAMES[clientId];
-  const greeting = realName ? `Chào ${realName}` : "Chào Huy Hà";
+  const greeting = realName ? `Chào ${realName}` : "Chào bạn mới";
   const [name, setName] = useState(() => localStorage.getItem(PLAYER_NAME_STORAGE_KEY) || "");
   const [roomIdInput, setRoomIdInput] = useState("");
   const [showAvatarModal, setShowAvatarModal] = useState(false);

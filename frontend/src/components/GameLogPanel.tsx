@@ -2122,7 +2122,7 @@ function SoiMuCollapsedGroup({
             position: "absolute",
             left: 10, // Căn giữa thẳng hàng với các nhánh ngang (24px paddingLeft - 14px left = 10px)
             top: -4,  // Bắt đầu ngay dưới avatar tiêu đề
-            bottom: 14, // Kết thúc chính xác tại điểm rẽ ngang của nút toggle (tâm nút toggle)
+            bottom: 17, // Kết thúc chính xác tại điểm rẽ ngang của nút toggle (tâm nút toggle)
             width: 2,
             background: "rgb(162, 155, 254)",
             pointerEvents: "none",
@@ -2155,7 +2155,7 @@ function SoiMuCollapsedGroup({
                         left: 10,
                         top: -12,
                         width: 10,
-                        height: 26,
+                        height: 30,
                         borderLeft: "2px solid rgb(162, 155, 254)",
                         borderBottom: "2px solid rgb(162, 155, 254)",
                         borderBottomLeftRadius: 6
@@ -2203,7 +2203,7 @@ function SoiMuCollapsedGroup({
                 left: 10,
                 top: 0,
                 width: 10,
-                height: 14,
+                height: 16,
                 borderLeft: "2px solid rgb(162, 155, 254)",
                 borderBottom: "2px solid rgb(162, 155, 254)",
                 borderBottomLeftRadius: 6
@@ -2211,7 +2211,7 @@ function SoiMuCollapsedGroup({
             />
           </div>
 
-          <button
+          <div
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="soi-mu-thread-toggle-btn"
             style={{
@@ -2233,7 +2233,7 @@ function SoiMuCollapsedGroup({
             }}
           >
             {isCollapsed ? `Xem tất cả ${entries.length} lựa chọn ∨` : `Thu gọn lựa chọn ∧`}
-          </button>
+          </div>
         </div>
       </div>
     </div>

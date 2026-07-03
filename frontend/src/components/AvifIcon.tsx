@@ -35,8 +35,10 @@ import scissorsIcon from "../assets/icon/scissors_2702-fe0f.avif";
 import trophyIcon from "../assets/icon/trophy_1f3c6.avif";
 import sparklesIcon from "../assets/icon/Lấp lánh.avif";
 import skullCrossbonesIcon from "../assets/icon/skull-and-crossbones_2620-fe0f.avif";
+import disconnectedIcon from "../assets/disconnected.svg";
 
 export const iconMap: Record<string, string> = {
+  "⛓️💥": disconnectedIcon,
   "🩸": dropOfBloodIcon,
   "🌞": sunWithFaceIcon,
   "🐺": wolfIcon,

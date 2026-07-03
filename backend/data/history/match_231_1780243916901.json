@@ -25,7 +25,7 @@
       "role": "Thần tình yêu"
     },
     {
-      "id": "client_1780242307126_pmozg54dmra",
+      "id": "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
       "name": "Ngã Cây",
       "role": "Thiên Sứ"
     },
@@ -72,7 +72,7 @@
       "y": 0.792
     },
     {
-      "playerId": "client_1780242307126_pmozg54dmra",
+      "playerId": "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
       "x": 0.601,
       "y": 0.242
     },
@@ -151,7 +151,7 @@
           "046fa88a-a719-47c3-8b97-ddfc8337cf83": "8dfc1d63-988f-460d-8569-8a1964be99a0",
           "f7d9652f-ac74-4557-81a2-7c2731a77d37": null,
           "397d9740-e21b-4ade-941f-25912aefd591": null,
-          "client_1780242307126_pmozg54dmra": null,
+          "d64474be-88b2-4f67-bf0d-310c3c9de7f5": null,
           "client_1780242348813_swid1tk0trh": "ec0c6c66-9ce7-4d86-ac12-25824af15b79",
           "8dfc1d63-988f-460d-8569-8a1964be99a0": "397d9740-e21b-4ade-941f-25912aefd591",
           "ec0c6c66-9ce7-4d86-ac12-25824af15b79": "397d9740-e21b-4ade-941f-25912aefd591",
@@ -181,7 +181,7 @@
           "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd"
         ],
         "dieVoterIds": [
-          "client_1780242307126_pmozg54dmra",
+          "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
           "8dfc1d63-988f-460d-8569-8a1964be99a0",
           "ec0c6c66-9ce7-4d86-ac12-25824af15b79",
           "96d71363-cee8-4a8e-824a-d4cdb6fd34ae"
@@ -254,7 +254,7 @@
           "046fa88a-a719-47c3-8b97-ddfc8337cf83": "8dfc1d63-988f-460d-8569-8a1964be99a0",
           "f7d9652f-ac74-4557-81a2-7c2731a77d37": "96d71363-cee8-4a8e-824a-d4cdb6fd34ae",
           "397d9740-e21b-4ade-941f-25912aefd591": "96d71363-cee8-4a8e-824a-d4cdb6fd34ae",
-          "client_1780242307126_pmozg54dmra": null,
+          "d64474be-88b2-4f67-bf0d-310c3c9de7f5": null,
           "8dfc1d63-988f-460d-8569-8a1964be99a0": "96d71363-cee8-4a8e-824a-d4cdb6fd34ae",
           "ec0c6c66-9ce7-4d86-ac12-25824af15b79": "96d71363-cee8-4a8e-824a-d4cdb6fd34ae",
           "96d71363-cee8-4a8e-824a-d4cdb6fd34ae": null,
@@ -279,7 +279,7 @@
         "liveVoterIds": [],
         "dieVoterIds": [
           "046fa88a-a719-47c3-8b97-ddfc8337cf83",
-          "client_1780242307126_pmozg54dmra",
+          "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
           "8dfc1d63-988f-460d-8569-8a1964be99a0",
           "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd"
         ]
@@ -299,7 +299,7 @@
           "type": "trial_verdict",
           "voterIds": [
             "046fa88a-a719-47c3-8b97-ddfc8337cf83",
-            "client_1780242307126_pmozg54dmra",
+            "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
             "8dfc1d63-988f-460d-8569-8a1964be99a0",
             "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd"
           ]
@@ -380,7 +380,7 @@
           "046fa88a-a719-47c3-8b97-ddfc8337cf83": "8dfc1d63-988f-460d-8569-8a1964be99a0",
           "f7d9652f-ac74-4557-81a2-7c2731a77d37": "046fa88a-a719-47c3-8b97-ddfc8337cf83",
           "397d9740-e21b-4ade-941f-25912aefd591": null,
-          "client_1780242307126_pmozg54dmra": "046fa88a-a719-47c3-8b97-ddfc8337cf83",
+          "d64474be-88b2-4f67-bf0d-310c3c9de7f5": "046fa88a-a719-47c3-8b97-ddfc8337cf83",
           "8dfc1d63-988f-460d-8569-8a1964be99a0": "046fa88a-a719-47c3-8b97-ddfc8337cf83",
           "ec0c6c66-9ce7-4d86-ac12-25824af15b79": "046fa88a-a719-47c3-8b97-ddfc8337cf83",
           "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd": "046fa88a-a719-47c3-8b97-ddfc8337cf83"
@@ -406,7 +406,7 @@
         ],
         "dieVoterIds": [
           "f7d9652f-ac74-4557-81a2-7c2731a77d37",
-          "client_1780242307126_pmozg54dmra",
+          "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
           "8dfc1d63-988f-460d-8569-8a1964be99a0",
           "ec0c6c66-9ce7-4d86-ac12-25824af15b79",
           "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd"
@@ -427,7 +427,7 @@
           "type": "trial_verdict",
           "voterIds": [
             "f7d9652f-ac74-4557-81a2-7c2731a77d37",
-            "client_1780242307126_pmozg54dmra",
+            "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
             "8dfc1d63-988f-460d-8569-8a1964be99a0",
             "ec0c6c66-9ce7-4d86-ac12-25824af15b79",
             "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd"
@@ -588,7 +588,7 @@
             "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd"
           ],
           "dieVoterIds": [
-            "client_1780242307126_pmozg54dmra",
+            "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
             "8dfc1d63-988f-460d-8569-8a1964be99a0",
             "ec0c6c66-9ce7-4d86-ac12-25824af15b79",
             "96d71363-cee8-4a8e-824a-d4cdb6fd34ae"
@@ -722,7 +722,7 @@
           "liveVoterIds": [],
           "dieVoterIds": [
             "046fa88a-a719-47c3-8b97-ddfc8337cf83",
-            "client_1780242307126_pmozg54dmra",
+            "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
             "8dfc1d63-988f-460d-8569-8a1964be99a0",
             "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd"
           ],
@@ -740,7 +740,7 @@
                 "type": "trial_verdict",
                 "voterIds": [
                   "046fa88a-a719-47c3-8b97-ddfc8337cf83",
-                  "client_1780242307126_pmozg54dmra",
+                  "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
                   "8dfc1d63-988f-460d-8569-8a1964be99a0",
                   "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd"
                 ]
@@ -843,7 +843,7 @@
               "targetId": "046fa88a-a719-47c3-8b97-ddfc8337cf83",
               "voterIds": [
                 "f7d9652f-ac74-4557-81a2-7c2731a77d37",
-                "client_1780242307126_pmozg54dmra",
+                "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
                 "8dfc1d63-988f-460d-8569-8a1964be99a0",
                 "ec0c6c66-9ce7-4d86-ac12-25824af15b79",
                 "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd"
@@ -873,7 +873,7 @@
           ],
           "dieVoterIds": [
             "f7d9652f-ac74-4557-81a2-7c2731a77d37",
-            "client_1780242307126_pmozg54dmra",
+            "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
             "8dfc1d63-988f-460d-8569-8a1964be99a0",
             "ec0c6c66-9ce7-4d86-ac12-25824af15b79",
             "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd"
@@ -899,7 +899,7 @@
                 "type": "trial_verdict",
                 "voterIds": [
                   "f7d9652f-ac74-4557-81a2-7c2731a77d37",
-                  "client_1780242307126_pmozg54dmra",
+                  "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
                   "8dfc1d63-988f-460d-8569-8a1964be99a0",
                   "ec0c6c66-9ce7-4d86-ac12-25824af15b79",
                   "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd"

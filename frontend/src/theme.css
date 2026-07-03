@@ -415,7 +415,7 @@ input {
   -webkit-user-drag: none;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 760px) {
   :root {
     --companion-right: 0px;
   }

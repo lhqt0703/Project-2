@@ -21,7 +21,7 @@ export function shootWinnerConfettiFromSides(winner?: string, loveState?: any) {
 
   if (isCupidWolfCouple) {
     const cupidOptions = {
-      particleCount: 1969,
+      particleCount: 1696,
       startVelocity: 152,
       ticks: 1000,
       colors: CặpĐôi,
@@ -62,7 +62,7 @@ export function shootWinnerConfettiFromSides(winner?: string, loveState?: any) {
   const isWolfWin = winner === "wolves" || winner === "demons";
   const colors = isWolfWin ? PheSói : PheDân;
   const spread = isWolfWin ? 1 : 68;
-  const particleCount = isWolfWin ? 186 : 86;
+  const particleCount = isWolfWin ? 68 : 26;
 
   const sharedOptions = {
     particleCount: particleCount,
@@ -71,7 +71,7 @@ export function shootWinnerConfettiFromSides(winner?: string, loveState?: any) {
     decay: 0.91,
     gravity: 0.92,
     scalar: 0.95,
-    ticks: 330,
+    ticks: 330, 
     colors: colors,
     //disableForReducedMotion: true, //vô hiệu hóa hiệu ứng nếu người dùng bật chế độ giảm chuyển động
     zIndex: 10000,
@@ -94,13 +94,13 @@ export function shootWinnerConfettiFromSides(winner?: string, loveState?: any) {
 
       if (isWolfWin) {
         confetti({
-          particleCount: 400,
-          spread: 68,
-          startVelocity: 52,
+          particleCount: 68, // số lượng confetti bắn ra
+          spread: 68, // độ túa ra của confetti
+          startVelocity: 52, // tốc độ ban đầu của confetti
           decay: 0.91,
           gravity: 1.92,
-          scalar: 0.95,
-          ticks: 430,
+          scalar: 0.95, // kích thước của confetti
+          ticks: 430, // thời gian tồn tại của confetti
           colors: PheSói,
           angle: 90,
           origin: { x: 0.5, y: 0 },

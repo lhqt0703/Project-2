@@ -10,6 +10,7 @@ import type { GamePhase } from "./gameRoles/socketEvents";
 import type { NightActionRole } from "../context/RoomContext";
 import { ELEMENTAL_ROLE_SET } from "../constants/elemental";
 import { useSeerRole } from "./gameRoles/useSeerRole";
+import { useChiefRole } from "./gameRoles/useChiefRole";
 import { useWolfRole } from "./gameRoles/useWolfRole";
 import { useGuardianRole } from "./gameRoles/useGuardianRole";
 import { useProtectorRole } from "./gameRoles/useProtectorRole";
@@ -75,17 +76,17 @@ const ROLE_SKILL_HINTS: Record<string, string> = {
   "Hộ nhân": "Chọn một người mà bạn muốn trao hộ thân giúp chặn mọi hiệu ứng gây chết cho họ trong một lần hoặc không hành động gì để bỏ qua",
   "Phù thủy": "Hãy lựa chọn cẩn thận hoặc không hành động gì để bỏ qua",
   "Thợ săn": "Chọn một mục tiêu để ghim hoặc không hành động gì để bỏ qua. Nếu bạn bị giết, mục tiêu sẽ bị giết theo",
-  "Sói": "chọn một người để cắn và hãy nhớ cẩn trọng đến việc thống nhất lựa chọn với những sói khác",
-  "Sói con": "chọn một người để cắn và hãy cẩn trọng đến việc thống nhất lựa chọn với những sói khác",
-  "Sói Dại": "chọn một người để cắn và hãy cẩn trọng đến việc thống nhất lựa chọn với những sói khác",
+  "Sói": "Chọn một người để cắn và hãy nhớ cẩn trọng đến việc thống nhất lựa chọn với những sói khác",
+  "Sói con": "Chọn một người để cắn và hãy cẩn trọng đến việc thống nhất lựa chọn với những sói khác",
+  "Sói Dại": "Chọn một người để cắn và hãy cẩn trọng đến việc thống nhất lựa chọn với những sói khác",
   "Bán sói": "Bạn không cần hành động đêm khi chưa bị cắn và sẽ trở thành phe sói nếu đã bị cắn",
   "Tay Buôn": "Chọn một món đồ và dạng khóa để gửi cho người mà bạn muốn hoặc không hành động gì để bỏ qua",
   "Kẻ bị nguyền": "Chọn một người mà bạn muốn ngửi xem liệu người đó và 2 người bên cạnh liệu có sói hay không",
   "Linh sói": " ",
   "Thần tình yêu": "Chọn một người mà bạn muốn ghép đôi bản thân với họ",
-  "Thiên Sứ": "Hãy quan sát kỹ mọi người, khi bạn bị giết, bạn sẽ có thể âm thầm hồi sinh một người đã chết mà bạn đặt niềm tin ở họ",
+  "Thiên Sứ": "Hãy quan sát kỹ mọi người, khi trời sáng, vào giây phút bạn bị giết, bạn sẽ có thể âm thầm hồi sinh một người đã chết mà bạn đặt niềm tin ở họ",
   "Dân làng": "Bạn không cần hành động đêm",
-  "Trưởng làng": "Bạn không cần hành động đêm"
+  "Trưởng làng": "Bạn không cần hành động đêm. Vào lần đầu tiên bạn bị biểu quyết chết bạn sẽ lộ diện thân phận và sống tiếp, nhưng cũng hãy cẩn thận vì dù bạn có lộ diện thân phận hay không thì sói vẫn có thể cắn bạn, khi đó bạn sẽ thấy một ánh sáng đỏ lóe lên và lúc này bạn sẽ còn cầm cự được sức lực thêm một đêm nữa thôi. Khi trời sáng, hãy cố thông báo cho mọi người biết nếu cần thiết",
 };
 
 export default function GameDaNghich() {
@@ -435,7 +436,9 @@ export default function GameDaNghich() {
           if (p.playerAvatar !== savedAvatar) {
             const isUnknownSaved = /^M unknownID \d+/i.test(savedAvatar);
             const isAssignedServer = (p.playerAvatar || "").includes("M-");
-            if (isUnknownSaved && isAssignedServer) {
+            const isPlayerOwnVip = !p.playerAvatar || p.playerAvatar.toLowerCase().includes(p.id.toLowerCase());
+            
+            if ((isUnknownSaved && isAssignedServer) || isPlayerOwnVip) {
               customAvatars[p.id] = p.playerAvatar;
               changed = true;
             } else {
@@ -1313,6 +1316,19 @@ export default function GameDaNghich() {
     nightActionNow: nightTurnNow,
     maxChecksTonight: seerMaxChecksTonight,
   });
+  const chief = useChiefRole({
+    roomId,
+    phase,
+    role,
+    deadPlayers: deadPlayersForNightActions,
+    chiefFoundProtectorId: sync.chiefFoundProtectorId,
+    chiefUsedTonight: sync.chiefUsedTonight,
+    allNightActionsSimultaneous,
+    currentNightTurnRole,
+    nightActionDeadline: mySimultaneousDeadline,
+    nightActionNow: nightTurnNow,
+    roles: room?.roles,
+  });
   const cursed = useCursedRole({
     roomId,
     phase,
@@ -1425,7 +1441,8 @@ export default function GameDaNghich() {
     loveState: sync.loveState,
     allNightActionsSimultaneous,
     currentNightTurnRole,
-    nightActionDeadline: allNightActionsSimultaneous ? mySimultaneousDeadline : nightTurnDeadline,
+    // ponytail: fallback to nightTurnDeadline when mySimultaneousDeadline is null for non-night active roles (e.g. Angel, Villager)
+    nightActionDeadline: allNightActionsSimultaneous ? (mySimultaneousDeadline ?? nightTurnDeadline) : nightTurnDeadline,
     nightActionNow: nightTurnNow,
     doesNightTurnMatchMyRole,
   });
@@ -1507,19 +1524,62 @@ export default function GameDaNghich() {
   const renderSkillHint = () => {
     if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions || !isNightInfoVisible) return null;
     
+    // Tính toán trực tiếp escape state để tránh lỗi cache của Vite
+    const lovePartnerId = sync.loveState.partnerId;
+    const loveHasVotedEscape = !!clientId && sync.loveState.escapeVotes.includes(clientId);
+    const lovePartnerRequestedEscape = !!lovePartnerId && sync.loveState.escapeVotes.includes(lovePartnerId);
+
     let hintText = "";
     if (role === "Thần tình yêu") {
       if (!love.targetId) {
         hintText = "Hãy chọn một người mà bạn muốn ghép đôi bản thân với họ";
       } else {
-        if (love.canUseEscape) {
-          hintText = "Bạn có thể gửi tín hiệu muốn ra khỏi làng cho nửa kia và nếu cả hai đều đồng ý thì cả bạn và người đó sẽ đều né được mọi sự kiện nhắm vào trong đêm, tuy nhiên điều này sẽ chỉ có thể thực hiện được một lần";
+        if (loveHasVotedEscape && lovePartnerRequestedEscape) {
+          hintText = "Đã cùng nhau rời khỏi làng, miễn nhiễm tất cả sự kiện nhắm vào đêm nay";
+        } else if (loveHasVotedEscape) {
+          hintText = "Đã gửi tín hiệu hãy rời khỏi làng đêm nay cho nửa kia. Hãy nhớ rằng hành động này chỉ có thể thực hiện thành công một lần";
+        } else if (lovePartnerRequestedEscape) {
+          hintText = "Nửa kia ra đang ra tín hiệu hãy rời khỏi làng đêm nay để né được mọi sự kiện nhắm vào cả hai, bạn có thể đồng ý hoặc không phản hồi để từ chối, hãy nhớ rằng việc đồng ý ra khỏi làng sẽ chỉ có thể thực hiện được một lần";
+        } else if (love.canUseEscape) {
+          hintText = "Bạn có thể gửi tín hiệu muốn ra khỏi làng cho nửa kia và nếu cả hai đều đồng ý thì cả bạn và họ sẽ đều né được mọi sự kiện nhắm vào trong đêm, tuy nhiên hành động này sẽ chỉ có thể thực hiện thành công một lần";
         } else {
           hintText = "Hãy cẩn trọng và cố gắng sống sót, vì nửa kia cũng như vì chính bản thân bạn";
         }
       }
+      if (isDebugMode) {
+        hintText += `<br><br><span style="color: #ffb703; font-size: 0.6rem;">[DEBUG] hasVotedEscape: ${loveHasVotedEscape}, partnerRequestedEscape: ${lovePartnerRequestedEscape}, votes: ${JSON.stringify(sync.loveState.escapeVotes)}, clientId: ${clientId}</span>`;
+      }
     } else {
       let baseHintText = ROLE_SKILL_HINTS[role] || "";
+      if (role === "Trưởng làng") {
+        const rules = room?.gameRules;
+        const hasProtectorInGame = room?.roles?.includes("Hộ nhân");
+        const knowsBite = rules?.villageChiefKnowsWolfBite === true;
+        const canFindProtector = rules?.villageChiefCanFindProtector && hasProtectorInGame;
+
+        const isBitten = sync.isChiefBitten || (room?.villageChiefDyingFramePlayerIds || []).includes(clientId || "");
+        if (knowsBite && isBitten) {
+          if (hasProtectorInGame) {
+            baseHintText = "Bạn đã bị sói cắn, bạn sẽ chỉ còn cầm cự được sức lực được đến đêm sau. Khi trời sáng, hãy cố thông báo cho mọi người biết nếu cần thiết, Hộ Nhân là người sẽ có khả năng có thể cứu bạn";
+          } else {
+            baseHintText = "Bạn đã bị sói cắn, bạn sẽ chỉ còn cầm cự được sức lực được đến đêm sau. Khi trời sáng, hãy cố thông báo cho mọi người biết nếu cần thiết";
+          }
+        } else {
+          const voteDeathPart = knowsBite
+            ? "Vào lần đầu tiên bạn bị biểu quyết chết bạn sẽ lộ diện thân phận và sống tiếp, nhưng cũng hãy cẩn thận vì dù bạn có lộ diện thân phận hay không thì sói vẫn có thể cắn bạn, khi đó bạn sẽ thấy một ánh sáng đỏ lóe lên và lúc này bạn sẽ còn cầm cự được sức lực thêm một đêm nữa thôi. Khi trời sáng, hãy cố thông báo cho mọi người biết nếu cần thiết"
+            : "Vào lần đầu tiên bạn bị biểu quyết chết bạn sẽ lộ diện thân phận và sống tiếp, nhưng cũng hãy cẩn thận vì dù bạn có lộ diện thân phận hay không thì sói vẫn có thể cắn bạn";
+
+          if (canFindProtector) {
+            if (sync.chiefFoundProtectorId) {
+              baseHintText = `Cố gắng sóng sót và bảo vệ Hộ nhân. Ngoài ra ${voteDeathPart.charAt(0).toLowerCase()}${voteDeathPart.slice(1)}`;
+            } else {
+              baseHintText = `Hãy cố gắng tìm lại được Hộ Nhân khi còn có thể. Ngoài ra ${voteDeathPart.charAt(0).toLowerCase()}${voteDeathPart.slice(1)}`;
+            }
+          } else {
+            baseHintText = `Bạn không cần hành động đêm. ${voteDeathPart}`;
+          }
+        }
+      }
       if (role === "Bán sói") {
         if (isBanSoiAligned || isWildWolfConverted) {
           baseHintText = ROLE_SKILL_HINTS["Sói"];
@@ -1548,11 +1608,22 @@ export default function GameDaNghich() {
       
       hintText = baseHintText;
       if (love.isPaired) {
-        if (love.canUseEscape) {
-          hintText = baseHintText + "<br><br>* Bạn có thể gửi tín hiệu muốn ra khỏi làng cho nửa kia và nếu cả hai đều đồng ý thì cả bạn và người đó sẽ đều né được mọi sự kiện nhắm vào trong đêm, tuy nhiên điều này sẽ chỉ có thể thực hiện được một lần";
+        let escapeText = "";
+        if (loveHasVotedEscape && lovePartnerRequestedEscape) {
+          escapeText = "Đã cùng nhau rời khỏi làng, miễn nhiễm tất cả sự kiện nhắm vào đêm nay";
+        } else if (loveHasVotedEscape) {
+          escapeText = "Đã gửi tín hiệu hãy rời khỏi làng đêm nay cho nửa kia. Hãy nhớ rằng hành động này chỉ có thể thực hiện thành công một lần";
+        } else if (lovePartnerRequestedEscape) {
+          escapeText = "Nửa kia ra đang ra tín hiệu hãy rời khỏi làng đêm nay để né được mọi sự kiện nhắm vào cả hai, bạn có thể đồng ý hoặc không phản hồi để từ chối, hãy nhớ rằng việc đồng ý ra khỏi làng sẽ chỉ có thể thực hiện được một lần";
+        } else if (love.canUseEscape) {
+          escapeText = "Bạn có thể gửi tín hiệu muốn ra khỏi làng cho nửa kia và nếu cả hai đều đồng ý thì cả bạn và họ sẽ đều né được mọi sự kiện nhắm vào trong đêm, tuy nhiên hành động này sẽ chỉ có thể thực hiện thành công một lần";
         } else {
-          hintText = baseHintText + "<br><br>* Hãy cẩn trọng và cố gắng sống sót, vì nửa kia cũng như vì chính bản thân bạn";
+          escapeText = "Hãy cẩn trọng và cố gắng sống sót, vì nửa kia cũng như vì chính bản thân bạn";
         }
+        hintText = baseHintText + "<br><br>* " + escapeText;
+      }
+      if (isDebugMode) {
+        hintText += `<br><br><span style="color: #ffb703; font-size: 0.6rem;">[DEBUG] isPaired: ${love.isPaired}, hasVotedEscape: ${loveHasVotedEscape}, partnerRequestedEscape: ${lovePartnerRequestedEscape}, votes: ${JSON.stringify(sync.loveState.escapeVotes)}, clientId: ${clientId}</span>`;
       }
     }
     
@@ -1570,10 +1641,15 @@ export default function GameDaNghich() {
       (role === "Linh sói" && !room?.spiritWolfWolfAligned) ||
       !!loveHybridBackgroundAsset;
 
+    const isLovePink = (role === "Thần tình yêu" || love.isPaired) && (loveHasVotedEscape || lovePartnerRequestedEscape);
+
     let borderStyle = "1px solid rgba(85, 99, 247, 0.22)";
     let backgroundStyle = "rgba(14, 18, 38, 0.65)";
 
-    if (isHybrid) {
+    if (isLovePink) {
+      borderStyle = "1px solid rgba(255, 113, 200, 0.42)";
+      backgroundStyle = "rgba(255, 113, 200, 0.18)";
+    } else if (isHybrid) {
       borderStyle = "1px solid transparent";
       backgroundStyle = "linear-gradient(rgba(18, 14, 38, 0.65), rgba(18, 14, 38, 0.65)) padding-box, linear-gradient(135deg, rgba(85, 99, 247, 0.22), rgba(247, 85, 85, 0.22)) border-box";
     } else if (isWolf) {
@@ -1947,6 +2023,7 @@ export default function GameDaNghich() {
     if (love.onPlayerClick(playerId)) return;
     if (merchant.onPlayerClick(playerId)) return;
     if (cursed.onPlayerClick(playerId)) return;
+    if (chief.onPlayerClick(playerId)) return;
     if (seer.onPlayerClick(playerId)) return;
     if (wolf.onPlayerClick(playerId)) return;
     if (guardian.onPlayerClick(playerId)) return;
@@ -1957,7 +2034,7 @@ export default function GameDaNghich() {
   };
 
   const handlePlayerDoubleClick = (playerId: string) => {
-    if (!isHost) return;
+    if (!isHost || roomForDisplay?.isReplay) return;
     if (!roomId) return;
     if (sync.gameEnded) return;
     setHostPlayerActionTargetId(playerId);
@@ -2505,13 +2582,18 @@ export default function GameDaNghich() {
                 cursedHighlightIsDanger={cursed.playerPositionsProps.cursedHighlightIsDanger}
                 verdictLivePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.secondaryIds}
                 verdictDiePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.dangerIds}
-                showRoleBadges={!!roleBadgesForDisplay}
-                roleBadges={roleBadgesForDisplay}
+                 showRoleBadges={!!roleBadgesForDisplay}
+                 roleBadges={roleBadgesForDisplay}
+                  loveState={sync.loveState}
+                  revealedRoles={sync.revealedRolesByPlayerId}
+                  rolesBeforeConversion={sync.rolesBeforeConversion}
+                  chiefFoundProtectorId={sync.chiefFoundProtectorId}
                 activeNightRole={isHost && isSequentialNight ? currentNightTurnRole : null}
                 suppressNightActionProgress={autoTrialHighlightSuppressed}
                 selectedOutlinePlayerId={
                   (phase !== "night" || isNightInfoVisible) ? (
                     dayVote.playerPositionsProps.selectedOutlinePlayerId ||
+                    chief.playerPositionsProps.selectedOutlinePlayerId ||
                     guardian.playerPositionsProps.selectedOutlinePlayerId ||
                     protector.playerPositionsProps.selectedOutlinePlayerId ||
                     merchant.playerPositionsProps.selectedOutlinePlayerId ||
@@ -2657,6 +2739,7 @@ export default function GameDaNghich() {
       })()}
 
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && seer.modal}
+      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && chief.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && cursed.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && merchant.modal}
       {!sync.gameEnded && canShowConfirmModals && angel.modal}
@@ -2689,7 +2772,7 @@ export default function GameDaNghich() {
       {!sync.gameEnded && angel.panel}
 
       {/* Game controls */}
-      {canShowGameControls && (
+      {canShowGameControls && !roomForDisplay?.isReplay && (
         <div className="game-host-controls">
           {isHost && (
             <button

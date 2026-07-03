@@ -2,6 +2,12 @@
 <html lang="vi">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // ponytail: force redirect from http to https to prevent clientId changes and same-origin localstorage split
+      if (window.location.protocol === "http:" && window.location.hostname !== "localhost" && !window.location.hostname.startsWith("127.")) {
+        window.location.href = "https://" + window.location.hostname + window.location.pathname + window.location.search + window.location.hash;
+      }
+    </script>
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Gummy Bears Force</title>

@@ -5,7 +5,7 @@ import { useRoomContext } from "../context/RoomContext";
 import PlayerPositions, { AVA_IMAGES, getAvatarUrlByFileName } from "../components/PlayerPositions";
 import GameLogPanel from "../components/GameLogPanel";
 import ConfirmModal from "../components/ConfirmModal";
-import RoleCharacterPortrait, { HYBRID_BACKGROUND_ASSET } from "../components/RoleCharacterPortrait";
+import RoleCharacterPortrait from "../components/RoleCharacterPortrait";
 import type { GamePhase } from "./gameRoles/socketEvents";
 import type { NightActionRole } from "../context/RoomContext";
 import { ELEMENTAL_ROLE_SET } from "../constants/elemental";
@@ -55,6 +55,16 @@ const DIET_QUY_DIET_QUY_ROLE_SKILL_HINTS: Record<string, string> = {
   "Người ẩn dật": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu",
   "Thánh nhân": "Hãy ngủ yên và chờ đợi ngày mới bắt đầu"
 };
+
+const NIGHT_ACTION_ROLE_SET = new Set([
+  "Độc thủ",
+  "Gián điệp",
+  "Phò",
+  "Ác Quỷ",
+  "Thầy bói",
+  "Nhà sư",
+  "Nuôi quạ"
+]);
 
 const renderInfoCard = (text: string) => (
   <div 
@@ -433,7 +443,9 @@ export default function GameDietQuy() {
           if (p.playerAvatar !== savedAvatar) {
             const isUnknownSaved = /^M unknownID \d+/i.test(savedAvatar);
             const isAssignedServer = (p.playerAvatar || "").includes("M-");
-            if (isUnknownSaved && isAssignedServer) {
+            const isPlayerOwnVip = !p.playerAvatar || p.playerAvatar.toLowerCase().includes(p.id.toLowerCase());
+            
+            if ((isUnknownSaved && isAssignedServer) || isPlayerOwnVip) {
               customAvatars[p.id] = p.playerAvatar;
               changed = true;
             } else {
@@ -705,7 +717,7 @@ export default function GameDietQuy() {
   }, [clearVerdictHighlight, sync.gameLogNights]);
 
   const canViewLog = room?.isReplay === true || (!isDusk && (isHost || phase === "day" || !!sync.gameEnded));
-  const canViewRoles = isHost || !!sync.gameEnded;
+  // const canViewRoles = isHost || !!sync.gameEnded;
 
   useEffect(() => {
     if (phase !== "night") return;
@@ -841,11 +853,11 @@ export default function GameDietQuy() {
     sync.wolfDeadline,
   ]);
 
-  const isSeerTurnActive = useMemo(() => {
-    if (phase !== "night") return false;
-    if (allNightActionsSimultaneous) return true;
-    return currentNightTurnRole === "Tiên tri";
-  }, [allNightActionsSimultaneous, currentNightTurnRole, phase]);
+  // const isSeerTurnActive = useMemo(() => {
+  //   if (phase !== "night") return false;
+  //   if (allNightActionsSimultaneous) return true;
+  //   return currentNightTurnRole === "Tiên tri";
+  // }, [allNightActionsSimultaneous, currentNightTurnRole, phase]);
 
   const doesNightTurnMatchMyRole = useMemo(() => {
     if (!currentNightTurnRole) return false;
@@ -1291,12 +1303,12 @@ export default function GameDietQuy() {
     phase === "day" && shouldRevealHunterShotInDay && hunterBulletAnim?.kind === "hunter";
   const canShowConfirmModals = !shouldDelayConfirmModals;
 
-  const seerMaxChecksTonight = useMemo(() => {
-    const buff = sync.elementalBuffResult;
-    if (!buff || buff.buffId !== "seer-check-two") return 1;
-    if (buff.appliesNight !== room?.nightCount) return 1;
-    return 2;
-  }, [sync.elementalBuffResult, room?.nightCount]);
+  // const seerMaxChecksTonight = useMemo(() => {
+  //   const buff = sync.elementalBuffResult;
+  //   if (!buff || buff.buffId !== "seer-check-two") return 1;
+  //   if (buff.appliesNight !== room?.nightCount) return 1;
+  //   return 2;
+  // }, [sync.elementalBuffResult, room?.nightCount]);
 
   const [dietQuyNightStartPlayerId, setDietQuyNightStartPlayerId] = useState<string | null>(null);
   const [selectedDirection, setSelectedDirection] = useState<"clockwise" | "counter_clockwise" | null>(null);
@@ -1338,7 +1350,7 @@ export default function GameDietQuy() {
     dayRemainingMs: room?.dayRemainingMs ?? sync.dayRemainingMs,
   });
 
-  const dietQuy = useDietQuyRole({ roomId, phase, role, room, deadPlayers });
+  const dietQuy = useDietQuyRole({ roomId, phase, role, room: room as any, deadPlayers: deadPlayersForNightActions });
 
   const confirmSlayerAction = () => {
     if (!roomId || !slayerTargetId) return;
@@ -1353,48 +1365,26 @@ export default function GameDietQuy() {
     if (role === "Phù thủy") return true;
     if (role === "Tay Buôn") return true;
     if (ELEMENTAL_ROLE_SET.has(role) && sync.elementalActionMode === "buff" && (allNightActionsSimultaneous || currentNightTurnRole === role)) return true;
-    if (role === "Thần tình yêu") {
-      return !!love.targetId;
-    }
     return false;
-  }, [phase, role, isCurrentPlayerDeadForNightActions, sync.elementalActionMode, allNightActionsSimultaneous, currentNightTurnRole, loveActionPlacement, love.targetId]);
+  }, [phase, role, isCurrentPlayerDeadForNightActions, sync.elementalActionMode, allNightActionsSimultaneous, currentNightTurnRole]);
 
   const renderSkillHint = () => {
     if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions || !isNightInfoVisible) return null;
     
     let hintText = "";
-    if (role === "Thần tình yêu") {
-      if (!love.targetId) {
-        hintText = "Hãy chọn một người mà bạn muốn ghép đôi bản thân với họ";
+    let baseHintText = DIET_QUY_DIET_QUY_ROLE_SKILL_HINTS[role] || "";
+    if (role === "Bán sói") {
+      if (isBanSoiAligned || isWildWolfConverted) {
+        baseHintText = DIET_QUY_DIET_QUY_ROLE_SKILL_HINTS["Sói"] || "";
       } else {
-        if (love.canUseEscape) {
-          hintText = "Bạn có thể gửi tín hiệu muốn ra khỏi làng cho nửa kia và nếu cả hai đều đồng ý thì cả bạn và người đó sẽ đều né được mọi sự kiện nhắm vào trong đêm, tuy nhiên điều này sẽ chỉ có thể thực hiện được một lần";
-        } else {
-          hintText = "Hãy cẩn trọng và cố gắng sống sót, vì nửa kia cũng như vì chính bản thân bạn";
-        }
-      }
-    } else {
-      let baseHintText = DIET_QUY_ROLE_SKILL_HINTS[role] || "";
-      if (role === "Bán sói") {
-        if (isBanSoiAligned || isWildWolfConverted) {
-          baseHintText = DIET_QUY_ROLE_SKILL_HINTS["Sói"];
-        } else {
-          baseHintText = "Bạn hiện vẫn là một dân làng nên chưa có khả năng thực hiện hành động đêm. Nhưng hãy cẩn thận vì nếu bạn bị sói tấn công thì dòng máu sói của bạn sẽ trỗi dậy";
-        }
-      }
-      if (!baseHintText && ELEMENTAL_ROLE_SET.has(role)) {
-        baseHintText = "Chọn một người mà bạn nghĩ họ cũng là dân làng nắm giữ nguyên tố";
-      }
-      
-      hintText = baseHintText;
-      if (love.isPaired) {
-        if (love.canUseEscape) {
-          hintText = baseHintText + "<br><br>* Bạn có thể gửi tín hiệu muốn ra khỏi làng cho nửa kia và nếu cả hai đều đồng ý thì cả bạn và người đó sẽ đều né được mọi sự kiện nhắm vào trong đêm, tuy nhiên điều này sẽ chỉ có thể thực hiện được một lần";
-        } else {
-          hintText = baseHintText + "<br><br>* Hãy cẩn trọng và cố gắng sống sót, vì nửa kia cũng như vì chính bản thân bạn";
-        }
+        baseHintText = "Bạn hiện vẫn là một dân làng nên chưa có khả năng thực hiện hành động đêm. Nhưng hãy cẩn thận vì nếu bạn bị sói tấn công thì dòng máu sói của bạn sẽ trỗi dậy";
       }
     }
+    if (!baseHintText && ELEMENTAL_ROLE_SET.has(role)) {
+      baseHintText = "Chọn một người mà bạn nghĩ họ cũng là dân làng nắm giữ nguyên tố";
+    }
+    
+    hintText = baseHintText;
     
     if (!hintText) return null;
 
@@ -1767,7 +1757,7 @@ export default function GameDietQuy() {
   };
 
   const handlePlayerDoubleClick = (playerId: string) => {
-    if (!isHost) return;
+    if (!isHost || roomForDisplay?.isReplay) return;
     if (!roomId) return;
     if (sync.gameEnded) return;
     setHostPlayerActionTargetId(playerId);
@@ -1859,10 +1849,10 @@ export default function GameDietQuy() {
     }
   }, [role, shouldRevealMyRole]);
   const shouldShowRolePortrait = shouldRevealMyRole;
-  const loveHybridBackgroundAsset =
-    clientId && sync.loveState.targetWolfAligned && sync.loveState.pairIds.includes(clientId)
-      ? HYBRID_BACKGROUND_ASSET
-      : null;
+  // const loveHybridBackgroundAsset =
+  //   clientId && sync.loveState.targetWolfAligned && sync.loveState.pairIds.includes(clientId)
+  //     ? HYBRID_BACKGROUND_ASSET
+  //     : null;
   const visiblePlayerCount = (roomForDisplay?.players || []).filter((p: any) => p.id !== roomForDisplay?.hostId).length;
   const playerFrameHeightPx = visiblePlayerCount > 18 ? 570 : 470;
   const rolePortraitAvifImagesForGame = useMemo(
@@ -2686,7 +2676,7 @@ export default function GameDietQuy() {
       {!sync.gameEnded && dietQuy.panel}
 
       {/* Game controls */}
-      {canShowGameControls && (
+      {canShowGameControls && !roomForDisplay?.isReplay && (
         <div className="game-host-controls">
           
           {isHost && (

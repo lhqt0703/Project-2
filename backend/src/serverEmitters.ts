@@ -134,6 +134,10 @@ export function toPublicRoom(room: Room) {
     angelReviveRecordsByAngelId: _angelReviveRecordsByAngelId,
     angelHiddenRevivedPlayerIds: _angelHiddenRevivedPlayerIds,
     angelOutcomeLoggedPlayerIds: _angelOutcomeLoggedPlayerIds,
+    chiefFoundProtectorId: _chiefFoundProtectorId,
+    chiefChecks: _chiefChecks,
+    chiefUsedTonight: _chiefUsedTonight,
+    rolesBeforeConversion: _rolesBeforeConversion,
     ...rest
   } = room;
 
@@ -567,6 +571,7 @@ export function emitRolesRevealToSocket(roomId: string, socketId: string) {
   ctx.io.to(socketId).emit("rolesRevealUpdated", {
     roomId,
     rolesByPlayerId: room.playerRoles || {},
+    rolesBeforeConversion: room.rolesBeforeConversion || {},
   } satisfies RolesRevealPayload);
 }
 
@@ -745,6 +750,7 @@ export function syncPrivateRoleStateForSocket(
     socket.emit("wolvesListSync", {
       wolves: wolves.map((w) => w.id),
       wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
+      rolesBeforeConversion: room.rolesBeforeConversion || {},
     });
     if (room.gameMode === "diet_quy") {
       socket.emit("wolfPhaseStarted", {
@@ -755,6 +761,7 @@ export function syncPrivateRoleStateForSocket(
         resetVotes: false,
         biteDisabled: true,
         wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
+        rolesBeforeConversion: room.rolesBeforeConversion || {},
         wildWolfConvertAvailable: false,
         wildWolfConvertRequested: false,
       });
@@ -767,6 +774,7 @@ export function syncPrivateRoleStateForSocket(
         resetVotes: false,
         biteDisabled: true,
         wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
+        rolesBeforeConversion: room.rolesBeforeConversion || {},
         wildWolfConvertAvailable: false,
         wildWolfConvertRequested: false,
       });
@@ -780,6 +788,7 @@ export function syncPrivateRoleStateForSocket(
         maxTargets: room.wolfBonusBiteThisNight ? 2 : 1,
         resetVotes: false,
         wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
+        rolesBeforeConversion: room.rolesBeforeConversion || {},
         wildWolfConvertAvailable: room.wildWolfConvertAvailableTonight === true,
         wildWolfConvertRequested: room.wildWolfConvertRequestedTonight === true,
       });
@@ -818,10 +827,31 @@ export function syncPrivateRoleStateForSocket(
     socket.emit("seerResults", results);
   }
 
+  if (role === "Trưởng làng") {
+    emitChiefPrivateState(roomId, playerId);
+    socket.emit("chiefChecks", room.chiefChecks?.[playerId] || {});
+  }
+
   emitMerchantPrivateState(roomId, playerId);
   emitAngelPrivateState(ctx, roomId, room, playerId);
   socket.emit("merchantCheeseMarksUpdated", {
     playerIds: isWolfAlignedPlayer(room, playerId) ? room.merchantCheeseMarkedPlayerIds || [] : [],
+  });
+}
+
+export function emitChiefPrivateState(roomId: string, chiefId: string) {
+  const ctx = getServerContext();
+  if (!ctx) return;
+  const room = ctx.rooms[roomId];
+  if (!room) return;
+
+  ctx.io.to(chiefId).emit("chiefState", {
+    chiefFoundProtectorId: room.chiefFoundProtectorId || null,
+    isChiefBitten: !!(
+      room.villageChiefPendingWolfDeath &&
+      !(room.deadPlayers || []).includes(room.villageChiefPendingWolfDeath.playerId)
+    ),
+    chiefUsedTonight: !!room.chiefUsedTonight?.[chiefId],
   });
 }
 

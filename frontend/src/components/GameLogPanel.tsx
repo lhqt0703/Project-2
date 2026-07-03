@@ -3136,7 +3136,6 @@ export default function GameLogPanel({
                     </label>
                   </div>
                 )}
-                {(isHost || !gameEnded) && (
                   <button
                     type="button"
                     onClick={() => selectMode("real-names")}
@@ -3154,8 +3153,6 @@ export default function GameLogPanel({
                   >
                     Chỉ hiện tên thật
                   </button>
-                )}
-                {(isHost || !gameEnded) && (
                   <button
                     type="button"
                     onClick={() => selectMode("nick-names")}
@@ -3173,8 +3170,7 @@ export default function GameLogPanel({
                   >
                     Chỉ hiện nghệ danh
                   </button>
-                )}
-                {(isHost || gameEnded) && (
+                {(isHost || gameEnded || isReplay) && (
                   <button
                     type="button"
                     onClick={() => selectMode("real-names-roles")}
@@ -3193,7 +3189,7 @@ export default function GameLogPanel({
                     Tên thật & vai trò
                   </button>
                 )}
-                {(isHost || gameEnded) && (
+                {(isHost || gameEnded || isReplay) && (
                   <button
                     type="button"
                     onClick={() => selectMode("nick-names-roles")}

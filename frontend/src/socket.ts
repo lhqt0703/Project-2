@@ -34,7 +34,17 @@ function getOrCreateClientId() {
   const devClientId = getDevClientIdOverride();
   if (devClientId) return devClientId;
 
-  const existing = window.localStorage.getItem(CLIENT_ID_STORAGE_KEY);
+  let existing = window.localStorage.getItem(CLIENT_ID_STORAGE_KEY);
+  
+  // ponytail: cookie fallback backup if localStorage is cleared by browser
+  if (!existing) {
+    const match = document.cookie.match(new RegExp('(^| )' + CLIENT_ID_STORAGE_KEY + '=([^;]+)'));
+    if (match) {
+      existing = match[2];
+      window.localStorage.setItem(CLIENT_ID_STORAGE_KEY, existing);
+    }
+  }
+  
   if (existing) return existing;
 
 
@@ -47,6 +57,8 @@ function getOrCreateClientId() {
       : `client_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
   window.localStorage.setItem(CLIENT_ID_STORAGE_KEY, nextId);
+  // ponytail: set secure long-lived cookie as client ID backup
+  document.cookie = `${CLIENT_ID_STORAGE_KEY}=${nextId}; max-age=${10 * 365 * 24 * 60 * 60}; path=/; SameSite=Lax; Secure`;
   return nextId;
 }
 

@@ -26,6 +26,7 @@ export type LoveStatePayload = {
   partnerId: string | null;
   pairIds: string[];
   rolesByPlayerId: Record<string, string>;
+  rolesBeforeConversion?: Record<string, string>;
   targetWolfAligned: boolean;
   escapeUsed: boolean;
   escapeActiveTonight: boolean;
@@ -76,6 +77,7 @@ export function buildLoveStateForPlayer(room: Room, playerId: string): LoveState
       partnerId: null,
       pairIds: [],
       rolesByPlayerId: {},
+      rolesBeforeConversion: {},
       targetWolfAligned: false,
       escapeUsed: false,
       escapeActiveTonight: false,
@@ -94,6 +96,7 @@ export function buildLoveStateForPlayer(room: Room, playerId: string): LoveState
     partnerId: pair[0] === playerId ? pair[1] : pair[0],
     pairIds: pair,
     rolesByPlayerId,
+    rolesBeforeConversion: room.rolesBeforeConversion || {},
     targetWolfAligned: room.loveTargetWolfAligned === true,
     escapeUsed: room.loveEscapeUsed === true,
     escapeActiveTonight: room.loveEscapeActiveTonight === true,

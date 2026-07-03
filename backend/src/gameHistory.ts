@@ -23,6 +23,8 @@ export function saveMatchHistory(room: Room) {
       players: room.players.map((p) => ({
         id: p.id,
         name: p.name,
+        playerRealName: p.playerRealName,
+        playerAvatar: p.playerAvatar,
         role: room.playerRoles?.[p.id] || "Dân làng",
       })),
       positions: room.positions || [],

@@ -26,7 +26,7 @@ export function useLoveRole({
   currentNightTurnRole,
   nightActionDeadline,
   nightActionNow,
-  doesNightTurnMatchMyRole,
+  doesNightTurnMatchMyRole: _doesNightTurnMatchMyRole,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -82,19 +82,10 @@ export function useLoveRole({
     if (phase !== "night") return false;
     if (!isPaired || !isMeAlive) return false;
     if (loveState.escapeUsed || loveState.escapeActiveTonight) return false;
-    if (allNightActionsSimultaneous && nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
-    if (
-      !allNightActionsSimultaneous &&
-      doesNightTurnMatchMyRole &&
-      nightActionDeadline &&
-      nightActionNow >= nightActionDeadline
-    ) {
-      return false;
-    }
+    // ponytail: simplified deadline check for both sequential and simultaneous night actions
+    if (nightActionDeadline && nightActionNow >= nightActionDeadline) return false;
     return true;
   }, [
-    allNightActionsSimultaneous,
-    doesNightTurnMatchMyRole,
     isMeAlive,
     isPaired,
     loveState.escapeActiveTonight,
@@ -219,5 +210,7 @@ export function useLoveRole({
     isPaired,
     canUseEscape,
     targetId: loveState.targetId,
+    hasVotedEscape,
+    partnerRequestedEscape,
   };
 }

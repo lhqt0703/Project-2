@@ -6,11 +6,11 @@ export function useMock8Test({
   room,
   deadPlayers,
   playHunterShotAnim,
-  setIsNightInfoVisible,
-  setCardFlippedToFront,
+  setIsNightInfoVisible: _setIsNightInfoVisible,
+  setCardFlippedToFront: _setCardFlippedToFront,
   debugAnim,
   roleOverride,
-  setRoleOverride,
+  setRoleOverride: _setRoleOverride,
 }: {
   roomId: string | null;
   room: any;

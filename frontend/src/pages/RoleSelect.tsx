@@ -107,7 +107,7 @@ const MiniToken = ({ playerId, players }: { playerId: string; players: PlayerInf
           "046fa88a-a719-47c3-8b97-ddfc8337cf83",
           "f7d9652f-ac74-4557-81a2-7c2731a77d37",
           "397d9740-e21b-4ade-941f-25912aefd591",
-          "client_1780242307126_pmozg54dmra",
+          "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
           "8dfc1d63-988f-460d-8569-8a1964be99a0",
           "ec0c6c66-9ce7-4d86-ac12-25824af15b79",
           "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd"

@@ -786,13 +786,6 @@ export const scannedIcons: ScannedIcon[] = [
     "codeSnippet": "<AvifIcon name=\"⭕\" style={{ width: \"100%\", height: \"100%\" }} />"
   },
   {
-    "emoji": "⌛",
-    "file": "components/PlayerPositions.tsx",
-    "line": 1727,
-    "usage": "Direct",
-    "codeSnippet": "⌛"
-  },
-  {
     "emoji": "🐺",
     "file": "components/PlayerPositions.tsx",
     "line": 1752,

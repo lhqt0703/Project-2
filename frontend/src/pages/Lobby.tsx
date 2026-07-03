@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { DEFAULT_ROOM_GAME_RULES } from "../context/RoomContext";
 import Aurora from "../components/Aurora";
 import ArrowLeft from "../assets/arrow-left.svg";
-import { AVA_IMAGES, getAvatarUrlByFileName } from "../components/PlayerPositions";
-import { AvifIcon } from "../components/AvifIcon";
+import UserIcon from "../assets/user.svg";
+import { getAvatarUrlByFileName } from "../components/PlayerPositions";
 import { VIP_REAL_NAMES } from "../constants/vip";
+import { AvatarSelectModal } from "../components/AvatarSelectModal";
 
 const PLAYER_NAME_STORAGE_KEY = "werewolfPlayerName";
 const ALLOWED_CREATOR_IDS = [
@@ -24,11 +25,6 @@ export default function Lobby() {
   const [roomIdInput, setRoomIdInput] = useState("");
   const [showAvatarModal, setShowAvatarModal] = useState(false);
   const [myAvatar, setMyAvatar] = useState(() => localStorage.getItem("werewolfPlayerAvatar") || "");
-
-  const myAvatars = Object.keys(AVA_IMAGES)
-    .map((path) => path.split("/").pop() || "")
-    .filter((fileName) => fileName.toLowerCase().includes(clientId.toLowerCase()))
-    .sort();
 
   const currentAvatarUrl = getAvatarUrlByFileName(myAvatar);
 
@@ -236,7 +232,8 @@ export default function Lobby() {
                 height: 60,
                 borderRadius: "50%",
                 border: "2px solid rgba(255, 255, 255, 0.2)",
-                background: currentAvatarUrl ? `url(${currentAvatarUrl})` : "rgba(255, 255, 255, 0.05)",
+                backgroundImage: currentAvatarUrl ? `url("${currentAvatarUrl}")` : undefined,
+                backgroundColor: currentAvatarUrl ? undefined : "rgba(255, 255, 255, 0.05)",
                 backgroundPosition: "center",
                 backgroundSize: "cover",
                 backgroundRepeat: "no-repeat",
@@ -260,7 +257,19 @@ export default function Lobby() {
               }}
               title="Đổi Avatar VIP"
             >
-              {!currentAvatarUrl && ""}
+              {!currentAvatarUrl && (
+                <img 
+                  src={UserIcon} 
+                  alt="User" 
+                  style={{ 
+                    width: "100%", 
+                    height: "100%", 
+                    objectFit: "contain",
+                    transform: "scale(1.2) translateY(10%)",
+                    opacity: 0.5
+                  }} 
+                />
+              )}
             </div>
           </div>
         </div>
@@ -327,143 +336,14 @@ export default function Lobby() {
           </section>
         </div>
       </div>
-      {showAvatarModal && (
-        <div style={{
-          position: "fixed",
-          inset: 0,
-          backgroundColor: "rgba(4, 6, 15, 0.8)",
-          backdropFilter: "blur(12px)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 9999,
-          padding: 16
-        }}>
-          <div className="lobby-card" style={{
-            width: "100%",
-            maxWidth: 480,
-            maxHeight: "85vh",
-            overflowY: "auto",
-            position: "relative",
-            animation: "modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <h2 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: "#ff8f42" }}>Chọn Avatar</h2>
-              <div 
-                onClick={() => setShowAvatarModal(false)}
-                style={{
-                  border: "none",
-                  background: "rgba(255, 255, 255, 0.05)",
-                  color: "#fff",
-                  width: 32,
-                  height: 32,
-                  borderRadius: "50%",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontWeight: "bold",
-                }}
-              >
-                ✕
-              </div>
-            </div>
-            
-
-            {myAvatars.length === 0 ? (
-              <div style={{
-                textAlign: "center",
-                padding: "32px 16px",
-                background: "rgba(255, 255, 255, 0.02)",
-                borderRadius: 16,
-                border: "1px dashed rgba(255, 255, 255, 0.1)",
-                color: "rgba(255,255,255,0.4)",
-                fontSize: 12,
-              }}>
-                <AvifIcon name="🔒" style={{ width: 37, height: 37, display: "block", margin: "0 auto 8px", opacity: 0.4 }} />
-                Bạn chưa được gán Avatar VIP nào trên hệ thống<br></br>Hãy liên hệ Quản Trò để biết thêm chi tiết
-              </div>
-            ) : (
-              <>
-                <p style={{ margin: "0 0 16px 0", fontSize: 14, color: "rgba(255,255,255,0.6)" }}>
-                  Dưới đây là các avatar VIP đã có của bạn
-                </p>
-                <div style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
-                  gap: 16,
-                  padding: 4
-                }}>
-                  {myAvatars.map((fileName) => {
-                    const url = getAvatarUrlByFileName(fileName);
-                    const isSelected = myAvatar === fileName;
-                    const isMFormat = fileName.includes("M-");
-                    let numberDisplay = "VIP";
-                    if (isMFormat && fileName.split(" ")[1]) {
-                      numberDisplay = `VIP #${fileName.split(" ")[1].split(".")[0].substring(2)}`;
-                    }
-                    return (
-                      <div 
-                        key={fileName}
-                        onClick={() => selectAvatar(fileName)}
-                        style={{
-                          position: "relative",
-                          aspectRatio: "1/1",
-                          borderRadius: 16,
-                          background: url ? `url(${url})` : "rgba(255,255,255,0.05)",
-                          backgroundPosition: "center",
-                          backgroundSize: "cover",
-                          backgroundRepeat: "no-repeat",
-                          cursor: "pointer",
-                          border: isSelected ? "3px solid #ff8f42" : "2px solid rgba(255,255,255,0.1)",
-                          boxShadow: isSelected ? "0 0 16px rgba(255, 143, 66, 0.4)" : "none",
-                          transition: "all 0.2s ease"
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isSelected) e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.4)";
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isSelected) e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.1)";
-                        }}
-                      >
-                        <div style={{
-                          position: "absolute",
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          padding: "4px 8px",
-                          background: "rgba(0,0,0,0.6)",
-                          backdropFilter: "blur(4px)",
-                          borderBottomLeftRadius: 12,
-                          borderBottomRightRadius: 12,
-                          fontSize: 11,
-                          textAlign: "center",
-                          color: isSelected ? "#ff8f42" : "#fff",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap"
-                        }}>
-                          {numberDisplay}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-
-            {myAvatar && (
-              <button 
-                onClick={clearAvatar}
-                className="lobby-btn lobby-btn-secondary"
-                style={{ marginTop: 16, width: "100%" }}
-              >
-                Gỡ Avatar hiện tại
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      <AvatarSelectModal
+        open={showAvatarModal}
+        onClose={() => setShowAvatarModal(false)}
+        myAvatar={myAvatar}
+        clientId={clientId}
+        onSelect={selectAvatar}
+        onClear={clearAvatar}
+      />
     </div>
   );
 }

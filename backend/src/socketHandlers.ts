@@ -59,10 +59,11 @@ import {
   updateSoiMuActionLog,
 } from "./gameLog.js";
 import { appendGameEvent } from "./gameEvent.js";
-import { listSavedMatches, loadSavedMatch } from "./gameHistory.js";
+import { listSavedMatches, loadSavedMatch, saveMatchHistory } from "./gameHistory.js";
 import {
   emitGameLogToSocket,
   emitCursedState,
+  emitChiefPrivateState,
   emitHunterTarget,
   emitMerchantCheeseMarks,
   emitMerchantPrivateState,
@@ -624,6 +625,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     room.playerRoles = room.playerRoles || {};
     const fromRole = room.playerRoles[targetId] || "Dân làng";
+    room.rolesBeforeConversion = room.rolesBeforeConversion || {};
+    if (!room.rolesBeforeConversion[targetId]) {
+      room.rolesBeforeConversion[targetId] = fromRole;
+    }
     room.playerRoles[targetId] = NORMAL_WOLF_ROLE;
     appendGameEvent(room, {
       type: "ROLE_CONVERSION",
@@ -639,7 +644,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.wolves = Array.from(new Set([...(room.wolves || []), targetId]));
     room.wildWolfConvertedPlayerIds = Array.from(new Set([...(room.wildWolfConvertedPlayerIds || []), targetId]));
 
-    if (room.publicRevealedRolesByPlayerId?.[targetId]) {
+    if (room.publicRevealedRolesByPlayerId?.[targetId] && room.publicRevealedRolesByPlayerId[targetId] !== VILLAGE_CHIEF_ROLE) {
       room.publicRevealedRolesByPlayerId[targetId] = NORMAL_WOLF_ROLE;
     }
     if (room.banSoiId === targetId) {
@@ -1109,8 +1114,31 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     for (const targetId of wolfTargets) {
       if (initialDead.has(targetId)) continue;
 
-      if (isLovePairMemberAwayAt(room, targetId, wolfAttackAt, true)) {
-        const playerName = room.players.find(p => p.id === targetId)?.name || targetId;
+      let currentTargetId = targetId;
+      const isProtector = room.playerRoles?.[targetId] === "Hộ nhân";
+      const chiefId = getVillageChiefId(room);
+      const isChiefAlive = chiefId && !initialDead.has(chiefId);
+      const chiefFoundProtector = room.chiefFoundProtectorId === targetId;
+      const chiefCanFindProtectorRule = ensureRoomGameRules(room).villageChiefCanFindProtector;
+
+      if (isProtector && isChiefAlive && chiefFoundProtector && chiefCanFindProtectorRule) {
+        currentTargetId = chiefId;
+        appendLogEntry(room, {
+          type: "custom_log",
+          phase: "night",
+          message: `Trưởng làng đỡ thay vết cắn của Sói cho Hộ nhân.`,
+        });
+        appendGameEvent(room, {
+          type: "ROLE_CONVERSION", // ponytail: using existing event type to represent the shielding / target redirection
+          phase: "night",
+          actorIds: [chiefId],
+          targetIds: [targetId],
+          metadata: { reason: "chief_shielded_protector" },
+        });
+      }
+
+      if (isLovePairMemberAwayAt(room, currentTargetId, wolfAttackAt, true)) {
+        const playerName = room.players.find(p => p.id === currentTargetId)?.name || currentTargetId;
         appendLogEntry(room, {
           type: "custom_log",
           phase: "night",
@@ -1120,29 +1148,29 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       }
 
       const escapeAt = room.loveEscapeActiveTonight ? (room.loveEscapeActivatedAt || null) : null;
-      const saveCutoffAt = escapeAt && wolfAttackAt <= escapeAt && getLovePairIds(room)?.includes(targetId)
+      const saveCutoffAt = escapeAt && wolfAttackAt <= escapeAt && getLovePairIds(room)?.includes(currentTargetId)
         ? escapeAt
         : null;
-      const wasHealed = isWitchHealEffective(targetId, saveCutoffAt);
-      const isProtected = isGuardianEffective(targetId, saveCutoffAt);
+      const wasHealed = isWitchHealEffective(currentTargetId, saveCutoffAt);
+      const isProtected = isGuardianEffective(currentTargetId, saveCutoffAt);
 
-      if (isProtected) addUnique(savedByGuardianIds, targetId);
+      if (isProtected) addUnique(savedByGuardianIds, currentTargetId);
 
-      if (targetId === wildWolfConvertTargetId) {
+      if (currentTargetId === wildWolfConvertTargetId) {
         const biteCounted = (!wasHealed && !isProtected) || rules.banSoiBecomeWolfEvenIfHealed;
         appendLogEntry(room, {
           type: "wild_wolf_conversion",
           phase: "night",
           actorId: room.wildWolfConvertActorId || getWildWolfId(room),
-          targetId,
+          targetId: currentTargetId,
           success: biteCounted,
-          previousTargetRole: room.playerRoles?.[targetId] || null,
+          previousTargetRole: room.playerRoles?.[currentTargetId] || null,
           savedByGuardian: isProtected,
           savedByWitch: wasHealed,
           ...(biteCounted ? {} : { reason: "saved" as const }),
         });
 
-        if (biteCounted && convertWildWolfTargetToWolf(roomId, room, targetId)) {
+        if (biteCounted && convertWildWolfTargetToWolf(roomId, room, currentTargetId)) {
           room.wildWolfConvertUsed = true;
         }
 
@@ -1152,21 +1180,21 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         continue;
       }
 
-      if (targetId === spiritWolfId) {
+      if (currentTargetId === spiritWolfId) {
         if (!wasHealed && !isProtected) {
           room.spiritWolfWolfAlignedPending = true;
         }
         continue;
       }
 
-      if (targetId === banSoiId) {
+      if (currentTargetId === banSoiId) {
         const biteCounted = (!wasHealed && !isProtected) || rules.banSoiBecomeWolfEvenIfHealed;
         if (biteCounted) {
           const twoHeartsDamage = getTwoHeartsWolfDamage(room);
           if (twoHeartsDamage > 0 && twoHeartsDamage < TWO_HEARTS_MAX_HP) {
             room.playerHearts = room.playerHearts || {};
-            const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.playerHearts[targetId] ?? TWO_HEARTS_MAX_HP));
-            room.playerHearts[targetId] = Math.max(0, currentHp - twoHeartsDamage);
+            const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.playerHearts[currentTargetId] ?? TWO_HEARTS_MAX_HP));
+            room.playerHearts[currentTargetId] = Math.max(0, currentHp - twoHeartsDamage);
           }
           room.banSoiWolfAlignedPending = true;
         }
@@ -1180,15 +1208,15 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         attackerIds: wolfAttackersForTarget(targetId),
       };
 
-      if (isVillageChief(room, targetId)) {
+      if (isVillageChief(room, currentTargetId)) {
         if (isVillageChiefDelayedBiteNight(room)) {
           if (room.sharedHeartsVisible) {
             room.playerHearts = room.playerHearts || {};
-            const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.playerHearts[targetId] ?? TWO_HEARTS_MAX_HP));
-            room.playerHearts[targetId] = Math.max(1, currentHp - 1);
+            const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.playerHearts[currentTargetId] ?? TWO_HEARTS_MAX_HP));
+            room.playerHearts[currentTargetId] = Math.max(1, currentHp - 1);
           }
           room.villageChiefPendingWolfDeath = {
-            playerId: targetId,
+            playerId: currentTargetId,
             bittenNight: room.nightCount || 0,
             attackerIds: wolfCause.attackerIds,
           };
@@ -1196,7 +1224,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         }
       }
 
-      const protectorSave = tryUseProtectorImmortality(room, targetId, wolfCause);
+      const protectorSave = tryUseProtectorImmortality(room, currentTargetId, wolfCause);
       if (protectorSave) {
         protectorSaves.push(protectorSave);
         continue;
@@ -1205,16 +1233,16 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       const twoHeartsDamage = getTwoHeartsWolfDamage(room);
       if (twoHeartsDamage > 0) {
         room.playerHearts = room.playerHearts || {};
-        const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.playerHearts[targetId] ?? TWO_HEARTS_MAX_HP));
+        const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.playerHearts[currentTargetId] ?? TWO_HEARTS_MAX_HP));
         const nextHp = Math.max(0, currentHp - twoHeartsDamage);
-        room.playerHearts[targetId] = nextHp;
+        room.playerHearts[currentTargetId] = nextHp;
         if (nextHp <= 0) {
-          markEliminated(targetId, wolfCause);
+          markEliminated(currentTargetId, wolfCause);
         }
         continue;
       }
 
-      markEliminated(targetId, wolfCause);
+      markEliminated(currentTargetId, wolfCause);
     }
 
     flushProtectorSaves();
@@ -1294,6 +1322,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.loveEscapeVotesTonight = {};
       room.loveEscapeVoteAt = {};
       emitLoveStateToPair(ctx, roomId, room);
+    }
+
+    const chiefId = getVillageChiefId(room);
+    if (chiefId) {
+      emitChiefPrivateState(roomId, chiefId);
     }
   }
 
@@ -1662,6 +1695,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     } else if (hadProtectorSave) {
       appendLogEntry(room, { type: "no_death", phase: "day" });
     }
+
+    const chiefId = getVillageChiefId(room);
+    if (chiefId) {
+      emitChiefPrivateState(roomId, chiefId);
+    }
   }
 
   function finalizeUnmatchedLoveEscapeVote(roomId: string, room: Room) {
@@ -1692,7 +1730,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     "79b02851-1b5d-46fb-8935-5d8031dc9a7f": "Nhật",
     "f7d9652f-ac74-4557-81a2-7c2731a77d37": "Din Phạm",
     "397d9740-e21b-4ade-941f-25912aefd591": "Hà Việt",
-    "client_1780242307126_pmozg54dmra": "San",
+    "d64474be-88b2-4f67-bf0d-310c3c9de7f5": "San",
     "client_1780242348813_swid1tk0trh": "Huy",
     "8dfc1d63-988f-460d-8569-8a1964be99a0": "Cường",
     "ec0c6c66-9ce7-4d86-ac12-25824af15b79": "Việt Thắng",
@@ -1701,6 +1739,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     "0c28a7b3-f332-4bce-b435-b1c63937f6b2": "Phát",
     "c3a97ba3-250d-49c7-8d00-436bc8056bf5": "Hiếu",
     "6a0d0c5d-6e85-4021-920b-9224f8306d6f": "Huy Hà",
+    "34ead8aa-1712-484a-8e11-466fc191e33a": "Thịnh",
   };
 
   // Register all socket event handlers
@@ -2679,6 +2718,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.wildWolfConvertUsed = false;
     room.wildWolfConvertedPlayerIds = [];
     room.villageChiefPendingWolfDeath = null;
+    room.chiefFoundProtectorId = null;
+    room.chiefChecks = {};
+    room.chiefUsedTonight = {};
     room.villageChiefExtraVoteAvailable = false;
     room.villageChiefExtraVoteReady = false;
     room.villageChiefExtraVoteUsed = false;
@@ -3258,6 +3300,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.elementalBuffVotesTonight = {};
       room.seerUsedTonight = {};
       room.seerResultsTonight = {};
+      room.chiefUsedTonight = {};
       room.witchHealTargetTonight = {};
       room.witchPoisonTargetTonight = {};
       room.witchHealTargetAt = {};
@@ -4535,6 +4578,34 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
+  socket.on("deleteAvatar", ({ fileName }: { fileName: string }) => {
+    if (typeof fileName !== "string" || !fileName.trim()) return;
+    if (!fileName.toLowerCase().includes(clientId.toLowerCase())) {
+      console.log(`[Avatar Delete Warning] Client ${clientId} cố gắng xóa file không thuộc sở hữu: ${fileName}`);
+      return;
+    }
+    try {
+      const avaDir = path.join(process.cwd(), "../frontend/src/assets/Ava");
+      if (fs.existsSync(avaDir)) {
+        const oldPath = path.join(avaDir, fileName);
+        if (fs.existsSync(oldPath)) {
+          const extIdx = fileName.lastIndexOf(".");
+          if (extIdx !== -1) {
+            const baseName = fileName.substring(0, extIdx);
+            const ext = fileName.substring(extIdx);
+            const newFileName = `${baseName} deleted${ext}`;
+            const newPath = path.join(avaDir, newFileName);
+            
+            fs.renameSync(oldPath, newPath);
+            console.log(`[Avatar Delete] Đã đổi tên file sang deleted: ${fileName} -> ${newFileName}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Lỗi khi đổi tên file avatar bị xóa ở backend:", e);
+    }
+  });
+
   socket.on("angelChooseRevive", ({ roomId, targetId, guess }: { roomId: string; targetId: string; guess: unknown }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -4691,6 +4762,20 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       type: "host_ended_game",
       phase,
     });
+
+    // Add game event for replay
+    appendGameEvent(room, {
+      type: "GAME_OVER",
+      phase: room.phase || "day",
+      metadata: { winner: "nobody", reason: "host_ended_game" },
+    });
+
+    // Save match history
+    try {
+      saveMatchHistory(room);
+    } catch (err) {
+      console.error("Error saving match history at hostEndGameNow:", err);
+    }
 
     // Emit events
     ctx.io.to(roomId).emit("gameEnded", {
@@ -5051,6 +5136,59 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       actualIsWolf,
       ...(seerBlockedByCloak ? { blockedByMerchantItem: "invisibility-cloak" as const } : {}),
     });
+    emitHostNightActionProgress(roomId);
+  });
+
+  socket.on("chiefCheck", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room || !room.playerRoles) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+
+    if (room.playerRoles[clientId] !== "Trưởng làng") return;
+    if (!canPerformNightRoleAction(room, clientId, "Trưởng làng")) return;
+    if (!canPlayerActAtNight(room, clientId)) return;
+
+    if (!room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    const hasProtectorInGame = room.roles?.includes("Hộ nhân") || Object.values(room.playerRoles || {}).includes("Hộ nhân");
+    if (!room.gameRules?.villageChiefCanFindProtector || !hasProtectorInGame) return;
+
+    room.chiefUsedTonight = room.chiefUsedTonight || {};
+    if (room.chiefUsedTonight[clientId]) {
+      socket.emit("errorMessage", "Bạn đã thực hiện tìm kiếm Hộ nhân trong đêm nay rồi!");
+      return;
+    }
+    room.chiefUsedTonight[clientId] = true;
+
+    const isProtector = room.playerRoles[targetId] === "Hộ nhân";
+
+    room.chiefChecks = room.chiefChecks || {};
+    room.chiefChecks[clientId] = room.chiefChecks[clientId] || {};
+    room.chiefChecks[clientId][targetId] = isProtector;
+
+    if (isProtector) {
+      room.chiefFoundProtectorId = targetId;
+    }
+
+    appendLogEntry(room, {
+      type: "custom_log",
+      phase: "night",
+      message: `Trưởng làng tìm kiếm Hộ nhân: chọn [${room.players.find(p => p.id === targetId)?.name || targetId}] và kết quả là ${isProtector ? "ĐÚNG" : "SAI"}.`,
+    });
+
+    if (isProtector) {
+      appendLogEntry(room, {
+        type: "custom_log",
+        phase: "night",
+        message: `Trưởng làng đã tìm thấy Hộ nhân!`,
+      });
+    }
+
+    emitChiefPrivateState(roomId, clientId);
+    socket.emit("chiefCheckResult", { targetId, isProtector });
+
     emitHostNightActionProgress(roomId);
   });
 
@@ -5610,6 +5748,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
           .map((p: any) => ({
             id: p.id,
             name: p.name,
+            // ponytail: fallback to VIP real name if not stored in history
+            playerRealName: p.playerRealName || VIP_REAL_NAMES[p.id],
+            playerAvatar: p.playerAvatar,
             connected: true,
             inGame: true,
           })),

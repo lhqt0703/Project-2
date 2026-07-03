@@ -49,7 +49,7 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 760px) {
   .pc-card-wrapper {
     width: 75dvw;
     height: 65dvh;

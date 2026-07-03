@@ -94,7 +94,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
     ctx.io.to(roomId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
     ctx.io.to(roomId).emit(
       "rolesRevealUpdated",
-      { roomId, rolesByPlayerId: room.playerRoles || {} }
+      { roomId, rolesByPlayerId: room.playerRoles || {}, rolesBeforeConversion: room.rolesBeforeConversion || {} }
     );
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   }
@@ -489,6 +489,47 @@ export function createLifecycleFlow(ctx: ServerContext) {
       if (shouldDeferEndGameForAngel(room)) return;
       endGame(roomId, room, "wolves", reason || "all_villagers_dead");
       return;
+    }
+
+    // ponytail: Early end game check for 2 villagers vs 1 wolf during day phase when villagers have no defense
+    if (room.phase === "day" && aliveIds.length === 3 && wolfAligned.length === 1 && nonWolfAligned.length === 2) {
+      const hasDefense = nonWolfAligned.some((pId) => {
+        const role = room.playerRoles?.[pId];
+        
+        // 1. Bảo vệ
+        if (role === "Bảo vệ") return true;
+
+        // 2. Phù thủy còn bình bất kỳ
+        if (role === "Phù thủy") {
+          const potions = room.witchPotions?.[pId];
+          if (!potions || !potions.healUsed || !potions.poisonUsed) return true;
+        }
+
+        // 3. Thợ săn
+        if (role === "Thợ săn") return true;
+
+        // 4. Cặp đôi chưa sử dụng "ra khỏi làng"
+        const pair = getLovePairIds(room);
+        if (pair && pair.includes(pId) && room.loveEscapeUsed !== true) {
+          return true;
+        }
+
+        // 5. Đang còn lá chắn của Hộ nhân giúp chặn 1 lần chết
+        if (room.protectorTargetId === pId) return true;
+
+        return false;
+      });
+
+      if (!hasDefense) {
+        if (shouldDeferEndGameForAngel(room)) return;
+        appendLogEntry(room, {
+          type: "custom_log",
+          phase: "day",
+          message: "Đoản hậu sớm: Phe dân chỉ còn 2 người nhưng cả hai cũng không còn ai có khả năng tự vệ chống lại Sói trong đêm tiếp theo. Sói thắng"
+        });
+        endGame(roomId, room, "wolves", reason || "wolves_early_win_no_defense");
+        return;
+      }
     }
 
     const bitingWolvesAlive = getAlivePlayerIds(room)

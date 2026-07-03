@@ -64,6 +64,7 @@ export type LoveStatePayload = {
   partnerId: string | null;
   pairIds: string[];
   rolesByPlayerId: Record<string, string>;
+  rolesBeforeConversion?: Record<string, string>;
   targetWolfAligned: boolean;
   escapeUsed: boolean;
   escapeActiveTonight: boolean;
@@ -207,7 +208,7 @@ export type GameLogNight = {
 
 export type GameLogUpdatedPayload = { roomId: string; nights: GameLogNight[] };
 
-export type RolesRevealUpdatedPayload = { roomId: string; rolesByPlayerId: Record<string, string> };
+export type RolesRevealUpdatedPayload = { roomId: string; rolesByPlayerId: Record<string, string>; rolesBeforeConversion?: Record<string, string> };
 export type PublicRolesRevealUpdatedPayload = { roomId: string; rolesByPlayerId: Record<string, string> };
 
 export type SpiritWolfDecisionNeededPayload = { targetId: string; deadline?: number | null };

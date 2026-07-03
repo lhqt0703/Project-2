@@ -3,7 +3,7 @@ export const VIP_REAL_NAMES: Record<string, string> = {
   "79b02851-1b5d-46fb-8935-5d8031dc9a7f": "Nhật",
   "f7d9652f-ac74-4557-81a2-7c2731a77d37": "Din Phạm",
   "397d9740-e21b-4ade-941f-25912aefd591": "Hà Việt",
-  "client_1780242307126_pmozg54dmra": "San",
+  "d64474be-88b2-4f67-bf0d-310c3c9de7f5": "San",
   "client_1780242348813_swid1tk0trh": "Huy",
   "8dfc1d63-988f-460d-8569-8a1964be99a0": "Cường",
   "ec0c6c66-9ce7-4d86-ac12-25824af15b79": "Việt Thắng",
@@ -12,4 +12,5 @@ export const VIP_REAL_NAMES: Record<string, string> = {
   "0c28a7b3-f332-4bce-b435-b1c63937f6b2": "Phát",
   "c3a97ba3-250d-49c7-8d00-436bc8056bf5": "Hiếu",
   "6a0d0c5d-6e85-4021-920b-9224f8306d6f": "Huy Hà",
+  "34ead8aa-1712-484a-8e11-466fc191e33a": "Thịnh",
 };

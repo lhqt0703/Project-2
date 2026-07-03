@@ -31,7 +31,7 @@ export interface Player {
   playerAvatar?: string;
 }
 
-export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | "Kẻ bị nguyền" | "Tay Buôn" | "Bác sĩ ung thư" | "Nam Thư" | "Đàn bà" | "Suy Thận" | ElementalRole | "Độc thủ" | "Gián điệp" | "Nhà sư" | "Thầy bói" | "Ác Quỷ" | "Thợ giặt" | "Thủ thư" | "Điều tra viên" | "Nuôi quạ" | "Diệt quỷ";
+export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | "Kẻ bị nguyền" | "Tay Buôn" | "Bác sĩ ung thư" | "Nam Thư" | "Đàn bà" | "Suy Thận" | ElementalRole | "Độc thủ" | "Gián điệp" | "Nhà sư" | "Thầy bói" | "Ác Quỷ" | "Thợ giặt" | "Thủ thư" | "Điều tra viên" | "Nuôi quạ" | "Diệt quỷ" | "Trưởng làng";
 
 export type NightActionOrderRole = NightActionRole | typeof ELEMENTAL_GROUP_ROLE;
 
@@ -58,6 +58,7 @@ export interface RoomGameRules {
   loveEscapeImmuneSimultaneous: boolean;
   wolfCanBiteWolf?: boolean;
   wolfBonusBiteSmoothTied?: boolean;
+  villageChiefCanFindProtector?: boolean;
 }
 
 export interface Room {
@@ -107,6 +108,7 @@ export interface Room {
   positionEditors?: string[];
   playerRoles?: Record<string, string>;
   publicRevealedRolesByPlayerId?: Record<string, string>;
+  rolesBeforeConversion?: Record<string, string>;
   nightCount?: number;
   gameLog?: GameLogNight[];
   gameEventLog?: GameEvent[];
@@ -128,6 +130,9 @@ export interface Room {
   privateHeartVisiblePlayerIds?: string[];
   playerHeartShakeIds?: string[];
   villageChiefDyingFramePlayerIds?: string[];
+  chiefFoundProtectorId?: string | null;
+  chiefChecks?: Record<string, Record<string, boolean>>;
+  chiefUsedTonight?: Record<string, boolean>;
   dayVoters?: string[];
   dayVotes?: Record<string, string | null>;
   dayLocked?: Record<string, boolean>;
@@ -270,7 +275,7 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 20,
   wolfNightActionDurationSec: 20,
-  nightActionOrder: ["Thần tình yêu", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền"],
+  nightActionOrder: ["Thần tình yêu", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"],
   banSoiBecomeWolfEvenIfHealed: false,
   loveCanChoosePartnerFirstTwoNights: false,
   villageChiefKnowsWolfBite: true,
@@ -282,6 +287,7 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   loveEscapeImmuneSimultaneous: true,
   wolfCanBiteWolf: false,
   wolfBonusBiteSmoothTied: true,
+  villageChiefCanFindProtector: true,
 };
 
 const NIGHT_ACTION_ROLE_SET = new Set<NightActionOrderRole>([
@@ -397,6 +403,7 @@ export function buildRoomGameRules(input?: Partial<RoomGameRules> | null, gameMo
       loveEscapeImmuneSimultaneous: merged.loveEscapeImmuneSimultaneous ?? true,
       wolfCanBiteWolf: false,
       wolfBonusBiteSmoothTied: false,
+      villageChiefCanFindProtector: false,
     };
   }
   return {
@@ -498,9 +505,10 @@ export type GameLogNight = {
 };
 
 export type RolesRevealPayload = {
-  roomId: string;
-  rolesByPlayerId: Record<string, string>;
-};
+   roomId: string;
+   rolesByPlayerId: Record<string, string>;
+   rolesBeforeConversion?: Record<string, string>;
+ };
 
 export interface GameEvent {
   id: string;

@@ -22,6 +22,7 @@ export type NightActionRole =
   | "Thần tình yêu"
   | "Kẻ bị nguyền"
   | "Tay Buôn"
+  | "Trưởng làng"
   | ElementalRole;
 
 export type NightActionOrderRole =
@@ -35,6 +36,7 @@ export type NightActionOrderRole =
   | "Thần tình yêu"
   | "Kẻ bị nguyền"
   | "Tay Buôn"
+  | "Trưởng làng"
   | typeof ELEMENTAL_GROUP_ROLE;
 
 export interface RoomGameRules {
@@ -60,6 +62,7 @@ export interface RoomGameRules {
   loveEscapeImmuneSimultaneous: boolean;
   wolfCanBiteWolf?: boolean;
   wolfBonusBiteSmoothTied?: boolean;
+  villageChiefCanFindProtector?: boolean;
 }
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -73,7 +76,7 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 20,
   wolfNightActionDurationSec: 20,
-  nightActionOrder: ["Thần tình yêu", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền"],
+  nightActionOrder: ["Thần tình yêu", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"],
   banSoiBecomeWolfEvenIfHealed: false,
   loveCanChoosePartnerFirstTwoNights: false,
   villageChiefKnowsWolfBite: true,
@@ -85,6 +88,7 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   loveEscapeImmuneSimultaneous: true,
   wolfCanBiteWolf: false,
   wolfBonusBiteSmoothTied: true,
+  villageChiefCanFindProtector: true,
 };
 
 export interface RoomData {

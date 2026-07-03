@@ -883,7 +883,7 @@ export default function GameSoiMu() {
             <PlayerPositions
               roomOverride={boardRoomOverride}
               onPlayerClick={(pid) => {
-                if (isHost) {
+                if (isHost && !room?.isReplay) {
                   if (hostPlayerActionTargetId === pid) {
                     setHostPlayerActionTargetId(null);
                   } else {
@@ -996,7 +996,7 @@ export default function GameSoiMu() {
       )}
 
       {/* Host Controls */}
-      {isHost && (
+      {isHost && !room?.isReplay && (
         <div className="game-host-controls" style={{ maxWidth: "600px", margin: "1.5rem auto" }}>
           {hostPlayerActionTargetId && (
             <div style={{

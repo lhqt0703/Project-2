@@ -14,6 +14,7 @@ const NIGHT_ACTION_ROLE_LABELS: Record<NightActionOrderRole, string> = {
   "Thần tình yêu": "Thần tình yêu",
   "Kẻ bị nguyền": "Kẻ bị nguyền",
   "Tay Buôn": "Tay Buôn",
+  "Trưởng làng": "Trưởng làng",
 };
 
 const NIGHT_ACTION_DURATION_STEP_SEC = 10;
@@ -629,6 +630,22 @@ export default function GameRulesModal({
                   checked={draftRules.witchSeeProtectorImmortalBite}
                   disabled={readOnly}
                   onChange={(e) => updateRule("witchSeeProtectorImmortalBite", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Trưởng làng tìm kiếm Hộ nhân</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi bật, nếu có Hộ nhân trong danh sách role, Trưởng làng mỗi đêm có thể chọn một người để dò tìm Hộ nhân. Khi tìm thấy, Trưởng làng sẽ thấy badge vai trò của Hộ nhân và tự động đỡ vết cắn của Sói thay cho Hộ nhân.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.villageChiefCanFindProtector === true}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("villageChiefCanFindProtector", e.target.checked)}
                   style={{ width: 20, height: 20, marginTop: 2 }}
                 />
               </label>

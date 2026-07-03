@@ -3,12 +3,14 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { socket, clientId } from "../socket";
 import PlayerPositions, { AVA_IMAGES, getAvatarUrlByFileName } from "../components/PlayerPositions";
 import ConfirmModal from "../components/ConfirmModal";
+import { AvatarSelectModal } from "../components/AvatarSelectModal";
 import nenLungAsset from "../assets/nền lưng.avif";
 import GameRulesModal from "../components/GameRulesModal";
 import ElementalEffectGuideModal from "../components/ElementalEffectGuideModal";
 import { DEFAULT_ROOM_GAME_RULES, type NightActionOrderRole, type Player, type RoomData } from "../context/RoomContext";
 import { useRoomContext } from "../context/RoomContext";
 import ArrowLeft from "../assets/arrow-left.svg";
+import UserIcon from "../assets/user.svg";
 import RoomBg from "../assets/Nền phòng.avif";
 import {
   ELEMENTAL_GROUP_ROLE,
@@ -23,7 +25,7 @@ interface PlayerPosition {
   y: number;
 }
 
-const NIGHT_ACTION_ROLE_ORDER: NightActionRole[] = ["Thần tình yêu", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền"];
+const NIGHT_ACTION_ROLE_ORDER: NightActionRole[] = ["Thần tình yêu", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"];
 const WOLF_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
 
 function getAvailableNightActionRoles(selectedRoles?: string[]) {
@@ -42,6 +44,10 @@ function getAvailableNightActionRoles(selectedRoles?: string[]) {
     if (role !== ELEMENTAL_GROUP_ROLE && roles.includes(role)) {
       available.add(role);
     }
+  }
+
+  if (roles.includes("Trưởng làng") && roles.includes("Hộ nhân")) {
+    available.add("Trưởng làng");
   }
 
   return NIGHT_ACTION_ROLE_ORDER.filter((role) => available.has(role));
@@ -108,6 +114,42 @@ export default function Room() {
   const [editingAvatar, setEditingAvatar] = useState("");
   const [avatarSearch, setAvatarSearch] = useState("");
   const [avatarTab, setAvatarTab] = useState("all");
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [myAvatar, setMyAvatar] = useState(() => localStorage.getItem("werewolfPlayerAvatar") || "");
+
+
+  const myPlayerInRoom = useMemo(() => {
+    return room?.players.find((p) => p.id === clientId);
+  }, [room?.players, clientId]);
+
+  const activeAvatarFile = myPlayerInRoom?.playerAvatar || myAvatar;
+  const currentAvatarUrl = getAvatarUrlByFileName(activeAvatarFile);
+
+  const selectAvatar = (fileName: string) => {
+    setMyAvatar(fileName);
+    localStorage.setItem("werewolfPlayerAvatar", fileName);
+    setShowAvatarModal(false);
+    if (room) {
+      socket.emit("hostSetPlayerAvatar", {
+        roomId: room.id,
+        targetId: clientId,
+        playerAvatar: fileName
+      });
+    }
+  };
+
+  const clearAvatar = () => {
+    setMyAvatar("");
+    localStorage.removeItem("werewolfPlayerAvatar");
+    setShowAvatarModal(false);
+    if (room) {
+      socket.emit("hostSetPlayerAvatar", {
+        roomId: room.id,
+        targetId: clientId,
+        playerAvatar: ""
+      });
+    }
+  };
 
   const allAvatars = useMemo(() => {
     return Object.keys(AVA_IMAGES)
@@ -499,7 +541,9 @@ export default function Room() {
           if (p.playerAvatar !== savedAvatar) {
             const isUnknownSaved = /^M unknownID \d+/i.test(savedAvatar);
             const isAssignedServer = (p.playerAvatar || "").includes("M-");
-            if (isUnknownSaved && isAssignedServer) {
+            const isPlayerOwnVip = !p.playerAvatar || p.playerAvatar.toLowerCase().includes(p.id.toLowerCase());
+            
+            if ((isUnknownSaved && isAssignedServer) || isPlayerOwnVip) {
               customAvatars[p.id] = p.playerAvatar;
               changed = true;
             } else {
@@ -525,12 +569,22 @@ export default function Room() {
     if (!room || !socket) return;
     const myPlayer = room.players.find(p => p.id === clientId);
     const mySavedAvatar = localStorage.getItem("werewolfPlayerAvatar");
-    if (myPlayer && mySavedAvatar && myPlayer.playerAvatar !== mySavedAvatar) {
-      socket.emit("hostSetPlayerAvatar", {
-        roomId: room.id,
-        targetId: clientId,
-        playerAvatar: mySavedAvatar
-      });
+    
+    if (myPlayer) {
+      if (myPlayer.playerAvatar) {
+        // Nếu server có avatar, đồng bộ ngược về localStorage nếu khác biệt
+        if (mySavedAvatar !== myPlayer.playerAvatar) {
+          localStorage.setItem("werewolfPlayerAvatar", myPlayer.playerAvatar);
+          setMyAvatar(myPlayer.playerAvatar);
+        }
+      } else if (mySavedAvatar) {
+        // Nếu server chưa có avatar nhưng local có, đồng bộ lên server
+        socket.emit("hostSetPlayerAvatar", {
+          roomId: room.id,
+          targetId: clientId,
+          playerAvatar: mySavedAvatar
+        });
+      }
     }
   }, [room?.players, room?.id, clientId, socket]);
 
@@ -732,6 +786,34 @@ export default function Room() {
           isolation: "isolate",
         }}
       >
+        <style>{`
+          .lobby-card {
+            padding: 32px;
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            background: rgba(11, 14, 20, 0.95);
+            backdrop-filter: blur(30px);
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+          }
+          .lobby-card:hover {
+            border-color: rgba(255, 255, 255, 0.12);
+            box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+          }
+          @keyframes modalFadeIn {
+            from {
+              opacity: 0;
+              transform: scale(0.95) translateY(10px);
+            }
+            to {
+              opacity: 1;
+              transform: scale(1) translateY(0);
+            }
+          }
+        `}</style>
         <div
           style={{
             position: "fixed",
@@ -745,27 +827,78 @@ export default function Room() {
             transform: "scale(1.08)", // Scale nhẹ để che viền trắng mờ do bộ lọc blur tạo ra ở rìa màn hình
           }}
         />
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-          <button
-            onClick={() => setLeaveConfirmOpen(true)}
-            aria-label="Quay về sảnh chờ"
-            title="Rời phòng và về sảnh chờ"
+        <div id="Phần-trên-cùng" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={() => setLeaveConfirmOpen(true)}
+              aria-label="Quay về sảnh chờ"
+              title="Rời phòng và về sảnh chờ"
+              style={{
+                border: "none",
+                background: "transparent",
+                padding: 0,
+                width: 28,
+                height: 28,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "left",
+                cursor: "pointer",
+                flexShrink: 0, // tránh bị co lại khi có tên phòng dài
+              }}
+            >
+              <img src={ArrowLeft} alt="Quay về sảnh chờ" style={{ width: 22, height: 22, display: "block" }} />
+            </button>
+            <h1 id="Ma-phong">Phòng: {room.id}</h1>
+          </div>
+
+          {/* Player Circle Token ở góc phải */}
+          <div 
+            onClick={() => setShowAvatarModal(true)}
             style={{
-              border: "none",
-              background: "transparent",
-              padding: 0,
-              width: 28,
-              height: 28,
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "left",
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              border: "2px solid rgba(255, 255, 255, 0.2)",
+              backgroundImage: currentAvatarUrl ? `url("${currentAvatarUrl}")` : undefined,
+              backgroundColor: currentAvatarUrl ? undefined : "rgba(255, 255, 255, 0.05)",
+              backgroundPosition: "center",
+              backgroundSize: "cover",
+              backgroundRepeat: "no-repeat",
               cursor: "pointer",
-              flexShrink: 0, // tránh bị co lại khi có tên phòng dài
+              transition: "all 0.25s ease",
+              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: currentAvatarUrl ? undefined : 16,
+              color: "#ff8f42",
+              overflow: "hidden",
+              marginRight: 4
             }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "#ff8f42";
+              e.currentTarget.style.transform = "scale(1.05)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.2)";
+              e.currentTarget.style.transform = "scale(1)";
+            }}
+            title="Đổi Avatar VIP"
           >
-            <img src={ArrowLeft} alt="Quay về sảnh chờ" style={{ width: 22, height: 22, display: "block" }} />
-          </button>
-          <h1 id="Ma-phong">Phòng: {room.id}</h1>
+            {!currentAvatarUrl && (
+              <img 
+                src={UserIcon} 
+                alt="User" 
+                style={{ 
+                  width: "100%", 
+                  height: "100%", 
+                  objectFit: "contain",
+                  transform: "scale(1.1) translateY(10%)",
+                  opacity: 0.5
+                }} 
+              />
+            )}
+          </div>
         </div>
         {room.gameMode !== "diet_quy" && room.gameMode !== "soi_mu" && hasElementalRole && (
           
@@ -984,7 +1117,7 @@ export default function Room() {
                         border: "2px solid rgba(255, 255, 255, 0.15)",
                         background: isMaskedPreview 
                           ? `url(${nenLungAsset}) center/cover no-repeat` 
-                          : (previewUrl ? `url(${previewUrl}) center/cover no-repeat` : "rgba(255, 255, 255, 0.05)"),
+                          : (previewUrl ? `url("${previewUrl}") center/cover no-repeat` : "rgba(255, 255, 255, 0.05)"),
                         position: "relative",
                         display: "flex",
                         alignItems: "center",
@@ -1581,6 +1714,15 @@ export default function Room() {
             }
             setWolfMismatchConfirm(null);
           }}
+        />
+
+        <AvatarSelectModal
+          open={showAvatarModal}
+          onClose={() => setShowAvatarModal(false)}
+          myAvatar={myAvatar}
+          clientId={clientId}
+          onSelect={selectAvatar}
+          onClear={clearAvatar}
         />
     </div>
   );

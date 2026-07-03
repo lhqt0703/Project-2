@@ -138,6 +138,13 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       if (sourceRoles.includes(role)) selected.add(role);
     }
 
+    const hasChiefCanFind = ensureRoomGameRules(room).villageChiefCanFindProtector &&
+      sourceRoles.includes("Trưởng làng") &&
+      sourceRoles.includes("Hộ nhân");
+    if (hasChiefCanFind) {
+      selected.add("Trưởng làng");
+    }
+
     const cursedPlayerIds = room.playerRoles
       ? Object.entries(room.playerRoles)
         .filter(([, role]) => role === CURSED_ROLE)

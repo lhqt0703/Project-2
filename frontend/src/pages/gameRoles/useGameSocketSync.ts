@@ -62,6 +62,7 @@ const EMPTY_LOVE_STATE: LoveStatePayload = {
   partnerId: null,
   pairIds: [],
   rolesByPlayerId: {},
+  rolesBeforeConversion: {},
   targetWolfAligned: false,
   escapeUsed: false,
   escapeActiveTonight: false,
@@ -103,6 +104,11 @@ export function useGameSocketSync({
   const [merchantPrivateState, setMerchantPrivateState] = useState(EMPTY_MERCHANT_PRIVATE_STATE);
   const [merchantCheeseMarkPlayerIds, setMerchantCheeseMarkPlayerIds] = useState<string[]>([]);
   const [angelReviveState, setAngelReviveState] = useState<AngelReviveStatePayload>(EMPTY_ANGEL_REVIVE_STATE);
+
+  const [chiefFoundProtectorId, setChiefFoundProtectorId] = useState<string | null>(null);
+  const [isChiefBitten, setIsChiefBitten] = useState(false);
+  const [chiefUsedTonight, setChiefUsedTonight] = useState(false);
+  const [chiefCheckedTargets, setChiefCheckedTargets] = useState<Record<string, boolean>>({});
 
   const [witchPendingDeathTargetIds, setWitchPendingDeathTargetIds] = useState<string[]>([]);
   const [witchPotions, setWitchPotions] = useState<WitchPotionsPayload | null>(null);
@@ -178,6 +184,7 @@ export function useGameSocketSync({
 
   const [gameLogNights, setGameLogNights] = useState<GameLogNight[]>([]);
   const [revealedRolesByPlayerId, setRevealedRolesByPlayerId] = useState<Record<string, string>>({});
+  const [rolesBeforeConversion, setRolesBeforeConversion] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const syncGameRoom = () => {
@@ -192,6 +199,7 @@ export function useGameSocketSync({
       setPhase(newPhase);
       setSeerResults([]);
       setCursedResult(null);
+      setChiefUsedTonight(false);
       if (newPhase === "day") {
         setWitchPendingDeathTargetIds([]);
         setSpiritWolfDecisionTargetId(null);
@@ -393,8 +401,13 @@ export function useGameSocketSync({
       setAngelReviveState(EMPTY_ANGEL_REVIVE_STATE);
       setWitchPendingDeathTargetIds([]);
       setDeadPlayers([]);
+      setChiefFoundProtectorId(null);
+      setIsChiefBitten(false);
+      setChiefUsedTonight(false);
+      setChiefCheckedTargets({});
       setGameLogNights([]);
       setRevealedRolesByPlayerId({});
+      setRolesBeforeConversion({});
       setProtectorTargetId(null);
       setProtectorTargetSeq(0);
       setProtectorHasUsed(false);
@@ -455,6 +468,9 @@ export function useGameSocketSync({
       if (!payload?.roomId) return;
       if (roomId && payload.roomId !== roomId) return;
       setRevealedRolesByPlayerId(payload.rolesByPlayerId || {});
+      if (payload.rolesBeforeConversion) {
+        setRolesBeforeConversion(payload.rolesBeforeConversion);
+      }
     };
 
     const handlePublicRolesRevealUpdated = (payload: PublicRolesRevealUpdatedPayload) => {
@@ -560,10 +576,13 @@ export function useGameSocketSync({
       } : prev));
     };
 
-    const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline, maxTargets, resetVotes, biteDisabled, wolfBadgeRolesByPlayerId, wildWolfConvertAvailable, wildWolfConvertRequested }: WolfPhaseStartedPayload) => {
+    const handleWolfPhaseStarted = ({ wolves, activeWolves, deadline, maxTargets, resetVotes, biteDisabled, wolfBadgeRolesByPlayerId, rolesBeforeConversion, wildWolfConvertAvailable, wildWolfConvertRequested }: any) => {
       setWolves(wolves);
       setActiveWolves(activeWolves || []);
       setWolfBadgeRolesByPlayerId(wolfBadgeRolesByPlayerId || {});
+      if (rolesBeforeConversion) {
+        setRolesBeforeConversion(rolesBeforeConversion);
+      }
       setWolfDeadline(typeof deadline === "number" ? deadline : null);
       setWolfMaxTargets(typeof maxTargets === "number" ? maxTargets : 1);
       setWolfBiteDisabled(biteDisabled === true);
@@ -584,9 +603,12 @@ export function useGameSocketSync({
       }
     };
 
-    const handleWolvesListSync = ({ wolves, wolfBadgeRolesByPlayerId }: { wolves: string[], wolfBadgeRolesByPlayerId: Record<string, string> }) => {
+    const handleWolvesListSync = ({ wolves, wolfBadgeRolesByPlayerId, rolesBeforeConversion }: { wolves: string[], wolfBadgeRolesByPlayerId: Record<string, string>, rolesBeforeConversion?: Record<string, string> }) => {
       setWolves(wolves || []);
       setWolfBadgeRolesByPlayerId(wolfBadgeRolesByPlayerId || {});
+      if (rolesBeforeConversion) {
+        setRolesBeforeConversion(rolesBeforeConversion);
+      }
     };
 
     const handleSeerResult = (payload: SeerResultPayload) => {
@@ -622,6 +644,20 @@ export function useGameSocketSync({
       setCursedLastTargetId(payload?.lastTargetId ?? null);
       updateCursedUseState(payload);
       setCursedTargetSeq((s) => s + 1);
+    };
+
+    const handleChiefState = (payload: { chiefFoundProtectorId: string | null; isChiefBitten: boolean; chiefUsedTonight: boolean }) => {
+      setChiefFoundProtectorId(payload.chiefFoundProtectorId);
+      setIsChiefBitten(payload.isChiefBitten);
+      setChiefUsedTonight(payload.chiefUsedTonight);
+    };
+
+    const handleChiefCheckResult = (payload: { targetId: string; isProtector: boolean }) => {
+      setChiefCheckedTargets((prev) => ({ ...prev, [payload.targetId]: payload.isProtector }));
+    };
+
+    const handleChiefChecks = (payloads: Record<string, boolean>) => {
+      setChiefCheckedTargets(payloads);
     };
 
     const handleMerchantPrivateStateUpdated = (payload: MerchantPrivateStateUpdatedPayload) => {
@@ -696,11 +732,15 @@ export function useGameSocketSync({
         partnerId: payload?.partnerId ?? null,
         pairIds: Array.isArray(payload?.pairIds) ? payload.pairIds.filter(Boolean) : [],
         rolesByPlayerId: payload?.rolesByPlayerId || {},
+        rolesBeforeConversion: payload?.rolesBeforeConversion || {},
         targetWolfAligned: payload?.targetWolfAligned === true,
         escapeUsed: payload?.escapeUsed === true,
         escapeActiveTonight: payload?.escapeActiveTonight === true,
         escapeVotes: Array.isArray(payload?.escapeVotes) ? payload.escapeVotes.filter(Boolean) : [],
       });
+      if (payload?.rolesBeforeConversion) {
+        setRolesBeforeConversion((prev) => ({ ...prev, ...payload.rolesBeforeConversion }));
+      }
     };
 
     const handleStickersSync = (payload: Sticker[]) => {
@@ -862,6 +902,9 @@ export function useGameSocketSync({
     socket.on("angelReviveStateUpdated", handleAngelReviveStateUpdated);
     socket.on("guardianProtected", handleGuardianProtected);
     socket.on("protectorTargetUpdated", handleProtectorTargetUpdated);
+    socket.on("chiefState", handleChiefState);
+    socket.on("chiefCheckResult", handleChiefCheckResult);
+    socket.on("chiefChecks", handleChiefChecks);
 
     socket.on("witchPendingDeath", handleWitchPendingDeath);
     socket.on("witchPotionsUpdated", handleWitchPotionsUpdated);
@@ -936,6 +979,9 @@ export function useGameSocketSync({
       socket.off("angelReviveStateUpdated", handleAngelReviveStateUpdated);
       socket.off("guardianProtected", handleGuardianProtected);
       socket.off("protectorTargetUpdated", handleProtectorTargetUpdated);
+      socket.off("chiefState", handleChiefState);
+      socket.off("chiefCheckResult", handleChiefCheckResult);
+      socket.off("chiefChecks", handleChiefChecks);
 
       socket.off("witchPendingDeath", handleWitchPendingDeath);
       socket.off("witchPotionsUpdated", handleWitchPotionsUpdated);
@@ -1001,6 +1047,10 @@ export function useGameSocketSync({
       setWitchPotionEffect,
       guardianProtectedSeq,
       guardianProtectedTargetId,
+      chiefFoundProtectorId,
+      isChiefBitten,
+      chiefUsedTonight,
+      chiefCheckedTargets,
       protectorTargetSeq,
       protectorTargetId,
       protectorHasUsed,
@@ -1055,6 +1105,7 @@ export function useGameSocketSync({
       trialVerdictFinishedSeq,
       gameLogNights,
       revealedRolesByPlayerId,
+      rolesBeforeConversion,
     }),
     [
       phase,
@@ -1129,6 +1180,7 @@ export function useGameSocketSync({
       trialVerdictFinishedSeq,
       gameLogNights,
       revealedRolesByPlayerId,
+      rolesBeforeConversion,
     ]
   );
 }

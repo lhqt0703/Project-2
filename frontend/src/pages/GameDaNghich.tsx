@@ -43,6 +43,10 @@ import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
 import StickerPeel from "../components/StickerPeel";
 import { getStickerUrlByFileName } from "../utils/stickerAssets";
 import { VIP_REAL_NAMES } from "../constants/vip";
+import { VillagerVictoryAnimation } from "../components/VillagerVictoryAnimation";
+import { GameFinishedModal } from "../components/GameFinishedModal";
+import { getVillagerAndWolfRoles } from "../utils/gameEndHelper";
+
 
 const WOLF_TEAM_REVEAL_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
 const NIGHT_ACTION_ROLE_SET = new Set([
@@ -353,7 +357,10 @@ export default function GameDaNghich() {
   const [cardFlippedToFront, setCardFlippedToFront] = useState(false);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const [scoreboardOpen, setScoreboardOpen] = useState(false);
+  const [villagerVictoryAnimOpen, setVillagerVictoryAnimOpen] = useState(false);
+  const [gameFinishedModalOpen, setGameFinishedModalOpen] = useState(false);
   const [hostPlayerActionTargetId, setHostPlayerActionTargetId] = useState<string | null>(null);
+
   const [viewMode, setViewMode] = useState<"real-names" | "nick-names" | "real-names-roles" | "nick-names-roles">(() => {
     const saved = localStorage.getItem("game-view-mode");
     if (saved === "real-names" || saved === "real-names-roles") return "real-names";
@@ -475,7 +482,6 @@ export default function GameDaNghich() {
 
   const [targetRoleDisplayOrderByPlayerId, setTargetRoleDisplayOrderByPlayerId] = useState<Record<string, TargetRoleDisplayOrder>>({});
   const [hostRuleEliminateTargetId, setHostRuleEliminateTargetId] = useState<string | null>(null);
-  const [hostDisconnected, setHostDisconnected] = useState(false);
   const [frozenRoomSnapshot, setFrozenRoomSnapshot] = useState<any | null>(null);
   const [rulesRestartOverlay, setRulesRestartOverlay] = useState<{
     message: string;
@@ -1198,6 +1204,8 @@ export default function GameDaNghich() {
   const lastHunterShotRef = useRef<{ hunterId: string; targetId: string } | null>(null);
   const lastDayVoteNoticeSeqRef = useRef(0);
   const lastTrialVerdictNoticeSeqRef = useRef(0);
+  const hasTriggeredEndGameRef = useRef(false);
+
 
   const playHunterShotAnim = useCallback((
     hunterId: string,
@@ -1908,19 +1916,7 @@ export default function GameDaNghich() {
     </div>
   ) : null;
 
-  useEffect(() => {
-    const handleHostDisconnected = () => {
-      setHostDisconnected(true);
-      showNotice(
-        "Thông báo",
-        "Quản trò đã rời đi. Bạn có thể chờ quản trò quay lại hoặc thoát khỏi phòng."
-      );
-    };
-    socket.on("hostDisconnected", handleHostDisconnected);
-    return () => {
-      socket.off("hostDisconnected", handleHostDisconnected);
-    };
-  }, [showNotice]);
+
 
   useEffect(() => {
     const handleErrorMessage = (msg: string) => {
@@ -1950,21 +1946,40 @@ export default function GameDaNghich() {
     };
   }, [nav, roomId, setRoom, showNotice]);
 
+  const { villagerRole, wolfRole } = useMemo(() => {
+    if (!sync.gameEnded) return { villagerRole: null, wolfRole: null };
+    return getVillagerAndWolfRoles(
+      sync.gameEnded.winner,
+      room?.scoreResult,
+      room?.players,
+      sync.deadPlayers,
+      sync.revealedRolesByPlayerId
+    );
+  }, [sync.gameEnded, room?.scoreResult, room?.players, sync.deadPlayers, sync.revealedRolesByPlayerId]);
+
   useEffect(() => {
-    if (!sync.gameEnded) return;
-    if (sync.gameEnded.winner === "nobody") {
-      showNotice("Trò chơi kết thúc", "Quản trò đã cho ngừng ván chơi này");
+    if (!sync.gameEnded) {
+      hasTriggeredEndGameRef.current = false;
       return;
     }
-    const winnerText =
-      sync.gameEnded.winner === "wolves"
-        ? "Phe Sói"
-        : sync.gameEnded.winner === "lovers"
-          ? "Cặp đôi"
-          : "Phe Dân";
-    showNotice("Trò chơi kết thúc", `${winnerText} chiến thắng`);
-    shootWinnerConfettiFromSides(sync.gameEnded.winner, sync.loveState);
-  }, [showNotice, sync.gameEnded, sync.loveState]);
+    if (hasTriggeredEndGameRef.current) return;
+    hasTriggeredEndGameRef.current = true;
+
+    const winner = sync.gameEnded.winner;
+    if (winner === "nobody") {
+      setGameFinishedModalOpen(true);
+      return;
+    }
+
+    const isVillagerWin = winner !== "wolves" && winner !== "lovers";
+    if (isVillagerWin) {
+      setVillagerVictoryAnimOpen(true);
+    } else {
+      shootWinnerConfettiFromSides(winner, sync.loveState);
+      setGameFinishedModalOpen(true);
+    }
+  }, [sync.gameEnded, sync.loveState]);
+
 
   useEffect(() => {
     const seq = sync.dayVoteFinishedSeq;
@@ -2125,7 +2140,7 @@ export default function GameDaNghich() {
       setCardFlippedToFront(false);
     }
   }, [role, shouldRevealMyRole]);
-  const shouldShowRolePortrait = shouldRevealMyRole;
+  const shouldShowRolePortrait = shouldRevealMyRole && !sync.gameEnded;
   const loveHybridBackgroundAsset =
     clientId && sync.loveState.targetWolfAligned && sync.loveState.pairIds.includes(clientId)
       ? HYBRID_BACKGROUND_ASSET
@@ -2513,22 +2528,23 @@ export default function GameDaNghich() {
 
 
 
-      {(isHost || !!sync.gameEnded || hostDisconnected) && (
+      {(isHost || !!sync.gameEnded) && (
         <div className="game-top-actions" style={{ marginTop: "0.75rem" }}>
           {!!sync.gameEnded && room?.scoreResult && (
             <button
               onClick={() => setScoreboardOpen(true)}
               style={{
-                background: "linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%)",
                 color: "#fff",
                 border: "none",
                 fontWeight: 700,
                 cursor: "pointer",
                 padding: "8px 16px",
                 borderRadius: "8px",
-                boxShadow: "0 4px 12px rgba(155, 89, 182, 0.3)",
+                boxShadow: "0 4px 12px rgba(168, 85, 247, 0.3)",
+                
                 display: "inline-flex",
                 alignItems: "center",
+                justifyContent: "center",
                 gap: "8px"
               }}
             >
@@ -2536,15 +2552,7 @@ export default function GameDaNghich() {
               Xem điểm
             </button>
           )}
-          {!hostDisconnected && (
-            <button onClick={handleBackToRoomClick}>Quay về phòng chờ</button>
-          )}
-          {hostDisconnected && (
-            <button onClick={() => {
-              setNoticeModal(null);
-              nav("/lobby");
-            }}>Quay về sảnh chờ</button>
-          )}
+          <button onClick={handleBackToRoomClick}>Quay về phòng chờ</button>
         </div>
       )}
 
@@ -2634,6 +2642,7 @@ export default function GameDaNghich() {
                 trialOrangePlayerId={dayVote.playerPositionsProps.trialOrangePlayerId}
                 trialWhitePlayerIds={dayVote.playerPositionsProps.trialWhitePlayerIds}
                 trialGreenPlayerId={dayVote.playerPositionsProps.trialGreenPlayerId}
+                guardianProtectedTargetId={sync.guardianProtectedTargetId}
                 replayActorIds={replayActorIds}
                 replayTargetIds={replayTargetIds}
                 showVoteReview={dayVote.playerPositionsProps.showVoteReview}
@@ -3060,7 +3069,7 @@ export default function GameDaNghich() {
           </div>
         );
       })()}
-      {!isHost && dayVote.panel}
+      {dayVote.panel}
       {!isHost && villageChiefExtraVotePanel}
       {!isHost && logPanel}
 
@@ -3650,6 +3659,26 @@ export default function GameDaNghich() {
           }}
         />
       </div>
+
+      <VillagerVictoryAnimation
+        open={villagerVictoryAnimOpen}
+        villagerRole={villagerRole}
+        wolfRole={wolfRole}
+        onComplete={() => {
+          setVillagerVictoryAnimOpen(false);
+          setGameFinishedModalOpen(true);
+        }}
+      />
+
+      <GameFinishedModal
+        open={gameFinishedModalOpen}
+        winner={sync.gameEnded?.winner}
+        scoreResult={room?.scoreResult}
+        onClose={() => setGameFinishedModalOpen(false)}
+        onBackToLobby={handleBackToRoomClick}
+        onOpenScoreboard={() => setScoreboardOpen(true)}
+      />
     </div>
   );
 }
+

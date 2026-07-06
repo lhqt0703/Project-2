@@ -96,6 +96,7 @@ export interface Room {
   soiMuInvestigationResult?: "success" | "fail" | null;
   soiMuHasMerchant?: boolean;
   soiMuNamThuTargetId?: string | null;
+  soiMuSuyThanTargetId?: string | null;
   hidePlayerRoleText?: boolean;
   roles?: string[];
   rolesLocked?: boolean;

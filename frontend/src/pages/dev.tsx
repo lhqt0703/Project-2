@@ -3,6 +3,289 @@ import { socket } from "../socket";
 import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
 import { AvifIcon, iconMap } from "../components/AvifIcon";
 import { scannedIcons } from "../constants/scannedIcons";
+import Orb from "../components/Orb";
+import nenLungAsset from "../assets/nền lưng.avif";
+import { VillagerVictoryAnimation } from "../components/VillagerVictoryAnimation";
+import { GameFinishedModal } from "../components/GameFinishedModal";
+
+
+const AVA_IMAGES = import.meta.glob("../assets/Ava/*.avif", { eager: true, import: "default" }) as Record<string, string>;
+const sampleAvatarUrl = Object.values(AVA_IMAGES)[0] || "";
+
+interface MockPlayerCircleProps {
+  name: string;
+  size: number;
+  scaleFactor: number;
+  isDead?: boolean;
+  avatarType?: "masked" | "solid" | "none";
+  isSeerResult?: boolean;
+  seerResultIsWolf?: boolean;
+  isVerdictLiveHighlighted?: boolean;
+  isVerdictDieHighlighted?: boolean;
+  isWitchDanger?: boolean;
+  isCursedHighlighted?: boolean;
+  cursedHighlightIsDanger?: boolean;
+  nightActionProgress?: "none" | "pending" | "done";
+  isDietQuyOrange?: boolean;
+  isDietQuyRed?: boolean;
+  isSecondaryHighlighted?: boolean;
+  isTrialWhite?: boolean;
+  isHighlighted?: boolean;
+  isActiveNightRoleBadge?: boolean;
+  isTrialOrange?: boolean;
+  isTrialGreen?: boolean;
+  showWolfBadge?: boolean;
+  showWolfVoteBadge?: boolean;
+  voteCount?: number;
+  wolfCount?: number;
+  shaking?: boolean;
+  isProtectedByGuardian?: boolean;
+}
+
+function MockPlayerCircle({
+  name,
+  size,
+  scaleFactor,
+  isDead = false,
+  avatarType = "masked",
+  isSeerResult = false,
+  seerResultIsWolf = false,
+  isVerdictLiveHighlighted = false,
+  isVerdictDieHighlighted = false,
+  isWitchDanger = false,
+  isCursedHighlighted = false,
+  cursedHighlightIsDanger = false,
+  nightActionProgress = "none",
+  isDietQuyOrange = false,
+  isDietQuyRed = false,
+  isSecondaryHighlighted = false,
+  isTrialWhite = false,
+  isHighlighted = false,
+  isActiveNightRoleBadge = false,
+  isTrialOrange = false,
+  isTrialGreen = false,
+  showWolfBadge = false,
+  showWolfVoteBadge = false,
+  voteCount = 1,
+  wolfCount = 2,
+  shaking = false,
+  isProtectedByGuardian = false,
+}: MockPlayerCircleProps) {
+  const scalePx = (value: number, min = 1) => Math.max(min, Math.round(value * scaleFactor));
+  const circleSizePx = scalePx(size, 34);
+  const circleRadiusPx = circleSizePx / 2;
+  const badgeOffsetPx = scalePx(10, 6);
+  const badgePadding = `${scalePx(2, 1)}px ${scalePx(6, 3)}px`;
+  const badgeFontSizePx = scalePx(11, 8);
+  const dashCamXoay = { inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px dashed #f59e0b` };
+
+  const maskedAvatarUrl = avatarType === "masked" ? sampleAvatarUrl : undefined;
+
+  return (
+    <div
+      className={`player-circle-token ${isDead ? "is-dead" : ""} ${shaking ? "witch-danger" : ""}`}
+      style={{
+        position: "relative",
+        width: circleSizePx,
+        height: circleSizePx,
+        borderRadius: circleRadiusPx,
+        backgroundImage: maskedAvatarUrl 
+          ? `url("${nenLungAsset}")` 
+          : undefined,
+        backgroundColor: avatarType === "solid" ? "#3b82f6" : (avatarType === "none" ? "rgba(255,255,255,0.05)" : undefined),
+        backgroundPosition: maskedAvatarUrl ? "center" : undefined,
+        backgroundSize: maskedAvatarUrl ? "cover" : undefined,
+        backgroundRepeat: maskedAvatarUrl ? "no-repeat" : undefined,
+        border: `${scalePx(2, 1)}px solid rgba(255,255,255,0.2)`,
+        boxSizing: "border-box"
+      }}
+    >
+      {maskedAvatarUrl && (
+        <>
+          {/* 1. Phần thân nhân vật được bo tròn theo vòng tròn */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "inherit",
+              overflow: "hidden",
+              pointerEvents: "none",
+              zIndex: 0,
+            }}
+          >
+            <img
+              src={maskedAvatarUrl}
+              alt=""
+              style={{
+                position: "absolute",
+                bottom: 0,
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: "115%",
+                height: "115%",
+                objectFit: "contain",
+                objectPosition: "bottom center",
+              }}
+            />
+            {/* Overlay tối nhẹ lên thân nhân vật */}
+            <div style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: "inherit",
+              zIndex: 1
+            }} />
+          </div>
+
+          {/* 2. Phần đầu nhân vật nhô lên ngoài vòng tròn */}
+          <img
+            src={maskedAvatarUrl}
+            alt=""
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: "50%",
+              transform: "translateX(-50%)",
+              width: "115%",
+              height: "115%",
+              objectFit: "contain",
+              objectPosition: "bottom center",
+              clipPath: "inset(0 0 40% 0)",
+              pointerEvents: "none",
+              zIndex: 0,
+            }}
+          />
+        </>
+      )}
+
+      {/* Concentric Halo Rings */}
+      {isSeerResult && (
+        <div className={`player-halo halo-seer ${seerResultIsWolf ? "halo-seer-wolf" : ""}`} style={{ inset: -scalePx(6, 4), border: `${scalePx(4, 1)}px solid ${seerResultIsWolf ? "#ef4444" : "#f1f5f9"}` }} />
+      )}
+      {isVerdictLiveHighlighted && (
+        <div className="player-halo halo-live" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #10b981` }} />
+      )}
+      {isVerdictDieHighlighted && (
+        <div className="player-halo halo-die" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #ef4444` }} />
+      )}
+      {isWitchDanger && (
+        <div className="player-halo halo-danger" style={{ inset: -scalePx(6, 4), border: `${scalePx(2.5, 1.5)}px solid #dc2626` }} />
+      )}
+      {isCursedHighlighted && (
+        <div className={`player-halo halo-cursed ${cursedHighlightIsDanger ? "halo-cursed-wolf" : ""}`} style={{ inset: -scalePx(6, 4), border: `${scalePx(4, 1)}px solid ${cursedHighlightIsDanger ? "#dc2626" : "#e2e8f0"}` }} />
+      )}
+      {nightActionProgress === "pending" && (
+        <div className="player-halo halo-dash-cam-xoay" style={dashCamXoay} />
+      )}
+      {nightActionProgress === "done" && (
+        <div className="player-halo halo-night-done" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #10b981` }} />
+      )}
+      {isDietQuyOrange && (
+        <div className="player-halo halo-dietquy-orange" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #ff9800` }} />
+      )}
+      {isDietQuyRed && (
+        <div className="player-halo halo-dietquy-red" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #ef4444` }} />
+      )}
+
+      {/* Mid Concentric Rings */}
+      {isSecondaryHighlighted && (
+        <div className="player-halo" style={{ inset: -scalePx(10, 6), border: `${scalePx(4, 1)}px solid #ffffff`, boxShadow: "0 0 10px rgba(255, 255, 255, 0.8)" }} />
+      )}
+      {isTrialWhite && (
+        <div className="player-halo halo-trial-white" style={{ inset: -scalePx(10, 6), border: `${scalePx(2, 1)}px solid #f1f5f9` }} />
+      )}
+
+      {/* Outer Concentric Rings */}
+      {isHighlighted && (
+        <div className="player-halo halo-spotlight" style={{ inset: -scalePx(10, 6), border: `${scalePx(4, 1)}px solid #ffffff`, boxShadow: "0 0 10px rgba(255, 255, 255, 0.8)" }} />
+      )}
+      {isActiveNightRoleBadge && (
+        <div className="player-halo halo-active-role" style={{ inset: -scalePx(10, 6), border: `${scalePx(2.5, 1.5)}px solid #ffd700` }} />
+      )}
+      {isTrialOrange && (
+        <div className="player-halo halo-dash-cam-xoay" style={dashCamXoay} />
+      )}
+      {isProtectedByGuardian && (
+        <Orb hue={0} />
+      )}
+      {isTrialGreen && (
+        <div className="player-halo halo-trial-green" style={{ inset: -scalePx(12, 8), border: `${scalePx(2.5, 2)}px solid #34d399` }} />
+      )}
+
+      {/* Badges and Indicators */}
+      {showWolfVoteBadge && (
+        <div style={{
+          position: "absolute",
+          top: -badgeOffsetPx,
+          right: -badgeOffsetPx,
+          background: "linear-gradient(135deg, #ef5350, #c62828)",
+          color: "#fff",
+          borderRadius: badgeOffsetPx,
+          padding: badgePadding,
+          fontSize: badgeFontSizePx,
+          fontWeight: "bold",
+          zIndex: 2,
+          boxShadow: "0 2px 6px rgba(198, 40, 40, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2)",
+          border: "1px solid rgba(255, 255, 255, 0.15)",
+        }}>
+          {voteCount}/{wolfCount}
+        </div>
+      )}
+
+      {showWolfBadge && (
+        <div style={{
+          position: "absolute",
+          bottom: -badgeOffsetPx,
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: "linear-gradient(135deg, #422213, #2d1307)",
+          color: "#ff6b6b",
+          padding: badgePadding,
+          borderRadius: scalePx(6, 3),
+          fontSize: badgeFontSizePx,
+          fontWeight: "bold",
+          border: "1px solid rgba(239, 68, 68, 0.35)",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.45), inset 0 1px 1px rgba(255, 255, 255, 0.15)",
+          display: "flex",
+          alignItems: "center",
+          gap: scalePx(3, 2),
+          width: "max-content",
+          zIndex: 2,
+          animation: "badgeFadeIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
+        }}>
+          <AvifIcon name="🐺" style={{ width: "1.15em", height: "1.15em" }} /> Sói
+        </div>
+      )}
+
+      {(() => {
+        const hasAvatar = avatarType !== "none";
+        const hasRoleBadge = showWolfBadge;
+        const isNameAtBottom = hasAvatar && !hasRoleBadge;
+        return (
+          <div style={{ 
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            transform: isNameAtBottom ? `translate(-50%, ${circleSizePx / 2.2}px)` : "translate(-50%, -50%)",
+            textAlign: "center", 
+            pointerEvents: "none", 
+            zIndex: 1,
+            width: "max-content",
+          }}>
+            <div style={{
+              fontWeight: 600,
+              opacity: isDead ? 0.45 : 1,
+              color: isDead ? "#94a3b8" : "#f8fafc",
+              fontFamily: "'Inter', system-ui, sans-serif",
+              fontSize: scalePx(12, 9),
+              letterSpacing: "-0.01em",
+              textShadow: hasAvatar ? "0 2px 4px rgba(0,0,0,0.95), 0 0 6px rgba(0,0,0,0.95)" : "0 1px 2px rgba(0,0,0,0.6)",
+            }}>{name}</div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
 
 export default function DevSpawn() {
   // Spawner States
@@ -10,6 +293,45 @@ export default function DevSpawn() {
   const [count, setCount] = useState(5);
   const [prefix, setPrefix] = useState("P");
   const [debugAnim, setDebugAnim] = useState(true);
+
+
+  const [villagerVictoryAnimOpen, setVillagerVictoryAnimOpen] = useState(false);
+  const [gameFinishedModalOpen, setGameFinishedModalOpen] = useState(false);
+  const [testWinner, setTestWinner] = useState<string | null>(null);
+  const [testScoreResult, setTestScoreResult] = useState<any>(null);
+
+
+  // --- PLAYER HALO SHOWCASE STATES ---
+  const [haloCircleSize, setHaloCircleSize] = useState(80);
+  const [haloScaleFactor, setHaloScaleFactor] = useState(1.0);
+  const [haloAvatarType, setHaloAvatarType] = useState<"masked" | "solid" | "none">("masked");
+  const [haloIsDead, setHaloIsDead] = useState(false);
+  const [haloShaking, setHaloShaking] = useState(false);
+  const [haloName, setHaloName] = useState("Dân Làng");
+
+  const [playgroundHalos, setPlaygroundHalos] = useState({
+    isSeerResult: false,
+    seerResultIsWolf: false,
+    isVerdictLiveHighlighted: false,
+    isVerdictDieHighlighted: false,
+    isWitchDanger: false,
+    isCursedHighlighted: false,
+    cursedHighlightIsDanger: false,
+    nightActionProgress: "none" as "none" | "pending" | "done",
+    isDietQuyOrange: false,
+    isDietQuyRed: false,
+    isSecondaryHighlighted: false,
+    isTrialWhite: false,
+    isHighlighted: false,
+    isActiveNightRoleBadge: false,
+    isTrialOrange: false,
+    isTrialGreen: false,
+    showWolfBadge: false,
+    showWolfVoteBadge: false,
+    voteCount: 1,
+    wolfCount: 2,
+    isProtectedByGuardian: false,
+  });
 
   // Replay States
   const [savedMatches, setSavedMatches] = useState<string[]>([]);
@@ -453,7 +775,18 @@ export default function DevSpawn() {
             </div>
 
             <button
-              onClick={() => shootWinnerConfettiFromSides("villagers")}
+              onClick={() => {
+                setTestWinner("villagers");
+                setTestScoreResult({
+                  gameId: "mock-game-1",
+                  mvp: { playerId: "p1", name: "Người Chơi MVP", score: 100 },
+                  ranking: [
+                    { playerId: "p1", name: "Người Chơi MVP", role: "Thiên Sứ", team: "villagers", aliveAtEnd: true, totalScore: 100 },
+                    { playerId: "p2", name: "Sói Bị Đẩy Văng", role: "Sói", team: "wolves", aliveAtEnd: false, totalScore: 20 }
+                  ]
+                });
+                setVillagerVictoryAnimOpen(true);
+              }}
               style={{
                 width: "100%",
                 marginTop: "12px",
@@ -471,7 +804,19 @@ export default function DevSpawn() {
               Test Phe Dân thắng
             </button>
             <button
-              onClick={() => shootWinnerConfettiFromSides("wolves")}
+              onClick={() => {
+                setTestWinner("wolves");
+                setTestScoreResult({
+                  gameId: "mock-game-2",
+                  mvp: { playerId: "p2", name: "Sói Chúa", score: 120 },
+                  ranking: [
+                    { playerId: "p1", name: "Dân Thường", role: "Dân làng", team: "villagers", aliveAtEnd: false, totalScore: 30 },
+                    { playerId: "p2", name: "Sói Chúa", role: "Sói", team: "wolves", aliveAtEnd: true, totalScore: 120 }
+                  ]
+                });
+                shootWinnerConfettiFromSides("wolves");
+                setGameFinishedModalOpen(true);
+              }}
               style={{
                 width: "100%",
                 marginTop: "8px",
@@ -489,13 +834,28 @@ export default function DevSpawn() {
               Test Phe Sói thắng
             </button>
             <button
-              onClick={() => shootWinnerConfettiFromSides("lovers", {
-                pairIds: ["p1", "p2"],
-                rolesByPlayerId: {
-                  p1: "Thần tình yêu",
-                  p2: "Sói thường"
-                }
-              })}
+              onClick={() => {
+                setTestWinner("lovers");
+                setTestScoreResult({
+                  gameId: "mock-game-3",
+                  mvp: [
+                    { playerId: "p1", name: "Cupid", score: 95 },
+                    { playerId: "p2", name: "Sói Yêu", score: 95 }
+                  ],
+                  ranking: [
+                    { playerId: "p1", name: "Cupid", role: "Thần tình yêu", team: "couple", aliveAtEnd: true, totalScore: 95 },
+                    { playerId: "p2", name: "Sói Yêu", role: "Sói", team: "couple", aliveAtEnd: true, totalScore: 95 }
+                  ]
+                });
+                shootWinnerConfettiFromSides("lovers", {
+                  pairIds: ["p1", "p2"],
+                  rolesByPlayerId: {
+                    p1: "Thần tình yêu",
+                    p2: "Sói thường"
+                  }
+                });
+                setGameFinishedModalOpen(true);
+              }}
               style={{
                 width: "100%",
                 marginTop: "8px",
@@ -509,6 +869,7 @@ export default function DevSpawn() {
                 cursor: "pointer",
                 transition: "all 0.2s",
               }}
+
             >
               Test Cặp đôi Sói + Cupid thắng
             </button>
@@ -956,6 +1317,671 @@ export default function DevSpawn() {
           </div>
         )}
       </div>
+
+      {/* PANEL BOTTOM: Player Circle Halo Showcase & Playground */}
+      <div style={{
+        marginTop: "32px",
+        background: "rgba(30, 27, 75, 0.25)",
+        backdropFilter: "blur(12px)",
+        border: "1px solid rgba(99, 102, 241, 0.15)",
+        borderRadius: "16px",
+        padding: "24px",
+        boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
+      }}>
+        <style>{`
+          @keyframes witchDangerShake {
+            0% { transform: translate(-50%, -50%) translateX(0); }
+            20% { transform: translate(-50%, -50%) translateX(-2px); }
+            40% { transform: translate(-50%, -50%) translateX(2px); }
+            60% { transform: translate(-50%, -50%) translateX(-2px); }
+            80% { transform: translate(-50%, -50%) translateX(2px); }
+            100% { transform: translate(-50%, -50%) translateX(0); }
+          }
+          @keyframes boardPop {
+            0% { transform: scale(0); opacity: 0; }
+            70% { transform: scale(1.15); opacity: 0.9; }
+            100% { transform: scale(1); opacity: 1; }
+          }
+          @keyframes dashMove {
+            to { stroke-dashoffset: -40; }
+          }
+          .witch-danger {
+            animation: witchDangerShake 500ms infinite !important;
+            position: absolute !important;
+            left: 50% !important;
+            top: 50% !important;
+          }
+          @keyframes playerHeartShake {
+            0% { transform: translateX(0); }
+            20% { transform: translateX(-1px); }
+            40% { transform: translateX(1px); }
+            60% { transform: translateX(-1px); }
+            80% { transform: translateX(1px); }
+            100% { transform: translateX(0); }
+          }
+
+          /* PREMIUM REVAMP KEYFRAMES */
+          @keyframes rotateGlow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+          @keyframes rotateGlowCounter {
+            from { transform: rotate(360deg); }
+            to { transform: rotate(0deg); }
+          }
+          @keyframes badgeFadeIn {
+            0% { opacity: 0; transform: translate(-50%, 12px) scale(0.8); }
+            70% { opacity: 0.9; transform: translate(-50%, -2px) scale(1.05); }
+            100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+          }
+          @keyframes breatheSoft {
+            0%, 100% { opacity: 0.65; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.03); }
+          }
+          @keyframes warningPulse {
+            0%, 100% { box-shadow: 0 0 10px rgba(220, 38, 38, 0.4), inset 0 0 4px rgba(220, 38, 38, 0.2); border-color: rgba(220, 38, 38, 0.7); }
+            50% { box-shadow: 0 0 20px rgba(220, 38, 38, 0.85), inset 0 0 8px rgba(220, 38, 38, 0.45); border-color: rgba(255, 107, 107, 1); }
+          }
+          @keyframes activeRolePulse {
+            0%, 100% { box-shadow: 0 0 12px rgba(255, 215, 0, 0.4), inset 0 0 6px rgba(255, 215, 0, 0.2); }
+            50% { box-shadow: 0 0 24px rgba(255, 215, 0, 0.75), inset 0 0 10px rgba(255, 215, 0, 0.4); }
+          }
+          @keyframes pulseCaution {
+            0%, 100% { opacity: 0.9; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+            50% { opacity: 1; box-shadow: 0 2px 10px rgba(245, 158, 11, 0.35); }
+          }
+
+          /* CONCENTRIC HALOS */
+          .player-halo {
+            position: absolute;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: -1;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+          }
+          .halo-live {
+            box-shadow: 0 0 16px rgba(16, 185, 129, 0.75), inset 0 0 6px rgba(16, 185, 129, 0.35);
+          }
+          .halo-die {
+            box-shadow: 0 0 16px rgba(239, 68, 68, 0.85), inset 0 0 6px rgba(239, 68, 68, 0.4);
+            animation: breatheSoft 2.2s ease-in-out infinite;
+          }
+          .halo-danger {
+            animation: warningPulse 1.2s ease-in-out infinite;
+          }
+          .halo-spotlight {
+            animation: rotateGlow 12s linear infinite;
+            box-shadow: 0 0 14px rgba(255, 152, 0, 0.45);
+          }
+          .halo-secondary {
+            animation: rotateGlowCounter 16s linear infinite;
+            box-shadow: 0 0 10px rgba(46, 204, 113, 0.25);
+          }
+          .halo-cursed {
+            animation: breatheSoft 2.5s ease-in-out infinite;
+            box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
+          }
+          .halo-cursed-wolf {
+            animation: breatheSoft 2.5s ease-in-out infinite;
+            box-shadow: 0 0 16px rgb(255 0 0 / 40%);
+          }
+          .halo-active-role {
+            animation: activeRolePulse 2s ease-in-out infinite;
+          }
+          .halo-trial-orange {
+            animation: rotateGlow 8s linear infinite;
+            box-shadow: 0 0 22px rgba(245, 158, 11, 0.75), inset 0 0 10px rgba(245, 158, 11, 0.35);
+          }
+          .halo-trial-white {
+            animation: breatheSoft 2.2s ease-in-out infinite;
+            box-shadow: 0 0 14px rgba(241, 245, 249, 0.5);
+          }
+          .halo-trial-green {
+            animation: breatheSoft 2s ease-in-out infinite;
+            box-shadow: 0 0 20px rgba(52, 211, 153, 0.65);
+          }
+          .halo-dash-cam-xoay {
+            animation: rotateGlow 14s linear infinite;
+            box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+          }
+          .halo-night-done {
+            box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+          }
+          .halo-seer {
+            animation: breatheSoft 2s ease-in-out infinite;
+            box-shadow: 0 0 16px rgba(255, 255, 255, 0.4);
+          }
+          .halo-seer-wolf {
+            animation: breatheSoft 2s ease-in-out infinite;
+            box-shadow: 0 0 16px rgb(255 0 0 / 40%);
+          }
+          .halo-dietquy-orange {
+            box-shadow: 0 0 8px #ff9800;
+          }
+          .halo-dietquy-red {
+            box-shadow: 0 0 8px #ef4444;
+          }
+
+          /* PREMIUM TOKEN COMPONENT */
+          .player-circle-token {
+            background: linear-gradient(135deg, rgba(31, 36, 48, 0.94), rgba(23, 26, 33, 0.97));
+            box-shadow: 
+              inset 0 1px 2px rgba(255, 255, 255, 0.08),
+              inset 0 -2px 6px rgba(0, 0, 0, 0.45),
+              0 8px 24px rgba(0, 0, 0, 0.35);
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+          }
+          .player-circle-token:hover {
+            transform: translateY(-2px) scale(1.03);
+            background: linear-gradient(135deg, rgba(38, 44, 58, 0.96), rgba(28, 32, 41, 0.98));
+            box-shadow: 
+              inset 0 1px 3px rgba(255, 255, 255, 0.14),
+              inset 0 -2px 8px rgba(0, 0, 0, 0.5),
+              0 12px 32px rgba(0, 0, 0, 0.45);
+          }
+        `}</style>
+
+        <h2 style={{ fontSize: "1.5rem", fontWeight: 700, margin: "0 0 20px 0", display: "flex", alignItems: "center", gap: "10px", color: "#f59e0b" }}>
+          <span>✨</span> Trình Trưng Bày & Thử Nghiệm Hào Quang (Player Halo Showcase & Playground)
+        </h2>
+
+        {/* SECTION 1: PLAYGROUND */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "24px",
+          marginBottom: "32px",
+          background: "rgba(15, 12, 30, 0.4)",
+          padding: "24px",
+          borderRadius: "12px",
+          border: "1px solid rgba(255,255,255,0.05)"
+        }}>
+          {/* Controls */}
+          <div>
+            <h3 style={{ fontSize: "1.1rem", fontWeight: 600, margin: "0 0 16px 0", color: "#cbd5e1", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
+              🛠️ Bảng Điều Khiển (Playground Controls)
+            </h3>
+            
+            {/* Range sliders */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", color: "#94a3b8", marginBottom: "4px" }}>
+                  Kích thước gốc: <strong>{haloCircleSize}px</strong>
+                </label>
+                <input
+                  type="range"
+                  min={50}
+                  max={150}
+                  value={haloCircleSize}
+                  onChange={(e) => setHaloCircleSize(Number(e.target.value))}
+                  style={{ width: "100%", accentColor: "#f59e0b" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", color: "#94a3b8", marginBottom: "4px" }}>
+                  Hệ số Tỷ lệ (Scale): <strong>{haloScaleFactor.toFixed(1)}</strong>
+                </label>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={2.0}
+                  step={0.1}
+                  value={haloScaleFactor}
+                  onChange={(e) => setHaloScaleFactor(Number(e.target.value))}
+                  style={{ width: "100%", accentColor: "#f59e0b" }}
+                />
+              </div>
+            </div>
+
+            {/* General state inputs */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", color: "#94a3b8", marginBottom: "4px" }}>Tên Người Chơi:</label>
+                <input
+                  value={haloName}
+                  onChange={(e) => setHaloName(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "6px 10px",
+                    borderRadius: "6px",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    background: "rgba(0,0,0,0.3)",
+                    color: "#fff",
+                    fontSize: "0.875rem",
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", color: "#94a3b8", marginBottom: "4px" }}>Kiểu Avatar:</label>
+                <select
+                  value={haloAvatarType}
+                  onChange={(e) => setHaloAvatarType(e.target.value as any)}
+                  style={{
+                    width: "100%",
+                    padding: "6px 10px",
+                    borderRadius: "6px",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    background: "rgba(0,0,0,0.3)",
+                    color: "#fff",
+                    fontSize: "0.875rem",
+                  }}
+                >
+                  <option value="masked">Masked Avatar (Nhô đầu)</option>
+                  <option value="solid">Màu Solid</option>
+                  <option value="none">Không Avatar</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "16px" }}>
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.825rem", color: "#cbd5e1", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={haloIsDead}
+                  onChange={(e) => setHaloIsDead(e.target.checked)}
+                />
+                💀 Đã Chết (Is Dead)
+              </label>
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.825rem", color: "#cbd5e1", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={haloShaking}
+                  onChange={(e) => setHaloShaking(e.target.checked)}
+                />
+                🫨 Rung Lắc (Witch Danger)
+              </label>
+            </div>
+
+            {/* Checkbox matrix for concentric halos */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "12px" }}>
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.isSeerResult}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isSeerResult: e.target.checked })}
+                />
+                🔍 Tiên Tri Soi (isSeerResult)
+              </label>
+              {playgroundHalos.isSeerResult && (
+                <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#f87171", cursor: "pointer", marginLeft: "12px" }}>
+                  <input
+                    type="checkbox"
+                    checked={playgroundHalos.seerResultIsWolf}
+                    onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, seerResultIsWolf: e.target.checked })}
+                  />
+                  ↳ Kết quả là Sói (isWolf)
+                </label>
+              )}
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.isVerdictLiveHighlighted}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isVerdictLiveHighlighted: e.target.checked })}
+                />
+                🟢 Bình chọn Sống (Live Highlight)
+              </label>
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.isVerdictDieHighlighted}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isVerdictDieHighlighted: e.target.checked })}
+                />
+                🔴 Bình chọn Treo (Die Highlight)
+              </label>
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.isWitchDanger}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isWitchDanger: e.target.checked })}
+                />
+                🧪 Phù Thủy Độc (Witch Danger)
+              </label>
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.isCursedHighlighted}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isCursedHighlighted: e.target.checked })}
+                />
+                ⬜ Bị Nguyền (Cursed Highlight)
+              </label>
+              {playgroundHalos.isCursedHighlighted && (
+                <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#f87171", cursor: "pointer", marginLeft: "12px" }}>
+                  <input
+                    type="checkbox"
+                    checked={playgroundHalos.cursedHighlightIsDanger}
+                    onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, cursedHighlightIsDanger: e.target.checked })}
+                  />
+                  ↳ Hóa Sói (isDanger)
+                </label>
+              )}
+
+              {/* Night Progress Radio group */}
+              <div style={{ gridColumn: "span 2", margin: "4px 0", borderTop: "1px dashed rgba(255,255,255,0.05)", paddingTop: "8px" }}>
+                <span style={{ fontSize: "0.8rem", color: "#94a3b8", marginRight: "8px" }}>Hành động Đêm (Night Action):</span>
+                <label style={{ display: "inline-flex", alignItems: "center", marginRight: "12px", fontSize: "0.8rem", cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    name="nightAction"
+                    value="none"
+                    checked={playgroundHalos.nightActionProgress === "none"}
+                    onChange={() => setPlaygroundHalos({ ...playgroundHalos, nightActionProgress: "none" })}
+                    style={{ marginRight: "4px" }}
+                  /> None
+                </label>
+                <label style={{ display: "inline-flex", alignItems: "center", marginRight: "12px", fontSize: "0.8rem", cursor: "pointer", color: "#f59e0b" }}>
+                  <input
+                    type="radio"
+                    name="nightAction"
+                    value="pending"
+                    checked={playgroundHalos.nightActionProgress === "pending"}
+                    onChange={() => setPlaygroundHalos({ ...playgroundHalos, nightActionProgress: "pending" })}
+                    style={{ marginRight: "4px" }}
+                  /> Pending (Dashed Orange)
+                </label>
+                <label style={{ display: "inline-flex", alignItems: "center", fontSize: "0.8rem", cursor: "pointer", color: "#10b981" }}>
+                  <input
+                    type="radio"
+                    name="nightAction"
+                    value="done"
+                    checked={playgroundHalos.nightActionProgress === "done"}
+                    onChange={() => setPlaygroundHalos({ ...playgroundHalos, nightActionProgress: "done" })}
+                    style={{ marginRight: "4px" }}
+                  /> Done (Green Solid)
+                </label>
+              </div>
+
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer", borderTop: "1px dashed rgba(255,255,255,0.05)", paddingTop: "8px" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.isDietQuyOrange}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isDietQuyOrange: e.target.checked })}
+                />
+                🟠 Diệt Quỷ Cam (dietquy-orange)
+              </label>
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer", borderTop: "1px dashed rgba(255,255,255,0.05)", paddingTop: "8px" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.isDietQuyRed}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isDietQuyRed: e.target.checked })}
+                />
+                🔴 Diệt Quỷ Đỏ (dietquy-red)
+              </label>
+
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.isSecondaryHighlighted}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isSecondaryHighlighted: e.target.checked })}
+                />
+                ⚪ Vòng Thứ Cấp (Secondary Glow)
+              </label>
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.isTrialWhite}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isTrialWhite: e.target.checked })}
+                />
+                ⬜ Trial White (Vòng luận tội trắng)
+              </label>
+
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.isHighlighted}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isHighlighted: e.target.checked })}
+                />
+                🌟 Spotlight (Vòng hào quang vàng xoay)
+              </label>
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.isActiveNightRoleBadge}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isActiveNightRoleBadge: e.target.checked })}
+                />
+                👑 Active Night Role (Vòng vàng nhấp nháy)
+              </label>
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#f59e0b", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.isTrialOrange}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isTrialOrange: e.target.checked })}
+                />
+                🌀 Dash Cam Xoay (Trial Orange / Bị biểu quyết)
+              </label>
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#34d399", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.isProtectedByGuardian}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isProtectedByGuardian: e.target.checked })}
+                />
+                🛡️ Được Bảo Vệ (Orb Đỏ hue 0)
+              </label>
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.isTrialGreen}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isTrialGreen: e.target.checked })}
+                />
+                🟢 Trial Green (Hào quang tha bổng xanh)
+              </label>
+
+              {/* Vote badges */}
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#f87171", cursor: "pointer", borderTop: "1px dashed rgba(255,255,255,0.05)", paddingTop: "8px" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.showWolfVoteBadge}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, showWolfVoteBadge: e.target.checked })}
+                />
+                🗳️ Phiếu bầu Sói (Wolf Vote Badge)
+              </label>
+              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#fb7185", cursor: "pointer", borderTop: "1px dashed rgba(255,255,255,0.05)", paddingTop: "8px" }}>
+                <input
+                  type="checkbox"
+                  checked={playgroundHalos.showWolfBadge}
+                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, showWolfBadge: e.target.checked })}
+                />
+                🐺 Huy hiệu Sói (Wolf Role Badge)
+              </label>
+            </div>
+          </div>
+
+          {/* Live Preview Screen */}
+          <div style={{
+            background: "radial-gradient(circle, #1a163a 0%, #05030b 100%)",
+            borderRadius: "8px",
+            border: "1px solid rgba(139, 92, 246, 0.2)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            position: "relative",
+            minHeight: "350px",
+            overflow: "hidden"
+          }}>
+            {/* Grid overlay for positioning reference */}
+            <div style={{
+              position: "absolute",
+              inset: 0,
+              backgroundImage: "linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)",
+              backgroundSize: "20px 20px",
+              pointerEvents: "none"
+            }} />
+
+            {/* The Mock Circle Rendered Live */}
+            <div style={{ position: "relative", padding: "40px" }}>
+              <MockPlayerCircle
+                name={haloName}
+                size={haloCircleSize}
+                scaleFactor={haloScaleFactor}
+                isDead={haloIsDead}
+                avatarType={haloAvatarType}
+                shaking={haloShaking}
+                {...playgroundHalos}
+              />
+            </div>
+
+            <div style={{
+              position: "absolute",
+              bottom: "12px",
+              fontSize: "0.75rem",
+              color: "#94a3b8",
+              background: "rgba(0,0,0,0.6)",
+              padding: "4px 8px",
+              borderRadius: "4px",
+              border: "1px solid rgba(255,255,255,0.05)",
+              pointerEvents: "none"
+            }}>
+              Màn Hình Live Preview (Tỉ lệ 1:1)
+            </div>
+          </div>
+        </div>
+
+        {/* SECTION 2: GRID OF ALL INDIVIDUAL HALOS */}
+        <div>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 600, margin: "0 0 16px 0", color: "#cbd5e1", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
+            📚 Danh sách các vòng hào quang (Individual Halo Library)
+          </h3>
+
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+            gap: "24px"
+          }}>
+            {/* Halo 1: Seer Result (Villager) */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>1. Tiên Tri Soi (Dân)</span>
+              <MockPlayerCircle name="Dân" size={70} scaleFactor={1.0} isSeerResult={true} seerResultIsWolf={false} />
+            </div>
+
+            {/* Halo 2: Seer Result (Wolf) */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>2. Tiên Tri Soi (Sói)</span>
+              <MockPlayerCircle name="Sói" size={70} scaleFactor={1.0} isSeerResult={true} seerResultIsWolf={true} />
+            </div>
+
+            {/* Halo 3: Verdict Live */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>3. Bình chọn Sống</span>
+              <MockPlayerCircle name="Sống" size={70} scaleFactor={1.0} isVerdictLiveHighlighted={true} />
+            </div>
+
+            {/* Halo 4: Verdict Die */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>4. Bình chọn Treo</span>
+              <MockPlayerCircle name="Treo" size={70} scaleFactor={1.0} isVerdictDieHighlighted={true} />
+            </div>
+
+            {/* Halo 5: Witch Danger */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>5. Bị Phù Thủy Độc</span>
+              <MockPlayerCircle name="Độc" size={70} scaleFactor={1.0} isWitchDanger={true} shaking={true} />
+            </div>
+
+            {/* Halo 6: Cursed Highlight (Normal) */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>6. Bị Nguyền (Chưa hóa)</span>
+              <MockPlayerCircle name="Nguyền" size={70} scaleFactor={1.0} isCursedHighlighted={true} cursedHighlightIsDanger={false} />
+            </div>
+
+            {/* Halo 7: Cursed Highlight (Danger/Wolf) */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>7. Bị Nguyền (Hóa Sói)</span>
+              <MockPlayerCircle name="Hóa Sói" size={70} scaleFactor={1.0} isCursedHighlighted={true} cursedHighlightIsDanger={true} />
+            </div>
+
+            {/* Halo 8: Night Action Pending */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>8. Đang chờ hành động (Đêm)</span>
+              <MockPlayerCircle name="Đợi..." size={70} scaleFactor={1.0} nightActionProgress="pending" />
+            </div>
+
+            {/* Halo 9: Night Action Done */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>9. Night Action Xong</span>
+              <MockPlayerCircle name="Xong" size={70} scaleFactor={1.0} nightActionProgress="done" />
+            </div>
+
+            {/* Halo 10: Diet Quy Orange */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>10. Diệt Quỷ Cam</span>
+              <MockPlayerCircle name="Diệt Quỷ" size={70} scaleFactor={1.0} isDietQuyOrange={true} />
+            </div>
+
+            {/* Halo 11: Diet Quy Red */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>11. Diệt Quỷ Đỏ</span>
+              <MockPlayerCircle name="Diệt Quỷ" size={70} scaleFactor={1.0} isDietQuyRed={true} />
+            </div>
+
+            {/* Halo 12: Secondary Highlight */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>12. Vòng Thứ Cấp</span>
+              <MockPlayerCircle name="Thứ Cấp" size={70} scaleFactor={1.0} isSecondaryHighlighted={true} />
+            </div>
+
+            {/* Halo 13: Trial White */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>13. Trial White</span>
+              <MockPlayerCircle name="Luận Tội" size={70} scaleFactor={1.0} isTrialWhite={true} />
+            </div>
+
+            {/* Halo 14: Spotlight (Highlighted) */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>14. Spotlight (Vàng xoay)</span>
+              <MockPlayerCircle name="Mục Tiêu" size={70} scaleFactor={1.0} isHighlighted={true} />
+            </div>
+
+            {/* Halo 15: Active Night Role */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>15. Active Night Role</span>
+              <MockPlayerCircle name="Nhấp Nháy" size={70} scaleFactor={1.0} isActiveNightRoleBadge={true} />
+            </div>
+
+            {/* Halo 16: Được Bảo Vệ (Orb Đỏ) */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>16. Được Bảo Vệ (Orb Đỏ)</span>
+              <MockPlayerCircle name="Bảo Vệ" size={70} scaleFactor={1.0} isProtectedByGuardian={true} />
+            </div>
+
+            {/* Halo 17: Trial Green */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>17. Trial Green (Tha bổng)</span>
+              <MockPlayerCircle name="Tha Bổng" size={70} scaleFactor={1.0} isTrialGreen={true} />
+            </div>
+
+            {/* Halo 18: Trial Orange (Bị Biểu Quyết) */}
+            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>18. Bị Biểu Quyết (Lên giàn)</span>
+              <MockPlayerCircle name="Lên Giàn" size={70} scaleFactor={1.0} isTrialOrange={true} />
+            </div>
+          </div>
+        </div>
+      </div>
+      <VillagerVictoryAnimation
+        open={villagerVictoryAnimOpen}
+        villagerRole="Thiên Sứ"
+        wolfRole="Sói"
+        onComplete={() => {
+          setVillagerVictoryAnimOpen(false);
+          setGameFinishedModalOpen(true);
+        }}
+      />
+
+      <GameFinishedModal
+        open={gameFinishedModalOpen}
+        winner={testWinner}
+        scoreResult={testScoreResult}
+        onClose={() => setGameFinishedModalOpen(false)}
+        onBackToLobby={() => {
+          setGameFinishedModalOpen(false);
+          alert("Quay về phòng chờ!");
+        }}
+        onOpenScoreboard={() => {
+          alert("Mở bảng điểm chi tiết!");
+        }}
+      />
     </div>
   );
 }
+
+

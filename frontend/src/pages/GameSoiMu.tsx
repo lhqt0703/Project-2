@@ -16,6 +16,10 @@ import medalSvg from "../assets/medal.svg";
 import GridMotionOverlay from "../components/GridMotionOverlay";
 import type { GameLogNight as SharedGameLogNight } from "./gameRoles/socketEvents";
 import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
+import { VillagerVictoryAnimation } from "../components/VillagerVictoryAnimation";
+import { GameFinishedModal } from "../components/GameFinishedModal";
+import { getVillagerAndWolfRoles } from "../utils/gameEndHelper";
+
 
 const HUNTER_BULLET_ANIM_MS = 4000;
 
@@ -32,6 +36,10 @@ export default function GameSoiMu() {
   const [daySelectedTargetId, setDaySelectedTargetId] = useState<string | null>(null);
   const [hostPlayerActionTargetId, setHostPlayerActionTargetId] = useState<string | null>(null);
   const [showGridOverlay, setShowGridOverlay] = useState(true);
+  const [noticeModal, setNoticeModal] = useState<{ title: string; message: string } | null>(null);
+  const [villagerVictoryAnimOpen, setVillagerVictoryAnimOpen] = useState(false);
+  const [gameFinishedModalOpen, setGameFinishedModalOpen] = useState(false);
+
 
   // Hunter shot animation states
   const [hunterBulletAnim, setHunterBulletAnim] = useState<{
@@ -235,14 +243,33 @@ export default function GameSoiMu() {
   const prevResultRef = useRef<string | null | undefined>(undefined);
   const prevGameOverRef = useRef(false);
 
+  const { villagerRole, wolfRole } = useMemo(() => {
+    if (!room?.gameOver) return { villagerRole: null, wolfRole: null };
+    return getVillagerAndWolfRoles(
+      room.winner,
+      null,
+      room.players,
+      room.deadPlayers || [],
+      room.playerRoles || revealedRoles
+    );
+  }, [room?.gameOver, room?.winner, room?.players, room?.deadPlayers, room?.playerRoles, revealedRoles]);
+
   useEffect(() => {
     if (room?.gameOver && !prevGameOverRef.current) {
-      if (room.winner && room.winner !== "nobody") {
-        shootWinnerConfettiFromSides(room.winner, undefined);
+      const winner = room.winner;
+      if (winner && winner !== "nobody") {
+        const isVillagerWin = winner !== "wolves";
+        if (isVillagerWin) {
+          setVillagerVictoryAnimOpen(true);
+        } else {
+          shootWinnerConfettiFromSides(winner, undefined);
+          setGameFinishedModalOpen(true);
+        }
       }
     }
     prevGameOverRef.current = !!room?.gameOver;
   }, [room?.gameOver, room?.winner]);
+
 
   useEffect(() => {
     if (!room) return;
@@ -317,6 +344,7 @@ export default function GameSoiMu() {
       setDaySelectedTargetId(null);
       setNightProgress({});
       setHostPlayerActionTargetId(null);
+      setNoticeModal(null);
       socket.emit("requestGameLog", { roomId });
       if (isHost) {
         socket.emit("requestHostNightActionProgress", { roomId });
@@ -435,7 +463,8 @@ export default function GameSoiMu() {
   const handleConfirmDayTarget = () => {
     if (!room || !daySelectedTargetId || !showInvestigationUI) return;
 
-    socket.emit("soiMuDayChooseTarget", { roomId: room.id, targetId: daySelectedTargetId });
+    const finalTargetId = daySelectedTargetId === "none" ? null : daySelectedTargetId;
+    socket.emit("soiMuDayChooseTarget", { roomId: room.id, targetId: finalTargetId });
   };
 
 
@@ -976,6 +1005,23 @@ export default function GameSoiMu() {
               gap: 12
             }}>
               <div style={{ fontWeight: 800, color: "#f59e0b" }}>⚠️ Chọn lại mục tiêu bạn đã chọn đêm qua</div>
+              <div style={{ fontSize: "13px", lineHeight: 1.4, color: "rgba(255, 255, 255, 0.8)" }}>
+                Hãy chọn một người chơi trên vòng tròn hoặc bấm nút dưới đây nếu bạn không chọn ai ban đêm:
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  className="btn-action"
+                  style={{
+                    background: daySelectedTargetId === "none" ? "rgba(245, 158, 11, 0.35)" : "rgba(255,255,255,0.08)",
+                    color: "#fff",
+                    border: daySelectedTargetId === "none" ? "1px solid #f59e0b" : "1px solid rgba(255,255,255,0.15)",
+                    flex: 1
+                  }}
+                  onClick={() => setDaySelectedTargetId("none")}
+                >
+                  Đã không chọn ai
+                </button>
+              </div>
               <button
                 className="btn-action"
                 style={{ background: "#f59e0b", color: "#000", fontWeight: 900 }}
@@ -989,7 +1035,7 @@ export default function GameSoiMu() {
         </div>
       )}
 
-      {!isHost && !isDusk && dayVote.panel && (
+      {!isDusk && dayVote.panel && (
         <div style={{ maxWidth: "600px", margin: "1rem auto 0 auto" }}>
           {dayVote.panel}
         </div>
@@ -1077,13 +1123,18 @@ export default function GameSoiMu() {
               {room.dayPaused ? "Tiếp tục thời gian" : "Tạm ngưng thời gian"}
             </button>
           )}
-          {isDay && (
+          {isDay && !room.gameOver && (
             <button
               onClick={() => socket.emit("hostStartDayVoting", { roomId: room.id })}
               disabled={!!room.dayDeadline || room.trialStage !== "none"}
               style={{ opacity: (!!room.dayDeadline || room.trialStage !== "none") ? 0.6 : 1 }}
             >
               Bắt đầu biểu quyết
+            </button>
+          )}
+          {isDay && !room.gameOver && room.trialStage === "defense" && (
+            <button onClick={() => socket.emit("hostForceFinishDayVote", { roomId: room.id })}>
+              Kết thúc tương tác ngay
             </button>
           )}
           {isDay && !room.gameOver && (room.dayDeadline || room.trialStage === "verdict") && (
@@ -1124,51 +1175,7 @@ export default function GameSoiMu() {
         />
       </div>
 
-      {/* Game Over Modal overlay */}
-      {room.gameOver && (
-        <div style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.8)",
-          backdropFilter: "blur(12px)",
-          zIndex: 1000,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: 20
-        }}>
-          <div style={{
-            background: "linear-gradient(180deg, #1f1a3a, #0d0a1a)",
-            border: "2px solid #a78bfa",
-            borderRadius: "24px",
-            padding: "40px",
-            maxWidth: "480px",
-            width: "100%",
-            textAlign: "center",
-            boxShadow: "0 0 50px rgba(167, 139, 250, 0.3)"
-          }}>
-            <img src={medalSvg} alt="Winner" style={{ width: 80, height: 80, marginBottom: 20, filter: "drop-shadow(0 0 15px #a78bfa)" }} />
-            <h2 style={{ fontSize: "28px", fontWeight: 900, color: "#fff", margin: "0 0 10px" }}>Trò Chơi Kết Thúc!</h2>
-            <div style={{
-              fontSize: "22px",
-              fontWeight: 800,
-              color: room.winner === "wolves" ? "#ef4444" : "#10b981",
-              margin: "0 0 20px"
-            }}>
-              {room.winner === "wolves" ? "🐺 PHE SÓI CHIẾN THẮNG!" : "👨‍🌾 PHE DÂN LÀNG CHIẾN THẮNG!"}
-            </div>
-            <p style={{ color: "rgba(255,255,255,0.7)", fontSize: "14px", lineHeight: 1.6, margin: "0 0 30px" }}>
-              Hãy xem bảng danh sách vai trò trên bản đồ để biết chính xác từng người chơi đã đảm nhiệm vai trò gì trong ván vừa qua.
-            </p>
-            <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-              {isHost && (
-                <button className="btn-action btn-primary" onClick={handleRestartGame}>Chia bài lại</button>
-              )}
-              <button className="btn-action" onClick={handleBackToRoomClick} style={{ background: "rgba(255,255,255,0.08)", color: "#fff", border: "1px solid rgba(255,255,255,0.15)" }}>Về phòng chờ</button>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Confirms */}
       <ConfirmModal
@@ -1225,6 +1232,34 @@ export default function GameSoiMu() {
         }}
         onCancel={() => setRestartConfirmOpen(false)}
       />
+
+      <ConfirmModal
+        open={!!noticeModal}
+        title={noticeModal?.title || ""}
+        message={noticeModal?.message || ""}
+        infoOnly={true}
+        closeText="Đóng"
+        onConfirm={() => setNoticeModal(null)}
+      />
+      <VillagerVictoryAnimation
+        open={villagerVictoryAnimOpen}
+        villagerRole={villagerRole}
+        wolfRole={wolfRole}
+        onComplete={() => {
+          setVillagerVictoryAnimOpen(false);
+          setGameFinishedModalOpen(true);
+        }}
+      />
+
+      <GameFinishedModal
+        open={gameFinishedModalOpen}
+        winner={room?.winner}
+        scoreResult={null}
+        onClose={() => setGameFinishedModalOpen(false)}
+        onBackToLobby={handleBackToRoomClick}
+        onOpenScoreboard={() => {}}
+      />
     </div>
   );
 }
+

@@ -1,0 +1,100 @@
+.villager-victory-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: transparent;
+  backdrop-filter: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Portrait Wrappers - Sát đáy màn hình, đẩy sâu xuống để lấp mọi khoảng hở */
+.victory-portrait-wrapper {
+  position: absolute;
+  bottom: -7dvh;
+  height: 58dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: all 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+.victory-portrait {
+  display: block;
+  height: 100%;
+  max-width: 48vw;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.5));
+  pointer-events: none;
+  user-select: none;
+}
+
+
+/* Phe Dân - Sát góc dưới trái, lật ngang */
+.villager-wrapper {
+  left: -60%;
+}
+
+.villager-portrait {
+  transform: scaleX(-1);
+}
+
+.phase-enter .villager-wrapper,
+.phase-shot .villager-wrapper,
+.phase-blown .villager-wrapper {
+  left: 0%;
+}
+
+/* Phe Sói - Sát góc dưới phải */
+.wolf-wrapper {
+  right: -60%;
+}
+
+.phase-enter .wolf-wrapper,
+.phase-shot .wolf-wrapper {
+  right: 0%;
+}
+
+/* Hiệu ứng bị đẩy văng của sói (giữ nguyên khi sang phase complete) */
+.phase-blown .wolf-wrapper,
+.phase-complete .wolf-wrapper {
+  transform: translate(120vw, -20vh) rotate(420deg) scale(0.15);
+  opacity: 0;
+  transition: transform 1.6s cubic-bezier(0.1, 0.8, 0.3, 1), opacity 1.2s ease-out;
+}
+
+
+/* Phản lực chớp sáng khi bắn */
+.victory-particles-spark {
+  position: absolute;
+  left: 20%;
+  top: 70%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 0 80px 40px white, 0 0 150px 80px #2ecc71;
+  opacity: 0;
+  transform: scale(0.1);
+  pointer-events: none;
+  z-index: 10006;
+}
+
+.phase-shot .victory-particles-spark {
+  animation: sparkFlash 0.35s ease-out forwards;
+}
+
+@keyframes sparkFlash {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(8);
+  }
+}

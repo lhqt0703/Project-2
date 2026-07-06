@@ -130,6 +130,7 @@ interface RoomLike {
   compactCircles?: boolean;
   phase?: string;
   gameOver?: boolean;
+  gameMode?: string;
   wolfVotes?: Record<string, string | null>;
   wolfVotes2?: Record<string, string | null>;
   deadPlayers?: string[];
@@ -151,6 +152,8 @@ interface RoomLike {
     twoHeartsFirstTwoNights?: boolean;
   };
   playerRoles?: Record<string, string>;
+  soiMuNamThuTargetId?: string | null;
+  soiMuSuyThanTargetId?: string | null;
 }
 
 type BulletAnimation = {
@@ -442,12 +445,14 @@ interface PlayerWoodBoardProps {
   visible: boolean;
   iconName: string;
   textLines: string[];
+  style?: React.CSSProperties;
 }
 
 function PlayerWoodBoard({
   visible,
   iconName,
   textLines,
+  style,
 }: PlayerWoodBoardProps) {
   const [showText, setShowText] = useState(false);
 
@@ -465,22 +470,23 @@ function PlayerWoodBoard({
       onClick={handleBoardClick}
       onPointerDown={(e) => e.stopPropagation()}
       style={{
-        position: "relative",
-        top: "-1.8rem",
+        position: "absolute",
+        top: "-1.2rem",
         right: "-0.1rem",
         width: "1.8rem",
         height: "1.8rem",
         cursor: "pointer",
-        rotate: "20deg",
+        rotate: "28deg",
         zIndex: -1,
         opacity: visible ? 1 : 0,
         transform: visible ? "scale(1)" : "scale(0)",
         pointerEvents: visible ? "auto" : "none", 
         transformOrigin: "bottom center",
-        transition: "opacity 0.35s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        transition: "opacity 0.35s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.35s ease, right 0.35s ease, rotate 0.35s ease",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
+        ...style,
       }}
     >
       <img
@@ -545,22 +551,46 @@ function PlayerWoodBoard({
   );
 }
 
-function BlankVoteBoard({ visible }: { visible: boolean }) {
+function BlankVoteBoard({ visible, style }: { visible: boolean; style?: React.CSSProperties }) {
   return (
     <PlayerWoodBoard
       visible={visible}
       iconName="⭕"
       textLines={["Phiếu", "trống"]}
+      style={style}
     />
   );
 }
 
-function DisconnectedBoard({ visible }: { visible: boolean }) {
+function DisconnectedBoard({ visible, style }: { visible: boolean; style?: React.CSSProperties }) {
   return (
     <PlayerWoodBoard
       visible={visible}
       iconName="⛓️💥"
       textLines={["Mất", "kết nối"]}
+      style={style}
+    />
+  );
+}
+
+function NamThuBoard({ visible, style }: { visible: boolean; style?: React.CSSProperties }) {
+  return (
+    <PlayerWoodBoard
+      visible={visible}
+      iconName="👄"
+      textLines={["Cấm", "cười"]}
+      style={style}
+    />
+  );
+}
+
+function SuyThanBoard({ visible, style }: { visible: boolean; style?: React.CSSProperties }) {
+  return (
+    <PlayerWoodBoard
+      visible={visible}
+      iconName="💦"
+      textLines={["Cấm", "đái"]}
+      style={style}
     />
   );
 }
@@ -717,6 +747,7 @@ export default function PlayerPositions({
   revealedRoles,
   rolesBeforeConversion,
   chiefFoundProtectorId,
+  guardianProtectedTargetId,
   activeNightRole,
   suppressNightActionProgress,
   trialOrangePlayerId,
@@ -738,7 +769,7 @@ export default function PlayerPositions({
   testHeartExplosionTrigger,
 }: {
   onPlayerClick: (playerId: string) => void;
-  onPlayerDoubleClick?: (playerId: string) => void;
+  onPlayerDoubleClick?: (playerId: string, clientX?: number, clientY?: number) => void;
   mode?: "edit" | "view";
   roomOverride?: RoomLike | null;
   seerResults?: { playerId: string; isWolf: boolean }[] | null;
@@ -768,6 +799,7 @@ export default function PlayerPositions({
   revealedRoles?: Record<string, string>;
   rolesBeforeConversion?: Record<string, string>;
   chiefFoundProtectorId?: string | null;
+  guardianProtectedTargetId?: string | null;
   activeNightRole?: string | null;
   suppressNightActionProgress?: boolean;
   trialOrangePlayerId?: string | null;
@@ -804,6 +836,12 @@ export default function PlayerPositions({
   const [nightActionNow, setNightActionNow] = useState(() => Date.now());
 
   if (!room) return null;
+
+  const getRoleDisplayName = (roleName: string | undefined | null) => {
+    if (!roleName) return "";
+    if (room?.gameMode === "soi_mu" && roleName === "Tay Buôn") return "Ariana";
+    return roleName;
+  };
 
   const visiblePlayers = room.players.filter((p) => p.id !== room.hostId);
 
@@ -906,6 +944,7 @@ export default function PlayerPositions({
   const hpBadgeTopPx = scalePx(26, 16);
   const badgePadding = `${scalePx(2, 1)}px ${scalePx(6, 3)}px`;
   const hpBadgePadding = `${scalePx(2, 1)}px ${scalePx(8, 4)}px`;
+  const dashCamXoay = { inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px dashed #f59e0b` };
 
   const wolfVotes = room.wolfVotes as Record<string, string | null> | undefined;
   const wolfVotes2 = room.wolfVotes2 as Record<string, string | null> | undefined;
@@ -1653,7 +1692,7 @@ export default function PlayerPositions({
           animation: breatheSoft 2s ease-in-out infinite;
           box-shadow: 0 0 20px rgba(52, 211, 153, 0.65);
         }
-        .halo-night-pending {
+        .halo-dash-cam-xoay {
           animation: rotateGlow 14s linear infinite;
           box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
         }
@@ -1886,8 +1925,7 @@ export default function PlayerPositions({
             (!!dangerPlayerIds && dangerPlayerIds.includes(pos.playerId))
             && !verdictDiePlayerIds?.includes(pos.playerId);
           const isHighlighted = !!highlightPlayerId && highlightPlayerId === pos.playerId;
-          const isSecondaryHighlighted = (!!secondaryHighlightPlayerIds && secondaryHighlightPlayerIds.includes(pos.playerId)) ||
-            (!!showVoteReview && !!trialOrangePlayerId && !!dayVotes && dayVotes[pos.playerId] === trialOrangePlayerId);
+          const isSecondaryHighlighted = !!secondaryHighlightPlayerIds && secondaryHighlightPlayerIds.includes(pos.playerId);
           const isBlankVoter =
             !isDead &&
             pos.playerId !== room.hostId &&
@@ -2162,7 +2200,7 @@ export default function PlayerPositions({
                 <div className={`player-halo halo-cursed ${cursedHighlightIsDanger ? "halo-cursed-wolf" : ""}`} style={{ inset: -scalePx(6, 4), border: `${scalePx(4, 1)}px solid ${cursedHighlightIsDanger ? "#dc2626" : "#e2e8f0"}` }} />
               )}
               {nightActionProgress === "pending" && (
-                <div className="player-halo halo-night-pending" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px dashed #f59e0b` }} />
+                <div className="player-halo halo-dash-cam-xoay" style={dashCamXoay} />
               )}
               {nightActionProgress === "done" && (
                 <div className="player-halo halo-night-done" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #10b981` }} />
@@ -2190,7 +2228,10 @@ export default function PlayerPositions({
                 <div className="player-halo halo-active-role" style={{ inset: -scalePx(10, 6), border: `${scalePx(2.5, 1.5)}px solid #ffd700` }} />
               )}
               {trialOrangePlayerId === pos.playerId && (
-                <Orb hue={210} />
+                <div className="player-halo halo-dash-cam-xoay" style={dashCamXoay} />
+              )}
+              {guardianProtectedTargetId === pos.playerId && (
+                <Orb hue={0} />
               )}
               {trialGreenPlayerId === pos.playerId && (
                 <div className="player-halo halo-trial-green" style={{ inset: -scalePx(12, 8), border: `${scalePx(2.5, 2)}px solid #34d399` }} />
@@ -2393,6 +2434,32 @@ export default function PlayerPositions({
                     <div style={{ opacity: isDead ? 0.3 : 0.5, fontSize: playerSubFontSizePx, textShadow: (avatarUrl || maskedAvatarUrl) ? "0 1px 2px rgba(0,0,0,0.9)" : undefined, filter: "drop-shadow(2px 4px 6px black)" }}>
                       {p.id === clientId ? "(Bạn)" : ""}
                     </div>
+                    {mode === "edit" && (
+                      <div style={{
+                        fontSize: "9px",
+                        fontWeight: 600,
+                        marginTop: 2,
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: 1,
+                        textShadow: "0 1px 2px rgba(0,0,0,0.9)"
+                      }}>
+                        {room?.positionEditors?.includes(p.id) && (
+                          <span style={{ color: "#38bdf8" }}>⚙️ Quyền sắp xếp</span>
+                        )}
+                        {isHost && room?.pendingRoleAssignments?.[p.id] && (
+                          <span style={{ color: "#ff8f42" }}>
+                            ✨ Phát trước: {getRoleDisplayName(room.pendingRoleAssignments[p.id])}
+                          </span>
+                        )}
+                        {isHost && room?.pendingRoleBlocks?.[p.id] && room.pendingRoleBlocks[p.id].length > 0 && (
+                          <span style={{ color: "#f43f5e" }}>
+                            🚫 Chặn: {room.pendingRoleBlocks[p.id].map(getRoleDisplayName).join(", ")}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -2411,14 +2478,14 @@ export default function PlayerPositions({
                 onPointerDown(e, pos.playerId); // Trigger drag
               }
             },
-            onClick: () => {
+            onClick: (e: React.MouseEvent) => {
               if (dragging) return;
               const isTouchTap = lastPointerTypeRef.current === "touch";
               if (isTouchTap && onPlayerDoubleClick) {
                 const now = Date.now();
                 const lastTap = lastTapRef.current;
                 if (lastTap && lastTap.playerId === p.id && now - lastTap.at <= 360) {
-                  onPlayerDoubleClick(p.id);
+                  onPlayerDoubleClick(p.id, e.clientX, e.clientY);
                   lastTapRef.current = null;
                 } else {
                   lastTapRef.current = { playerId: p.id, at: now };
@@ -2426,8 +2493,8 @@ export default function PlayerPositions({
               }
               onPlayerClick(p.id);
             },
-            onDoubleClick: () => {
-              if (!dragging) onPlayerDoubleClick?.(p.id);
+            onDoubleClick: (e: React.MouseEvent) => {
+              if (!dragging) onPlayerDoubleClick?.(p.id, e.clientX, e.clientY);
             },
             className: `player-circle-token ${isDead ? "is-dead" : ""} ${isSwapSelected ? "is-swap-selected" : ""} ${isWitchDanger && !isVerdictDieHighlighted ? "witch-danger" : ""}`,
             style: {
@@ -2473,11 +2540,78 @@ export default function PlayerPositions({
             }
           };
 
+          const isDay = room?.phase === "day";
+          const isSoiMu = room?.gameMode === "soi_mu";
+          const rolesInGame = room?.roles || [];
+          const hasNamThuInGame = rolesInGame.includes("Nam Thư");
+          const hasSuyThanInGame = rolesInGame.includes("Suy Thận");
+          const showNamThuBoard = !!isSoiMu && !!isDay && room?.soiMuNamThuTargetId === pos.playerId;
+          const showSuyThanBoard = !!isSoiMu && !!isDay && room?.soiMuSuyThanTargetId === pos.playerId;
+
+          // Xác định danh sách các bảng thực sự đang hiển thị
+          const visibleBlank = !!showVoteReview && isBlankVoter;
+          const visibleDisconnected = showDisconnectedBadge;
+          const visibleNamThu = showNamThuBoard;
+          const visibleSuyThan = showSuyThanBoard;
+
+          const visibleBoards: string[] = [];
+          if (hasNamThuInGame && visibleNamThu) visibleBoards.push("namthu");
+          if (hasSuyThanInGame && visibleSuyThan) visibleBoards.push("suythan");
+          if (visibleBlank) visibleBoards.push("blank");
+          if (visibleDisconnected) visibleBoards.push("disconnected");
+
+          const hasDashCamXoay = (nightActionProgress === "pending") || (trialOrangePlayerId === pos.playerId);
+
+          const getBoardStyle = (key: string) => {
+            const index = visibleBoards.indexOf(key);
+            if (index === -1) return undefined;
+
+            const count = visibleBoards.length;
+
+            if (count >= 2) {
+              if (index === 0) {
+                return hasDashCamXoay
+                  ? { top: "-1.75rem", right: "0.3rem", rotate: "15deg" }
+                  : { top: "-1.45rem", right: "0.3rem", rotate: "15deg" };
+              }
+              if (index === 1) {
+                return hasDashCamXoay
+                  ? { top: "-0.9rem", right: "-0.7rem", rotate: "48deg" }
+                  : { top: "-0.9rem", right: "-0.4rem", rotate: "48deg" };
+              }
+              if (index === 2) {
+                return hasDashCamXoay
+                  ? { top: "-2.75rem", right: "0.05rem", rotate: "16deg", zIndex: -2 }
+                  : { top: "-2.45rem", right: "0.05rem", rotate: "16deg", zIndex: -2 };
+              }
+              if (index === 3) {
+                return hasDashCamXoay
+                  ? { top: "-1.65rem", right: "-1.5rem", rotate: "48deg", zIndex: -2 }
+                  : { top: "-1.65rem", right: "-1.2rem", rotate: "48deg", zIndex: -2 };
+              }
+            } else if (count === 1) {
+              if (hasDashCamXoay) {
+                return {
+                  top: "-1.4rem",
+                  right: "-0.3rem",
+                };
+              }
+            }
+            return undefined;
+          };
+
+          const blankStyle = getBoardStyle("blank");
+          const disconnectedStyle = getBoardStyle("disconnected");
+          const namThuStyle = getBoardStyle("namthu");
+          const suyThanStyle = getBoardStyle("suythan");
+
           return (
             <div key={pos.playerId} {...tokenProps} data-player-id={pos.playerId}>
               {innerContent}
-              <BlankVoteBoard visible={!!showVoteReview && isBlankVoter} />
-              <DisconnectedBoard visible={showDisconnectedBadge} />
+              <BlankVoteBoard visible={visibleBlank} style={blankStyle} />
+              <DisconnectedBoard visible={visibleDisconnected} style={disconnectedStyle} />
+              {hasNamThuInGame && <NamThuBoard visible={visibleNamThu} style={namThuStyle} />}
+              {hasSuyThanInGame && <SuyThanBoard visible={visibleSuyThan} style={suyThanStyle} />}
             </div>
           );
         })}

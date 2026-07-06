@@ -359,6 +359,18 @@ function getEliminationCauseText(
       const votersText = getPlayerNamesText(cause.voterIds, playerNamesById, rolesByPlayerId, showRolesOnly, realNamesById, isRealNamesMode);
       return `Bị biểu quyết sống/chết bởi: ${votersText}`;
     }
+    if (cause.type === "cancer_doctor") {
+      return "Thất tình và chết do thả thính nhưng bị Bác sĩ lạnh lùng";
+    }
+    if (cause.type === "nam_thu_smile") {
+      return "Chết do cười";
+    }
+    if (cause.type === "suy_than_pee") {
+      return "Chết do đi đái khi Suy Thận còn sống";
+    }
+    if (cause.type === "hunter_shot") {
+      return "Thợ săn đã bắn trúng";
+    }
     return "Thợ săn đã bắn trúng";
   });
   return parts.join(" và ");

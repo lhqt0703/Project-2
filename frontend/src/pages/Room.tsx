@@ -17,6 +17,65 @@ import {
   ELEMENTAL_ROLE_SET,
 } from "../constants/elemental";
 
+const rolePortraitAvifImages = import.meta.glob<string>("../assets/C *.avif", {
+  eager: true,
+  import: "default",
+});
+const dietQuyRolePortraitAvifImages = import.meta.glob<string>("../assets/Diệt Quỷ/C *.avif", {
+  eager: true,
+  import: "default",
+});
+
+function normalizeRoleName(value: string) {
+  return value.normalize("NFC").trim().toLowerCase();
+}
+
+function getAssetName(path: string) {
+  return path.split("/").pop()?.replace(/\.avif$/i, "") ?? "";
+}
+
+function getRoomRolePortrait(role: string, gameMode?: string) {
+  if (!role) return null;
+  const targetCName = normalizeRoleName(`C ${role}`);
+
+  if (gameMode === "diet_quy") {
+    for (const [path, src] of Object.entries(dietQuyRolePortraitAvifImages)) {
+      if (normalizeRoleName(getAssetName(path)) === targetCName) {
+        return src;
+      }
+    }
+  }
+
+  for (const [path, src] of Object.entries(rolePortraitAvifImages)) {
+    if (normalizeRoleName(getAssetName(path)) === targetCName) {
+      return src;
+    }
+  }
+
+  return null;
+}
+
+function getRolePriority(role: string) {
+  const norm = normalizeRoleName(role);
+  switch (norm) {
+    case "trưởng làng": return 0;
+    case "hộ nhân": return 1;
+    case "tiên tri": return 2;
+    case "thần tình yêu": return 3;
+    case "thiên sứ": return 5;
+    case "bán sói": return 6;
+    case "sói": return 7;
+    case "sói dại": return 9;
+    case "sói con": return 8;
+    default:
+      if (norm.includes("sói")) {
+        return 7.5;
+      }
+      return 4;
+  }
+}
+
+
 type NightActionRole = NightActionOrderRole;
 
 interface PlayerPosition {
@@ -27,6 +86,7 @@ interface PlayerPosition {
 
 const NIGHT_ACTION_ROLE_ORDER: NightActionRole[] = ["Thần tình yêu", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"];
 const WOLF_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
+
 
 function getAvailableNightActionRoles(selectedRoles?: string[]) {
   const roles = selectedRoles || [];
@@ -73,7 +133,6 @@ export default function Room() {
     if (room?.gameMode === "soi_mu" && roleName === "Tay Buôn") return "Ariana";
     return roleName;
   };
-  const [pendingKickByDoubleClick, setPendingKickByDoubleClick] = useState<Player | null>(null);
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [showRulesModal, setShowRulesModal] = useState(false);
   const [showCurrentRulesModal, setShowCurrentRulesModal] = useState(false);
@@ -104,11 +163,7 @@ export default function Room() {
     fadeOutMs: number;
     key: number;
   } | null>(null);
-  const [contextMenu, setContextMenu] = useState<{
-    x: number;
-    y: number;
-    player: Player | null;
-  } | null>(null);
+  const [hostPlayerActionTarget, setHostPlayerActionTarget] = useState<Player | null>(null);
   const [roleAssignmentPlayer, setRoleAssignmentPlayer] = useState<Player | null>(null);
   const [avatarAssignmentPlayer, setAvatarAssignmentPlayer] = useState<Player | null>(null);
   const [editingAvatar, setEditingAvatar] = useState("");
@@ -172,7 +227,6 @@ export default function Room() {
       return true;
     });
   }, [allAvatars, avatarSearch, avatarTab]);
-  const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const location = useLocation();
   const nav = useNavigate();
 
@@ -369,17 +423,7 @@ export default function Room() {
     };
   }, [nav, room, roomId]);
 
-  useEffect(() => {
-    // Khi host rời khi game đang diễn ra
-    const handleHostDisconnected = () => {
-      showNotice("Thông báo", "Quản trò đã rời đi. Bạn có thể chờ quản trò quay lại hoặc thoát khỏi phòng.");
-      // Có thể thêm logic cho phép người chơi tự thoát hoặc chờ
-    };
-    socket.on("hostDisconnected", handleHostDisconnected);
-    return () => {
-      socket.off("hostDisconnected", handleHostDisconnected);
-    };
-  }, [showNotice]);
+
 
   useEffect(() => {
     const handleErrorMessage = (message: string) => {
@@ -396,71 +440,26 @@ export default function Room() {
     };
   }, [nav, showNotice]);
 
-  // Xử lý click chuột trái vào tên người chơi
-  const handlePlayerLeftClick = (e: React.MouseEvent, player: Player) => {
-    e.stopPropagation();
-    setContextMenu({ x: e.clientX, y: e.clientY, player });
-  };
-
-  useEffect(() => {
-    if (!contextMenu) return;
-
-    const adjustMenuPosition = () => {
-      const menuElement = contextMenuRef.current;
-      if (!menuElement) return;
-
-      const VIEWPORT_PADDING = 8;
-      const rect = menuElement.getBoundingClientRect();
-      let nextX = contextMenu.x;
-      let nextY = contextMenu.y;
-
-      if (rect.right > window.innerWidth - VIEWPORT_PADDING) {
-        nextX -= rect.right - (window.innerWidth - VIEWPORT_PADDING);
-      }
-      if (rect.bottom > window.innerHeight - VIEWPORT_PADDING) {
-        nextY -= rect.bottom - (window.innerHeight - VIEWPORT_PADDING);
-      }
-      if (rect.left < VIEWPORT_PADDING) {
-        nextX += VIEWPORT_PADDING - rect.left;
-      }
-      if (rect.top < VIEWPORT_PADDING) {
-        nextY += VIEWPORT_PADDING - rect.top;
-      }
-
-      if (Math.abs(nextX - contextMenu.x) > 0.5 || Math.abs(nextY - contextMenu.y) > 0.5) {
-        setContextMenu((prev) => (prev ? { ...prev, x: Math.round(nextX), y: Math.round(nextY) } : prev));
-      }
-    };
-
-    const rafId = window.requestAnimationFrame(adjustMenuPosition);
-    window.addEventListener("resize", adjustMenuPosition);
-
-    return () => {
-      window.cancelAnimationFrame(rafId);
-      window.removeEventListener("resize", adjustMenuPosition);
-    };
-  }, [contextMenu]);
-
   // Xử lý nhường quyền
   const handleTransferHost = () => {
-    if (contextMenu?.player && room) {
-      socket.emit("transferHost", { roomId: room.id, targetId: contextMenu.player.id });
-      setContextMenu(null);
+    if (hostPlayerActionTarget && room) {
+      socket.emit("transferHost", { roomId: room.id, targetId: hostPlayerActionTarget.id });
+      setHostPlayerActionTarget(null);
     }
   };
 
   // Xử lý kick
   const handleKick = () => {
-    if (contextMenu?.player && room) {
-      socket.emit("kickPlayer", { roomId: room.id, targetId: contextMenu.player.id, source: "room" });
-      setContextMenu(null);
+    if (hostPlayerActionTarget && room) {
+      socket.emit("kickPlayer", { roomId: room.id, targetId: hostPlayerActionTarget.id, source: "room" });
+      setHostPlayerActionTarget(null);
     }
   };
 
   const handleOpenRoleAssignment = () => {
-    if (!contextMenu?.player) return;
-    setRoleAssignmentPlayer(contextMenu.player);
-    setContextMenu(null);
+    if (!hostPlayerActionTarget) return;
+    setRoleAssignmentPlayer(hostPlayerActionTarget);
+    setHostPlayerActionTarget(null);
   };
 
   const handleSetPendingRoleAssignment = (role: string | null) => {
@@ -483,50 +482,40 @@ export default function Room() {
     });
   };
 
-  const handlePlayerDoubleClickKick = (playerId: string) => {
+  const handlePlayerDoubleClickMenu = (playerId: string) => {
     if (!room) return;
     if (!amIHost) return;
     if (playerId === room.hostId) return;
 
     const target = room.players.find((p) => p.id === playerId);
     if (!target) return;
-    setPendingKickByDoubleClick(target);
-  };
-
-  const confirmDoubleClickKick = () => {
-    if (!room || !pendingKickByDoubleClick) return;
-    socket.emit("kickPlayer", {
-      roomId: room.id,
-      targetId: pendingKickByDoubleClick.id,
-      source: "room",
-    });
-    setPendingKickByDoubleClick(null);
+    setHostPlayerActionTarget(target);
   };
 
   // Xử lý trao quyền sắp xếp vị trí
   const handleGrantPosition = () => {
-    if (contextMenu?.player && room) {
-      socket.emit("grantPositionEdit", { roomId: room.id, targetId: contextMenu.player.id });
-      setContextMenu(null);
+    if (hostPlayerActionTarget && room) {
+      socket.emit("grantPositionEdit", { roomId: room.id, targetId: hostPlayerActionTarget.id });
+      setHostPlayerActionTarget(null);
     }
   };
 
   // Xử lý thu lại quyền sắp xếp vị trí
   const handleRevokePosition = () => {
-    if (contextMenu?.player && room) {
-      socket.emit("revokePositionEdit", { roomId: room.id, targetId: contextMenu.player.id });
-      setContextMenu(null);
+    if (hostPlayerActionTarget && room) {
+      socket.emit("revokePositionEdit", { roomId: room.id, targetId: hostPlayerActionTarget.id });
+      setHostPlayerActionTarget(null);
     }
   };
 
   // Xử lý mở modal gán avatar
   const handleOpenAvatarAssignment = () => {
-    if (!contextMenu?.player) return;
-    setAvatarAssignmentPlayer(contextMenu.player);
-    setEditingAvatar(contextMenu.player.playerAvatar || "");
+    if (!hostPlayerActionTarget) return;
+    setAvatarAssignmentPlayer(hostPlayerActionTarget);
+    setEditingAvatar(hostPlayerActionTarget.playerAvatar || "");
     setAvatarSearch("");
     setAvatarTab("all");
-    setContextMenu(null);
+    setHostPlayerActionTarget(null);
   };
 
   // Tự động đồng bộ ảnh đại diện tùy chỉnh từ localStorage lên server (dành cho Host)
@@ -588,14 +577,7 @@ export default function Room() {
     }
   }, [room?.players, room?.id, clientId, socket]);
 
-  // Đóng menu khi click ngoài
-  useEffect(() => {
-    const closeMenu = () => setContextMenu(null);
-    if (contextMenu) {
-      window.addEventListener("click", closeMenu);
-      return () => window.removeEventListener("click", closeMenu);
-    }
-  }, [contextMenu]);
+
 
   // Lắng nghe bị kick
   useEffect(() => {
@@ -997,79 +979,111 @@ export default function Room() {
              // Handle click if needed, e.g. show profile or context menu
              // Currently context menu is handled by click on the list,
              // but we might want it here too. For now, just log or ignore.
-          }} onPlayerDoubleClick={handlePlayerDoubleClickKick} />
+          }} onPlayerDoubleClick={handlePlayerDoubleClickMenu} />
         </div>
 
-          
-        <div className="room-sidebar">
-          <h3>Người chơi:</h3>
-          <ul>
-            {room.players.map((p) => {
-              const pendingRole = amIHost ? room.pendingRoleAssignments?.[p.id] : undefined;
-              const blockedRoles = amIHost ? room.pendingRoleBlocks?.[p.id] || [] : [];
-              return (
-                <li
-                  key={p.id}
-                  onClick={amIHost && p.id !== room.hostId ? (e) => handlePlayerLeftClick(e, p) : undefined}
-                  style={{ cursor: amIHost && p.id !== room.hostId ? "pointer" : undefined }}
-                >
-                  {p.name} {p.id === room.hostId && "(Quản trò)"} {room.positionEditors?.includes(p.id) && " • (Quyền sắp xếp)"}
-                  {pendingRole && (
-                    <span style={{ color: "var(--accent)", fontWeight: 700 }}>
-                      {" • "}(Phát trước: {getRoleDisplayName(pendingRole)})
-                    </span>
-                  )}
-                  {blockedRoles.length > 0 && (
-                    <span style={{ color: "var(--danger)", fontWeight: 700 }}>
-                      {" • "}(Chặn: {blockedRoles.map(getRoleDisplayName).join(", ")})
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-
-      </div>
-
         {/* Menu thao tác cho host */}
-        {contextMenu && (
+        {hostPlayerActionTarget && (
           <div
-            ref={contextMenuRef}
-            onClick={(e) => e.stopPropagation()}
+            onClick={() => setHostPlayerActionTarget(null)}
             style={{
               position: "fixed",
-              top: contextMenu.y,
-              left: contextMenu.x,
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: 6,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-              zIndex: 1000,
-              minWidth: 190,
+              inset: 0,
+              zIndex: 9999,
+              background: "rgba(0,0,0,0.32)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 16,
             }}
           >
-            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleTransferHost}>
-              Nhường quyền chủ phòng
-            </button>
-            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer", color: "var(--danger)" }} onClick={handleKick}>
-              Kick khỏi phòng
-            </button>
-            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleOpenRoleAssignment}>
-              Phát trước role
-            </button>
-            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleOpenRoleAssignment}>
-              Chặn trước role
-            </button>
-            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleGrantPosition}>
-              Trao quyền sắp xếp vị trí
-            </button>
-            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleRevokePosition}>
-              Thu lại quyền sắp xếp
-            </button>
-            <button style={{ width: "100%", padding: 8, border: "none", background: "none", cursor: "pointer" }} onClick={handleOpenAvatarAssignment}>
-              Gắn ảnh đại diện
-            </button>
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "min(92vw, 360px)",
+                maxHeight: "90vh",
+                overflowY: "auto",
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: 12,
+                padding: 24,
+                boxShadow: "0 12px 32px rgba(0,0,0,0.25)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              <h2 style={{ marginTop: 0, marginBottom: 8, fontSize: 20, textAlign: "center" }}>
+                Thao tác với {hostPlayerActionTarget.name}
+              </h2>
+              
+              <button
+                onClick={handleTransferHost}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 6, cursor: "pointer" }}
+              >
+                Nhường quyền chủ phòng
+              </button>
 
+              {room?.positionEditors?.includes(hostPlayerActionTarget.id) ? (
+                <button
+                  onClick={handleRevokePosition}
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: 6, cursor: "pointer" }}
+                >
+                  Thu lại quyền sắp xếp vị trí
+                </button>
+              ) : (
+                <button
+                  onClick={handleGrantPosition}
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: 6, cursor: "pointer" }}
+                >
+                  Trao quyền sắp xếp vị trí
+                </button>
+              )}
+
+              <button
+                onClick={handleOpenRoleAssignment}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 6, cursor: "pointer" }}
+              >
+                Can thiệp role
+              </button>
+
+              <button
+                onClick={handleOpenAvatarAssignment}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 6, cursor: "pointer" }}
+              >
+                Gắn ảnh đại diện
+              </button>
+
+              <button
+                onClick={handleKick}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  background: "rgba(211, 47, 47, 0.1)",
+                  color: "var(--danger)",
+                  border: "1px solid var(--danger)",
+                }}
+              >
+                Kick khỏi phòng
+              </button>
+
+              <button
+                onClick={() => setHostPlayerActionTarget(null)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  background: "rgba(255, 255, 255, 0.08)",
+                  border: "none",
+                  marginTop: 8,
+                }}
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         )}
 
@@ -1498,21 +1512,7 @@ export default function Room() {
           onCancel={() => setLeaveConfirmOpen(false)}
         />
 
-        <ConfirmModal
-          open={!!pendingKickByDoubleClick}
-          title="Xác nhận xóa người chơi"
-          message={
-            pendingKickByDoubleClick
-              ? ((room?.phase && !room?.gameOver)
-                  ? `Bạn có chắc muốn xóa ${pendingKickByDoubleClick.name} khỏi phòng? Trò chơi hiện tại sẽ kết thúc ngay và  tất cả người chơi sẽ được đưa về phòng chờ.`
-                  : `Bạn có chắc muốn xóa ${pendingKickByDoubleClick.name} khỏi phòng?`)
-              : ""
-          }
-          confirmText="Xóa"
-          cancelText="Hủy"
-          onConfirm={confirmDoubleClickKick}
-          onCancel={() => setPendingKickByDoubleClick(null)}
-        />
+
 
         <ConfirmModal
           open={!!noticeModal}
@@ -1724,6 +1724,191 @@ export default function Room() {
           onSelect={selectAvatar}
           onClear={clearAvatar}
         />
+
+        {room.roles && room.roles.length > 0 && (() => {
+          // 1. Filter roles that have valid portraits
+          const rolesWithPortraits = room.roles.filter(role => getRoomRolePortrait(role, room.gameMode) !== null);
+          if (rolesWithPortraits.length === 0) return null;
+
+          const leftSpecial = ["thần tình yêu", "tiên tri", "hộ nhân", "trưởng làng"];
+          const rightSpecial = ["bán sói", "sói", "sói con", "sói dại"];
+
+          const leftSpecialPresent: string[] = [];
+          const rightSpecialPresent: string[] = [];
+          const otherPresent: string[] = [];
+          let centerRole: string | null = null;
+
+          for (const role of rolesWithPortraits) {
+            const norm = normalizeRoleName(role);
+            if (norm === "thiên sứ") {
+              centerRole = role;
+            } else if (leftSpecial.includes(norm)) {
+              leftSpecialPresent.push(role);
+            } else if (rightSpecial.includes(norm)) {
+              rightSpecialPresent.push(role);
+            } else {
+              otherPresent.push(role);
+            }
+          }
+
+          // Sort leftSpecialPresent according to the order from center outwards:
+          // Index 0: thần tình yêu, Index 1: tiên tri, Index 2: hộ nhân, Index 3: trưởng làng
+          leftSpecialPresent.sort((a, b) => {
+            const order = ["thần tình yêu", "tiên tri", "hộ nhân", "trưởng làng"];
+            return order.indexOf(normalizeRoleName(a)) - order.indexOf(normalizeRoleName(b));
+          });
+
+          // Sort rightSpecialPresent according to the order from center outwards:
+          // Index 0: bán sói, Index 1: sói, Index 2: sói con, Index 3: sói dại
+          rightSpecialPresent.sort((a, b) => {
+            const order = ["bán sói", "sói", "sói con", "sói dại"];
+            return order.indexOf(normalizeRoleName(a)) - order.indexOf(normalizeRoleName(b));
+          });
+
+          const half = Math.ceil(otherPresent.length / 2);
+          const leftOthers = otherPresent.slice(0, half);
+          const rightOthers = otherPresent.slice(half);
+
+          const leftRoles = [...leftSpecialPresent, ...leftOthers];
+          const rightRoles = [...rightSpecialPresent, ...rightOthers];
+
+          const hasTruongLang = leftRoles.some(r => normalizeRoleName(r) === "trưởng làng");
+
+          const renderRolePortrait = (role: string, idx: number, isLeftHalf: boolean) => {
+            const src = getRoomRolePortrait(role, room.gameMode);
+            if (!src) return null;
+
+            const norm = normalizeRoleName(role);
+
+            // Determine flip
+            let flipX = 1;
+            if (norm === "thiên sứ") {
+              flipX = 1;
+            } else if (getRolePriority(role) < 5) {
+              flipX = -1;
+            } else if (getRolePriority(role) > 5) {
+              flipX = 1;
+            } else {
+              flipX = isLeftHalf ? -1 : 1;
+            }
+
+            // Determine custom styling
+            let scale = 1.0;
+            let zIndex = 1;
+            let marginLeft: string | undefined = undefined;
+            let marginRight: string | undefined = undefined;
+            let marginBottom: string | undefined = undefined;
+
+            if (norm === "trưởng làng") {
+              scale = 1.2;
+              zIndex = 1;
+              marginLeft = "-2.3rem";
+            } else if (norm === "hộ nhân") {
+              scale = 1.0;
+              zIndex = 2;
+              if (hasTruongLang) {
+                marginLeft = "-1.5rem";
+              }
+            } else if (norm === "tiên tri") {
+              scale = 0.9;
+              marginLeft = "-2.3rem";
+              marginRight = "-2.3rem";
+            } else if (norm === "bán sói") {
+              scale = 0.8;
+            } else if (norm === "thiên sứ") {
+              scale = 1.15;
+            } else if (norm === "sói") {
+              scale = 1.15;
+              marginLeft = "-2.3rem";
+              marginRight = "-1.3rem";
+              marginBottom = "-1.1rem";
+            } else if (norm === "sói con") {
+              scale = 0.85;
+              marginBottom = "-1.1rem";
+              marginRight = "-2.3rem";
+            } else if (norm === "sói dại") {
+              scale = 1.1;
+              marginBottom = "-1.1rem";
+              marginLeft = "-0.5rem";
+            }else if (norm === "phù thủy") {
+              scale = 1.3;
+              marginLeft = "-0.5rem";
+            }
+
+            return (
+              <div
+                key={`${role}-${idx}`}
+                className={`room-role-portrait-item ${flipX === -1 ? "is-left-slide" : "is-right-slide"}`}
+                style={{
+                  animationDelay: `${idx * 0.05}s`,
+                  zIndex,
+                  marginLeft,
+                  marginRight,
+                  marginBottom
+                }}
+              >
+                <div
+                  className="room-role-portrait-inner"
+                  style={{
+                    transform: `scale(${scale}) scaleX(${flipX})`,
+                    transformOrigin: "bottom center",
+                    height: "100%",
+                    display: "flex",
+                    alignItems: "flex-end",
+                  }}
+                >
+                  <img
+                    className="room-role-portrait-image"
+                    src={src}
+                    alt={role}
+                    title={role}
+                  />
+                </div>
+              </div>
+            );
+          };
+
+          const leftOffset = centerRole ? "calc(50% + 15px)" : "50%";
+          const rightOffset = centerRole ? "calc(50% + 15px)" : "50%";
+
+          return (
+            <div className="room-role-portraits-wrapper">
+              {/* Left container */}
+              {leftRoles.length > 0 && (
+                <div
+                  className="room-role-portraits-left"
+                  style={{
+                    right: leftOffset,
+                    gap: leftRoles.length > 3 ? `${Math.max(-80, -12 * (leftRoles.length - 3))}px` : "8px"
+                  }}
+                >
+                  {leftRoles.map((role, idx) => renderRolePortrait(role, idx, true))}
+                </div>
+              )}
+
+              {/* Center character (Angel) */}
+              {centerRole && (
+                <div className="room-role-portraits-center">
+                  {renderRolePortrait(centerRole, 99, false)}
+                </div>
+              )}
+
+              {/* Right container */}
+              {rightRoles.length > 0 && (
+                <div
+                  className="room-role-portraits-right"
+                  style={{
+                    left: rightOffset,
+                    gap: rightRoles.length > 3 ? `${Math.max(-80, -12 * (rightRoles.length - 3))}px` : "8px"
+                  }}
+                >
+                  {rightRoles.map((role, idx) => renderRolePortrait(role, idx, false))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
     </div>
   );
 }
+

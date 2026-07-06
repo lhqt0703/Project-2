@@ -10,6 +10,7 @@ type Player = { id: string; name: string; connected?: boolean };
 
 type RoomLike = {
   players: Player[];
+  hostId?: string | null;
 };
 
 export function useDayVoteRole({
@@ -89,15 +90,17 @@ export function useDayVoteRole({
     setLocalSelectedTarget(dayVotes?.[myId] ?? null);
   }, [dayVotes, phase]);
 
+  const isHost = room.hostId ? clientId === room.hostId : false;
+
   const canAct = useMemo(() => {
     if (phase !== "day") return false;
-    if (!clientId) return false;
+    if (!clientId || isHost) return false;
     if (!dayDeadline) return false;
     if (deadPlayers.includes(clientId)) return false;
     if (dayVoters.length > 0 && !dayVoters.includes(clientId)) return false;
     if (trialStage !== "none") return false;
     return true;
-  }, [dayDeadline, dayVoters, deadPlayers, phase, trialStage]);
+  }, [dayDeadline, dayVoters, deadPlayers, phase, trialStage, isHost]);
 
   const myTrialVote = clientId ? (trialVotes?.[clientId] ?? null) : null;
 
@@ -107,6 +110,7 @@ export function useDayVoteRole({
     phase === "day" &&
     trialStage === "defense" &&
     !!clientId &&
+    !isHost &&
     !isTrialTarget &&
     !deadPlayers.includes(clientId) &&
     !alreadyChosenByTrialTarget &&
@@ -118,6 +122,7 @@ export function useDayVoteRole({
     phase === "day" &&
     trialStage === "verdict" &&
     !!clientId &&
+    !isHost &&
     !deadPlayers.includes(clientId) &&
     !isTrialTarget;
 
@@ -168,7 +173,7 @@ export function useDayVoteRole({
   const panel =
     phase === "day" && clientId ? (
       <div>
-        {trialStage === "none" && !deadPlayers.includes(clientId) && (
+        {trialStage === "none" && !isHost && !deadPlayers.includes(clientId) && (
           <>
             {dayDeadline && (
               <>
@@ -211,7 +216,7 @@ export function useDayVoteRole({
               Lượt tương tác còn lại của bị cáo: {remainingInteractionTurns}
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-              {!isTrialTarget && !deadPlayers.includes(clientId) && (
+              {!isHost && !isTrialTarget && !deadPlayers.includes(clientId) && (
                 alreadyChosenByTrialTarget || hasInteracted ? (
                   <button
                     onClick={() => {

@@ -1435,6 +1435,15 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.soiMuNamThuTargetId = null;
     }
 
+    // 8. Suy Thận
+    const suyThanId = aliveIds.find(id => room.playerRoles?.[id] === "Suy Thận");
+    const suyThanTargetId = (suyThanId && suyThanId !== danBaTargetId) ? targets[suyThanId] : null;
+    if (suyThanId && suyThanTargetId) {
+      room.soiMuSuyThanTargetId = suyThanTargetId;
+    } else {
+      room.soiMuSuyThanTargetId = null;
+    }
+
     // Sao chép mục tiêu Thợ săn sang hunterTargetTonight để dùng khi chết ban ngày
     const hunterIds = aliveIds.filter(id => room.playerRoles?.[id] === "Thợ săn");
     for (const hId of hunterIds) {
@@ -1442,6 +1451,24 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         room.hunterTargetTonight = room.hunterTargetTonight || {};
         room.hunterTargetTonight[hId] = targets[hId];
       }
+    }
+
+    // In log công khai khi Nam Thư và Suy Thận chọn mục tiêu
+    if (room.soiMuNamThuTargetId) {
+      const targetName = room.players.find(p => p.id === room.soiMuNamThuTargetId)?.name || room.soiMuNamThuTargetId;
+      appendLogEntry(room, {
+        type: "custom_log",
+        phase: "day",
+        message: `${targetName} đã bị Nam Thư chọn và ${targetName} sẽ không thể cười vì có cái gì mà buồn cười`,
+      });
+    }
+    if (room.soiMuSuyThanTargetId) {
+      const targetName = room.players.find(p => p.id === room.soiMuSuyThanTargetId)?.name || room.soiMuSuyThanTargetId;
+      appendLogEntry(room, {
+        type: "custom_log",
+        phase: "day",
+        message: `${targetName} đã bị Suy Thận chọn và ${targetName} sẽ không thể đi đái nếu ko sẽ nổ và chết`,
+      });
     }
 
     // Quyết định ai chết đêm nay:
@@ -1734,8 +1761,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     "client_1780242348813_swid1tk0trh": "Huy",
     "8dfc1d63-988f-460d-8569-8a1964be99a0": "Cường",
     "ec0c6c66-9ce7-4d86-ac12-25824af15b79": "Việt Thắng",
-    "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd": "Duy",
-    "c3baa0ec-1bef-40a3-9812-27236222029b": "Hy",
+    "b2a5788c-2a27-480f-a149-6b194d53d7c4": "Duy",
+    "4a6a6978-79ac-49bf-ae4e-ac741a249a62": "Hy",
     "0c28a7b3-f332-4bce-b435-b1c63937f6b2": "Phát",
     "c3a97ba3-250d-49c7-8d00-436bc8056bf5": "Hiếu",
     "6a0d0c5d-6e85-4021-920b-9224f8306d6f": "Huy Hà",
@@ -2548,11 +2575,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
                 room.trialSelectedInteractorId = null;
               }
 
-              if (room.trialTargetId === clientId) {
-                startTrialVerdictVoting(roomId);
-              } else {
-                ctx.io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
-              }
+              ctx.io.to(roomId).emit("trialInteractionUpdated", buildTrialInteractionUpdatedPayload(room));
             }
 
             if (room.trialStage === "verdict") {
@@ -2575,7 +2598,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
           ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
 
           if (isHost) {
-            ctx.io.to(roomId).emit("hostDisconnected");
             console.log(`Host mất kết nối khi game đang diễn ra ở phòng ${roomId}`);
           }
 
@@ -2749,6 +2771,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.soiMuDaySelectedTargetId = null;
     room.soiMuInvestigationResult = null;
     room.soiMuNamThuTargetId = null;
+    room.soiMuSuyThanTargetId = null;
     room.witchPotions = {};
     room.witchHealTargetTonight = {};
     room.witchPoisonTargetTonight = {};
@@ -3138,6 +3161,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.dayLocked = {};
       room.dayDiscussionDeadline = null;
       room.dayDeadline = null;
+      room.soiMuNamThuTargetId = null;
+      room.soiMuSuyThanTargetId = null;
       ctx.io.to(roomId).emit("dayDiscussionStarted", { deadline: null });
       clearTrialState(room);
 

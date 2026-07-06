@@ -434,6 +434,12 @@ export function PlayerShotEffect({ bulletAnimation, positions, containerRef, onR
     const boxWidth = isOnTarget ? targetWidth + 12 : 24;
     const boxHeight = isOnTarget ? targetHeight + 12 : 24;
 
+    const bulletProgress = targetingFrame.elapsedMs >= 3700
+      ? clamp((targetingFrame.elapsedMs - 3700) / 1000, 0, 1)
+      : 0;
+    const flyOffset = Math.pow(bulletProgress, 2) * 3600;
+    const cornersOpacity = 1 - bulletProgress;
+
     return createPortal(
       <div
         style={{
@@ -559,9 +565,12 @@ export function PlayerShotEffect({ bulletAnimation, positions, containerRef, onR
                 borderLeft: `2px solid ${cursorColor}`,
                 left: isOnTarget ? 0 : "50%",
                 top: isOnTarget ? 0 : "50%",
-                transform: isOnTarget ? "translate(-2px, -2px)" : "translate(-150%, -150%)",
-                transition: "all 0.3s cubic-bezier(0.25, 1, 0.5, 1)",
-                willChange: "left, top, transform, border-color",
+                transform: isOnTarget 
+                  ? `translate(-2px, -2px) translate(-${flyOffset}px, -${flyOffset}px)` 
+                  : "translate(-150%, -150%)",
+                opacity: cornersOpacity,
+                transition: bulletProgress > 0 ? "none" : "all 0.3s cubic-bezier(0.25, 1, 0.5, 1)",
+                willChange: "left, top, transform, border-color, opacity",
               }}
             />
             <div
@@ -573,9 +582,12 @@ export function PlayerShotEffect({ bulletAnimation, positions, containerRef, onR
                 borderRight: `2px solid ${cursorColor}`,
                 left: isOnTarget ? "100%" : "50%",
                 top: isOnTarget ? 0 : "50%",
-                transform: isOnTarget ? "translate(-100%, 0) translate(2px, -2px)" : "translate(50%, -150%)",
-                transition: "all 0.3s cubic-bezier(0.25, 1, 0.5, 1)",
-                willChange: "left, top, transform, border-color",
+                transform: isOnTarget 
+                  ? `translate(-100%, 0) translate(2px, -2px) translate(${flyOffset}px, -${flyOffset}px)` 
+                  : "translate(50%, -150%)",
+                opacity: cornersOpacity,
+                transition: bulletProgress > 0 ? "none" : "all 0.3s cubic-bezier(0.25, 1, 0.5, 1)",
+                willChange: "left, top, transform, border-color, opacity",
               }}
             />
             <div
@@ -587,9 +599,12 @@ export function PlayerShotEffect({ bulletAnimation, positions, containerRef, onR
                 borderRight: `2px solid ${cursorColor}`,
                 left: isOnTarget ? "100%" : "50%",
                 top: isOnTarget ? "100%" : "50%",
-                transform: isOnTarget ? "translate(-100%, -100%) translate(2px, 2px)" : "translate(50%, 50%)",
-                transition: "all 0.3s cubic-bezier(0.25, 1, 0.5, 1)",
-                willChange: "left, top, transform, border-color",
+                transform: isOnTarget 
+                  ? `translate(-100%, -100%) translate(2px, 2px) translate(${flyOffset}px, ${flyOffset}px)` 
+                  : "translate(50%, 50%)",
+                opacity: cornersOpacity,
+                transition: bulletProgress > 0 ? "none" : "all 0.3s cubic-bezier(0.25, 1, 0.5, 1)",
+                willChange: "left, top, transform, border-color, opacity",
               }}
             />
             <div
@@ -601,9 +616,12 @@ export function PlayerShotEffect({ bulletAnimation, positions, containerRef, onR
                 borderLeft: `2px solid ${cursorColor}`,
                 left: isOnTarget ? 0 : "50%",
                 top: isOnTarget ? "100%" : "50%",
-                transform: isOnTarget ? "translate(0, -100%) translate(-2px, 2px)" : "translate(-150%, 50%)",
-                transition: "all 0.3s cubic-bezier(0.25, 1, 0.5, 1)",
-                willChange: "left, top, transform, border-color",
+                transform: isOnTarget 
+                  ? `translate(0, -100%) translate(-2px, 2px) translate(-${flyOffset}px, ${flyOffset}px)` 
+                  : "translate(-150%, 50%)",
+                opacity: cornersOpacity,
+                transition: bulletProgress > 0 ? "none" : "all 0.3s cubic-bezier(0.25, 1, 0.5, 1)",
+                willChange: "left, top, transform, border-color, opacity",
               }}
             />
           </div>

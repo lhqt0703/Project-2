@@ -6,11 +6,13 @@ export default function RoleCompanionOverlay({
   normalizedRole,
   playerFrameHeightPx,
   seerResults,
+  isRobbed,
 }: {
   companionRoleSrc: string | null;
   normalizedRole: string | null;
   playerFrameHeightPx: number;
   seerResults: { playerId: string; isWolf: boolean }[] | null;
+  isRobbed?: boolean;
 }) {
   const [renderedSrc, setRenderedSrc] = useState<string | null>(null);
   const [renderedRole, setRenderedRole] = useState<string | null>(null);
@@ -103,6 +105,8 @@ export default function RoleCompanionOverlay({
             objectPosition: "right bottom",
             pointerEvents: "none",
             userSelect: "none",
+            filter: (isRobbed && visible) ? "brightness(0.1) blur(1px)" : undefined,
+            transition: "filter 320ms ease",
           }}
         />
         <div
@@ -152,9 +156,10 @@ export default function RoleCompanionOverlay({
         pointerEvents: "none",
         userSelect: "none",
         zIndex: 27,
-        transition: "opacity 320ms ease, transform 520ms cubic-bezier(0.16, 1, 0.3, 1)",
+        transition: "opacity 320ms ease, transform 520ms cubic-bezier(0.16, 1, 0.3, 1), filter 320ms ease",
         opacity: visible ? 1 : 0,
         transform: visible ? "scale(1)" : "scale(1.008)",
+        filter: (isRobbed && visible) ? "brightness(0.1) blur(1px)" : undefined,
       }}
     />
   );

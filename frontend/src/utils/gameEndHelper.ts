@@ -4,7 +4,7 @@ export interface GameEndRoles {
 }
 
 export function getVillagerAndWolfRoles(
-  winner: string | undefined | null,
+  _winner: string | undefined | null,
   scoreResult: any,
   players: any[] | undefined | null,
   deadPlayers: string[] | undefined | null,

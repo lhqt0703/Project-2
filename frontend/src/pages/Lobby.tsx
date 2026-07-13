@@ -12,7 +12,8 @@ import { AvatarSelectModal } from "../components/AvatarSelectModal";
 const PLAYER_NAME_STORAGE_KEY = "werewolfPlayerName";
 const ALLOWED_CREATOR_IDS = [
   "16ab4278-4d7a-40e5-a856-c9bf490d5fc3",
-  "84bcb975-46ec-4be3-87bb-cd1b4d976633",
+  "757a9407-202f-4c2b-acd9-50abdefd3aeb",
+  "53bc353c-f61b-4146-a53e-5ee6b7697039",
   //"046fa88a-a719-47c3-8b97-ddfc8337cf83", // Sicula 
   //"79b02851-1b5d-46fb-8935-5d8031dc9a7f" // mẹ
 ];

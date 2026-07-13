@@ -33,7 +33,7 @@ export function revealRolePublicly(room: Room, playerId: string) {
 }
 
 export function getDayVoteWeight(room: Room, voterId: string) {
-  if (isVillageChief(room, voterId)) return 2;
+  if (isVillageChief(room, voterId) && room.songTrungRobbedPlayerId !== voterId) return 2;
   return 1;
 }
 

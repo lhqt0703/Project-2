@@ -7,7 +7,7 @@ import { getAvatarUrlByFileName, MASKED_AVATAR_MAP } from "../components/PlayerP
 import nenLungAsset from "../assets/nền lưng.avif";
 import ArrowLeft from "../assets/arrow-left.svg";
 
-const NON_VILLAGER_ROLES = ["Dân làng", "Sói", "Bán sói", "Sói con", "Sói Dại", "Linh sói", "Kẻ bị nguyền", "Tay Buôn", "Thiên Sứ", "Trưởng làng", "Hộ nhân", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Thần tình yêu"] as const;
+const NON_VILLAGER_ROLES = ["Dân làng", "Sói", "Bán sói", "Sói con", "Sói Dại", "Linh sói", "Kẻ bị nguyền", "Tay Buôn", "Thiên Sứ", "Trưởng làng", "Hộ nhân", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Thần tình yêu", "Song Trùng"] as const;
 type NonVillagerRole = (typeof NON_VILLAGER_ROLES)[number];
 
 const SOI_MU_ROLES = ["Dân làng", "Sói", "Bảo vệ", "Phù thủy", "Tiên tri", "Trưởng làng", "Tay Buôn", "Thợ săn", "Bác sĩ ung thư", "Nam Thư", "Đàn bà", "Suy Thận"] as const;
@@ -50,7 +50,7 @@ const getGlowColor = (role: string) => {
   if (ELEMENTAL_ROLE_ORDER.includes(role as any)) return "#ED6E7B";
   if (["Tiên tri", "Thợ săn"].includes(role)) return "#60a5fa";
   if (["Bảo vệ", "Phù thủy", "Hộ nhân", "Trưởng làng"].includes(role)) return "#34d399";
-  if (["Kẻ bị nguyền", "Thiên Sứ", "Thần tình yêu", "Tay Buôn"].includes(role)) return "#a855f7";
+  if (["Kẻ bị nguyền", "Thiên Sứ", "Thần tình yêu", "Tay Buôn", "Song Trùng"].includes(role)) return "#a855f7";
   return "#ff9800"; // fallback gold glow
 };
 interface PlayerInfo {
@@ -550,7 +550,7 @@ export default function RoleSelect() {
       ) : (
         <div className="roleselect-grid">
           {(["Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Trưởng làng", "Hộ nhân", "Kẻ bị nguyền", "Thần tình yêu"] as const).map((role) => renderRoleCard(role))}
-          {(["Bán sói", "Linh sói", "Tay Buôn", "Thiên Sứ"] as const).map((role) => renderRoleCard(role))}
+          {(["Bán sói", "Linh sói", "Tay Buôn", "Thiên Sứ", "Song Trùng"] as const).map((role) => renderRoleCard(role))}
           {(["Sói", "Sói con", "Sói Dại"] as const).map((role) => renderRoleCard(role))}
           {ELEMENTAL_ROLE_ORDER.map((role) => renderRoleCard(role))}
           {renderRoleCard("Dân làng")}

@@ -167,7 +167,7 @@ export function useGuardianRole({
     resetOnPhaseChange,
     playerPositionsProps: {
       selectedOutlinePlayerId:
-        role === "Bảo vệ" && isGuardianTurnActive ? (lockedTargetId || selectedPlayerId) : null,
+        role === "Bảo vệ" && isGuardianTurnActive ? (lockedTargetId ? null : selectedPlayerId) : null,
     },
   };
 }

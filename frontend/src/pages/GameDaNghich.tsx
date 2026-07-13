@@ -24,6 +24,8 @@ import { useLoveRole } from "./gameRoles/useLoveRole";
 import { useCursedRole } from "./gameRoles/useCursedRole";
 import { useMerchantRole } from "./gameRoles/useMerchantRole";
 import { useAngelRole } from "./gameRoles/useAngelRole";
+import { useSongTrungRole } from "./gameRoles/useSongTrungRole";
+import { useSongTrungRobbedRole } from "./gameRoles/useSongTrungRobbedRole";
 import { useMock8Test } from "./gameRoles/useMock8Test";
 import { ScoreboardModal } from "../components/ScoreboardModal";
 import RoleCard3D from "../components/RoleCard3D";
@@ -360,6 +362,7 @@ export default function GameDaNghich() {
   const [villagerVictoryAnimOpen, setVillagerVictoryAnimOpen] = useState(false);
   const [gameFinishedModalOpen, setGameFinishedModalOpen] = useState(false);
   const [hostPlayerActionTargetId, setHostPlayerActionTargetId] = useState<string | null>(null);
+  const isWarned = !!(hostPlayerActionTargetId && room?.warnedPlayerIds?.includes(hostPlayerActionTargetId));
 
   const [viewMode, setViewMode] = useState<"real-names" | "nick-names" | "real-names-roles" | "nick-names-roles">(() => {
     const saved = localStorage.getItem("game-view-mode");
@@ -1148,7 +1151,7 @@ export default function GameDaNghich() {
   const visibleLoveRoleBadges = useMemo(() => {
     if (!clientId) return {};
     const partnerId = sync.loveState.partnerId;
-    if (!partnerId || !sync.loveState.pairIds.includes(clientId)) return {};
+    if (!partnerId || !sync.loveState.pairIds.includes(clientId) || clientId === sync.songTrungRobbedPlayerId || clientId === room?.songTrungVictimId) return {};
     if (!sync.gameEnded) {
       if (phase !== "night") return {};
       if (!isNightInfoVisible) return {};
@@ -1165,6 +1168,8 @@ export default function GameDaNghich() {
     sync.loveState.partnerId,
     sync.loveState.rolesByPlayerId,
     isNightInfoVisible,
+    sync.songTrungRobbedPlayerId,
+    room?.songTrungVictimId,
   ]);
 
   const dayVoteWeightsByVoterId = useMemo(() => {
@@ -1324,6 +1329,30 @@ export default function GameDaNghich() {
     nightActionNow: nightTurnNow,
     maxChecksTonight: seerMaxChecksTonight,
   });
+  const songTrung = useSongTrungRole({
+    roomId,
+    phase,
+    role,
+    deadPlayers: deadPlayersForNightActions,
+    songTrungUsedTonight: room?.songTrungUsedTonight || {},
+    songTrungChoices: room?.songTrungChoices || [],
+    maxUses: room?.gameRules?.songTrungMaxUses ?? 0,
+    allNightActionsSimultaneous,
+    currentNightTurnRole,
+    nightActionDeadline: mySimultaneousDeadline,
+    nightActionNow: nightTurnNow,
+  });
+  const songTrungRobbed = useSongTrungRobbedRole({
+    roomId,
+    phase,
+    deadPlayers: deadPlayersForNightActions,
+    songTrungRobbedPlayerId: sync.songTrungRobbedPlayerId,
+    songTrungFoundByVictim: sync.songTrungFoundByVictim,
+    songTrungVictimSearchUsedTonight: sync.songTrungVictimSearchUsedTonight,
+    allNightActionsSimultaneous,
+    nightActionDeadline: mySimultaneousDeadline,
+    nightActionNow: nightTurnNow,
+  });
   const chief = useChiefRole({
     roomId,
     phase,
@@ -1453,6 +1482,7 @@ export default function GameDaNghich() {
     nightActionDeadline: allNightActionsSimultaneous ? (mySimultaneousDeadline ?? nightTurnDeadline) : nightTurnDeadline,
     nightActionNow: nightTurnNow,
     doesNightTurnMatchMyRole,
+    songTrungRobbedPlayerId: sync.songTrungRobbedPlayerId || room?.songTrungVictimId,
   });
 
   const spiritWolf = useSpiritWolfRole({
@@ -1538,7 +1568,11 @@ export default function GameDaNghich() {
     const lovePartnerRequestedEscape = !!lovePartnerId && sync.loveState.escapeVotes.includes(lovePartnerId);
 
     let hintText = "";
-    if (role === "Thần tình yêu") {
+    const isRobbed = !!(clientId && (sync.songTrungRobbedPlayerId === clientId || room?.songTrungVictimId === clientId));
+
+    if (isRobbed) {
+      hintText = "Song Trùng đã cướp mất vai trò của bạn khiến bạn không thể thực hiện chức năng được nữa, hãy cố gắng tìm ra Song Trùng trước khi Song Trùng bị giết để có thể lấy lại được vai trò.<br><br><b>Hãy nhớ rằng bạn sẽ không thể nói chuyện được nữa cho đến khi lấy lại được những thứ thuộc về bạn</b>";
+    } else if (role === "Thần tình yêu") {
       if (!love.targetId) {
         hintText = "Hãy chọn một người mà bạn muốn ghép đôi bản thân với họ";
       } else {
@@ -2039,6 +2073,8 @@ export default function GameDaNghich() {
     if (merchant.onPlayerClick(playerId)) return;
     if (cursed.onPlayerClick(playerId)) return;
     if (chief.onPlayerClick(playerId)) return;
+    if (songTrung.onPlayerClick(playerId)) return;
+    if (songTrungRobbed.onPlayerClick(playerId)) return;
     if (seer.onPlayerClick(playerId)) return;
     if (wolf.onPlayerClick(playerId)) return;
     if (guardian.onPlayerClick(playerId)) return;
@@ -2596,11 +2632,15 @@ export default function GameDaNghich() {
                   revealedRoles={sync.revealedRolesByPlayerId}
                   rolesBeforeConversion={sync.rolesBeforeConversion}
                   chiefFoundProtectorId={sync.chiefFoundProtectorId}
+                  songTrungRobbedPlayerId={sync.songTrungRobbedPlayerId || roomForDisplay?.songTrungVictimId}
+                  songTrungFoundByVictim={sync.songTrungFoundByVictim}
                 activeNightRole={isHost && isSequentialNight ? currentNightTurnRole : null}
                 suppressNightActionProgress={autoTrialHighlightSuppressed}
                 selectedOutlinePlayerId={
                   (phase !== "night" || isNightInfoVisible) ? (
                     dayVote.playerPositionsProps.selectedOutlinePlayerId ||
+                    songTrung.playerPositionsProps.selectedOutlinePlayerId ||
+                    songTrungRobbed.playerPositionsProps.selectedOutlinePlayerId ||
                     chief.playerPositionsProps.selectedOutlinePlayerId ||
                     guardian.playerPositionsProps.selectedOutlinePlayerId ||
                     protector.playerPositionsProps.selectedOutlinePlayerId ||
@@ -2730,7 +2770,7 @@ export default function GameDaNghich() {
               </PlayerPositions>
             </div>
             <RoleCharacterPortrait
-              role={shouldShowRolePortrait ? role : null}
+              role={shouldShowRolePortrait ? (sync.rolesBeforeConversion[clientId || ""] === "Song Trùng" ? "Song Trùng" : role) : null}
               backgroundAssetOverride={
                 room?.id === "mock-8"
                   ? mock8.backgroundAssetOverride
@@ -2742,12 +2782,15 @@ export default function GameDaNghich() {
               normalizedRole={normalizedRole}
               playerFrameHeightPx={playerFrameHeightPx}
               seerResults={isNightInfoVisible ? sync.seerResults : null}
+              isRobbed={room?.gameRules?.songTrungVictimStaysAlive === true && !!(clientId && (sync.songTrungRobbedPlayerId === clientId || room?.songTrungVictimId === clientId))}
             />
           </>
         );
       })()}
 
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && seer.modal}
+      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && songTrung.modal}
+      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && songTrungRobbed.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && chief.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && cursed.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && merchant.modal}
@@ -3545,6 +3588,19 @@ export default function GameDaNghich() {
                     +10 giây lượt hành động
                   </button>
                   <button
+                    style={{ background: isWarned ? "#e67e22" : "#f1c40f", color: "#000", fontWeight: "bold" }}
+                    onClick={() => {
+                      if (!roomId || !hostPlayerActionTargetId) return;
+                      socket.emit("hostToggleWarningFlag", {
+                        roomId,
+                        targetId: hostPlayerActionTargetId,
+                      });
+                      setHostPlayerActionTargetId(null);
+                    }}
+                  >
+                    {isWarned ? "Gỡ cờ cảnh cáo" : "Gắn cờ cảnh cáo"}
+                  </button>
+                  <button
                     style={{ background: "#e74c3c", color: "#fff" }}
                     onClick={() => {
                       setHostRuleEliminateTargetId(hostPlayerActionTargetId);
@@ -3563,6 +3619,19 @@ export default function GameDaNghich() {
               </>
             ) : (
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+                <button
+                  style={{ background: isWarned ? "#e67e22" : "#f1c40f", color: "#000", fontWeight: "bold" }}
+                  onClick={() => {
+                    if (!roomId || !hostPlayerActionTargetId) return;
+                    socket.emit("hostToggleWarningFlag", {
+                      roomId,
+                      targetId: hostPlayerActionTargetId,
+                    });
+                    setHostPlayerActionTargetId(null);
+                  }}
+                >
+                  {isWarned ? "Gỡ cờ cảnh cáo" : "Gắn cờ cảnh cáo"}
+                </button>
                 <button onClick={() => setHostPlayerActionTargetId(null)}>Đóng</button>
               </div>
             )}

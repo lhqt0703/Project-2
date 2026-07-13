@@ -367,6 +367,7 @@ export default function GameDietQuy() {
   const [villagerVictoryAnimOpen, setVillagerVictoryAnimOpen] = useState(false);
   const [gameFinishedModalOpen, setGameFinishedModalOpen] = useState(false);
   const [hostPlayerActionTargetId, setHostPlayerActionTargetId] = useState<string | null>(null);
+  const isWarned = !!(hostPlayerActionTargetId && room?.warnedPlayerIds?.includes(hostPlayerActionTargetId));
 
   const [viewMode, setViewMode] = useState<"real-names" | "nick-names" | "real-names-roles" | "nick-names-roles">(() => {
     const saved = localStorage.getItem("game-view-mode");
@@ -2667,7 +2668,7 @@ export default function GameDietQuy() {
             
             </div>
             <RoleCharacterPortrait
-              role={shouldShowRolePortrait ? role : null}
+              role={shouldShowRolePortrait ? (sync.rolesBeforeConversion[clientId || ""] === "Song Trùng" ? "Song Trùng" : role) : null}
               backgroundAssetOverride={null}
               gameMode="diet_quy"
             />
@@ -3402,6 +3403,19 @@ export default function GameDietQuy() {
                     +10 giây lượt hành động
                   </button>
                   <button
+                    style={{ background: isWarned ? "#e67e22" : "#f1c40f", color: "#000", fontWeight: "bold" }}
+                    onClick={() => {
+                      if (!roomId || !hostPlayerActionTargetId) return;
+                      socket.emit("hostToggleWarningFlag", {
+                        roomId,
+                        targetId: hostPlayerActionTargetId,
+                      });
+                      setHostPlayerActionTargetId(null);
+                    }}
+                  >
+                    {isWarned ? "Gỡ cờ cảnh cáo" : "Gắn cờ cảnh cáo"}
+                  </button>
+                  <button
                     style={{ background: "#e74c3c", color: "#fff" }}
                     onClick={() => {
                       setHostRuleEliminateTargetId(hostPlayerActionTargetId);
@@ -3420,6 +3434,19 @@ export default function GameDietQuy() {
               </>
             ) : (
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
+                <button
+                  style={{ background: isWarned ? "#e67e22" : "#f1c40f", color: "#000", fontWeight: "bold" }}
+                  onClick={() => {
+                    if (!roomId || !hostPlayerActionTargetId) return;
+                    socket.emit("hostToggleWarningFlag", {
+                      roomId,
+                      targetId: hostPlayerActionTargetId,
+                    });
+                    setHostPlayerActionTargetId(null);
+                  }}
+                >
+                  {isWarned ? "Gỡ cờ cảnh cáo" : "Gắn cờ cảnh cáo"}
+                </button>
                 <button onClick={() => setHostPlayerActionTargetId(null)}>Đóng</button>
               </div>
             )}

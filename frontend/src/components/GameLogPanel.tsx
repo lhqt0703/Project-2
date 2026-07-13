@@ -104,6 +104,31 @@ function filterAndNormalizeNightEntries(
       }
     }
 
+    if (entry.type === "love_link_death") {
+      if (myPlayerId && (myPlayerId === entry.targetId || myPlayerId === entry.sourceId)) {
+        filtered.push(entry);
+      }
+      continue;
+    }
+
+    if (entry.type === "custom_log") {
+      const msg = entry.message || "";
+      if (msg.startsWith("__song_trung_guess_wrong__:")) {
+        const [_, actorId] = msg.split(":");
+        if (myPlayerId === actorId) {
+          filtered.push(entry);
+        }
+        continue;
+      }
+      if (msg.startsWith("__song_trung_victim_guess_wrong__:")) {
+        const [_, actorId] = msg.split(":");
+        if (myPlayerId === actorId) {
+          filtered.push(entry);
+        }
+        continue;
+      }
+    }
+
     // 6. Tay buôn và Người nhận
     if (myRole === "Tay Buôn" && entry.type === "merchant_trade_offer" && entry.actorId === myPlayerId) {
       filtered.push(entry);
@@ -370,6 +395,9 @@ function getEliminationCauseText(
     }
     if (cause.type === "hunter_shot") {
       return "Thợ săn đã bắn trúng";
+    }
+    if (cause.type === "song_trung_rob") {
+      return "Bị Song Trùng cướp vai trò";
     }
     return "Thợ săn đã bắn trúng";
   });
@@ -1614,13 +1642,24 @@ function LogEntryLine({
       );
     }
 
-    case "love_link_death":
+    case "love_link_death": {
+      const hasAccess = !!(
+        isHost ||
+        gameEnded ||
+        (myPlayerId && (myPlayerId === entry.targetId || myPlayerId === entry.sourceId))
+      );
+
+      if (!hasAccess) {
+        return null;
+      }
+
       return (
         <LogItem emoji="💔" style={lineStyle}>
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.sourceId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> chết theo vì{" "}
           <RoleSpan playerId={entry.sourceId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" secondaryHighlightIds={[entry.targetId]} onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã chết
         </LogItem>
       );
+    }
 
     case "spirit_wolf_decision": {
       const isPlayerView = !isHost && !gameEnded;
@@ -1689,10 +1728,55 @@ function LogEntryLine({
         </LogItem>
       );
 
-    case "saved_by_guardian":
+    case "saved_by_guardian": {
+      const isPlayerView = !isHost && !gameEnded;
+      const myRole = myPlayerId ? rolesByPlayerId[myPlayerId] : undefined;
+      const isGuardian = myRole === "Bảo vệ";
+
+      const customLineStyle: React.CSSProperties = {
+        ...lineStyle,
+        background: "linear-gradient(45deg, #75f7782b, transparent)",
+      };
+
+      if (isPlayerView && isGuardian) {
+        return (
+          <LogItem emoji="🛡️" style={customLineStyle}>
+            Kết giới đã cứu{" "}
+            {entry.targetIds && entry.targetIds.length > 0 ? (
+              <RolesListSpan
+                playerIds={entry.targetIds}
+                rolesByPlayerId={rolesByPlayerId}
+                playerNamesById={playerNamesById}
+                getDisplayMode={getTargetDisplayMode}
+                popupMode="none"
+                onEliminationFocusChange={onEliminationFocusChange}
+                onHighlightPlayer={onHighlightPlayer}
+              />
+            ) : (
+              "(không rõ)"
+            )}
+            {" "}thành công
+          </LogItem>
+        );
+      }
+
       return (
-        <LogItem emoji="🛡️" style={lineStyle}>
-          {entry.actorId ? <RoleSpan playerId={entry.actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> : "Bảo vệ"} đã cứu{" "}
+        <LogItem emoji="🛡️" style={customLineStyle}>
+          Kết giới của{" "}
+          {entry.actorId ? (
+            <RoleSpan
+              playerId={entry.actorId}
+              rolesByPlayerId={rolesByPlayerId}
+              playerNamesById={playerNamesById}
+              displayMode="player"
+              popupMode="none"
+              onEliminationFocusChange={onEliminationFocusChange}
+              onHighlightPlayer={onHighlightPlayer}
+            />
+          ) : (
+            "Bảo vệ"
+          )}{" "}
+          đã cứu{" "}
           {entry.targetIds && entry.targetIds.length > 0 ? (
             <RolesListSpan
               playerIds={entry.targetIds}
@@ -1705,9 +1789,11 @@ function LogEntryLine({
             />
           ) : (
             "(không rõ)"
-          )}
+          )}{" "}
+          thành công
         </LogItem>
       );
+    }
 
     case "saved_by_witch":
       return (
@@ -2017,56 +2103,279 @@ function LogEntryLine({
       );
     }
 
-    case "custom_log":
+    case "custom_log": {
+      const msg = entry.message || "";
+      if (msg.startsWith("__song_trung_victim_muted__:")) {
+        const [_, targetId, cupidId] = msg.split(":");
+        return (
+          <LogItem emoji="🔇" style={lineStyle}>
+            {targetId && <RoleSpan playerId={targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            đã bị câm lặng và không còn là cặp đôi với{" "}
+            {cupidId && <RoleSpan playerId={cupidId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}
+          </LogItem>
+        );
+      }
+      if (msg.startsWith("__song_trung_lovers_paired__:")) {
+        const [_, cupidId, actorId] = msg.split(":");
+        const isCupid = myPlayerId === cupidId;
+        const isSongTrung = myPlayerId === actorId;
+        
+        if (!gameEnded && (isCupid || isSongTrung)) {
+          const partnerId = isCupid ? actorId : cupidId;
+          return (
+            <LogItem emoji="🖤" style={lineStyle}>
+              Bạn và{" "}
+              {partnerId && <RoleSpan playerId={partnerId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+              đã trở thành cặp đôi phe ba
+            </LogItem>
+          );
+        }
+        
+        return (
+          <LogItem emoji="🖤" style={lineStyle}>
+            {cupidId && <RoleSpan playerId={cupidId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            và{" "}
+            {actorId && <RoleSpan playerId={actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            đã trở thành cặp đôi phe ba
+          </LogItem>
+        );
+      }
+      if (msg.startsWith("__song_trung_rob_single__:")) {
+        const [_, actorId, targetId, victimRole] = msg.split(":");
+        const isSongTrung = myPlayerId === actorId;
+        
+        if (!gameEnded && isSongTrung) {
+          return (
+            <LogItem emoji="🎭" style={lineStyle}>
+              Đã rút cạn linh hồn của{" "}
+              {targetId && <RoleSpan playerId={targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+              và chiếm đoạt vai trò <span style={{ fontWeight: 600, color: "#c084fc" }}>{victimRole}</span>
+            </LogItem>
+          );
+        }
+        
+        return (
+          <LogItem emoji="🎭" style={lineStyle}>
+            {actorId && <RoleSpan playerId={actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            đã rút cạn linh hồn của{" "}
+            {targetId && <RoleSpan playerId={targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            và chiếm đoạt vai trò <span style={{ fontWeight: 600, color: "#c084fc" }}>{victimRole}</span>
+          </LogItem>
+        );
+      }
+      if (msg.startsWith("__song_trung_guess_wrong__:")) {
+        const [_, actorId, targetId] = msg.split(":");
+        const isSongTrung = myPlayerId === actorId;
+        const hasAccess = isHost || gameEnded || isSongTrung;
+
+        if (!hasAccess) {
+          return null;
+        }
+
+        const wrongBgStyle: React.CSSProperties = {
+          ...lineStyle,
+          background: "linear-gradient(45deg, hsl(0deg 83.51% 57.95% / 19%), transparent)",
+          padding: "4px 8px",
+          borderRadius: "6px",
+        };
+
+        if (!gameEnded && isSongTrung) {
+          return (
+            <LogItem emoji="🎭" style={wrongBgStyle}>
+              Đã nghĩ{" "}
+              {targetId && <RoleSpan playerId={targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+              là nửa kia của Thần Tình Yêu
+            </LogItem>
+          );
+        }
+
+        return (
+          <LogItem emoji="🎭" style={wrongBgStyle}>
+            {actorId && <RoleSpan playerId={actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            nghĩ{" "}
+            {targetId && <RoleSpan playerId={targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            là nửa kia của Thần Tình Yêu
+          </LogItem>
+        );
+      }
+      if (msg.startsWith("__song_trung_victim_guess_wrong__:")) {
+        const [_, actorId, targetId] = msg.split(":");
+        const isVictim = myPlayerId === actorId;
+        const hasAccess = isHost || gameEnded || isVictim;
+
+        if (!hasAccess) {
+          return null;
+        }
+
+        const wrongBgStyle: React.CSSProperties = {
+          ...lineStyle,
+          background: "linear-gradient(45deg, hsl(0deg 83.51% 57.95% / 19%), transparent)",
+          padding: "4px 8px",
+          borderRadius: "6px",
+        };
+
+        if (!gameEnded && isVictim) {
+          return (
+            <LogItem emoji="🎭" style={wrongBgStyle}>
+              Đã nghĩ{" "}
+              {targetId && <RoleSpan playerId={targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+              là Song Trùng
+            </LogItem>
+          );
+        }
+
+        return (
+          <LogItem emoji="🎭" style={wrongBgStyle}>
+            {actorId && <RoleSpan playerId={actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            nghĩ{" "}
+            {targetId && <RoleSpan playerId={targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            là Song Trùng
+          </LogItem>
+        );
+      }
       return <LogItem emoji="📝" style={lineStyle}>{entry.message}</LogItem>;
+    }
 
     default:
       return <LogItem emoji="📝" style={lineStyle}>(log không rõ)</LogItem>;
   }
 }
 
-function groupSoiMuEntries(
+function groupLogEntries(
   entries: GameLogEntry[],
   rolesByPlayerId: Record<string, string>,
   wolves: string[],
-  nightEntries: GameLogEntry[]
-): (GameLogEntry | { type: "soi_mu_collapsed_group"; entries: GameLogEntry[] })[] {
-  const noImpactChoose: GameLogEntry[] = [];
-  const otherEntries: GameLogEntry[] = [];
+  nightEntries: GameLogEntry[],
+  isBlindWerewolf: boolean,
+  isPlayerViewForGroup: boolean,
+  myPlayerId?: string,
+  gameEnded?: boolean,
+  isHost?: boolean
+): (GameLogEntry | { type: "log_thread_group"; title: string; entries: GameLogEntry[]; icon?: string })[] {
+  let currentEntries = entries;
+  let collapsedGroup: { type: "log_thread_group"; title: string; entries: GameLogEntry[]; icon?: string } | null = null;
 
-  const isNoImpactVillagerChoose = (entry: GameLogEntry) => {
-    if (entry.type !== "soi_mu_villager_choose") return false;
-    const actorRole = rolesByPlayerId[entry.actorId];
-    if (actorRole === "Phù thủy") {
-      const wolfBiteEntry = nightEntries.find(e => e.type === "soi_mu_wolf_bite");
-      const wolfBittenId = wolfBiteEntry ? (wolfBiteEntry as any).targetId : null;
-      if (wolves && wolves.includes(entry.targetId)) return false;
-      if (wolfBittenId && entry.targetId === wolfBittenId) return false;
+  if (isBlindWerewolf && !isPlayerViewForGroup) {
+    const noImpactChoose: GameLogEntry[] = [];
+    const otherEntries: GameLogEntry[] = [];
+
+    const isNoImpactVillagerChoose = (entry: GameLogEntry) => {
+      if (entry.type !== "soi_mu_villager_choose") return false;
+      const actorRole = rolesByPlayerId[entry.actorId];
+      if (actorRole === "Phù thủy") {
+        const wolfBiteEntry = nightEntries.find(e => e.type === "soi_mu_wolf_bite");
+        const wolfBittenId = wolfBiteEntry ? (wolfBiteEntry as any).targetId : null;
+        if (wolves && wolves.includes(entry.targetId)) return false;
+        if (wolfBittenId && entry.targetId === wolfBittenId) return false;
+      }
+      if (actorRole === "Đàn bà" || actorRole === "Thợ săn" || actorRole === "Tiên tri") return false;
+      return true;
+    };
+
+    for (const entry of entries) {
+      if (isNoImpactVillagerChoose(entry)) {
+        noImpactChoose.push(entry);
+      } else {
+        otherEntries.push(entry);
+      }
     }
-    if (actorRole === "Đàn bà" || actorRole === "Thợ săn" || actorRole === "Tiên tri") return false;
-    return true;
-  };
 
-  for (const entry of entries) {
-    if (isNoImpactVillagerChoose(entry)) {
-      noImpactChoose.push(entry);
+    if (noImpactChoose.length > 0) {
+      collapsedGroup = {
+        type: "log_thread_group",
+        title: "Các lựa chọn không gây tác động",
+        entries: noImpactChoose,
+        icon: "👤"
+      };
+    }
+    currentEntries = otherEntries;
+  }
+
+  const result: (GameLogEntry | { type: "log_thread_group"; title: string; entries: GameLogEntry[]; icon?: string })[] = [];
+  if (collapsedGroup) {
+    result.push(collapsedGroup);
+  }
+
+  for (const entry of currentEntries) {
+    if (entry.type === "song_trung_rob") {
+      const { actorId, targetId, victimRole, cupidId, staysAlive } = entry;
+      const isSongTrung = myPlayerId === actorId;
+      const isCupid = myPlayerId === cupidId;
+
+      const hasAccess = !!(
+        isHost ||
+        gameEnded ||
+        (myPlayerId && (isSongTrung || isCupid))
+      );
+
+      if (!hasAccess) {
+        continue;
+      }
+
+      if (isCupid && !isHost && !gameEnded) {
+        result.push({
+          type: "custom_log",
+          phase: "night",
+          message: `__song_trung_lovers_paired__:${cupidId}:${actorId}`
+        });
+      } else {
+        if (!staysAlive) {
+          if (isHost || gameEnded || isSongTrung) {
+            result.push({
+              type: "custom_log",
+              phase: "night",
+              message: `__song_trung_rob_single__:${actorId}:${targetId}:${victimRole}:false`
+            });
+          }
+          result.push({
+            type: "custom_log",
+            phase: "night",
+            message: `__song_trung_lovers_paired__:${cupidId}:${actorId}`
+          });
+        } else {
+          const childEntries: GameLogEntry[] = [];
+          childEntries.push({
+            type: "custom_log",
+            phase: "night",
+            message: `__song_trung_victim_muted__:${targetId}:${cupidId}`
+          });
+          childEntries.push({
+            type: "custom_log",
+            phase: "night",
+            message: `__song_trung_lovers_paired__:${cupidId}:${actorId}`
+          });
+
+          result.push({
+            type: "log_thread_group",
+            title: `__song_trung_rob_title__:${actorId}:${targetId}:${victimRole}:${staysAlive ? "true" : "false"}`,
+            entries: childEntries,
+            icon: "🎭"
+          });
+        }
+      }
+    } else if (entry.type === "custom_log" && entry.message?.startsWith("__song_trung_guess_wrong__:")) {
+      const [_, actorId] = entry.message.split(":");
+      const isSongTrung = myPlayerId === actorId;
+      const hasAccess = !!(isHost || gameEnded || isSongTrung);
+      if (hasAccess) {
+        result.push(entry);
+      }
+    } else if (entry.type === "custom_log" && entry.message?.startsWith("__song_trung_victim_guess_wrong__:")) {
+      const [_, actorId] = entry.message.split(":");
+      const isVictim = myPlayerId === actorId;
+      const hasAccess = !!(isHost || gameEnded || isVictim);
+      if (hasAccess) {
+        result.push(entry);
+      }
     } else {
-      otherEntries.push(entry);
+      result.push(entry);
     }
   }
 
-  const result: (GameLogEntry | { type: "soi_mu_collapsed_group"; entries: GameLogEntry[] })[] = [];
-  if (noImpactChoose.length > 0) {
-    result.push({
-      type: "soi_mu_collapsed_group",
-      entries: noImpactChoose,
-    });
-  }
-  result.push(...otherEntries);
   return result;
 }
 
-function SoiMuCollapsedGroup({
+function LogThreadGroup({
   night,
   entries,
   dayVotersByTarget,
@@ -2086,6 +2395,8 @@ function SoiMuCollapsedGroup({
   isHost,
   isBlindWerewolf,
   nightEntries,
+  title,
+  icon,
 }: {
   night: number;
   entries: GameLogEntry[];
@@ -2106,6 +2417,8 @@ function SoiMuCollapsedGroup({
   isHost?: boolean;
   isBlindWerewolf?: boolean;
   nightEntries?: GameLogEntry[];
+  title?: string;
+  icon?: string;
 }) {
   const [isCollapsed, setIsCollapsed] = useState(true);
 
@@ -2114,20 +2427,67 @@ function SoiMuCollapsedGroup({
     transition: "opacity 280ms ease",
   };
 
+  let renderedTitle: React.ReactNode = title;
+  if (title && title.startsWith("__song_trung_rob_title__:")) {
+    const [_, actorId, targetId, victimRole, staysAliveStr] = title.split(":");
+    const staysAlive = staysAliveStr === "true";
+    const isSongTrung = myPlayerId === actorId;
+
+    if (!gameEnded && isSongTrung) {
+      if (staysAlive) {
+        renderedTitle = (
+          <>
+            Đã giam cầm linh hồn của{" "}
+            {targetId && <RoleSpan playerId={targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            và chiếm đoạt vai trò <span style={{ fontWeight: 600, color: "#c084fc" }}>{victimRole}</span>
+          </>
+        );
+      } else {
+        renderedTitle = (
+          <>
+            Đã rút cạn linh hồn của{" "}
+            {targetId && <RoleSpan playerId={targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            và chiếm đoạt vai trò <span style={{ fontWeight: 600, color: "#c084fc" }}>{victimRole}</span>
+          </>
+        );
+      }
+    } else {
+      if (staysAlive) {
+        renderedTitle = (
+          <>
+            {actorId && <RoleSpan playerId={actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            đã giam cầm linh hồn của{" "}
+            {targetId && <RoleSpan playerId={targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            và chiếm đoạt vai trò <span style={{ fontWeight: 600, color: "#c084fc" }}>{victimRole}</span>
+          </>
+        );
+      } else {
+        renderedTitle = (
+          <>
+            {actorId && <RoleSpan playerId={actorId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            đã rút cạn linh hồn của{" "}
+            {targetId && <RoleSpan playerId={targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode="player" popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} />}{" "}
+            và chiếm đoạt vai trò <span style={{ fontWeight: 600, color: "#c084fc" }}>{victimRole}</span>
+          </>
+        );
+      }
+    }
+  }
+
   return (
-    <div className="soi-mu-thread-group" style={{ marginBottom: 12, ...lineStyle }}>
+    <div className="log-thread-group" style={{ marginBottom: 12, padding: "6px 8px", ...lineStyle }}>
       {/* Header dòng tiêu đề */}
-      <div className="soi-mu-thread-header" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="log-thread-header" style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span className="game-log-item-icon" style={{ flexShrink: 0, width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <AvifIcon name="👤" />
+          <AvifIcon name={icon || "👤"} />
         </span>
-        <span className="soi-mu-thread-title" style={{ fontWeight: 600, color: "#cbd5e1", fontSize: "14px" }}>
-          Các lựa chọn không gây tác động
+        <span className="log-thread-title" style={{ fontWeight: 600, color: "#cbd5e1", fontSize: "14px" }}>
+          {renderedTitle || "Các lựa chọn không gây tác động"}
         </span>
       </div>
 
       {/* Phần thân chứa line và nội dung */}
-      <div className="soi-mu-thread-body" style={{ position: "relative", marginTop: 4 }}>
+      <div className="log-thread-body" style={{ position: "relative", marginTop: 4 }}>
         {/* Đường dọc chính chạy suốt từ trên xuống dưới và tự động co giãn mượt mà */}
         <div 
           style={{
@@ -2144,7 +2504,7 @@ function SoiMuCollapsedGroup({
 
         {/* Danh sách con co giãn mượt mà sử dụng CSS Grid */}
         <div 
-          className="soi-mu-thread-children" 
+          className="log-thread-children" 
           style={{ 
             display: "grid",
             gridTemplateRows: isCollapsed ? "0fr" : "1fr",
@@ -2225,7 +2585,7 @@ function SoiMuCollapsedGroup({
 
           <div
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="soi-mu-thread-toggle-btn"
+            className="log-thread-toggle-btn"
             style={{
               background: "linear-gradient(135deg, rgba(162, 155, 254, 0.08) 0%, rgba(108, 92, 231, 0.04) 100%)",
               border: "1px solid rgba(162, 155, 254, 0.3)",
@@ -2244,7 +2604,7 @@ function SoiMuCollapsedGroup({
               transition: "all 0.2s ease"
             }}
           >
-            {isCollapsed ? `Xem tất cả ${entries.length} lựa chọn ∨` : `Thu gọn lựa chọn ∧`}
+            {isCollapsed ? "Xem thêm ∨" : "Thu gọn ∧"}
           </div>
         </div>
       </div>
@@ -3321,6 +3681,18 @@ export default function GameLogPanel({
                   });
                 if (trialVerdictOnly) return false;
               }
+              if (e.type === "love_link_death") {
+                if (isPlayerView) {
+                  const hasAccess = !!(myPlayerId && (myPlayerId === e.targetId || myPlayerId === e.sourceId));
+                  if (!hasAccess) return false;
+                }
+              }
+              if (e.type === "custom_log" && e.message?.startsWith("__song_trung_victim_guess_wrong__:")) {
+                if (isPlayerView) {
+                  const [_, actorId] = e.message.split(":");
+                  if (myPlayerId !== actorId) return false;
+                }
+              }
               return true;
             }
           );
@@ -3332,9 +3704,17 @@ export default function GameLogPanel({
           const dimBucket = !!eliminationFocus && eliminationFocus.night !== n.night;
 
           const isPlayerViewForGroup = !isHost && !gameEnded;
-          const groupedNightEntries = (isBlindWerewolf && !isPlayerViewForGroup)
-            ? groupSoiMuEntries(displayNightEntries, rolesByEntry.get(nightEntries[0] || {} as any) || rolesByPlayerId, wolves || [], nightEntries)
-            : displayNightEntries;
+          const groupedNightEntries = groupLogEntries(
+            displayNightEntries,
+            rolesByEntry.get(nightEntries[0] || {} as any) || rolesByPlayerId,
+            wolves || [],
+            nightEntries,
+            isBlindWerewolf === true,
+            isPlayerViewForGroup,
+            myPlayerId,
+            gameEnded,
+            isHost
+          );
 
           return (
             <div key={n.night} style={{ opacity: dimBucket ? 0.42 : 1, transition: "all 240ms ease", marginTop: 14 }}>
@@ -3348,12 +3728,14 @@ export default function GameLogPanel({
                   ) : (
                     <ul className="game-log-list">
                       {groupedNightEntries.map((entry, idx) => {
-                        if ("type" in entry && entry.type === "soi_mu_collapsed_group") {
+                        if ("type" in entry && entry.type === "log_thread_group") {
                           return (
-                            <SoiMuCollapsedGroup
+                            <LogThreadGroup
                               key={`group-${idx}`}
                               night={n.night}
                               entries={entry.entries}
+                              title={entry.title}
+                              icon={entry.icon}
                               dayVotersByTarget={dayVotersByTarget}
                               legacyAngelGuessByPair={legacyAngelGuessByPair}
                               playerOnlyDayLogs={isPlayerView}

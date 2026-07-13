@@ -34,7 +34,6 @@ import type {
   WitchPendingDeathPayload,
   WitchPotionsPayload,
   WolfLockedUpdatedPayload,
-  WolfPhaseStartedPayload,
   WolfVotesUpdatedPayload,
   WolfVotes2UpdatedPayload,
   ElementalTargetUpdatedPayload,
@@ -108,6 +107,10 @@ export function useGameSocketSync({
   const [chiefFoundProtectorId, setChiefFoundProtectorId] = useState<string | null>(null);
   const [isChiefBitten, setIsChiefBitten] = useState(false);
   const [chiefUsedTonight, setChiefUsedTonight] = useState(false);
+
+  const [songTrungRobbedPlayerId, setSongTrungRobbedPlayerId] = useState<string | null>(null);
+  const [songTrungFoundByVictim, setSongTrungFoundByVictim] = useState(false);
+  const [songTrungVictimSearchUsedTonight, setSongTrungVictimSearchUsedTonight] = useState<string | null>(null);
   const [chiefCheckedTargets, setChiefCheckedTargets] = useState<Record<string, boolean>>({});
 
   const [witchPendingDeathTargetIds, setWitchPendingDeathTargetIds] = useState<string[]>([]);
@@ -462,6 +465,21 @@ export function useGameSocketSync({
       if (!Array.isArray(payload.nights)) return;
       const sorted = [...payload.nights].sort((a, b) => (a.night || 0) - (b.night || 0));
       setGameLogNights(sorted);
+    };
+
+    const handleYourOriginalRole = (originalRole: string | null) => {
+      if (originalRole && clientId) {
+        setRolesBeforeConversion((prev) => ({
+          ...prev,
+          [clientId]: originalRole,
+        }));
+      }
+    };
+
+    const handleSongTrungRobbedState = (payload: { robbedPlayerId: string | null; foundByVictim: boolean; searchUsedTonight: string | null }) => {
+      setSongTrungRobbedPlayerId(payload?.robbedPlayerId ?? null);
+      setSongTrungFoundByVictim(payload?.foundByVictim === true);
+      setSongTrungVictimSearchUsedTonight(payload?.searchUsedTonight ?? null);
     };
 
     const handleRolesRevealUpdated = (payload: RolesRevealUpdatedPayload) => {
@@ -954,6 +972,8 @@ export function useGameSocketSync({
     socket.on("elementalBuffVoteStateUpdated", handleElementalBuffVoteStateUpdated);
     socket.on("elementalBuffSelected", handleElementalBuffSelected);
     socket.on("hostNightActionProgressUpdated", handleHostNightActionProgressUpdated);
+    socket.on("yourOriginalRole", handleYourOriginalRole);
+    socket.on("songTrungRobbedState", handleSongTrungRobbedState);
 
     return () => {
       socket.off("roomUpdated", handleRoomUpdated);
@@ -1022,6 +1042,8 @@ export function useGameSocketSync({
       socket.off("elementalBuffVoteStateUpdated", handleElementalBuffVoteStateUpdated);
       socket.off("elementalBuffSelected", handleElementalBuffSelected);
       socket.off("hostNightActionProgressUpdated", handleHostNightActionProgressUpdated);
+      socket.off("yourOriginalRole", handleYourOriginalRole);
+      socket.off("songTrungRobbedState", handleSongTrungRobbedState);
       socket.off("connect", syncGameRoom);
     };
   }, [roomId, setRoom]);
@@ -1106,6 +1128,9 @@ export function useGameSocketSync({
       gameLogNights,
       revealedRolesByPlayerId,
       rolesBeforeConversion,
+      songTrungRobbedPlayerId,
+      songTrungFoundByVictim,
+      songTrungVictimSearchUsedTonight,
     }),
     [
       phase,
@@ -1181,6 +1206,9 @@ export function useGameSocketSync({
       gameLogNights,
       revealedRolesByPlayerId,
       rolesBeforeConversion,
+      songTrungRobbedPlayerId,
+      songTrungFoundByVictim,
+      songTrungVictimSearchUsedTonight,
     ]
   );
 }

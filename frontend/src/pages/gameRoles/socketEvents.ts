@@ -141,7 +141,8 @@ export type EliminationCause =
   | { type: "trial_verdict"; voterIds: string[] }
   | { type: "cancer_doctor" }
   | { type: "nam_thu_smile" }
-  | { type: "suy_than_pee" };
+  | { type: "suy_than_pee" }
+  | { type: "song_trung_rob" };
 
 export type GameLogEntry =
   | { type: "wolf_vote"; phase: GameLogEntryPhase; voteBreakdown: WolfVoteBreakdown[] }
@@ -198,7 +199,8 @@ export type GameLogEntry =
   | { type: "soi_mu_wolf_bite"; phase: GameLogEntryPhase; actorId: string; targetId: string; wolfLabel: string }
   | { type: "soi_mu_wolf_suicide"; phase: GameLogEntryPhase; actorId: string; wolfLabel: string }
   | { type: "soi_mu_wolf_inactive_choose"; phase: GameLogEntryPhase; actorId: string; targetId: string; wolfLabel: string; activeWolfLabel: string }
-  | { type: "soi_mu_ariana_trade"; phase: GameLogEntryPhase; actorId: string; targetId: string; actorThumb: "up" | "down"; targetThumb: "up" | "down" | null };
+  | { type: "soi_mu_ariana_trade"; phase: GameLogEntryPhase; actorId: string; targetId: string; actorThumb: "up" | "down"; targetThumb: "up" | "down" | null }
+  | { type: "song_trung_rob"; phase: GameLogEntryPhase; actorId: string; targetId: string; victimRole: string; cupidId: string; staysAlive: boolean };
 
 export type GameLogNight = {
   night: number;

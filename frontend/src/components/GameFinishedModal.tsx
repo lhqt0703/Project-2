@@ -17,12 +17,10 @@ export const GameFinishedModal: React.FC<GameFinishedModalProps> = ({
   winner,
   scoreResult,
   onClose,
-  onBackToLobby,
   onOpenScoreboard,
 }) => {
   if (!open) return null;
 
-  const isVillagers = winner !== "wolves" && winner !== "lovers" && winner !== "nobody";
   const isWolves = winner === "wolves";
   const isLovers = winner === "lovers";
 

@@ -124,10 +124,10 @@ test("Chief Protector Search and Shield Redirection", async (t) => {
       dayFlow,
       nightFlow,
       elementalFlow,
-    });
+    } as any);
 
     // 1. Check a non-protector player
-    socketListeners.chiefCheck({ roomId: room.id, targetId: "villager_1" });
+    socketListeners.chiefCheck?.({ roomId: room.id, targetId: "villager_1" });
     assert.strictEqual(mockSocket.lastResult?.isProtector, false);
     assert.ok(!room.chiefFoundProtectorId);
     assert.strictEqual(room.chiefUsedTonight?.chief_1, true);
@@ -135,8 +135,8 @@ test("Chief Protector Search and Shield Redirection", async (t) => {
     // Reset chiefUsedTonight for the next check (simulating next night)
     room.chiefUsedTonight = {};
 
-    // 2. Check the protector player
-    socketListeners.chiefCheck({ roomId: room.id, targetId: "protector_1" });
+    // 2. Check the protector
+    socketListeners.chiefCheck?.({ roomId: room.id, targetId: "protector_1" });
     assert.strictEqual(mockSocket.lastResult?.isProtector, true);
     assert.strictEqual(room.chiefFoundProtectorId, "protector_1");
   });
@@ -171,14 +171,14 @@ test("Chief Protector Search and Shield Redirection", async (t) => {
       dayFlow,
       nightFlow,
       elementalFlow,
-    });
+    } as any);
 
     // Change phase to day to resolve night actions
-    socketListeners.changePhase({ roomId: room.id, phase: "day" });
+    socketListeners.changePhase?.({ roomId: room.id, phase: "day" });
 
     // Protector should be alive and Chief should be bitten (delayed bite)
-    assert.ok(!room.deadPlayers.includes("protector_1"));
-    assert.ok(!room.deadPlayers.includes("chief_1"));
+    assert.ok(!(room.deadPlayers || []).includes("protector_1"));
+    assert.ok(!(room.deadPlayers || []).includes("chief_1"));
     assert.deepStrictEqual(room.villageChiefPendingWolfDeath?.playerId, "chief_1");
 
     // Check if the shield redirection log was appended

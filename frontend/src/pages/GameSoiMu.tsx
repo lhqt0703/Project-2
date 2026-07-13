@@ -12,7 +12,6 @@ import nenLungAsset from "../assets/nền lưng.avif";
 import RoomBg from "../assets/Nền phòng.avif";
 import ChieuBg from "../assets/nền chiều.avif";
 import nenLaiAsset from "../assets/Nền lai.avif";
-import medalSvg from "../assets/medal.svg";
 import GridMotionOverlay from "../components/GridMotionOverlay";
 import type { GameLogNight as SharedGameLogNight } from "./gameRoles/socketEvents";
 import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
@@ -35,6 +34,7 @@ export default function GameSoiMu() {
   const [thumbDecision, setThumbDecision] = useState<"up" | "down" | null>(null);
   const [daySelectedTargetId, setDaySelectedTargetId] = useState<string | null>(null);
   const [hostPlayerActionTargetId, setHostPlayerActionTargetId] = useState<string | null>(null);
+  const isWarned = !!(hostPlayerActionTargetId && room?.warnedPlayerIds?.includes(hostPlayerActionTargetId));
   const [showGridOverlay, setShowGridOverlay] = useState(true);
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string } | null>(null);
   const [villagerVictoryAnimOpen, setVillagerVictoryAnimOpen] = useState(false);
@@ -1068,6 +1068,19 @@ export default function GameSoiMu() {
                 >
                   Loại vì phạm luật
                 </button>
+                <button
+                  onClick={() => {
+                    if (!room?.id || !hostPlayerActionTargetId) return;
+                    socket.emit("hostToggleWarningFlag", {
+                      roomId: room.id,
+                      targetId: hostPlayerActionTargetId,
+                    });
+                    setHostPlayerActionTargetId(null);
+                  }}
+                  style={{ background: isWarned ? "#e67e22" : "#f1c40f", color: "#000", fontWeight: 700 }}
+                >
+                  {isWarned ? "Gỡ cờ cảnh cáo" : "Gắn cờ cảnh cáo"}
+                </button>
                 {room.soiMuNamThuTargetId === hostPlayerActionTargetId && (
                   <button
                     onClick={() => {
@@ -1240,6 +1253,7 @@ export default function GameSoiMu() {
         infoOnly={true}
         closeText="Đóng"
         onConfirm={() => setNoticeModal(null)}
+        onCancel={() => setNoticeModal(null)}
       />
       <VillagerVictoryAnimation
         open={villagerVictoryAnimOpen}

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { socket } from "../socket";
+import { socket, clientId } from "../socket";
 import { ELEMENTAL_GROUP_ROLE, type ElementalBuffId, type ElementalRole } from "../constants/elemental";
 
 export interface Player {
@@ -37,6 +37,7 @@ export type NightActionOrderRole =
   | "Kẻ bị nguyền"
   | "Tay Buôn"
   | "Trưởng làng"
+  | "Song Trùng"
   | typeof ELEMENTAL_GROUP_ROLE;
 
 export interface RoomGameRules {
@@ -63,6 +64,11 @@ export interface RoomGameRules {
   wolfCanBiteWolf?: boolean;
   wolfBonusBiteSmoothTied?: boolean;
   villageChiefCanFindProtector?: boolean;
+  songTrungMaxUses?: number;
+  songTrungVictimStaysAlive?: boolean;
+  songTrungReturnRoleOnlyIfVotedOut?: boolean;
+  songTrungReturnRoleRequiresCupidVote?: boolean;
+  guardianCanSeeSavedLog?: boolean;
 }
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -76,7 +82,7 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 20,
   wolfNightActionDurationSec: 20,
-  nightActionOrder: ["Thần tình yêu", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"],
+  nightActionOrder: ["Thần tình yêu", "Song Trùng", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"],
   banSoiBecomeWolfEvenIfHealed: false,
   loveCanChoosePartnerFirstTwoNights: false,
   villageChiefKnowsWolfBite: true,
@@ -89,6 +95,11 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   wolfCanBiteWolf: false,
   wolfBonusBiteSmoothTied: true,
   villageChiefCanFindProtector: true,
+  songTrungMaxUses: 0,
+  songTrungVictimStaysAlive: false,
+  songTrungReturnRoleOnlyIfVotedOut: false,
+  songTrungReturnRoleRequiresCupidVote: false,
+  guardianCanSeeSavedLog: false,
 };
 
 export interface RoomData {
@@ -168,6 +179,9 @@ export interface RoomData {
   elementalSelectedBuffId?: ElementalBuffId | null;
   nightActionProgressByPlayerId?: Record<string, "pending" | "done">;
   wolfDeadline?: number | null;
+  songTrungUsedTonight?: Record<string, string | null>;
+  songTrungChoices?: Array<{ playerId: string; night: number; targetId: string | null }>;
+  songTrungVictimId?: string | null;
   scoreResult?: any;
   duskCardSelections?: Record<string, number>;
   playerRoles?: Record<string, string>;
@@ -252,12 +266,13 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const phase = room?.phase;
     const isGameActive = phase === "dusk" || phase === "night" || phase === "day";
+    const isHost = room?.hostId === clientId;
 
-    if (isGameActive && !role) {
+    if (isGameActive && !role && !isHost) {
       console.log("[RoomContext] Game đang chạy nhưng vai trò bị trống, gửi yêu cầu requestMyRole...");
       socket.emit("requestMyRole", { roomId: rId });
     }
-  }, [room?.phase, role]);
+  }, [room?.phase, room?.hostId, role]);
 
   return (
     <RoomContext.Provider value={{ role, setRole, room, setRoom }}>

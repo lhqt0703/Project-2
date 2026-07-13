@@ -34,6 +34,7 @@ export function isAngelHiddenRevivedPlayer(room: Room, playerId: string) {
 }
 
 export function canPlayerActAtNight(room: Room, playerId: string) {
+  if (room.songTrungRobbedPlayerId === playerId) return false;
   return !(room.deadPlayers || []).includes(playerId) || isAngelHiddenRevivedPlayer(room, playerId);
 }
 
@@ -341,6 +342,15 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.angelHiddenRevivedPlayerIds = [];
   room.angelOutcomeLoggedPlayerIds = [];
   resetMerchantRoundState(room);
+
+  room.rolesBeforeConversion = {};
+  room.songTrungChoices = [];
+  room.songTrungUsedTonight = {};
+  room.songTrungVictimId = null;
+  room.songTrungRobbedPlayerId = null;
+  room.songTrungRobbedOriginalRole = null;
+  room.songTrungFoundByVictim = false;
+  room.songTrungVictimSearchUsedTonight = {};
 
   room.players = room.players.map((p) => ({ ...p, inGame: false }));
 }

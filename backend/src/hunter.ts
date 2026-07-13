@@ -45,6 +45,7 @@ export function resolveHunterShotsForDeaths(
     processed.add(hunterId);
 
     if (!hunterIds.has(hunterId)) continue;
+    if (room.songTrungRobbedPlayerId === hunterId) continue;
     if (firedHunterIds.has(hunterId)) continue;
     if (!(room.deadPlayers || []).includes(hunterId)) continue;
 

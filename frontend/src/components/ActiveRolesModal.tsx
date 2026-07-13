@@ -40,7 +40,7 @@ const getGlowColor = (role: string) => {
   if (ELEMENTAL_ROLE_ORDER.includes(role as any)) return "#ED6E7B";
   if (["Tiên tri", "Thợ săn"].includes(role)) return "#60a5fa";
   if (["Bảo vệ", "Phù thủy", "Hộ nhân", "Trưởng làng"].includes(role)) return "#34d399";
-  if (["Kẻ bị nguyền", "Thiên Sứ", "Thần tình yêu", "Tay Buôn"].includes(role)) return "#a855f7";
+  if (["Kẻ bị nguyền", "Thiên Sứ", "Thần tình yêu", "Tay Buôn", "Song Trùng"].includes(role)) return "#a855f7";
   return "#ff9800"; // fallback gold glow
 };
 

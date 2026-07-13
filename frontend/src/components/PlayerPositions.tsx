@@ -134,6 +134,7 @@ interface RoomLike {
   wolfVotes?: Record<string, string | null>;
   wolfVotes2?: Record<string, string | null>;
   deadPlayers?: string[];
+  warnedPlayerIds?: string[];
   sharedHeartsVisible?: boolean;
   playerHearts?: Record<string, number>;
   privatePlayerHearts?: Record<string, number>;
@@ -154,6 +155,11 @@ interface RoomLike {
   playerRoles?: Record<string, string>;
   soiMuNamThuTargetId?: string | null;
   soiMuSuyThanTargetId?: string | null;
+  publicRevealedRolesByPlayerId?: Record<string, string>;
+  wolves?: string[];
+  pendingRoleAssignments?: Record<string, string>;
+  pendingRoleBlocks?: Record<string, string[]>;
+  roles?: string[];
 }
 
 type BulletAnimation = {
@@ -394,9 +400,10 @@ function applyMagnetSnap(
   return { snapped: { ...snapped, ...clamped }, lockedAxis: "y" };
 }
 
-const getRoleBadgeStyle = (role: string) => {
+const getRoleBadgeStyle = (role: string, isHost: boolean = false) => {
   const isCupid = role === "Thần tình yêu";
   const isWolf = ["Sói", "Sói con", "Sói Dại", "Bán sói", "Linh sói"].includes(role);
+  const isSongTrung = role === "Song Trùng";
   // const isSpecialBlue = ["Tiên tri", "Tiên tri tập sự", "Thợ săn", "Hiệp sĩ"].includes(role);
   // const isSpecialGreen = ["Bảo vệ", "Phù thủy", "Già làng", "Sinh đôi", "Bác sĩ ung thư", "Hộ nhân"].includes(role);
   // const isSpecialPurple = ["Thổi sáo", "Linh hồn", "Kẻ nguyền rủa", "Nam Thư", "Đàn bà", "Suy Thận"].includes(role);
@@ -406,17 +413,25 @@ const getRoleBadgeStyle = (role: string) => {
   let textColor = "#e2e8f0";
   let glow = "rgba(0, 0, 0, 0.4)";
 
-  if (isCupid) {
-    borderGradient = "linear-gradient(135deg, rgba(244, 114, 182, 0.6), rgba(219, 39, 119, 0.3))";
-    bgGradient = "linear-gradient(135deg, rgba(74, 20, 45, 0.95), rgba(40, 10, 25, 0.98))";
-    textColor = "#f472b6";
-    glow = "rgba(244, 114, 182, 0.25)";
-  } else if (isWolf) {
+  // ponytail: simplify host styling - only wolves get colored badge for host
+  if (isWolf) {
     borderGradient = "linear-gradient(135deg, rgba(239, 68, 68, 0.6), rgba(153, 27, 27, 0.3))";
     bgGradient = "linear-gradient(135deg, rgba(45, 18, 18, 0.95), rgba(20, 10, 10, 0.98))";
     textColor = "#ff6b6b";
     glow = "rgba(239, 68, 68, 0.25)";
-/*   } else if (isSpecialBlue) {
+  } else if (!isHost) {
+    if (isCupid) {
+      borderGradient = "linear-gradient(135deg, rgba(244, 114, 182, 0.6), rgba(219, 39, 119, 0.3))";
+      bgGradient = "linear-gradient(135deg, rgba(74, 20, 45, 0.95), rgba(40, 10, 25, 0.98))";
+      textColor = "#f472b6";
+      glow = "rgba(244, 114, 182, 0.25)";
+    } else if (isSongTrung) {
+      borderGradient = "linear-gradient(135deg, rgba(168, 85, 247, 0.6), rgba(109, 40, 217, 0.3))";
+      bgGradient = "linear-gradient(135deg, rgba(28, 18, 45, 0.95), rgba(15, 8, 25, 0.98))";
+      textColor = "#e2e8f0";
+      glow = "rgba(168, 85, 247, 0.25)";
+    }
+  }/*   } else if (isSpecialBlue) {
     borderGradient = "linear-gradient(135deg, rgba(6, 182, 212, 0.6), rgba(8, 145, 178, 0.3))";
     bgGradient = "linear-gradient(135deg, rgba(12, 34, 45, 0.95), rgba(8, 20, 30, 0.98))";
     textColor = "#22d3ee";
@@ -431,7 +446,7 @@ const getRoleBadgeStyle = (role: string) => {
     bgGradient = "linear-gradient(135deg, rgba(28, 18, 45, 0.95), rgba(15, 8, 25, 0.98))";
     textColor = "#c084fc";
     glow = "rgba(168, 85, 247, 0.25)"; */
-  }
+
 
   return {
     background: `${bgGradient} padding-box, ${borderGradient} border-box`,
@@ -568,6 +583,17 @@ function DisconnectedBoard({ visible, style }: { visible: boolean; style?: React
       visible={visible}
       iconName="⛓️💥"
       textLines={["Mất", "kết nối"]}
+      style={style}
+    />
+  );
+}
+
+function WarningBoard({ visible, style }: { visible: boolean; style?: React.CSSProperties }) {
+  return (
+    <PlayerWoodBoard
+      visible={visible}
+      iconName="⚠️"
+      textLines={["Cảnh", "cáo"]}
       style={style}
     />
   );
@@ -747,6 +773,8 @@ export default function PlayerPositions({
   revealedRoles,
   rolesBeforeConversion,
   chiefFoundProtectorId,
+  songTrungRobbedPlayerId,
+  songTrungFoundByVictim,
   guardianProtectedTargetId,
   activeNightRole,
   suppressNightActionProgress,
@@ -799,6 +827,8 @@ export default function PlayerPositions({
   revealedRoles?: Record<string, string>;
   rolesBeforeConversion?: Record<string, string>;
   chiefFoundProtectorId?: string | null;
+  songTrungRobbedPlayerId?: string | null;
+  songTrungFoundByVictim?: boolean;
   guardianProtectedTargetId?: string | null;
   activeNightRole?: string | null;
   suppressNightActionProgress?: boolean;
@@ -1976,27 +2006,38 @@ export default function PlayerPositions({
             (wolfBadgeRoles && wolfBadgeRoles[p.id]) ||
             (revealedRoles && revealedRoles[p.id]) ||
             (loveState && loveState.rolesByPlayerId && loveState.rolesByPlayerId[p.id]) ||
-            (p.id === clientId ? role : undefined);
+            (p.id === clientId ? (p.id === songTrungRobbedPlayerId && !room.gameOver ? undefined : role) : undefined);
           const isCurrentlyWolf = currentRoleOfP === "Sói" || room.wolves?.includes(p.id);
           const isChiefConverted = !!(isChiefRevealed && isCurrentlyWolf);
 
           const isViewerWolf = ["Sói", "Sói con", "Sói Dại", "Bán sói", "Linh sói"].includes(role || "") || room.wolves?.includes(clientId || "");
-          const isViewerCupidAndPaired = role === "Thần tình yêu" && loveState?.pairIds?.includes(p.id);
+          const isViewerCupidAndPaired = role === "Thần tình yêu" && clientId !== songTrungRobbedPlayerId && loveState?.pairIds?.includes(p.id);
+          const isSongTrungConversion = originalRoleOfP === "Song Trùng";
+          const isRobbedPlayerWhoFound = clientId && songTrungRobbedPlayerId === clientId && songTrungFoundByVictim;
           const canSeeConversion = !!(
             isHost ||
             room.gameOver ||
             (clientId && p.id === clientId) ||
-            isViewerWolf ||
-            isViewerCupidAndPaired
+            (isSongTrungConversion && isRobbedPlayerWhoFound) ||
+            (!isSongTrungConversion && (isViewerWolf || isViewerCupidAndPaired))
           );
 
           // Kết hợp cả hai trường hợp: bất kỳ role nào có originalRoleOfP, hoặc Trưởng làng lộ diện hóa Sói
           const isConverted = !!(originalRoleOfP || isChiefConverted);
-          const showSpecialConvertedWolfBadge = !!(isConverted && canSeeConversion);
+          
+          // Chỉ hiển thị badge kép của Song Trùng vào ban đêm, khi kết thúc game hoặc đối với Host
+          const isNightOrGameOverOrHost = room.phase === "night" || room.gameOver || isHost;
+          const isSongTrungConversionActive = isSongTrungConversion && isNightOrGameOverOrHost;
+
+          const showSpecialConvertedWolfBadge = !!(
+            isConverted && 
+            canSeeConversion && 
+            (!isSongTrungConversion || isSongTrungConversionActive)
+          );
 
           const effectiveOriginalRole = originalRoleOfP || (isChiefConverted ? "Trưởng làng" : undefined);
 
-          if (showSpecialConvertedWolfBadge && effectiveOriginalRole) {
+          if (showRoleBadges && showSpecialConvertedWolfBadge && effectiveOriginalRole) {
             rawRoleBadgeText = effectiveOriginalRole;
           }
 
@@ -2230,7 +2271,7 @@ export default function PlayerPositions({
               {trialOrangePlayerId === pos.playerId && (
                 <div className="player-halo halo-dash-cam-xoay" style={dashCamXoay} />
               )}
-              {guardianProtectedTargetId === pos.playerId && (
+              {isNightPhase && guardianProtectedTargetId === pos.playerId && (
                 <Orb hue={0} />
               )}
               {trialGreenPlayerId === pos.playerId && (
@@ -2314,10 +2355,12 @@ export default function PlayerPositions({
               )}
 
               {roleBadgeText && (
-                <div style={{
-                  position: "absolute",
-                  bottom: -badgeOffsetPx,
-                  left: "50%",
+                <div
+                  id={showRoleBadges && showSpecialConvertedWolfBadge && effectiveOriginalRole === "Song Trùng" ? "badgekep" : undefined}
+                  style={{
+                    position: "absolute",
+                    bottom: -badgeOffsetPx,
+                    left: "50%",
                   transform: "translateX(-50%)",
                   padding: badgePadding,
                   borderRadius: scalePx(6, 3),
@@ -2326,11 +2369,15 @@ export default function PlayerPositions({
                   width: "max-content",
                   zIndex: 2,
                   animation: "badgeFadeIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
-                  ...getRoleBadgeStyle(roleBadgeText),
+                  ...getRoleBadgeStyle(roleBadgeText, isHost),
                   ...(showSpecialConvertedWolfBadge ? {
-                    background: "linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(45 18 18 / 0.95)) padding-box, linear-gradient(135deg, rgba(239, 68, 68, 0.6), rgba(153, 27, 27, 0.3)) border-box",
+                    background: effectiveOriginalRole === "Song Trùng"
+                      ? "linear-gradient(rgba(30 30 30 / 0.84), rgba(15 23 42 / 0.95)) padding-box padding-box, linear-gradient(135deg, rgba(85, 99, 247, 0.22), rgba(247, 85, 85, 0.22)) border-box border-box"
+                      : "linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(45 18 18 / 0.95)) padding-box, linear-gradient(135deg, rgba(239, 68, 68, 0.6), rgba(153, 27, 27, 0.3)) border-box",
                     border: "1px solid transparent",
-                    boxShadow: "0 3px 8px rgba(239, 68, 68, 0.25)",
+                    boxShadow: effectiveOriginalRole === "Song Trùng"
+                      ? "0px 3px 8px rgba(111, 85, 247, 0.25)"
+                      : "0 3px 8px rgba(239, 68, 68, 0.25)",
                     display: "flex",
                     flexDirection: "column",
                     alignItems: "center",
@@ -2338,14 +2385,25 @@ export default function PlayerPositions({
                   } : {}),
                 }}>
                   {showSpecialConvertedWolfBadge && effectiveOriginalRole ? (
-                    <>
-                      <span style={{ filter: "blur(0.7px)", opacity: 0.55, fontSize: "0.75em" }}>
-                        {effectiveOriginalRole}
-                      </span>
-                      <span style={{ color: "#ff6b6b", fontSize: "0.95em", display: "flex", alignItems: "center", gap: "2px" }}>
-                        <AvifIcon name="🐺" style={{ width: "1.1em", height: "1.1em" }} /> Sói
-                      </span>
-                    </>
+                    effectiveOriginalRole === "Song Trùng" ? (
+                      <>
+                        <span style={{ filter: "blur(0.7px)", opacity: 0.55, fontSize: "0.75em" }}>
+                          Song Trùng
+                        </span>
+                        <span style={{ color: "#e2e8f0", fontSize: "0.95em" }}>
+                          {currentRoleOfP}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span style={{ filter: "blur(0.7px)", opacity: 0.55, fontSize: "0.75em" }}>
+                          {effectiveOriginalRole}
+                        </span>
+                        <span style={{ color: "#ff6b6b", fontSize: "0.95em", display: "flex", alignItems: "center", gap: "2px" }}>
+                          <AvifIcon name="🐺" style={{ width: "1.1em", height: "1.1em" }} /> Sói
+                        </span>
+                      </>
+                    )
                   ) : (
                     roleBadgeText
                   )}
@@ -2553,12 +2611,14 @@ export default function PlayerPositions({
           const visibleDisconnected = showDisconnectedBadge;
           const visibleNamThu = showNamThuBoard;
           const visibleSuyThan = showSuyThanBoard;
+          const visibleWarning = !!room?.warnedPlayerIds?.includes(pos.playerId);
 
           const visibleBoards: string[] = [];
           if (hasNamThuInGame && visibleNamThu) visibleBoards.push("namthu");
           if (hasSuyThanInGame && visibleSuyThan) visibleBoards.push("suythan");
           if (visibleBlank) visibleBoards.push("blank");
           if (visibleDisconnected) visibleBoards.push("disconnected");
+          if (visibleWarning) visibleBoards.push("warning");
 
           const hasDashCamXoay = (nightActionProgress === "pending") || (trialOrangePlayerId === pos.playerId);
 
@@ -2589,6 +2649,11 @@ export default function PlayerPositions({
                   ? { top: "-1.65rem", right: "-1.5rem", rotate: "48deg", zIndex: -2 }
                   : { top: "-1.65rem", right: "-1.2rem", rotate: "48deg", zIndex: -2 };
               }
+              if (index === 4) {
+                return hasDashCamXoay
+                  ? { top: "-2.25rem", right: "-1.1rem", rotate: "32deg", zIndex: -3 }
+                  : { top: "-2.25rem", right: "-0.8rem", rotate: "32deg", zIndex: -3 };
+              }
             } else if (count === 1) {
               if (hasDashCamXoay) {
                 return {
@@ -2604,6 +2669,7 @@ export default function PlayerPositions({
           const disconnectedStyle = getBoardStyle("disconnected");
           const namThuStyle = getBoardStyle("namthu");
           const suyThanStyle = getBoardStyle("suythan");
+          const warningStyle = getBoardStyle("warning");
 
           return (
             <div key={pos.playerId} {...tokenProps} data-player-id={pos.playerId}>
@@ -2612,6 +2678,7 @@ export default function PlayerPositions({
               <DisconnectedBoard visible={visibleDisconnected} style={disconnectedStyle} />
               {hasNamThuInGame && <NamThuBoard visible={visibleNamThu} style={namThuStyle} />}
               {hasSuyThanInGame && <SuyThanBoard visible={visibleSuyThan} style={suyThanStyle} />}
+              <WarningBoard visible={visibleWarning} style={warningStyle} />
             </div>
           );
         })}

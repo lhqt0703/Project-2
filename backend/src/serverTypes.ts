@@ -31,7 +31,7 @@ export interface Player {
   playerAvatar?: string;
 }
 
-export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | "Kẻ bị nguyền" | "Tay Buôn" | "Bác sĩ ung thư" | "Nam Thư" | "Đàn bà" | "Suy Thận" | ElementalRole | "Độc thủ" | "Gián điệp" | "Nhà sư" | "Thầy bói" | "Ác Quỷ" | "Thợ giặt" | "Thủ thư" | "Điều tra viên" | "Nuôi quạ" | "Diệt quỷ" | "Trưởng làng";
+export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | "Kẻ bị nguyền" | "Tay Buôn" | "Bác sĩ ung thư" | "Nam Thư" | "Đàn bà" | "Suy Thận" | ElementalRole | "Độc thủ" | "Gián điệp" | "Nhà sư" | "Thầy bói" | "Ác Quỷ" | "Thợ giặt" | "Thủ thư" | "Điều tra viên" | "Nuôi quạ" | "Diệt quỷ" | "Trưởng làng" | "Song Trùng";
 
 export type NightActionOrderRole = NightActionRole | typeof ELEMENTAL_GROUP_ROLE;
 
@@ -56,9 +56,14 @@ export interface RoomGameRules {
   merchantWinRequiredSuccessfulTrades: number;
   merchantHideReceivedItemName: boolean;
   loveEscapeImmuneSimultaneous: boolean;
-  wolfCanBiteWolf?: boolean;
-  wolfBonusBiteSmoothTied?: boolean;
-  villageChiefCanFindProtector?: boolean;
+  wolfCanBiteWolf?: boolean | undefined;
+  wolfBonusBiteSmoothTied?: boolean | undefined;
+  villageChiefCanFindProtector?: boolean | undefined;
+  songTrungMaxUses?: number | undefined;
+  songTrungVictimStaysAlive?: boolean | undefined;
+  songTrungReturnRoleOnlyIfVotedOut?: boolean | undefined;
+  songTrungReturnRoleRequiresCupidVote?: boolean | undefined;
+  guardianCanSeeSavedLog?: boolean | undefined;
 }
 
 export interface Room {
@@ -97,6 +102,7 @@ export interface Room {
   soiMuHasMerchant?: boolean;
   soiMuNamThuTargetId?: string | null;
   soiMuSuyThanTargetId?: string | null;
+  warnedPlayerIds?: string[];
   hidePlayerRoleText?: boolean;
   roles?: string[];
   rolesLocked?: boolean;
@@ -143,6 +149,9 @@ export interface Room {
   dayTimer?: NodeJS.Timeout | null;
   dayDeadline?: number | null;
   stickers?: Sticker[];
+  songTrungChoices?: { playerId: string; night: number; targetId: string | null }[];
+  songTrungUsedTonight?: Record<string, string | null>;
+  songTrungVictimId?: string | null;
   trialTargetId?: string | null;
   trialStage?: "none" | "defense" | "verdict";
   trialDefenseDeadline?: number | null;
@@ -263,6 +272,10 @@ export interface Room {
   replayIndex?: number;
   duskCardSelections?: Record<string, number>;
   roleVotes?: Record<string, string[]>;
+  songTrungRobbedPlayerId?: string | null;
+  songTrungRobbedOriginalRole?: string | null;
+  songTrungFoundByVictim?: boolean;
+  songTrungVictimSearchUsedTonight?: Record<string, string | null>;
 }
 
 const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -276,7 +289,7 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 20,
   wolfNightActionDurationSec: 20,
-  nightActionOrder: ["Thần tình yêu", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"],
+  nightActionOrder: ["Thần tình yêu", "Song Trùng", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"],
   banSoiBecomeWolfEvenIfHealed: false,
   loveCanChoosePartnerFirstTwoNights: false,
   villageChiefKnowsWolfBite: true,
@@ -289,6 +302,11 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   wolfCanBiteWolf: false,
   wolfBonusBiteSmoothTied: true,
   villageChiefCanFindProtector: true,
+  songTrungMaxUses: 0,
+  songTrungVictimStaysAlive: false,
+  songTrungReturnRoleOnlyIfVotedOut: false,
+  songTrungReturnRoleRequiresCupidVote: false,
+  guardianCanSeeSavedLog: false,
 };
 
 const NIGHT_ACTION_ROLE_SET = new Set<NightActionOrderRole>([
@@ -405,6 +423,7 @@ export function buildRoomGameRules(input?: Partial<RoomGameRules> | null, gameMo
       wolfCanBiteWolf: false,
       wolfBonusBiteSmoothTied: false,
       villageChiefCanFindProtector: false,
+      guardianCanSeeSavedLog: false,
     };
   }
   return {
@@ -412,6 +431,7 @@ export function buildRoomGameRules(input?: Partial<RoomGameRules> | null, gameMo
     wolfCanBiteWolf: merged.wolfCanBiteWolf ?? false,
     wolfBonusBiteSmoothTied: merged.wolfBonusBiteSmoothTied ?? true,
     forceWolfBiteFirstNight: merged.twoHeartsFirstTwoNights && merged.forceWolfBiteFirstNight,
+    songTrungMaxUses: typeof input?.songTrungMaxUses === "number" ? Math.max(0, input.songTrungMaxUses) : DEFAULT_ROOM_GAME_RULES.songTrungMaxUses,
   };
 }
 
@@ -437,7 +457,8 @@ export type EliminationCause =
   | { type: "trial_verdict"; voterIds: string[] }
   | { type: "cancer_doctor" }
   | { type: "nam_thu_smile" }
-  | { type: "suy_than_pee" };
+  | { type: "suy_than_pee" }
+  | { type: "song_trung_rob" };
 
 export type GameLogEntry =
   | { type: "custom_log"; phase: GameLogEntryPhase; message: string; timestamp?: number }
@@ -496,6 +517,7 @@ export type GameLogEntry =
   | { type: "soi_mu_villager_choose"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "soi_mu_wolf_bite"; phase: GameLogEntryPhase; actorId: string; targetId: string; wolfLabel: string }
   | { type: "soi_mu_wolf_suicide"; phase: GameLogEntryPhase; actorId: string; wolfLabel: string }
+  | { type: "song_trung_rob"; phase: GameLogEntryPhase; actorId: string; targetId: string; victimRole: string; cupidId: string; staysAlive: boolean }
   | { type: "soi_mu_wolf_inactive_choose"; phase: GameLogEntryPhase; actorId: string; targetId: string; wolfLabel: string; activeWolfLabel: string }
   | { type: "soi_mu_ariana_trade"; phase: GameLogEntryPhase; actorId: string; targetId: string; actorThumb: "up" | "down"; targetThumb: "up" | "down" | null };
 

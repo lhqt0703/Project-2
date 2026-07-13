@@ -138,6 +138,13 @@ export function toPublicRoom(room: Room) {
     chiefChecks: _chiefChecks,
     chiefUsedTonight: _chiefUsedTonight,
     rolesBeforeConversion: _rolesBeforeConversion,
+    songTrungChoices: _songTrungChoices,
+    songTrungUsedTonight: _songTrungUsedTonight,
+    songTrungVictimId: _songTrungVictimId,
+    songTrungRobbedPlayerId: _songTrungRobbedPlayerId,
+    songTrungRobbedOriginalRole: _songTrungRobbedOriginalRole,
+    songTrungFoundByVictim: _songTrungFoundByVictim,
+    songTrungVictimSearchUsedTonight: _songTrungVictimSearchUsedTonight,
     ...rest
   } = room;
 
@@ -413,7 +420,6 @@ export function emitGameLogToSocket(roomId: string, socketId: string) {
 }
 
 const PUBLIC_NIGHT_GAME_LOG_TYPES = new Set<GameLogEntry["type"]>([
-  "saved_by_guardian",
   "saved_by_witch",
   "eliminated",
   "no_death",
@@ -449,6 +455,15 @@ function getGameLogForPlayer(room: Room, playerId: string): GameLogNight[] {
       // 1. Mysterious force
       if (entry.type === "mysterious_force_eliminated") {
         return true;
+      }
+
+      // 1.5. Saved by guardian log (visible to bodyguard only if the rule is enabled)
+      if (entry.type === "saved_by_guardian") {
+        const rules = ensureRoomGameRules(room);
+        if (rules.guardianCanSeeSavedLog && myRole === "Bảo vệ") {
+          return true;
+        }
+        return false;
       }
 
       // 2. Angel revive
@@ -523,6 +538,28 @@ function getGameLogForPlayer(room: Room, playerId: string): GameLogNight[] {
           entry.type !== "merchant_trade_response" &&
           entry.type !== "merchant_win_condition_completed"
         ) {
+          return true;
+        }
+      }
+
+      // 8.5 Song Trung & Cupid & Love link death
+      if (entry.type === "song_trung_rob" && entry.cupidId === playerId) {
+        return true;
+      }
+      if (entry.type === "love_link_death") {
+        if (playerId === entry.targetId || playerId === entry.sourceId) {
+          return true;
+        }
+      }
+      if (entry.type === "custom_log" && entry.message?.startsWith("__song_trung_guess_wrong__:")) {
+        const [_, actorId] = entry.message.split(":");
+        if (playerId === actorId) {
+          return true;
+        }
+      }
+      if (entry.type === "custom_log" && entry.message?.startsWith("__song_trung_victim_guess_wrong__:")) {
+        const [_, actorId] = entry.message.split(":");
+        if (playerId === actorId) {
           return true;
         }
       }
@@ -720,6 +757,11 @@ export function syncPrivateRoleStateForSocket(
   if (!role) return;
 
   socket.emit("yourRole", role);
+  if (room.rolesBeforeConversion?.[playerId]) {
+    socket.emit("yourOriginalRole", room.rolesBeforeConversion[playerId]);
+  } else {
+    socket.emit("yourOriginalRole", null);
+  }
   socket.emit("wildWolfConvertedState", {
     converted: (room.wildWolfConvertedPlayerIds || []).includes(playerId),
   });
@@ -837,6 +879,13 @@ export function syncPrivateRoleStateForSocket(
   socket.emit("merchantCheeseMarksUpdated", {
     playerIds: isWolfAlignedPlayer(room, playerId) ? room.merchantCheeseMarkedPlayerIds || [] : [],
   });
+
+  const hasSongTrungAccess = playerId === room.hostId || playerId === room.songTrungRobbedPlayerId || room.playerRoles?.[playerId] === "Song Trùng" || room.rolesBeforeConversion?.[playerId] === "Song Trùng";
+  socket.emit("songTrungRobbedState", {
+    robbedPlayerId: hasSongTrungAccess ? room.songTrungRobbedPlayerId || null : null,
+    foundByVictim: hasSongTrungAccess ? room.songTrungFoundByVictim === true : false,
+    searchUsedTonight: room.songTrungVictimSearchUsedTonight?.[playerId] || null,
+  });
 }
 
 export function emitChiefPrivateState(roomId: string, chiefId: string) {
@@ -853,6 +902,18 @@ export function emitChiefPrivateState(roomId: string, chiefId: string) {
     ),
     chiefUsedTonight: !!room.chiefUsedTonight?.[chiefId],
   });
+}
+
+export function emitSongTrungRobbedStateToPlayers(ctx: any, roomId: string, room: Room) {
+  for (const player of room.players) {
+    const playerId = player.id;
+    const hasAccess = playerId === room.hostId || playerId === room.songTrungRobbedPlayerId || room.playerRoles?.[playerId] === "Song Trùng" || room.rolesBeforeConversion?.[playerId] === "Song Trùng";
+    ctx.io.to(playerId).emit("songTrungRobbedState", {
+      robbedPlayerId: hasAccess ? room.songTrungRobbedPlayerId || null : null,
+      foundByVictim: hasAccess ? room.songTrungFoundByVictim === true : false,
+      searchUsedTonight: room.songTrungVictimSearchUsedTonight?.[playerId] || null,
+    });
+  }
 }
 
 export function broadcastWolvesListSync(roomId: string) {

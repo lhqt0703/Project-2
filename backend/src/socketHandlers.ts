@@ -85,6 +85,7 @@ import {
   toPublicRoom,
   broadcastElementalBuffSelection,
   broadcastWolvesListSync,
+  emitSongTrungRobbedStateToPlayers,
 } from "./serverEmitters.js";
 import {
   ELEMENTAL_BUFFS,
@@ -139,6 +140,7 @@ import {
   canLoveChoosePartnerTonight,
   clearLoveStateForPlayers,
   emitLoveStateToPair,
+  emitLoveStateToPlayer,
   isLovePairMemberAwayAt,
   markEliminatedWithLoveChain,
   getLovePairIds,
@@ -1001,6 +1003,21 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const loveLinkDeaths: { sourceId: string; targetId: string }[] = [];
     const savedByGuardianIds: string[] = [];
 
+    const markEliminated = (targetId: string, cause: EliminationCause) => {
+      return markEliminatedWithLoveChain(ctx, roomId, room, targetId, cause, "night", {
+        initialDead,
+        eliminatedIds,
+        causesByTarget,
+        protectorSaves,
+        loveLinkDeaths,
+      });
+    };
+
+    if (room.songTrungVictimId && !initialDead.has(room.songTrungVictimId)) {
+      markEliminated(room.songTrungVictimId, { type: "song_trung_rob" });
+      room.songTrungVictimId = null;
+    }
+
     const addUnique = (ids: string[], id: string) => {
       if (!ids.includes(id)) ids.push(id);
     };
@@ -1029,16 +1046,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         if (!unique.includes(targetId)) unique.push(targetId);
       }
       return unique;
-    };
-
-    const markEliminated = (targetId: string, cause: EliminationCause) => {
-      return markEliminatedWithLoveChain(ctx, roomId, room, targetId, cause, "night", {
-        initialDead,
-        eliminatedIds,
-        causesByTarget,
-        protectorSaves,
-        loveLinkDeaths,
-      });
     };
 
     const flushProtectorSaves = () => {
@@ -1729,6 +1736,111 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
   }
 
+  function resolveSongTrungChoice(roomId: string, room: Room) {
+    const songTrungPlayers = Object.entries(room.playerRoles || {})
+      .filter(([id, role]) => role === "Song Trùng" && !(room.deadPlayers || []).includes(id));
+
+    for (const [stId] of songTrungPlayers) {
+      const targetId = room.songTrungUsedTonight?.[stId];
+      if (!targetId) continue;
+
+      const cupidId = room.loveCupidId;
+      const partnerId = room.loveTargetId; // Partner của Cupid
+
+      if (cupidId && partnerId && targetId === partnerId) {
+        // Chọn trúng partner của Cupid!
+        // Kiểm tra xem cặp đôi đã ra khỏi làng đêm nay chưa
+        if (room.loveEscapeActiveTonight === true) {
+          appendLogEntry(room, {
+            type: "custom_log",
+            phase: "night",
+            message: `Song Trùng chọn trúng partner của Thần tình yêu, nhưng cặp đôi đã ra khỏi làng đêm nay nên không có gì xảy ra.`,
+          });
+          continue;
+        }
+
+        // Cướp thành công!
+        const victimRole = room.playerRoles?.[targetId] || "Dân làng";
+
+        // Lưu vai trò gốc của Song Trùng
+        room.rolesBeforeConversion = room.rolesBeforeConversion || {};
+        room.rolesBeforeConversion[stId] = "Song Trùng";
+
+        // Đổi vai trò Song Trùng thành vai trò cướp được
+        room.playerRoles = room.playerRoles || {};
+        room.playerRoles[stId] = victimRole;
+
+        const rules = ensureRoomGameRules(room);
+        if (rules.songTrungVictimStaysAlive === true) {
+          // Người bị cướp vẫn sống, chỉ bị vô hiệu chức năng
+          room.songTrungRobbedPlayerId = targetId;
+          room.songTrungRobbedOriginalRole = victimRole;
+          room.songTrungFoundByVictim = false;
+        } else {
+          // Đánh dấu người bị cướp vai trò sẽ chết sáng hôm sau
+          room.songTrungVictimId = targetId;
+        }
+
+        // Trở thành partner mới của Thần tình yêu
+        room.loveTargetId = stId;
+
+        appendLogEntry(room, {
+          type: "song_trung_rob",
+          phase: "night",
+          actorId: stId,
+          targetId: targetId,
+          victimRole: victimRole,
+          cupidId: room.loveCupidId || "",
+          staysAlive: room.gameRules?.songTrungVictimStaysAlive === true,
+        });
+
+        appendGameEvent(room, {
+          type: "ROLE_CONVERSION" as any,
+          phase: "night",
+          actorIds: [stId],
+          targetIds: [targetId],
+          metadata: {
+            type: "song_trung",
+            fromRole: "Song Trùng",
+            toRole: victimRole,
+          },
+        });
+
+        // Cập nhật socket room join và emit state
+        const victimSockets = ctx.io.in(targetId);
+        victimSockets.socketsLeave(`lovers_${roomId}`);
+
+        const stSockets = ctx.io.in(stId);
+        stSockets.socketsJoin(`lovers_${roomId}`);
+
+        // Gửi yourRole cho Song Trùng
+        ctx.io.to(stId).emit("yourRole", victimRole);
+        // Gửi yourOriginalRole cho Song Trùng
+        ctx.io.to(stId).emit("yourOriginalRole", "Song Trùng");
+        
+        // Gửi love state trống cho nạn nhân cũ và cập nhật cho cặp đôi mới
+        emitLoveStateToPlayer(ctx, roomId, room, targetId);
+        emitLoveStateToPair(ctx, roomId, room);
+        
+        // Phát trạng thái cướp cho người chơi liên quan
+        emitSongTrungRobbedStateToPlayers(ctx, roomId, room);
+        if (room.hostId) {
+          emitRolesRevealToSocket(roomId, room.hostId);
+        }
+      } else {
+        // Chọn sai / không trúng partner
+        appendLogEntry(room, {
+          type: "custom_log",
+          phase: "night",
+          message: `__song_trung_guess_wrong__:${stId}:${targetId}`,
+        });
+      }
+    }
+
+    // Reset lựa chọn đêm nay
+    room.songTrungUsedTonight = {};
+  }
+
   function finalizeUnmatchedLoveEscapeVote(roomId: string, room: Room) {
     if (room.loveEscapeActiveTonight) return;
     const pair = getLovePairIds(room);
@@ -1791,6 +1903,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       gameRules: buildRoomGameRules(gameRules, gameMode),
       gameEventLog: [],
       gameMode: gameMode || "da_nghich",
+      warnedPlayerIds: [],
     };
 
     leaveOtherGameRooms(roomId);
@@ -3108,6 +3221,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.playerHeartShakeIds = [];
       room.villageChiefDyingFramePlayerIds = [];
       resolveVillageChiefDelayedWolfDeath(roomId, room);
+      resolveSongTrungChoice(roomId, room);
+      room.songTrungVictimSearchUsedTonight = {};
+      emitSongTrungRobbedStateToPlayers(ctx, roomId, room);
       if (room.gameMode === "soi_mu") {
         resolveSoiMuNight(roomId, room);
       } else {
@@ -3319,6 +3435,13 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.protectedTonight = null;
       room.protectedTonightBy = null;
       room.protectedTonightAt = null;
+
+      // Emit to guardian players that protection has been reset
+      for (const p of room.players) {
+        if (room.playerRoles?.[p.id] === "Bảo vệ") {
+          ctx.io.to(p.id).emit("guardianProtected", null);
+        }
+      }
       room.hunterTargetTonight = {};
       room.elementalTargetTonight = {};
       room.elementalCorrectGuessPlayerIdsTonight = [];
@@ -4366,6 +4489,24 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     checkAndEndGame(roomId, "host_eliminated_for_rules");
   });
 
+  socket.on("hostToggleWarningFlag", ({ roomId, targetId }: { roomId: string; targetId: string }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+    if (clientId !== room.hostId) return;
+    if (!targetId) return;
+    if (!room.players.find((player) => player.id === targetId)) return;
+
+    room.warnedPlayerIds = room.warnedPlayerIds || [];
+    const index = room.warnedPlayerIds.indexOf(targetId);
+    if (index === -1) {
+      room.warnedPlayerIds.push(targetId);
+    } else {
+      room.warnedPlayerIds.splice(index, 1);
+    }
+
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
   socket.on("hostNamThuTargetSmile", ({ roomId, targetId }: { roomId: string; targetId: string }) => {
     const room = rooms[roomId];
     if (!room) return;
@@ -5107,6 +5248,94 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (clientId !== room.hostId) return;
     if (!room.players.find(p => p.id === targetId)) return;
     removePlayerFromRoom(roomId, targetId, { ...(source ? { source } : {}), notifyTarget: true });
+  });
+
+  socket.on("songTrungChoose", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room || !room.playerRoles) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+
+    if (room.playerRoles[clientId] !== "Song Trùng") return;
+    if (!canPlayerActAtNight(room, clientId)) return;
+
+    if (targetId && !room.players.find(p => p.id === targetId)) return;
+    if (targetId && (room.deadPlayers || []).includes(targetId)) return;
+
+    room.songTrungUsedTonight = room.songTrungUsedTonight || {};
+    if (room.songTrungUsedTonight[clientId]) {
+      socket.emit("errorMessage", "Bạn đã thực hiện lựa chọn trong đêm nay rồi!");
+      return;
+    }
+
+    room.songTrungChoices = room.songTrungChoices || [];
+    const maxUses = room.gameRules?.songTrungMaxUses ?? 0;
+    const usedCount = room.songTrungChoices.filter(c => c.playerId === clientId).length;
+    if (maxUses > 0 && usedCount >= maxUses) {
+      socket.emit("errorMessage", "Bạn đã hết số lần thực hiện chức năng!");
+      return;
+    }
+
+    room.songTrungChoices.push({
+      playerId: clientId,
+      night: room.nightCount || 1,
+      targetId: targetId || null,
+    });
+    room.songTrungUsedTonight[clientId] = targetId || null;
+
+
+
+    ctx.io.to(clientId).emit("songTrungChoiceRecorded", { targetId });
+    emitHostNightActionProgress(roomId);
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+  });
+
+  socket.on("songTrungVictimSearch", ({ roomId, targetId }) => {
+    const room = rooms[roomId];
+    if (!room || !room.playerRoles) return;
+    if (room.gameOver) return;
+    if (room.phase !== "night") return;
+
+    if (room.songTrungRobbedPlayerId !== clientId) return;
+
+    if (!targetId || !room.players.find(p => p.id === targetId)) return;
+    if ((room.deadPlayers || []).includes(targetId)) return;
+
+    room.songTrungVictimSearchUsedTonight = room.songTrungVictimSearchUsedTonight || {};
+    if (room.songTrungVictimSearchUsedTonight[clientId]) {
+      socket.emit("errorMessage", "Bạn đã thực hiện tìm kiếm trong đêm nay rồi!");
+      return;
+    }
+
+    room.songTrungVictimSearchUsedTonight[clientId] = targetId;
+
+    const originalRoleOfTarget = room.rolesBeforeConversion?.[targetId];
+    const isSongTrung = originalRoleOfTarget === "Song Trùng";
+
+    const victimName = room.players.find(p => p.id === clientId)?.name || clientId;
+    const targetName = room.players.find(p => p.id === targetId)?.name || targetId;
+
+    let found = false;
+    if (isSongTrung) {
+      room.songTrungFoundByVictim = true;
+      found = true;
+      appendLogEntry(room, {
+        type: "custom_log",
+        phase: "night",
+        message: `Người bị cướp chức năng (${victimName}) đã tìm đúng Song Trùng (${targetName})!`,
+      });
+    } else {
+      appendLogEntry(room, {
+        type: "custom_log",
+        phase: "night",
+        message: `__song_trung_victim_guess_wrong__:${clientId}:${targetId}`,
+      });
+    }
+
+    socket.emit("songTrungVictimSearchResult", { targetId, found });
+    emitHostNightActionProgress(roomId);
+    emitSongTrungRobbedStateToPlayers(ctx, roomId, room);
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
   socket.on("seerCheck", ({ roomId, targetId }) => {

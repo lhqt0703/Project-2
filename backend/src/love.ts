@@ -1,6 +1,7 @@
 import type { ServerContext } from "./serverContext.js";
 import { ensureRoomGameRules, type EliminationCause, type GameLogEntryPhase, type Room } from "./serverTypes.js";
 import { appendGameEvent } from "./gameEvent.js";
+import { appendLogEntry } from "./gameLog.js";
 import { clearProtectorTargetIfDead, tryUseProtectorImmortality, type ProtectorSaveRecord } from "./specialRoles.js";
 import { markWildWolfConversionReadyIfWolfDied, markWolfCubExtraBiteReadyIfDied } from "./roomState.js";
 import { emitAngelPrivateState, emitAngelPrivateStateForAll, markAngelReviveAvailable } from "./angel.js";
@@ -152,6 +153,77 @@ export function markEliminatedWithLoveChain(
   _phase: GameLogEntryPhase,
   options: MarkEliminatedOptions = {},
 ): string[] {
+  const deadPlayers = room.deadPlayers || [];
+  if (room.songTrungRobbedPlayerId && room.loveTargetId && targetId === room.loveTargetId && !deadPlayers.includes(targetId)) {
+    // Song Trùng bị chết!
+    const robbedName = room.players.find(p => p.id === room.songTrungRobbedPlayerId)?.name || room.songTrungRobbedPlayerId;
+    
+    if (room.songTrungFoundByVictim !== true) {
+      // Chưa tìm được -> không khôi phục, Cupid vẫn chết theo
+      appendLogEntry(room, {
+        type: "custom_log",
+        phase: _phase,
+        message: `Song Trùng đã chết nhưng người bị cướp vai trò chưa tìm thấy Song Trùng trước đó. Thần tình yêu sẽ chết theo.`
+      });
+    } else {
+      // Đã tìm thấy
+      let valid = true;
+      const rules = ensureRoomGameRules(room);
+      
+      // 1. Kiểm tra luật treo cổ
+      if (rules.songTrungReturnRoleOnlyIfVotedOut === true) {
+        if (cause.type !== "day_vote" && cause.type !== "trial_verdict") {
+          valid = false;
+          appendLogEntry(room, {
+            type: "custom_log",
+            phase: _phase,
+            message: `Song Trùng chết do nguyên nhân khác (không phải biểu quyết treo cổ). Điều kiện giải cứu không hợp lệ, Thần tình yêu vẫn chết theo.`
+          });
+        }
+      }
+      
+      // 2. Kiểm tra luật Cupid vote
+      if (valid && rules.songTrungReturnRoleRequiresCupidVote === true) {
+        const cupidId = room.loveCupidId;
+        const voterIds = (cause as any).voterIds || [];
+        if (!cupidId || !voterIds.includes(cupidId)) {
+          valid = false;
+          appendLogEntry(room, {
+            type: "custom_log",
+            phase: _phase,
+            message: `Song Trùng bị treo cổ nhưng Thần tình yêu không biểu quyết vote chết Song Trùng. Điều kiện giải cứu không hợp lệ, Thần tình yêu vẫn chết theo.`
+          });
+        }
+      }
+      
+      if (valid) {
+        // Hợp lệ! Khôi phục vai trò và liên kết tình yêu ban đầu
+        const robbedId = room.songTrungRobbedPlayerId;
+        
+        // Cập nhật socket room join và emit state
+        const targetSockets = ctx.io.in(targetId);
+        targetSockets.socketsLeave(`lovers_${roomId}`);
+        
+        const robbedSockets = ctx.io.in(robbedId);
+        robbedSockets.socketsJoin(`lovers_${roomId}`);
+        
+        room.loveTargetId = robbedId; // Trả Cupid target về người bị cướp
+        room.songTrungRobbedPlayerId = null; // Trả lại chức năng cho người bị cướp
+        room.songTrungVictimId = null;
+        room.songTrungRobbedOriginalRole = null;
+        
+        emitLoveStateToPair(ctx, roomId, room);
+        ctx.io.to(robbedId).emit("yourRole", room.playerRoles?.[robbedId]);
+        
+        appendLogEntry(room, {
+          type: "custom_log",
+          phase: _phase,
+          message: `[Giải cứu thành công] Song Trùng đã chết. ${robbedName} lấy lại được chức năng vai trò của mình và Thần tình yêu không bị chết theo.`
+        });
+      }
+    }
+  }
+
   const initialDead = options.initialDead || new Set<string>();
   const eliminatedIds = options.eliminatedIds;
   const causesByTarget = options.causesByTarget;

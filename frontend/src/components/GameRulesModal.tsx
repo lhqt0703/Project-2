@@ -15,6 +15,7 @@ const NIGHT_ACTION_ROLE_LABELS: Record<NightActionOrderRole, string> = {
   "Kẻ bị nguyền": "Kẻ bị nguyền",
   "Tay Buôn": "Tay Buôn",
   "Trưởng làng": "Trưởng làng",
+  "Song Trùng": "Song Trùng",
 };
 
 const NIGHT_ACTION_DURATION_STEP_SEC = 10;
@@ -636,6 +637,22 @@ export default function GameRulesModal({
 
               <label style={rowStyle()}>
                 <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Bảo vệ thấy log cứu thành công</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi bật, người chơi có vai trò Bảo vệ sẽ thấy được dòng log thông báo khi đã cứu thành công mục tiêu khỏi vết cắn của Sói.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.guardianCanSeeSavedLog === true}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("guardianCanSeeSavedLog", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>Trưởng làng tìm kiếm Hộ nhân</div>
                   <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
                     Khi bật, nếu có Hộ nhân trong danh sách role, Trưởng làng mỗi đêm có thể chọn một người để dò tìm Hộ nhân. Khi tìm thấy, Trưởng làng sẽ thấy badge vai trò của Hộ nhân và tự động đỡ vết cắn của Sói thay cho Hộ nhân.
@@ -894,6 +911,91 @@ export default function GameRulesModal({
                   disabled={readOnly}
                   onChange={(e) => updateRule("trialInteractionSelectionLimit", clampSelectionLimit(Number(e.target.value)))}
                   style={{ width: 96, padding: "10px 12px" }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Số lần Song Trùng có thể chọn mục tiêu</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Số lần tối đa Song Trùng có thể thực hiện chức năng chọn partner Cupid (0 để không giới hạn).
+                  </div>
+                </div>
+                <input
+                  type="number"
+                  min={0}
+                  max={20}
+                  value={draftRules.songTrungMaxUses ?? 0}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("songTrungMaxUses", Math.max(0, Number(e.target.value)))}
+                  style={{ width: 96, padding: "10px 12px" }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Người bị cướp vai trò vẫn sống (chỉ bị vô hiệu chức năng)</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi bật, mục tiêu bị Song Trùng cướp vai trò sẽ không chết vào sáng hôm sau mà vẫn sống nhưng không thể dùng chức năng vai trò của mình. Ban đêm họ có thể đoán ai là Song Trùng.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.songTrungVictimStaysAlive === true}
+                  disabled={readOnly}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setDraftRules((prev) => {
+                      const next = { ...prev, songTrungVictimStaysAlive: checked };
+                      if (!checked) {
+                        next.songTrungReturnRoleOnlyIfVotedOut = false;
+                        next.songTrungReturnRoleRequiresCupidVote = false;
+                      }
+                      return next as RoomGameRules;
+                    });
+                  }}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={{ ...rowStyle(), opacity: draftRules.songTrungVictimStaysAlive !== true ? 0.4 : 1 }}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Chỉ lấy lại chức năng khi Song Trùng bị treo cổ ban ngày</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Yêu cầu bật luật "Người bị cướp vai trò vẫn sống". Chỉ khi Song Trùng bị biểu quyết treo cổ ban ngày mới tính là giải cứu hợp lệ.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.songTrungReturnRoleOnlyIfVotedOut === true}
+                  disabled={readOnly || draftRules.songTrungVictimStaysAlive !== true}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setDraftRules((prev) => {
+                      const next = { ...prev, songTrungReturnRoleOnlyIfVotedOut: checked };
+                      if (!checked) {
+                        next.songTrungReturnRoleRequiresCupidVote = false;
+                      }
+                      return next as RoomGameRules;
+                    });
+                  }}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={{ ...rowStyle(), opacity: (draftRules.songTrungVictimStaysAlive !== true || draftRules.songTrungReturnRoleOnlyIfVotedOut !== true) ? 0.4 : 1 }}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Yêu cầu Thần tình yêu vote chết Song Trùng</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Yêu cầu bật luật "Chỉ lấy lại chức năng khi bị treo cổ". Thần tình yêu bắt buộc phải tham gia biểu quyết treo cổ Song Trùng mới được tính giải cứu.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.songTrungReturnRoleRequiresCupidVote === true}
+                  disabled={readOnly || draftRules.songTrungVictimStaysAlive !== true || draftRules.songTrungReturnRoleOnlyIfVotedOut !== true}
+                  onChange={(e) => updateRule("songTrungReturnRoleRequiresCupidVote", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
                 />
               </label>
             </>

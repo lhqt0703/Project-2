@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ELEMENTAL_ROLE_SET } from "../constants/elemental";
 
-const rolePortraitImages = import.meta.glob<string>("../assets/*.png", {
+const rolePortraitImages = import.meta.glob<string>("../assets/*.{png,avif}", {
   eager: true,
   import: "default",
 });
@@ -21,7 +21,7 @@ const BLANK_ROLE_NAMES = new Set(["dân làng nguyên tố"]);
 const NO_DARK_OVERLAY_ROLE_NAMES = new Set(["tiên tri", "phù thủy", "thợ săn"]);
 const FADE_OUT_MS = 280;
 const WOLF_ROLE_NAMES = new Set(["sói", "sói con", "sói dại"]);
-const HYBRID_ROLE_NAMES = new Set(["bán sói", "linh sói", "tay buôn", "thiên sứ"]);
+const HYBRID_ROLE_NAMES = new Set(["bán sói", "linh sói", "tay buôn", "thiên sứ", "song trùng"]);
 export const VILLAGER_BACKGROUND_ASSET = "Nền dân";
 export const WOLF_BACKGROUND_ASSET = "Nền sói";
 export const HYBRID_BACKGROUND_ASSET = "Nền lai";

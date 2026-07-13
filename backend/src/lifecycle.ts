@@ -2,7 +2,7 @@ import type { ServerContext } from "./serverContext.js";
 import { ensureRoomGameRules, buildRoomGameRules, type Room, type GameLogEntryPhase } from "./serverTypes.js";
 import { clearGameTimers, clearTrialState, ensureWitchState, getParticipantCount, getParticipantPlayers, getParticipantIds, getBanSoiId, getSpiritWolfId, getWildWolfId, getWitches, isWolfRole, resetNightTurnState, getAlivePlayerIds, isWolfAlignedPlayer } from "./roomState.js";
 import { RULES_RESTART_FADE_IN_MS, RULES_RESTART_FADE_OUT_MS, RULES_RESTART_HOLD_MS, RULES_RESTART_RESTART_AT_MS, TWO_HEARTS_NIGHT_LIMIT, initTwoHeartsForParticipants } from "./gameConfig.js";
-import { emitRolesRevealToSocket, toPublicRoom, broadcastWolvesListSync, emitPublicDayGameLogToRoom, emitGameLogToSocket } from "./serverEmitters.js";
+import { emitRolesRevealToSocket, toPublicRoom, broadcastWolvesListSync, emitPublicDayGameLogToRoom, emitGameLogToSocket, emitSongTrungRobbedStateToPlayers } from "./serverEmitters.js";
 import { dealRolesWithPendingAssignments, pickRolesForParticipants } from "./roleAssignment.js";
 import { clearLoveStateForPlayers, getLovePairIds } from "./love.js";
 import { MERCHANT_ROLE, resetMerchantRoundState } from "./merchant.js";
@@ -68,6 +68,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
   function endGame(roomId: string, room: Room, winner: NonNullable<Room["winner"]>, reason: string) {
     room.gameOver = true;
     room.winner = winner;
+    room.warnedPlayerIds = [];
     appendAngelOutcomes(room, winner);
 
     appendGameEvent(room, {
@@ -258,6 +259,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
     room.gameLog = [];
     room.gameEventLog = [];
     room.deadPlayers = [];
+    room.warnedPlayerIds = [];
     room.publicRevealedRolesByPlayerId = {};
     room.sharedHeartsVisible = false;
     room.playerHearts = {};
@@ -359,9 +361,20 @@ export function createLifecycleFlow(ctx: ServerContext) {
     room.soiMuInvestigationResult = null;
     room.soiMuHasMerchant = room.gameMode === "soi_mu" && Object.values(room.playerRoles || {}).includes("Tay Buôn");
 
+    // Reset Song Trung state
+    room.rolesBeforeConversion = {};
+    room.songTrungChoices = [];
+    room.songTrungUsedTonight = {};
+    room.songTrungVictimId = null;
+    room.songTrungRobbedPlayerId = null;
+    room.songTrungRobbedOriginalRole = null;
+    room.songTrungFoundByVictim = false;
+    room.songTrungVictimSearchUsedTonight = {};
+
     ctx.io.to(roomId).emit("phaseChanged", "dusk");
     clearLoveStateForPlayers(ctx, room, roomId);
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    emitSongTrungRobbedStateToPlayers(ctx, roomId, room);
     ctx.io.to(roomId).emit("gameStarted");
     emitRolesRevealToSocket(roomId, room.hostId);
     emitPublicDayGameLogToRoom(roomId);

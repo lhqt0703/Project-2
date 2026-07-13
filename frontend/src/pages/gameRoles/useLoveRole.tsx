@@ -27,6 +27,7 @@ export function useLoveRole({
   nightActionDeadline,
   nightActionNow,
   doesNightTurnMatchMyRole: _doesNightTurnMatchMyRole,
+  songTrungRobbedPlayerId,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -39,13 +40,14 @@ export function useLoveRole({
   nightActionDeadline: number | null;
   nightActionNow: number;
   doesNightTurnMatchMyRole: boolean;
+  songTrungRobbedPlayerId?: string | null;
 }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [showPairConfirm, setShowPairConfirm] = useState(false);
   const [showEscapeConfirm, setShowEscapeConfirm] = useState(false);
 
   const isMeAlive = roomId === "mock-8" ? true : (!!clientId && !deadPlayers.includes(clientId));
-  const isPaired = roomId === "mock-8" ? true : (!!clientId && loveState.pairIds.includes(clientId));
+  const isPaired = roomId === "mock-8" ? true : (!!clientId && loveState.pairIds.includes(clientId) && clientId !== songTrungRobbedPlayerId);
   const partnerId = loveState.partnerId;
   const partnerName = partnerId ? room.players.find((player) => player.id === partnerId)?.name : null;
   const hasVotedEscape = !!clientId && loveState.escapeVotes.includes(clientId);

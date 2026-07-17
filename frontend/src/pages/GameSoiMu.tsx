@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { socket, clientId } from "../socket";
+import { socket, clientId, startRoomRecovery } from "../socket";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useRoomContext } from "../context/RoomContext";
 import PlayerPositions from "../components/PlayerPositions";
@@ -171,8 +171,8 @@ export default function GameSoiMu() {
   });
 
   // Tiên tri status
-  const isInvestigated = room?.soiMuInvestigatedPlayerId === clientId;
-  const isInvestigationResolved = room?.soiMuInvestigationResolved !== false; // true if resolved or null
+  const isInvestigated = room?.soiMuState?.investigatedPlayerId === clientId;
+  const isInvestigationResolved = room?.soiMuState?.investigationResolved !== false; // true if resolved or null
   const showInvestigationUI = isDay && isInvestigated && !isInvestigationResolved && !amIDead;
 
   const isSuyThanAlive = useMemo(() => {
@@ -273,9 +273,9 @@ export default function GameSoiMu() {
 
   useEffect(() => {
     if (!room) return;
-    if (room.soiMuInvestigationResult === "fail" && prevResultRef.current !== "fail") {
-      if (room.soiMuDaySelectedTargetId) {
-        setSoiMuWrongChoiceHighlightId(room.soiMuDaySelectedTargetId);
+    if (room.soiMuState?.investigationResult === "fail" && prevResultRef.current !== "fail") {
+      if (room.soiMuState?.daySelectedTargetId) {
+        setSoiMuWrongChoiceHighlightId(room.soiMuState?.daySelectedTargetId);
         setSoiMuWrongChoiceOpacity(1);
 
         // After 5 seconds, start fading out over 3 seconds
@@ -294,21 +294,12 @@ export default function GameSoiMu() {
         };
       }
     }
-    prevResultRef.current = room.soiMuInvestigationResult;
-  }, [room?.soiMuInvestigationResult, room?.soiMuDaySelectedTargetId]);
+    prevResultRef.current = room.soiMuState?.investigationResult;
+  }, [room?.soiMuState?.investigationResult, room?.soiMuState?.daySelectedTargetId]);
 
   // Lắng nghe sự kiện socket
   useEffect(() => {
     if (!roomId) return;
-
-    // Yêu cầu lấy thông tin phòng ban đầu
-    socket.emit("getRoom", roomId);
-    socket.emit("requestGameLog", { roomId });
-    socket.emit("requestHostNightActionProgress", { roomId });
-
-    if (isHost) {
-      socket.emit("requestRolesReveal", { roomId });
-    }
 
     const handleRoomUpdated = (updatedRoom: any) => {
       if (updatedRoom && updatedRoom.id === roomId) {
@@ -397,6 +388,12 @@ export default function GameSoiMu() {
     socket.on("hunterShot", handleHunterShot);
     socket.on("witchPotionEffectTriggered", handleWitchPotionEffectTriggered);
 
+    const stopRoomRecovery = startRoomRecovery(roomId, () => {
+      socket.emit("requestGameLog", { roomId });
+      socket.emit("requestHostNightActionProgress", { roomId });
+      if (isHost) socket.emit("requestRolesReveal", { roomId });
+    });
+
     return () => {
       socket.off("roomUpdated", handleRoomUpdated);
       socket.off("gameLogUpdated", handleGameLogUpdated);
@@ -408,6 +405,7 @@ export default function GameSoiMu() {
       socket.off("forceReturnToRoom", handleForceReturnToRoom);
       socket.off("hunterShot", handleHunterShot);
       socket.off("witchPotionEffectTriggered", handleWitchPotionEffectTriggered);
+      stopRoomRecovery();
     };
   }, [roomId, isHost, nav, setRoom]);
 
@@ -427,7 +425,7 @@ export default function GameSoiMu() {
   // Gửi hành động chọn mục tiêu ban đêm
   const handleChooseNightTarget = (targetId: string) => {
     if (!room || amIDead || isHost) return;
-    if (room.soiMuLocked?.[clientId]) return;
+    if (room.soiMuState?.locked?.[clientId]) return;
 
     const nextTarget = selectedTargetId === targetId ? null : targetId;
     setSelectedTargetId(nextTarget);
@@ -437,7 +435,7 @@ export default function GameSoiMu() {
   // Gửi hành động chọn ngón tay của Tay Buôn
   const handleChooseThumb = (decision: "up" | "down") => {
     if (!room || amIDead || isHost) return;
-    if (room.soiMuLocked?.[clientId]) return;
+    if (room.soiMuState?.locked?.[clientId]) return;
 
     const nextDecision = thumbDecision === decision ? null : decision;
     setThumbDecision(nextDecision);
@@ -447,7 +445,7 @@ export default function GameSoiMu() {
   // Khóa hành động ban đêm
   const handleLockNightAction = () => {
     if (!room || amIDead || isHost) return;
-    if (room.soiMuLocked?.[clientId]) return;
+    if (room.soiMuState?.locked?.[clientId]) return;
 
     socket.emit("soiMuLockAction", { roomId: room.id });
   };
@@ -548,21 +546,21 @@ export default function GameSoiMu() {
   // Cấu hình Highlight gộp của Tiên tri ban ngày và Tòa án xét xử
   const trialWhitePlayerIds = useMemo(() => {
     const list = [...(dayVote.playerPositionsProps.trialWhitePlayerIds || [])];
-    if (isDay && room?.soiMuInvestigatedPlayerId && !room.soiMuInvestigationResolved) {
-      list.push(room.soiMuInvestigatedPlayerId);
+    if (isDay && room?.soiMuState?.investigatedPlayerId && !room.soiMuState?.investigationResolved) {
+      list.push(room.soiMuState?.investigatedPlayerId);
     }
     return list;
-  }, [dayVote.playerPositionsProps.trialWhitePlayerIds, isDay, room?.soiMuInvestigatedPlayerId, room?.soiMuInvestigationResolved]);
+  }, [dayVote.playerPositionsProps.trialWhitePlayerIds, isDay, room?.soiMuState?.investigatedPlayerId, room?.soiMuState?.investigationResolved]);
 
   const trialGreenPlayerId = useMemo(() => {
     if (dayVote.playerPositionsProps.trialGreenPlayerId) {
       return dayVote.playerPositionsProps.trialGreenPlayerId;
     }
-    if (isDay && room?.soiMuInvestigatedPlayerId && room.soiMuInvestigationResult === "success") {
-      return room.soiMuInvestigatedPlayerId;
+    if (isDay && room?.soiMuState?.investigatedPlayerId && room.soiMuState?.investigationResult === "success") {
+      return room.soiMuState?.investigatedPlayerId;
     }
     return undefined;
-  }, [dayVote.playerPositionsProps.trialGreenPlayerId, isDay, room?.soiMuInvestigatedPlayerId, room?.soiMuInvestigationResult]);
+  }, [dayVote.playerPositionsProps.trialGreenPlayerId, isDay, room?.soiMuState?.investigatedPlayerId, room?.soiMuState?.investigationResult]);
 
   const verdictDiePlayerIds = useMemo(() => {
     const list: string[] = [];
@@ -596,8 +594,8 @@ export default function GameSoiMu() {
     return dayVote.remainingSec;
   }, [isNight, room.nightTurnPaused, room.nightTurnRemainingMs, room.nightTurnDeadline, now, dayVote.remainingSec]);
 
-  const hasMerchantInGame = room.soiMuHasMerchant === true;
-  const isLocked = room.soiMuLocked?.[clientId] === true;
+  const hasMerchantInGame = room.soiMuState?.hasMerchant === true;
+  const isLocked = room.soiMuState?.locked?.[clientId] === true;
 
   return (
     <div 
@@ -1081,7 +1079,7 @@ export default function GameSoiMu() {
                 >
                   {isWarned ? "Gỡ cờ cảnh cáo" : "Gắn cờ cảnh cáo"}
                 </button>
-                {room.soiMuNamThuTargetId === hostPlayerActionTargetId && (
+                {room.soiMuState?.namThuTargetId === hostPlayerActionTargetId && (
                   <button
                     onClick={() => {
                       socket.emit("hostNamThuTargetSmile", { roomId: room.id, targetId: hostPlayerActionTargetId });
@@ -1182,7 +1180,7 @@ export default function GameSoiMu() {
           isReplay={room?.isReplay}
           myPlayerId={clientId || undefined}
           myRole={room?.playerRoles?.[clientId || ""]}
-          wolves={room?.wolves || []}
+          wolves={room?.daNghichState?.wolves || []}
           gameRules={room?.gameRules}
           isBlindWerewolf={true}
         />

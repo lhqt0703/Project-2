@@ -197,11 +197,6 @@ export default function RoleSelect() {
     roleVotes?: Record<string, string[]>;
   } | null>(null);
   const [pendingRolesApply, setPendingRolesApply] = useState<string[] | null>(null);
-  const [wolfMismatchData, setWolfMismatchData] = useState<{
-    currentWolfCount: number;
-    maxAllowedWolfCount: number;
-    playerCount: number;
-  } | null>(null);
   const [infoModal, setInfoModal] = useState<{ title: string; message: string } | null>(null);
   const didInitFromServer = useRef(false);
 
@@ -261,12 +256,6 @@ export default function RoleSelect() {
   }, [roomId]);
 
   useEffect(() => {
-    interface WolfRoleMismatchData {
-      currentWolfCount: number;
-      maxAllowedWolfCount: number;
-      playerCount: number;
-    }
-
     const handleGameStarted = (payload?: {
       hostRestartCinematic?: {
         roomId?: string;
@@ -284,22 +273,15 @@ export default function RoleSelect() {
       nav(`/game?roomId=${roomId}`);
     };
 
-    const handleWolfMismatch = (data: WolfRoleMismatchData) => {
-      if (!roomId) return;
-      setWolfMismatchData(data);
-    };
-
     const handleRolesReady = () => {
       // Do not redirect, let the user return manually.
     };
 
     socket.on("gameStarted", handleGameStarted);
-    socket.on("wolfRoleMismatch", handleWolfMismatch);
     socket.on("rolesReady", handleRolesReady);
 
     return () => {
       socket.off("gameStarted", handleGameStarted);
-      socket.off("wolfRoleMismatch", handleWolfMismatch);
       socket.off("rolesReady", handleRolesReady);
     };
   }, [nav, roomId, selectedRoles, selectedElementalRoles, isDietQuy]);
@@ -596,33 +578,6 @@ export default function RoleSelect() {
           });
           setPendingRolesApply(null);
         }}
-      />
-
-      <ConfirmModal
-        open={!!wolfMismatchData}
-        title="Xác nhận điều chỉnh vai trò"
-        message={
-          wolfMismatchData
-            ? `Danh sách vai trò hiện tại có ${wolfMismatchData.currentWolfCount} sói/quỷ, vượt quá mức tối đa ${wolfMismatchData.maxAllowedWolfCount} cho phòng ${wolfMismatchData.playerCount} người.\n\n` +
-              `Hệ thống sẽ tự giảm bớt số lượng sói/quỷ để tránh phe ác thắng ngay khi bắt đầu.\n` +
-              `Nhấn OK để hệ thống tự điều chỉnh và tiếp tục khởi tạo ván chơi mới.\n` +
-              `Nhấn Hủy để ở lại màn hình chọn vai trò.`
-            : ""
-        }
-        confirmText="OK"
-        cancelText="Hủy"
-        onConfirm={() => {
-          if (!roomId || !wolfMismatchData) return;
-          const rolesToUse = buildFinalRoles();
-          socket.emit("rolesSelected", {
-            roomId,
-            roles: rolesToUse,
-            applyMode: "restart-now",
-            forceAdjustWolfCount: true,
-          });
-          setWolfMismatchData(null);
-        }}
-        onCancel={() => setWolfMismatchData(null)}
       />
 
       <ConfirmModal

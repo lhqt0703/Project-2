@@ -95,8 +95,8 @@ export function isWolfAlignedPlayer(room: Room, playerId: string) {
   const role = room.playerRoles?.[playerId];
   if (isWildWolfConvertedPlayer(room, playerId)) return true;
   if (isWolfRole(role)) return true;
-  if (role === BAN_SOI_ROLE) return room.banSoiWolfAligned === true && getBanSoiId(room) === playerId;
-  return room.spiritWolfWolfAligned === true && getSpiritWolfId(room) === playerId;
+  if (role === BAN_SOI_ROLE) return room.daNghichState!.banSoiWolfAligned === true && getBanSoiId(room) === playerId;
+  return room.daNghichState!.spiritWolfWolfAligned === true && getSpiritWolfId(room) === playerId;
 }
 
 export function markWildWolfConversionReadyIfWolfDied(room: Room, playerId: string) {
@@ -202,10 +202,10 @@ export function resetNightTurnState(room: Room) {
   room.nightTurnDeadline = null;
   room.nightTurnPaused = false;
   room.nightTurnRemainingMs = null;
-  room.wolfTurnRemainingMs = null;
-  room.spiritWolfDecisionRemainingMs = null;
+  room.daNghichState!.wolfTurnRemainingMs = null;
+  room.daNghichState!.spiritWolfDecisionRemainingMs = null;
   room.nightActionExtraTimeMsByPlayerId = {};
-  room.spiritWolfDecisionDeadline = null;
+  room.daNghichState!.spiritWolfDecisionDeadline = null;
   delete room.nightTurnOrderSnapshot;
 }
 
@@ -259,11 +259,11 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.gameOver = true;
   room.winner = undefined;
 
-  room.wolves = [];
-  room.wolfVotes = {};
-  room.wolfVotes2 = {};
+  room.daNghichState!.wolves = [];
+  room.daNghichState!.wolfVotes = {};
+  room.daNghichState!.wolfVotes2 = {};
   room.wolfLocked = {};
-  room.wolfDeadline = null;
+  room.daNghichState!.wolfDeadline = null;
   room.wolfVoteResolvedTonight = false;
   room.killedTonight = null;
   room.killedTonightExtra = null;
@@ -271,8 +271,8 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.wolfExtraBiteNextNight = false;
   room.wildWolfId = null;
   room.wildWolfConvertReadyNextNight = false;
-  room.wildWolfConvertAvailableTonight = false;
-  room.wildWolfConvertRequestedTonight = false;
+  room.daNghichState!.wildWolfConvertAvailableTonight = false;
+  room.daNghichState!.wildWolfConvertRequestedTonight = false;
   room.wildWolfConvertActorId = null;
   room.wildWolfConvertTargetId = null;
   room.wildWolfConvertUsed = false;
@@ -289,12 +289,12 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.dayPausedType = null;
 
   room.deadPlayers = [];
-  room.sharedHeartsVisible = false;
-  room.playerHearts = {};
-  room.privatePlayerHearts = {};
-  room.privateHeartVisiblePlayerIds = [];
-  room.playerHeartShakeIds = [];
-  room.villageChiefDyingFramePlayerIds = [];
+  room.daNghichState!.sharedHeartsVisible = false;
+  room.daNghichState!.playerHearts = {};
+  room.daNghichState!.privatePlayerHearts = {};
+  room.daNghichState!.privateHeartVisiblePlayerIds = [];
+  room.daNghichState!.playerHeartShakeIds = [];
+  room.daNghichState!.villageChiefDyingFramePlayerIds = [];
   room.protectedTonight = null;
   room.protectedTonightBy = null;
   room.protectedTonightAt = null;
@@ -318,12 +318,12 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.witchHealTargetAt = {};
   room.witchPoisonTargetAt = {};
   room.spiritWolfPendingPoisonedWolfId = null;
-  room.spiritWolfDecisionDeadline = null;
+  room.daNghichState!.spiritWolfDecisionDeadline = null;
   room.publicRevealedRolesByPlayerId = {};
   room.villageChiefPendingWolfDeath = null;
   room.villageChiefExtraVoteAvailable = false;
-  room.villageChiefExtraVoteReady = false;
-  room.villageChiefExtraVoteUsed = false;
+  room.daNghichState!.villageChiefExtraVoteReady = false;
+  room.daNghichState!.villageChiefExtraVoteUsed = false;
   room.protectorActorId = null;
   room.protectorTargetId = null;
   room.protectorTargetSetNight = null;
@@ -334,7 +334,7 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.elementalPendingBuffVoteNight = null;
   room.elementalBuffVotesTonight = {};
   room.elementalBuffVotesResolvedNight = null;
-  room.elementalSelectedBuffId = null;
+  room.daNghichState!.elementalSelectedBuffId = null;
   room.elementalSelectedBuffAppliesNight = null;
   room.angelReviveAvailableByPlayerId = {};
   room.angelReviveUsedPlayerIds = [];
@@ -344,9 +344,9 @@ export function resetRoomFromGameToLobby(room: Room) {
   resetMerchantRoundState(room);
 
   room.rolesBeforeConversion = {};
-  room.songTrungChoices = [];
-  room.songTrungUsedTonight = {};
-  room.songTrungVictimId = null;
+  room.daNghichState!.songTrungChoices = [];
+  room.daNghichState!.songTrungUsedTonight = {};
+  room.daNghichState!.songTrungVictimId = null;
   room.songTrungRobbedPlayerId = null;
   room.songTrungRobbedOriginalRole = null;
   room.songTrungFoundByVictim = false;

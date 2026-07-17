@@ -16,11 +16,13 @@ type RoomLike = {
   nightCount?: number;
   players: Player[];
   deadPlayers?: string[];
-  dietQuyMonkProtectedPlayerId?: string | null;
-  dietQuyPoisonedPlayerId?: string | null;
-  dietQuyRedCharmPlayerId?: string | null;
-  dietQuyImpKillPlayerId?: string | null;
-  dietQuyMayorReplacementId?: string | null;
+  dietQuyState?: {
+    monkProtectedPlayerId?: string | null;
+    poisonedPlayerId?: string | null;
+    redCharmPlayerId?: string | null;
+    impKillPlayerId?: string | null;
+    mayorReplacementId?: string | null;
+  };
   playerRoles?: Record<string, string>;
 };
 
@@ -262,15 +264,15 @@ export function useDietQuyRole({
         }}>
           <h4>Host: Chọn mục tiêu Red Charm (Thầy bói nhận thông tin giả)</h4>
           <p>Click vào 1 người trên vòng tròn để gán Red Charm.</p>
-          <p>Hiện tại: <b>{room.dietQuyRedCharmPlayerId ? room.players.find(p => p.id === room.dietQuyRedCharmPlayerId)?.name : "Chưa có"}</b></p>
+          <p>Hiện tại: <b>{room.dietQuyState?.redCharmPlayerId ? room.players.find(p => p.id === room.dietQuyState?.redCharmPlayerId)?.name : "Chưa có"}</b></p>
         </div>
       );
     }
 
     if (turnRole === "Ác Quỷ") {
       // Find if Imp targeted the Mayor
-      const impTargetId = room.dietQuyImpKillPlayerId;
-      const isMayorTarget = impTargetId && room.playerRoles?.[impTargetId] === "Thị trưởng" && room.dietQuyPoisonedPlayerId !== impTargetId;
+      const impTargetId = room.dietQuyState?.impKillPlayerId;
+      const isMayorTarget = impTargetId && room.playerRoles?.[impTargetId] === "Thị trưởng" && room.dietQuyState?.poisonedPlayerId !== impTargetId;
 
       if (isMayorTarget) {
         return (
@@ -284,7 +286,7 @@ export function useDietQuyRole({
           }}>
             <h3 style={{ color: "#e74c3c" }}>Host: Thị trưởng bị Ác Quỷ nhắm tới!</h3>
             <p>Chọn 1 người chơi thế mạng (Click trên vòng tròn):</p>
-            <p>Thế mạng hiện tại: <b>{room.dietQuyMayorReplacementId ? room.players.find(p => p.id === room.dietQuyMayorReplacementId)?.name : "Chưa chọn (Mayor sẽ chết)"}</b></p>
+            <p>Thế mạng hiện tại: <b>{room.dietQuyState?.mayorReplacementId ? room.players.find(p => p.id === room.dietQuyState?.mayorReplacementId)?.name : "Chưa chọn (Mayor sẽ chết)"}</b></p>
           </div>
         );
       }
@@ -468,11 +470,11 @@ export function useDietQuyRole({
     playerPositionsProps: {
       selectedOutlinePlayerId: isMyNightTurnActive && role !== "Thầy bói" ? selectedTargetId : null,
       dietQuyOrangeHighlightPlayerIds: (isMyNightTurnActive && role === "Thầy bói" ? ftSelectedIds : [])
-        .concat(isHost && phase === "night" && room?.nightTurnRole === "Thầy bói" && room?.dietQuyRedCharmPlayerId ? [room.dietQuyRedCharmPlayerId] : [])
+        .concat(isHost && phase === "night" && room?.nightTurnRole === "Thầy bói" && room?.dietQuyState?.redCharmPlayerId ? [room.dietQuyState?.redCharmPlayerId] : [])
         .concat(role === "Thợ giặt" && washerwomanInfo ? washerwomanInfo.targetIds : [])
         .concat(role === "Thủ thư" && librarianInfo ? librarianInfo.targetIds : [])
         .concat(role === "Điều tra viên" && investigatorInfo ? investigatorInfo.targetIds : []),
-      dietQuyRedHighlightPlayerIds: isHost && phase === "night" && ["Thợ giặt", "Thủ thư", "Điều tra viên"].includes(room?.nightTurnRole || "") ? hostSelectedIds : (isHost && phase === "night" && room?.nightTurnRole === "Ác Quỷ" && room?.dietQuyMayorReplacementId ? [room.dietQuyMayorReplacementId] : []),
+      dietQuyRedHighlightPlayerIds: isHost && phase === "night" && ["Thợ giặt", "Thủ thư", "Điều tra viên"].includes(room?.nightTurnRole || "") ? hostSelectedIds : (isHost && phase === "night" && room?.nightTurnRole === "Ác Quỷ" && room?.dietQuyState?.mayorReplacementId ? [room.dietQuyState?.mayorReplacementId] : []),
     }
   };
 }

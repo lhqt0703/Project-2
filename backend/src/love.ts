@@ -209,7 +209,7 @@ export function markEliminatedWithLoveChain(
         
         room.loveTargetId = robbedId; // Trả Cupid target về người bị cướp
         room.songTrungRobbedPlayerId = null; // Trả lại chức năng cho người bị cướp
-        room.songTrungVictimId = null;
+        room.daNghichState!.songTrungVictimId = null;
         room.songTrungRobbedOriginalRole = null;
         
         emitLoveStateToPair(ctx, roomId, room);

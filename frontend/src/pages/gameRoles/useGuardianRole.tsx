@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { socket, clientId } from "../../socket";
+import { clientId, emitSocketAction, requestRoomSync } from "../../socket";
 import type { GamePhase } from "./socketEvents";
 import ConfirmModal from "../../components/ConfirmModal";
 import { useTargetSelection } from "./useTargetSelection";
@@ -44,6 +44,7 @@ export function useGuardianRole({
 
   const [lastProtectedPrevNight, setLastProtectedPrevNight] = useState<string | null>(null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const prevPhaseRef = useRef<GamePhase>(phase);
   const lockedTargetIdRef = useRef<string | null>(null);
 
@@ -99,6 +100,7 @@ export function useGuardianRole({
   }, [allNightActionsSimultaneous, currentNightTurnRole, phase, roomId]);
 
   const onPlayerClick = useCallback((playerId: string) => {
+    if (isSubmitting) return true;
     if (!canAct) return false;
 
     // đã xác nhận rồi thì không được đổi
@@ -120,17 +122,31 @@ export function useGuardianRole({
 
     selectTarget(playerId);
     return true;
-  }, [canAct, lastProtectedPrevNight, lockedTargetId, roomId, selectTarget]);
+  }, [canAct, isSubmitting, lastProtectedPrevNight, lockedTargetId, roomId, selectTarget]);
 
-  const confirm = useCallback(() => {
-    if (!canAct) return;
+  const confirm = useCallback(async () => {
+    if (!canAct || isSubmitting) return;
     if (!roomId || !selectedPlayerId) return;
 
-    // lock ngay khi đã bấm xác nhận
-    lockSelection(selectedPlayerId);
-    if (roomId === "mock-8") return;
-    socket.emit("guardianProtect", { roomId, targetId: selectedPlayerId });
-  }, [canAct, roomId, selectedPlayerId, lockSelection]);
+    if (roomId === "mock-8") {
+      lockSelection(selectedPlayerId);
+      return;
+    }
+
+    setShowConfirm(false);
+    setIsSubmitting(true);
+    const result = await emitSocketAction("guardianProtect", { roomId, targetId: selectedPlayerId });
+    setIsSubmitting(false);
+
+    if (result.ok) {
+      lockSelection(selectedPlayerId);
+      return;
+    }
+
+    clearSelection();
+    setInfoMessage(result.message || "Không thể xác nhận thao tác. Trạng thái phòng đang được đồng bộ lại.");
+    void requestRoomSync(roomId);
+  }, [canAct, clearSelection, isSubmitting, lockSelection, roomId, selectedPlayerId, setShowConfirm]);
 
   const resetOnPhaseChange = useCallback((_nextPhase: GamePhase) => {
     clearSelection();

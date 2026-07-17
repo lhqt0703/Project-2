@@ -69,6 +69,10 @@ export interface RoomGameRules {
   songTrungReturnRoleOnlyIfVotedOut?: boolean;
   songTrungReturnRoleRequiresCupidVote?: boolean;
   guardianCanSeeSavedLog?: boolean;
+  dayDiscussionDurationSec?: number;
+  trialDefenseDurationSec?: number;
+  trialVerdictDurationSec?: number;
+  dayVotingDurationSec?: number;
 }
 
 export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -100,32 +104,89 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   songTrungReturnRoleOnlyIfVotedOut: false,
   songTrungReturnRoleRequiresCupidVote: false,
   guardianCanSeeSavedLog: false,
+  dayDiscussionDurationSec: 240,
+  trialDefenseDurationSec: 120,
+  trialVerdictDurationSec: 20,
+  dayVotingDurationSec: 45,
 };
+
+export interface DietQuyState {
+  nightDirection?: "clockwise" | "counter_clockwise";
+  nightStartPlayerId?: string | null;
+  nightTurnOrder?: string[];
+  poisonedPlayerId?: string | null;
+  poisonedPrevPlayerId?: string | null;
+  redCharmPlayerId?: string | null;
+  monkProtectedPlayerId?: string | null;
+  impKillPlayerId?: string | null;
+  mayorReplacementId?: string | null;
+  ravenkeeperTargetId?: string | null;
+  washerwomanSelectedIds?: string[];
+  librarianSelectedIds?: string[];
+  investigatorSelectedIds?: string[];
+  slayerUsed?: boolean;
+  virginTriggered?: boolean;
+  fortuneTellerCheckedIds?: string[];
+  saintExecutedToday?: boolean;
+  executedToday?: boolean;
+  executedPlayerId?: string | null;
+}
+
+export interface SoiMuState {
+  targets?: Record<string, string>;
+  thumbDecisions?: Record<string, "up" | "down">;
+  locked?: Record<string, boolean>;
+  investigatedPlayerId?: string | null;
+  investigatedPrevTargetId?: string | null;
+  investigationResolved?: boolean;
+  daySelectedTargetId?: string | null;
+  investigationResult?: "success" | "fail" | null;
+  hasMerchant?: boolean;
+  namThuTargetId?: string | null;
+  suyThanTargetId?: string | null;
+}
+
+export interface DaNghichState {
+  banSoiWolfAligned?: boolean;
+  banSoiWolfAlignedPending?: boolean;
+  spiritWolfWolfAligned?: boolean;
+  spiritWolfWolfAlignedPending?: boolean;
+  wildWolfConvertAvailableTonight?: boolean;
+  wildWolfConvertRequestedTonight?: boolean;
+  wildWolfConvertedSelf?: boolean;
+  privateHeartVisiblePlayerIds?: string[];
+  playerHeartShakeIds?: string[];
+  villageChiefDyingFramePlayerIds?: string[];
+  villageChiefExtraVoteReady?: boolean;
+  villageChiefExtraVoteUsed?: boolean;
+  sharedHeartsVisible?: boolean;
+  playerHearts?: Record<string, number>;
+  privatePlayerHearts?: Record<string, number>;
+  wolfVotes?: Record<string, string | null>;
+  wolfVotes2?: Record<string, string | null>;
+  spiritWolfDecisionDeadline?: number | null;
+  wolfTurnRemainingMs?: number | null;
+  spiritWolfDecisionRemainingMs?: number | null;
+  elementalPendingBuffVote?: boolean;
+  elementalBuffQuickMode?: boolean;
+  elementalSelectedBuffId?: ElementalBuffId | null;
+  wolfDeadline?: number | null;
+  songTrungUsedTonight?: Record<string, string | null>;
+  songTrungChoices?: Array<{ playerId: string; night: number; targetId: string | null }>;
+  songTrungVictimId?: string | null;
+  wolves?: string[];
+}
 
 export interface RoomData {
   id: string;
   players: Player[];
   hostId: string;
+  warnedPlayerIds?: string[];
   gameMode?: "da_nghich" | "diet_quy" | "soi_mu";
-  dietQuyNightDirection?: "clockwise" | "counter_clockwise";
-  dietQuyNightStartPlayerId?: string | null;
-  dietQuyNightTurnOrder?: string[];
+  dietQuyState?: DietQuyState;
+  soiMuState?: SoiMuState;
+  daNghichState?: DaNghichState;
   nightTurnPlayerId?: string | null;
-  dietQuyPoisonedPlayerId?: string | null;
-  dietQuyPoisonedPrevPlayerId?: string | null;
-  dietQuyRedCharmPlayerId?: string | null;
-  dietQuyMonkProtectedPlayerId?: string | null;
-  dietQuyImpKillPlayerId?: string | null;
-  dietQuyMayorReplacementId?: string | null;
-  dietQuyRavenkeeperTargetId?: string | null;
-  dietQuyWasherwomanSelectedIds?: string[];
-  dietQuyLibrarianSelectedIds?: string[];
-  dietQuyInvestigatorSelectedIds?: string[];
-  dietQuySlayerUsed?: boolean;
-  dietQuyVirginTriggered?: boolean;
-  dietQuyFortuneTellerCheckedIds?: string[];
-  dietQuySaintExecutedToday?: boolean;
-  dietQuyExecutedToday?: boolean;
   serverTime?: number;
   hidePlayerRoleText?: boolean;
   isReplay?: boolean;
@@ -142,62 +203,23 @@ export interface RoomData {
   compactCircles?: boolean;
   gameRules?: RoomGameRules;
   pendingGameRules?: RoomGameRules;
-  banSoiWolfAligned?: boolean;
-  banSoiWolfAlignedPending?: boolean;
-  spiritWolfWolfAligned?: boolean;
-  spiritWolfWolfAlignedPending?: boolean;
-  wildWolfConvertAvailableTonight?: boolean;
-  wildWolfConvertRequestedTonight?: boolean;
-  wildWolfConvertedSelf?: boolean;
   publicRevealedRolesByPlayerId?: Record<string, string>;
-  privateHeartVisiblePlayerIds?: string[];
-  playerHeartShakeIds?: string[];
-  villageChiefDyingFramePlayerIds?: string[];
-  villageChiefExtraVoteReady?: boolean;
-  villageChiefExtraVoteUsed?: boolean;
-  sharedHeartsVisible?: boolean;
-  playerHearts?: Record<string, number>;
-  privatePlayerHearts?: Record<string, number>;
-  wolfVotes?: Record<string, string | null>;
-  wolfVotes2?: Record<string, string | null>;
   deadPlayers?: string[];
   nightCount?: number;
   nightTurnIndex?: number;
   nightTurnRole?: NightActionRole | null;
   nightTurnDeadline?: number | null;
-  spiritWolfDecisionDeadline?: number | null;
   nightTurnPaused?: boolean;
   nightTurnRemainingMs?: number | null;
   dayPaused?: boolean;
   dayRemainingMs?: number | null;
   dayPausedType?: "discussion" | "voting" | "defense" | "verdict" | null;
-  wolfTurnRemainingMs?: number | null;
-  spiritWolfDecisionRemainingMs?: number | null;
   nightActionExtraTimeMsByPlayerId?: Record<string, number>;
-  elementalPendingBuffVote?: boolean;
-  elementalBuffQuickMode?: boolean;
-  elementalSelectedBuffId?: ElementalBuffId | null;
   nightActionProgressByPlayerId?: Record<string, "pending" | "done">;
-  wolfDeadline?: number | null;
-  songTrungUsedTonight?: Record<string, string | null>;
-  songTrungChoices?: Array<{ playerId: string; night: number; targetId: string | null }>;
-  songTrungVictimId?: string | null;
   scoreResult?: any;
   duskCardSelections?: Record<string, number>;
   playerRoles?: Record<string, string>;
-  wolves?: string[];
   winner?: string;
-  soiMuTargets?: Record<string, string>;
-  soiMuThumbDecisions?: Record<string, "up" | "down">;
-  soiMuLocked?: Record<string, boolean>;
-  soiMuInvestigatedPlayerId?: string | null;
-  soiMuInvestigatedPrevTargetId?: string | null;
-  soiMuInvestigationResolved?: boolean;
-  soiMuDaySelectedTargetId?: string | null;
-  soiMuInvestigationResult?: "success" | "fail" | null;
-  soiMuHasMerchant?: boolean;
-  soiMuNamThuTargetId?: string | null;
-  soiMuSuyThanTargetId?: string | null;
   dayVotes?: Record<string, string | null>;
   dayLocked?: Record<string, boolean>;
   dayVoters?: string[];

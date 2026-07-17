@@ -220,6 +220,14 @@ type RegisterSocketHandlersParams = {
   elementalFlow: ReturnType<typeof createElementalFlow>;
 };
 
+type SocketActionAckResponse = {
+  ok: boolean;
+  reason?: string;
+  message?: string;
+};
+
+type SocketActionAck = (response: SocketActionAckResponse) => void;
+
 export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
   const {
     socket,
@@ -306,17 +314,17 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
   function clearLobbyHeartBadges(room: Room) {
     const hadHeartBadges =
-      room.sharedHeartsVisible === true ||
-      Object.keys(room.playerHearts || {}).length > 0 ||
-      Object.keys(room.privatePlayerHearts || {}).length > 0 ||
-      (room.privateHeartVisiblePlayerIds || []).length > 0 ||
-      (room.playerHeartShakeIds || []).length > 0;
+      room.daNghichState!.sharedHeartsVisible === true ||
+      Object.keys(room.daNghichState!.playerHearts || {}).length > 0 ||
+      Object.keys(room.daNghichState!.privatePlayerHearts || {}).length > 0 ||
+      (room.daNghichState!.privateHeartVisiblePlayerIds || []).length > 0 ||
+      (room.daNghichState!.playerHeartShakeIds || []).length > 0;
 
-    room.sharedHeartsVisible = false;
-    room.playerHearts = {};
-    room.privatePlayerHearts = {};
-    room.privateHeartVisiblePlayerIds = [];
-    room.playerHeartShakeIds = [];
+    room.daNghichState!.sharedHeartsVisible = false;
+    room.daNghichState!.playerHearts = {};
+    room.daNghichState!.privatePlayerHearts = {};
+    room.daNghichState!.privateHeartVisiblePlayerIds = [];
+    room.daNghichState!.playerHeartShakeIds = [];
 
     return hadHeartBadges;
   }
@@ -414,11 +422,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (room.playerRoleHistory) {
       delete room.playerRoleHistory[targetId];
     }
-    if (room.wolfVotes) {
-      delete room.wolfVotes[targetId];
+    if (room.daNghichState!.wolfVotes) {
+      delete room.daNghichState!.wolfVotes[targetId];
     }
-    if (room.wolfVotes2) {
-      delete room.wolfVotes2[targetId];
+    if (room.daNghichState!.wolfVotes2) {
+      delete room.daNghichState!.wolfVotes2[targetId];
     }
     if (room.wolfLocked) {
       delete room.wolfLocked[targetId];
@@ -434,12 +442,12 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
     room.dayVoters = (room.dayVoters || []).filter((id) => id !== targetId);
     room.deadPlayers = (room.deadPlayers || []).filter((id) => id !== targetId);
-    room.wolves = (room.wolves || []).filter((id) => id !== targetId);
+    room.daNghichState!.wolves = (room.daNghichState!.wolves || []).filter((id) => id !== targetId);
     if (room.publicRevealedRolesByPlayerId) {
       delete room.publicRevealedRolesByPlayerId[targetId];
     }
-    if (room.privatePlayerHearts) {
-      delete room.privatePlayerHearts[targetId];
+    if (room.daNghichState!.privatePlayerHearts) {
+      delete room.daNghichState!.privatePlayerHearts[targetId];
     }
     if (room.roleVotes) {
       for (const role in room.roleVotes) {
@@ -448,9 +456,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         }
       }
     }
-    room.privateHeartVisiblePlayerIds = (room.privateHeartVisiblePlayerIds || []).filter((id) => id !== targetId);
-    room.playerHeartShakeIds = (room.playerHeartShakeIds || []).filter((id) => id !== targetId);
-    room.villageChiefDyingFramePlayerIds = (room.villageChiefDyingFramePlayerIds || []).filter((id) => id !== targetId);
+    room.daNghichState!.privateHeartVisiblePlayerIds = (room.daNghichState!.privateHeartVisiblePlayerIds || []).filter((id) => id !== targetId);
+    room.daNghichState!.playerHeartShakeIds = (room.daNghichState!.playerHeartShakeIds || []).filter((id) => id !== targetId);
+    room.daNghichState!.villageChiefDyingFramePlayerIds = (room.daNghichState!.villageChiefDyingFramePlayerIds || []).filter((id) => id !== targetId);
     if (room.villageChiefPendingWolfDeath?.playerId === targetId) {
       room.villageChiefPendingWolfDeath = null;
     }
@@ -461,7 +469,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
     if (removedRole === VILLAGE_CHIEF_ROLE) {
       room.villageChiefExtraVoteAvailable = false;
-      room.villageChiefExtraVoteReady = false;
+      room.daNghichState!.villageChiefExtraVoteReady = false;
     }
 
     if (room.hostId === targetId && room.players.length > 0) {
@@ -510,18 +518,18 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!canPlayerActAtNight(room, playerId)) return null;
 
     if (isWolfAlignedPlayer(room, playerId)) {
-      if (!room.wolfDeadline) return null;
-      return room.wolfDeadline + getNightActionExtraMs(room, playerId);
+      if (!room.daNghichState!.wolfDeadline) return null;
+      return room.daNghichState!.wolfDeadline + getNightActionExtraMs(room, playerId);
     }
 
     const role = room.playerRoles?.[playerId] || null;
     if (!role) return null;
 
     if (role === SPIRIT_WOLF_ROLE) {
-      if (!room.spiritWolfDecisionDeadline || !room.spiritWolfPendingPoisonedWolfId || room.spiritWolfDecisionMade) {
+      if (!room.daNghichState!.spiritWolfDecisionDeadline || !room.spiritWolfPendingPoisonedWolfId || room.spiritWolfDecisionMade) {
         return null;
       }
-      return room.spiritWolfDecisionDeadline + getNightActionExtraMs(room, playerId);
+      return room.daNghichState!.spiritWolfDecisionDeadline + getNightActionExtraMs(room, playerId);
     }
 
     if (!room.nightTurnDeadline) return null;
@@ -538,10 +546,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.wolfTimer = null;
     }
     if (room.wolfVoteResolvedTonight) return;
-    if (!room.wolfDeadline) return;
+    if (!room.daNghichState!.wolfDeadline) return;
 
     const activeWolves = getActiveWolves(room);
-    let maxDeadline = room.wolfDeadline;
+    let maxDeadline = room.daNghichState!.wolfDeadline;
     for (const wolfId of activeWolves) {
       const deadline = getSimultaneousDeadlineForPlayer(room, wolfId);
       if (deadline && deadline > maxDeadline) {
@@ -564,7 +572,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     return (
       wildWolfId === playerId &&
       room.playerRoles?.[playerId] === WILD_WOLF_ROLE &&
-      room.wildWolfConvertAvailableTonight === true &&
+      room.daNghichState!.wildWolfConvertAvailableTonight === true &&
       room.wildWolfConvertUsed !== true &&
       canPlayerActAtNight(room, playerId)
     );
@@ -572,23 +580,23 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
   function emitWildWolfConversionState(roomId: string, room: Room) {
     ctx.io.to(`wolves_${roomId}`).emit("wildWolfConversionUpdated", {
-      available: room.wildWolfConvertAvailableTonight === true,
-      requested: room.wildWolfConvertRequestedTonight === true,
+      available: room.daNghichState!.wildWolfConvertAvailableTonight === true,
+      requested: room.daNghichState!.wildWolfConvertRequestedTonight === true,
     });
   }
 
   function getWildWolfConversionCandidateIds(room: Room, playerId: string) {
-    return [room.wolfVotes?.[playerId], room.wolfVotes2?.[playerId]]
+    return [room.daNghichState!.wolfVotes?.[playerId], room.daNghichState!.wolfVotes2?.[playerId]]
       .filter((targetId): targetId is string => !!targetId);
   }
 
   function clearWildWolfConversionIfTargetIsNoLongerSelected(roomId: string, room: Room, playerId: string) {
     if (room.wildWolfConvertActorId !== playerId) return;
-    if (!room.wildWolfConvertRequestedTonight) return;
+    if (!room.daNghichState!.wildWolfConvertRequestedTonight) return;
     const targetId = room.wildWolfConvertTargetId || null;
     if (targetId && getWildWolfConversionCandidateIds(room, playerId).includes(targetId)) return;
 
-    room.wildWolfConvertRequestedTonight = false;
+    room.daNghichState!.wildWolfConvertRequestedTonight = false;
     room.wildWolfConvertActorId = null;
     room.wildWolfConvertTargetId = null;
     emitWildWolfConversionState(roomId, room);
@@ -597,10 +605,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
   function canWaitForWildWolfConversionAfterLocked(room: Room) {
     const wildWolfId = getWildWolfId(room);
     if (!wildWolfId) return false;
-    if (room.wolfDeadline && Date.now() >= room.wolfDeadline) return false;
+    if (room.daNghichState!.wolfDeadline && Date.now() >= room.daNghichState!.wolfDeadline) return false;
     return (
-      room.wildWolfConvertAvailableTonight === true &&
-      room.wildWolfConvertRequestedTonight !== true &&
+      room.daNghichState!.wildWolfConvertAvailableTonight === true &&
+      room.daNghichState!.wildWolfConvertRequestedTonight !== true &&
       room.wildWolfConvertUsed !== true &&
       room.playerRoles?.[wildWolfId] === WILD_WOLF_ROLE &&
       isPlayerConnected(room, wildWolfId) &&
@@ -643,7 +651,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         toRole: NORMAL_WOLF_ROLE,
       },
     });
-    room.wolves = Array.from(new Set([...(room.wolves || []), targetId]));
+    room.daNghichState!.wolves = Array.from(new Set([...(room.daNghichState!.wolves || []), targetId]));
     room.wildWolfConvertedPlayerIds = Array.from(new Set([...(room.wildWolfConvertedPlayerIds || []), targetId]));
 
     if (room.publicRevealedRolesByPlayerId?.[targetId] && room.publicRevealedRolesByPlayerId[targetId] !== VILLAGE_CHIEF_ROLE) {
@@ -651,13 +659,13 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
     if (room.banSoiId === targetId) {
       room.banSoiId = null;
-      room.banSoiWolfAligned = false;
-      room.banSoiWolfAlignedPending = false;
+      room.daNghichState!.banSoiWolfAligned = false;
+      room.daNghichState!.banSoiWolfAlignedPending = false;
     }
     if (room.spiritWolfId === targetId) {
       room.spiritWolfId = null;
-      room.spiritWolfWolfAligned = false;
-      room.spiritWolfWolfAlignedPending = false;
+      room.daNghichState!.spiritWolfWolfAligned = false;
+      room.daNghichState!.spiritWolfWolfAlignedPending = false;
       room.spiritWolfPendingPoisonedWolfId = null;
     }
 
@@ -688,7 +696,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.elementalCorrectGuessCountForBuff = triggeredBuffVote ? correctCount : 0;
     room.elementalPendingBuffVoteNight = nextBuffVoteNight ?? null;
     room.elementalBuffVotesTonight = {};
-    room.elementalBuffQuickMode = isElementalQuickMode(room);
+    room.daNghichState!.elementalBuffQuickMode = isElementalQuickMode(room);
 
     if (totalCount > 0 || (room.elementalTargetTonight && Object.keys(room.elementalTargetTonight).length > 0)) {
       appendLogEntry(room, {
@@ -869,32 +877,32 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
   function resolveNightDeaths(roomId: string, room: Room) {
     if (room.gameMode === "diet_quy") {
       const initialDead = new Set(room.deadPlayers || []);
-      const impKillId = room.dietQuyImpKillPlayerId;
+      const impKillId = room.dietQuyState!.impKillPlayerId;
 
       if (impKillId && !initialDead.has(impKillId)) {
         let finalTargetId: string | null = impKillId;
 
         // Check Monk protection
         const monkId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Nhà sư");
-        const isMonkActive = monkId && !initialDead.has(monkId) && room.dietQuyPoisonedPlayerId !== monkId;
-        const isMonkProtected = isMonkActive && room.dietQuyMonkProtectedPlayerId === impKillId;
+        const isMonkActive = monkId && !initialDead.has(monkId) && room.dietQuyState!.poisonedPlayerId !== monkId;
+        const isMonkProtected = isMonkActive && room.dietQuyState!.monkProtectedPlayerId === impKillId;
 
         // Check Soldier protection
         const soldierId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Chiến sĩ");
-        const isSoldierProtected = soldierId === impKillId && room.dietQuyPoisonedPlayerId !== soldierId;
+        const isSoldierProtected = soldierId === impKillId && room.dietQuyState!.poisonedPlayerId !== soldierId;
 
         // Check Mayor protection
         const mayorId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Thị trưởng");
-        const isMayorProtected = mayorId === impKillId && room.dietQuyPoisonedPlayerId !== mayorId;
+        const isMayorProtected = mayorId === impKillId && room.dietQuyState!.poisonedPlayerId !== mayorId;
 
         if (isMonkProtected || isSoldierProtected) {
           finalTargetId = null; // Protected!
         } else if (isMayorProtected) {
-          const replacementId = room.dietQuyMayorReplacementId;
+          const replacementId = room.dietQuyState!.mayorReplacementId;
           if (replacementId && !initialDead.has(replacementId)) {
             // Check if replacement is protected
-            const isReplacementMonkProtected = isMonkActive && room.dietQuyMonkProtectedPlayerId === replacementId;
-            const isReplacementSoldierProtected = soldierId === replacementId && room.dietQuyPoisonedPlayerId !== soldierId;
+            const isReplacementMonkProtected = isMonkActive && room.dietQuyState!.monkProtectedPlayerId === replacementId;
+            const isReplacementSoldierProtected = soldierId === replacementId && room.dietQuyState!.poisonedPlayerId !== soldierId;
             if (isReplacementMonkProtected || isReplacementSoldierProtected) {
               finalTargetId = null;
             } else {
@@ -964,7 +972,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       const chefId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Đầu bếp");
       if (chefId && !room.deadPlayers?.includes(chefId) && room.nightCount === 1) {
         const count = getChefPairsCount(room);
-        const isPoisoned = room.dietQuyPoisonedPlayerId === chefId;
+        const isPoisoned = room.dietQuyState!.poisonedPlayerId === chefId;
         const finalCount = isPoisoned ? (Math.random() < 0.5 ? 0 : 1) : count;
         ctx.io.to(chefId).emit("dietQuyChefInfo", { count: finalCount });
       }
@@ -973,7 +981,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       const empathId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Đồng cảm");
       if (empathId && !room.deadPlayers?.includes(empathId)) {
         const count = getEmpathNeighborsCount(room, empathId);
-        const isPoisoned = room.dietQuyPoisonedPlayerId === empathId;
+        const isPoisoned = room.dietQuyState!.poisonedPlayerId === empathId;
         const finalCount = isPoisoned ? (Math.random() < 0.5 ? 0 : 1) : count;
         ctx.io.to(empathId).emit("dietQuyEmpathInfo", { count: finalCount });
       }
@@ -981,10 +989,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       // Calculate and emit Undertaker info
       const undertakerId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Chôn cất");
       if (undertakerId && !room.deadPlayers?.includes(undertakerId)) {
-        const executedId = room.dietQuyExecutedPlayerId;
+        const executedId = room.dietQuyState!.executedPlayerId;
         if (executedId) {
           const role = room.playerRoles?.[executedId] || "Dân làng";
-          const isPoisoned = room.dietQuyPoisonedPlayerId === undertakerId;
+          const isPoisoned = room.dietQuyState!.poisonedPlayerId === undertakerId;
           const finalRole = isPoisoned ? "Ác Quỷ" : role;
           ctx.io.to(undertakerId).emit("dietQuyUndertakerInfo", { role: finalRole });
         }
@@ -1013,9 +1021,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       });
     };
 
-    if (room.songTrungVictimId && !initialDead.has(room.songTrungVictimId)) {
-      markEliminated(room.songTrungVictimId, { type: "song_trung_rob" });
-      room.songTrungVictimId = null;
+    if (room.daNghichState!.songTrungVictimId && !initialDead.has(room.daNghichState!.songTrungVictimId)) {
+      markEliminated(room.daNghichState!.songTrungVictimId, { type: "song_trung_rob" });
+      room.daNghichState!.songTrungVictimId = null;
     }
 
     const addUnique = (ids: string[], id: string) => {
@@ -1029,13 +1037,13 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         return causes.some((cause) => cause.type === "wolf");
       });
       if (!protectorId) return;
-      if (room.villageChiefExtraVoteUsed || room.villageChiefExtraVoteAvailable) return;
+      if (room.daNghichState!.villageChiefExtraVoteUsed || room.villageChiefExtraVoteAvailable) return;
 
       const chiefId = getVillageChiefId(room);
       if (!chiefId || (room.deadPlayers || []).includes(chiefId)) return;
 
       room.villageChiefExtraVoteAvailable = true;
-      room.villageChiefExtraVoteReady = false;
+      room.daNghichState!.villageChiefExtraVoteReady = false;
     };
 
     const getUniqueTargets = (targets: Array<string | null | undefined>) => {
@@ -1085,8 +1093,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     };
 
     const wolfAttackersForTarget = (targetId: string) => {
-      const votes = room.wolfVotes || {};
-      const votes2 = room.wolfVotes2 || {};
+      const votes = room.daNghichState!.wolfVotes || {};
+      const votes2 = room.daNghichState!.wolfVotes2 || {};
       return getActiveWolves(room).filter((wolfId) => votes[wolfId] === targetId || votes2[wolfId] === targetId);
     };
 
@@ -1097,8 +1105,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const spiritWolfId = getSpiritWolfId(room);
     const banSoiId = getBanSoiId(room);
     const wildWolfConvertTargetId =
-      room.wildWolfConvertRequestedTonight &&
-      room.wildWolfConvertAvailableTonight &&
+      room.daNghichState!.wildWolfConvertRequestedTonight &&
+      room.daNghichState!.wildWolfConvertAvailableTonight &&
       !room.wildWolfConvertUsed
         ? room.wildWolfConvertTargetId || null
         : null;
@@ -1181,15 +1189,15 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
           room.wildWolfConvertUsed = true;
         }
 
-        room.wildWolfConvertAvailableTonight = false;
-        room.wildWolfConvertRequestedTonight = false;
+        room.daNghichState!.wildWolfConvertAvailableTonight = false;
+        room.daNghichState!.wildWolfConvertRequestedTonight = false;
         room.wildWolfConvertActorId = null;
         continue;
       }
 
       if (currentTargetId === spiritWolfId) {
         if (!wasHealed && !isProtected) {
-          room.spiritWolfWolfAlignedPending = true;
+          room.daNghichState!.spiritWolfWolfAlignedPending = true;
         }
         continue;
       }
@@ -1199,11 +1207,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         if (biteCounted) {
           const twoHeartsDamage = getTwoHeartsWolfDamage(room);
           if (twoHeartsDamage > 0 && twoHeartsDamage < TWO_HEARTS_MAX_HP) {
-            room.playerHearts = room.playerHearts || {};
-            const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.playerHearts[currentTargetId] ?? TWO_HEARTS_MAX_HP));
-            room.playerHearts[currentTargetId] = Math.max(0, currentHp - twoHeartsDamage);
+            room.daNghichState!.playerHearts = room.daNghichState!.playerHearts || {};
+            const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.daNghichState!.playerHearts[currentTargetId] ?? TWO_HEARTS_MAX_HP));
+            room.daNghichState!.playerHearts[currentTargetId] = Math.max(0, currentHp - twoHeartsDamage);
           }
-          room.banSoiWolfAlignedPending = true;
+          room.daNghichState!.banSoiWolfAlignedPending = true;
         }
         continue;
       }
@@ -1217,10 +1225,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
       if (isVillageChief(room, currentTargetId)) {
         if (isVillageChiefDelayedBiteNight(room)) {
-          if (room.sharedHeartsVisible) {
-            room.playerHearts = room.playerHearts || {};
-            const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.playerHearts[currentTargetId] ?? TWO_HEARTS_MAX_HP));
-            room.playerHearts[currentTargetId] = Math.max(1, currentHp - 1);
+          if (room.daNghichState!.sharedHeartsVisible) {
+            room.daNghichState!.playerHearts = room.daNghichState!.playerHearts || {};
+            const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.daNghichState!.playerHearts[currentTargetId] ?? TWO_HEARTS_MAX_HP));
+            room.daNghichState!.playerHearts[currentTargetId] = Math.max(1, currentHp - 1);
           }
           room.villageChiefPendingWolfDeath = {
             playerId: currentTargetId,
@@ -1239,10 +1247,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
       const twoHeartsDamage = getTwoHeartsWolfDamage(room);
       if (twoHeartsDamage > 0) {
-        room.playerHearts = room.playerHearts || {};
-        const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.playerHearts[currentTargetId] ?? TWO_HEARTS_MAX_HP));
+        room.daNghichState!.playerHearts = room.daNghichState!.playerHearts || {};
+        const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.daNghichState!.playerHearts[currentTargetId] ?? TWO_HEARTS_MAX_HP));
         const nextHp = Math.max(0, currentHp - twoHeartsDamage);
-        room.playerHearts[currentTargetId] = nextHp;
+        room.daNghichState!.playerHearts[currentTargetId] = nextHp;
         if (nextHp <= 0) {
           markEliminated(currentTargetId, wolfCause);
         }
@@ -1341,8 +1349,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const aliveIds = getAlivePlayerIds(room).filter(id => id !== room.hostId);
     const dead = new Set(room.deadPlayers || []);
 
-    const targets = room.soiMuTargets || {};
-    const thumbs = room.soiMuThumbDecisions || {};
+    const targets = room.soiMuState!.targets || {};
+    const thumbs = room.soiMuState!.thumbDecisions || {};
 
     // 0. Đàn bà chặn chức năng
     const danBaId = aliveIds.find(id => room.playerRoles?.[id] === "Đàn bà");
@@ -1357,7 +1365,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
 
     // 1. Sói cắn
-    const activeWolfId = (room.wolves || []).find(wid => !dead.has(wid));
+    const activeWolfId = (room.daNghichState!.wolves || []).find(wid => !dead.has(wid));
     let wolfBittenTargetId = (activeWolfId && activeWolfId !== danBaTargetId) ? targets[activeWolfId] : null;
 
     // Sói tự cắn
@@ -1408,17 +1416,17 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const seerId = aliveIds.find(id => room.playerRoles?.[id] === "Tiên tri");
     const seerTargetId = (seerId && seerId !== danBaTargetId) ? targets[seerId] : null;
     if (seerId && seerTargetId) {
-      room.soiMuInvestigatedPlayerId = seerTargetId;
-      room.soiMuInvestigatedPrevTargetId = targets[seerTargetId] || null;
-      room.soiMuInvestigationResolved = false;
-      room.soiMuDaySelectedTargetId = null;
-      room.soiMuInvestigationResult = null;
+      room.soiMuState!.investigatedPlayerId = seerTargetId;
+      room.soiMuState!.investigatedPrevTargetId = targets[seerTargetId] || null;
+      room.soiMuState!.investigationResolved = false;
+      room.soiMuState!.daySelectedTargetId = null;
+      room.soiMuState!.investigationResult = null;
     } else {
-      room.soiMuInvestigatedPlayerId = null;
-      room.soiMuInvestigatedPrevTargetId = null;
-      room.soiMuInvestigationResolved = true;
-      room.soiMuDaySelectedTargetId = null;
-      room.soiMuInvestigationResult = null;
+      room.soiMuState!.investigatedPlayerId = null;
+      room.soiMuState!.investigatedPrevTargetId = null;
+      room.soiMuState!.investigationResolved = true;
+      room.soiMuState!.daySelectedTargetId = null;
+      room.soiMuState!.investigationResult = null;
     }
 
     // 6. Bác sĩ ung thư
@@ -1437,18 +1445,18 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const namThuId = aliveIds.find(id => room.playerRoles?.[id] === "Nam Thư");
     const namThuTargetId = (namThuId && namThuId !== danBaTargetId) ? targets[namThuId] : null;
     if (namThuId && namThuTargetId) {
-      room.soiMuNamThuTargetId = namThuTargetId;
+      room.soiMuState!.namThuTargetId = namThuTargetId;
     } else {
-      room.soiMuNamThuTargetId = null;
+      room.soiMuState!.namThuTargetId = null;
     }
 
     // 8. Suy Thận
     const suyThanId = aliveIds.find(id => room.playerRoles?.[id] === "Suy Thận");
     const suyThanTargetId = (suyThanId && suyThanId !== danBaTargetId) ? targets[suyThanId] : null;
     if (suyThanId && suyThanTargetId) {
-      room.soiMuSuyThanTargetId = suyThanTargetId;
+      room.soiMuState!.suyThanTargetId = suyThanTargetId;
     } else {
-      room.soiMuSuyThanTargetId = null;
+      room.soiMuState!.suyThanTargetId = null;
     }
 
     // Sao chép mục tiêu Thợ săn sang hunterTargetTonight để dùng khi chết ban ngày
@@ -1461,16 +1469,16 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
 
     // In log công khai khi Nam Thư và Suy Thận chọn mục tiêu
-    if (room.soiMuNamThuTargetId) {
-      const targetName = room.players.find(p => p.id === room.soiMuNamThuTargetId)?.name || room.soiMuNamThuTargetId;
+    if (room.soiMuState!.namThuTargetId) {
+      const targetName = room.players.find(p => p.id === room.soiMuState!.namThuTargetId)?.name || room.soiMuState!.namThuTargetId;
       appendLogEntry(room, {
         type: "custom_log",
         phase: "day",
         message: `${targetName} đã bị Nam Thư chọn và ${targetName} sẽ không thể cười vì có cái gì mà buồn cười`,
       });
     }
-    if (room.soiMuSuyThanTargetId) {
-      const targetName = room.players.find(p => p.id === room.soiMuSuyThanTargetId)?.name || room.soiMuSuyThanTargetId;
+    if (room.soiMuState!.suyThanTargetId) {
+      const targetName = room.players.find(p => p.id === room.soiMuState!.suyThanTargetId)?.name || room.soiMuState!.suyThanTargetId;
       appendLogEntry(room, {
         type: "custom_log",
         phase: "day",
@@ -1501,10 +1509,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         // Kiểm tra sát thương 2 tim
         const twoHeartsDamage = getTwoHeartsWolfDamage(room);
         if (twoHeartsDamage > 0) {
-          room.playerHearts = room.playerHearts || {};
-          const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.playerHearts[wolfBittenTargetId] ?? TWO_HEARTS_MAX_HP));
+          room.daNghichState!.playerHearts = room.daNghichState!.playerHearts || {};
+          const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.daNghichState!.playerHearts[wolfBittenTargetId] ?? TWO_HEARTS_MAX_HP));
           const nextHp = Math.max(0, currentHp - twoHeartsDamage);
-          room.playerHearts[wolfBittenTargetId] = nextHp;
+          room.daNghichState!.playerHearts[wolfBittenTargetId] = nextHp;
           
           if (nextHp <= 0) {
             if (isChief) {
@@ -1524,7 +1532,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
               addDeath(wolfBittenTargetId, { type: "wolf", attackerIds: [activeWolfId || ""] });
             }
           } else {
-            room.playerHeartShakeIds = [wolfBittenTargetId];
+            room.daNghichState!.playerHeartShakeIds = [wolfBittenTargetId];
             appendLogEntry(room, {
               type: "custom_log",
               phase: "night",
@@ -1595,7 +1603,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         if (room.playerRoles?.[targetId] === "Thợ săn" && !processedHunters.has(targetId)) {
           processedHunters.add(targetId);
           if (targetId === danBaTargetId) continue;
-          const hunterTargetId = room.soiMuTargets?.[targetId];
+          const hunterTargetId = room.soiMuState!.targets?.[targetId];
           if (hunterTargetId && hunterTargetId !== targetId) {
             const isAliveBefore = !dead.has(hunterTargetId) && !newlyKilled.has(hunterTargetId);
             const playerExists = room.players.some(p => p.id === hunterTargetId);
@@ -1648,9 +1656,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       appendLogEntry(room, { type: "no_death", phase: "day" });
     }
 
-    room.soiMuTargets = {};
-    room.soiMuThumbDecisions = {};
-    room.soiMuLocked = {};
+    room.soiMuState!.targets = {};
+    room.soiMuState!.thumbDecisions = {};
+    room.soiMuState!.locked = {};
   }
 
   function resolveVillageChiefDelayedWolfDeath(roomId: string, room: Room) {
@@ -1659,12 +1667,12 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if ((room.nightCount || 0) <= pending.bittenNight) return;
 
     room.villageChiefPendingWolfDeath = null;
-    if (room.privatePlayerHearts) {
-      delete room.privatePlayerHearts[pending.playerId];
+    if (room.daNghichState!.privatePlayerHearts) {
+      delete room.daNghichState!.privatePlayerHearts[pending.playerId];
     }
-    room.privateHeartVisiblePlayerIds = (room.privateHeartVisiblePlayerIds || []).filter((id) => id !== pending.playerId);
-    room.playerHeartShakeIds = (room.playerHeartShakeIds || []).filter((id) => id !== pending.playerId);
-    room.villageChiefDyingFramePlayerIds = (room.villageChiefDyingFramePlayerIds || []).filter((id) => id !== pending.playerId);
+    room.daNghichState!.privateHeartVisiblePlayerIds = (room.daNghichState!.privateHeartVisiblePlayerIds || []).filter((id) => id !== pending.playerId);
+    room.daNghichState!.playerHeartShakeIds = (room.daNghichState!.playerHeartShakeIds || []).filter((id) => id !== pending.playerId);
+    room.daNghichState!.villageChiefDyingFramePlayerIds = (room.daNghichState!.villageChiefDyingFramePlayerIds || []).filter((id) => id !== pending.playerId);
 
     if ((room.deadPlayers || []).includes(pending.playerId)) return;
     if (!room.players.find((player) => player.id === pending.playerId)) return;
@@ -1741,7 +1749,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       .filter(([id, role]) => role === "Song Trùng" && !(room.deadPlayers || []).includes(id));
 
     for (const [stId] of songTrungPlayers) {
-      const targetId = room.songTrungUsedTonight?.[stId];
+      const targetId = room.daNghichState!.songTrungUsedTonight?.[stId];
       if (!targetId) continue;
 
       const cupidId = room.loveCupidId;
@@ -1778,7 +1786,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
           room.songTrungFoundByVictim = false;
         } else {
           // Đánh dấu người bị cướp vai trò sẽ chết sáng hôm sau
-          room.songTrungVictimId = targetId;
+          room.daNghichState!.songTrungVictimId = targetId;
         }
 
         // Trở thành partner mới của Thần tình yêu
@@ -1838,7 +1846,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
 
     // Reset lựa chọn đêm nay
-    room.songTrungUsedTonight = {};
+    room.daNghichState!.songTrungUsedTonight = {};
   }
 
   function finalizeUnmatchedLoveEscapeVote(roomId: string, room: Room) {
@@ -1903,6 +1911,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       gameRules: buildRoomGameRules(gameRules, gameMode),
       gameEventLog: [],
       gameMode: gameMode || "da_nghich",
+      dietQuyState: {},
+      soiMuState: {},
+      daNghichState: {},
       warnedPlayerIds: [],
     };
 
@@ -1955,7 +1966,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     syncPrivateRoleStateForSocket(socket, roomId, room, clientId); // Cần sync sau emit roomUpdated để tránh bị ghi đè reset wolfMaxTargets trở về 1 khiến sói không thể chọn nhiều mục tiêu
   });
 
-  socket.on("getRoom", (roomId) => {
+  socket.on("getRoom", (roomId: string, callback?: SocketActionAck) => {
     const room = rooms[roomId];
     if (room) {
       ensureRoomGameRules(room);
@@ -2047,8 +2058,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         }
       }
 
+      callback?.({ ok: true });
+
     } else {
       socket.emit("errorMessage", "Phòng không tồn tại :(");
+      callback?.({ ok: false, reason: "room_not_found", message: "Phòng không tồn tại." });
     }
   });
 
@@ -2269,12 +2283,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     roomId,
     roles,
     applyMode,
-    forceAdjustWolfCount,
   }: {
     roomId: string;
     roles: string[];
     applyMode?: "next-round" | "restart-now";
-    forceAdjustWolfCount?: boolean;
   }) => {
     const room = rooms[roomId];
     if (!room) {
@@ -2293,44 +2305,12 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       return;
     }
 
-    const incomingWolfCount = getWolfRoleCount(incomingRoles);
-    const maxAllowedWolfCount = getMaxAllowedWolfCount(participantCount);
-
-    if (incomingWolfCount > maxAllowedWolfCount && !forceAdjustWolfCount) {
-      ctx.io.to(room.hostId).emit("wolfRoleMismatch", {
-        currentWolfCount: incomingWolfCount,
-        maxAllowedWolfCount,
-        playerCount: participantCount,
-      });
-      return;
-    }
-
     room.roles = incomingRoles;
     room.rolesLocked = true;
     room.lockedPlayerIds = getParticipantIds(room);
-
-    if (incomingWolfCount > maxAllowedWolfCount && forceAdjustWolfCount) {
-      rebalanceWolfRoles(room, maxAllowedWolfCount);
-    }
     syncPendingRoleInterventionsToHost(roomId);
 
     if (gameInProgress && applyMode === "restart-now") {
-      const wolfCount = getWolfRoleCount(room.roles);
-
-      if (wolfCount > maxAllowedWolfCount) {
-        if (!forceAdjustWolfCount) {
-          ctx.io.to(room.hostId).emit("wolfRoleMismatch", {
-            currentWolfCount: wolfCount,
-            maxAllowedWolfCount,
-            playerCount: participantCount,
-          });
-          return;
-        }
-
-        rebalanceWolfRoles(room, maxAllowedWolfCount);
-        syncPendingRoleInterventionsToHost(roomId);
-      }
-
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       returnHostToGameView(roomId, "Đang khởi tạo ván chơi mới");
       emitRestartCinematicToPlayers(roomId, "Quản trò đã cập nhật danh sách vai trò và khởi động lại ván chơi mới");
@@ -2432,11 +2412,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     });
     room.players = room.players.map((p) => ({ ...p, inGame: p.id !== room.hostId }));
 
-    room.wolves = participants
+    room.daNghichState!.wolves = participants
       .filter(p => isWolfRole(room.playerRoles?.[p.id]))
       .map(p => p.id);
 
-    room.wolves.forEach(wolfId => {
+    room.daNghichState!.wolves.forEach(wolfId => {
       ctx.io.in(wolfId).socketsJoin(`wolves_${roomId}`);
     });
 
@@ -2447,14 +2427,14 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.angelReviveRecordsByAngelId = {};
     room.angelHiddenRevivedPlayerIds = [];
     room.angelOutcomeLoggedPlayerIds = [];
-    room.privatePlayerHearts = {};
-    room.privateHeartVisiblePlayerIds = [];
-    room.playerHeartShakeIds = [];
-    room.villageChiefDyingFramePlayerIds = [];
+    room.daNghichState!.privatePlayerHearts = {};
+    room.daNghichState!.privateHeartVisiblePlayerIds = [];
+    room.daNghichState!.playerHeartShakeIds = [];
+    room.daNghichState!.villageChiefDyingFramePlayerIds = [];
     room.villageChiefPendingWolfDeath = null;
     room.villageChiefExtraVoteAvailable = false;
-    room.villageChiefExtraVoteReady = false;
-    room.villageChiefExtraVoteUsed = false;
+    room.daNghichState!.villageChiefExtraVoteReady = false;
+    room.daNghichState!.villageChiefExtraVoteUsed = false;
     room.protectorActorId = null;
     room.protectorTargetId = null;
     room.protectorTargetSetNight = null;
@@ -2495,18 +2475,18 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.spiritWolfId = getSpiritWolfId(room);
     room.spiritWolfDecisionMade = false;
     room.spiritWolfChoseSave = false;
-    room.spiritWolfWolfAligned = false;
-    room.spiritWolfWolfAlignedPending = false;
+    room.daNghichState!.spiritWolfWolfAligned = false;
+    room.daNghichState!.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
-    room.spiritWolfDecisionDeadline = null;
+    room.daNghichState!.spiritWolfDecisionDeadline = null;
     room.wildWolfConvertedPlayerIds = [];
     room.banSoiId = getBanSoiId(room);
-    room.banSoiWolfAligned = false;
-    room.banSoiWolfAlignedPending = false;
+    room.daNghichState!.banSoiWolfAligned = false;
+    room.daNghichState!.banSoiWolfAlignedPending = false;
     room.wildWolfId = getWildWolfId(room);
     room.wildWolfConvertReadyNextNight = false;
-    room.wildWolfConvertAvailableTonight = false;
-    room.wildWolfConvertRequestedTonight = false;
+    room.daNghichState!.wildWolfConvertAvailableTonight = false;
+    room.daNghichState!.wildWolfConvertRequestedTonight = false;
     room.wildWolfConvertActorId = null;
     room.wildWolfConvertTargetId = null;
     room.wildWolfConvertUsed = false;
@@ -2794,12 +2774,12 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.angelHiddenRevivedPlayerIds = [];
     room.angelOutcomeLoggedPlayerIds = [];
     room.publicRevealedRolesByPlayerId = {};
-    room.sharedHeartsVisible = false;
-    room.playerHearts = {};
-    room.privatePlayerHearts = {};
-    room.privateHeartVisiblePlayerIds = [];
-    room.playerHeartShakeIds = [];
-    room.villageChiefDyingFramePlayerIds = [];
+    room.daNghichState!.sharedHeartsVisible = false;
+    room.daNghichState!.playerHearts = {};
+    room.daNghichState!.privatePlayerHearts = {};
+    room.daNghichState!.privateHeartVisiblePlayerIds = [];
+    room.daNghichState!.playerHeartShakeIds = [];
+    room.daNghichState!.villageChiefDyingFramePlayerIds = [];
     room.protectedTonight = null;
     room.protectedTonightBy = null;
     room.protectedTonightAt = null;
@@ -2820,10 +2800,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.killedTonight = null;
     room.killedTonightExtra = null;
     room.wolfAttackResolvedAt = null;
-    room.wolfVotes = {};
-    room.wolfVotes2 = {};
+    room.daNghichState!.wolfVotes = {};
+    room.daNghichState!.wolfVotes2 = {};
     room.wolfLocked = {};
-    room.wolfDeadline = null;
+    room.daNghichState!.wolfDeadline = null;
     room.wolfVoteResolvedTonight = false;
     room.wolfExtraBiteNextNight = false;
     room.wolfBonusBiteThisNight = false;
@@ -2837,17 +2817,17 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.hidePlayerRoleText = true;
     room.spiritWolfDecisionMade = false;
     room.spiritWolfChoseSave = false;
-    room.spiritWolfWolfAligned = false;
-    room.spiritWolfWolfAlignedPending = false;
+    room.daNghichState!.spiritWolfWolfAligned = false;
+    room.daNghichState!.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
-    room.spiritWolfDecisionDeadline = null;
+    room.daNghichState!.spiritWolfDecisionDeadline = null;
     room.banSoiId = null;
-    room.banSoiWolfAligned = false;
-    room.banSoiWolfAlignedPending = false;
+    room.daNghichState!.banSoiWolfAligned = false;
+    room.daNghichState!.banSoiWolfAlignedPending = false;
     room.wildWolfId = null;
     room.wildWolfConvertReadyNextNight = false;
-    room.wildWolfConvertAvailableTonight = false;
-    room.wildWolfConvertRequestedTonight = false;
+    room.daNghichState!.wildWolfConvertAvailableTonight = false;
+    room.daNghichState!.wildWolfConvertRequestedTonight = false;
     room.wildWolfConvertActorId = null;
     room.wildWolfConvertTargetId = null;
     room.wildWolfConvertUsed = false;
@@ -2857,8 +2837,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.chiefChecks = {};
     room.chiefUsedTonight = {};
     room.villageChiefExtraVoteAvailable = false;
-    room.villageChiefExtraVoteReady = false;
-    room.villageChiefExtraVoteUsed = false;
+    room.daNghichState!.villageChiefExtraVoteReady = false;
+    room.daNghichState!.villageChiefExtraVoteUsed = false;
     room.protectorActorId = null;
     room.protectorTargetId = null;
     room.protectorTargetSetNight = null;
@@ -2869,28 +2849,28 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.elementalPendingBuffVoteNight = null;
     room.elementalBuffVotesTonight = {};
     room.elementalBuffVotesResolvedNight = null;
-    room.elementalSelectedBuffId = null;
+    room.daNghichState!.elementalSelectedBuffId = null;
     room.elementalSelectedBuffAppliesNight = null;
-    room.elementalBuffQuickMode = true;
+    room.daNghichState!.elementalBuffQuickMode = true;
     resetMerchantRoundState(room);
 
     // Reset Soi Mu state
-    room.soiMuTargets = {};
-    room.soiMuThumbDecisions = {};
-    room.soiMuLocked = {};
-    room.soiMuInvestigatedPlayerId = null;
-    room.soiMuInvestigatedPrevTargetId = null;
-    room.soiMuInvestigationResolved = true;
-    room.soiMuDaySelectedTargetId = null;
-    room.soiMuInvestigationResult = null;
-    room.soiMuNamThuTargetId = null;
-    room.soiMuSuyThanTargetId = null;
+    room.soiMuState!.targets = {};
+    room.soiMuState!.thumbDecisions = {};
+    room.soiMuState!.locked = {};
+    room.soiMuState!.investigatedPlayerId = null;
+    room.soiMuState!.investigatedPrevTargetId = null;
+    room.soiMuState!.investigationResolved = true;
+    room.soiMuState!.daySelectedTargetId = null;
+    room.soiMuState!.investigationResult = null;
+    room.soiMuState!.namThuTargetId = null;
+    room.soiMuState!.suyThanTargetId = null;
     room.witchPotions = {};
     room.witchHealTargetTonight = {};
     room.witchPoisonTargetTonight = {};
     room.witchHealTargetAt = {};
     room.witchPoisonTargetAt = {};
-    room.wolves = [];
+    room.daNghichState!.wolves = [];
     room.players = room.players.map((p) => ({ ...p, inGame: p.id !== room.hostId }));
 
     if (ensureRoomGameRules(room).twoHeartsFirstTwoNights) {
@@ -2930,16 +2910,16 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     });
     room.players = room.players.map((p) => ({ ...p, inGame: p.id !== room.hostId }));
 
-    room.wolves = participants
+    room.daNghichState!.wolves = participants
       .filter(p => isWolfRole(room.playerRoles?.[p.id]))
       .map(p => p.id);
 
     if (room.gameMode === "soi_mu") {
-      room.wolves = room.wolves.sort(() => Math.random() - 0.5);
-      room.soiMuHasMerchant = Object.values(room.playerRoles || {}).includes("Tay Buôn");
+      room.daNghichState!.wolves = room.daNghichState!.wolves.sort(() => Math.random() - 0.5);
+      room.soiMuState!.hasMerchant = Object.values(room.playerRoles || {}).includes("Tay Buôn");
     }
 
-    room.wolves.forEach(wolfId => {
+    room.daNghichState!.wolves.forEach(wolfId => {
       ctx.io.in(wolfId).socketsJoin(`wolves_${roomId}`);
     });
 
@@ -3173,8 +3153,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     if (phase === "day") {
       if (ensureRoomGameRules(room).twoHeartsFirstTwoNights && room.nightCount === 2) {
-        room.sharedHeartsVisible = false;
-        room.playerHearts = {};
+        room.daNghichState!.sharedHeartsVisible = false;
+        room.daNghichState!.playerHearts = {};
       }
       room.stickers = [];
       ctx.io.to(`wolves_${roomId}`).emit("stickersSync", []);
@@ -3204,7 +3184,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         finishWolfVoting(roomId);
       }
       clearSpiritWolfDecisionTimer(room);
-      room.spiritWolfDecisionDeadline = null;
+      room.daNghichState!.spiritWolfDecisionDeadline = null;
       if (room.spiritWolfPendingPoisonedWolfId && !room.spiritWolfDecisionMade) {
         room.spiritWolfDecisionMade = true;
         room.spiritWolfChoseSave = false;
@@ -3216,10 +3196,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       }
       room.spiritWolfPendingPoisonedWolfId = null;
       finalizeUnmatchedLoveEscapeVote(roomId, room);
-      room.privatePlayerHearts = {};
-      room.privateHeartVisiblePlayerIds = [];
-      room.playerHeartShakeIds = [];
-      room.villageChiefDyingFramePlayerIds = [];
+      room.daNghichState!.privatePlayerHearts = {};
+      room.daNghichState!.privateHeartVisiblePlayerIds = [];
+      room.daNghichState!.playerHeartShakeIds = [];
+      room.daNghichState!.villageChiefDyingFramePlayerIds = [];
       resolveVillageChiefDelayedWolfDeath(roomId, room);
       resolveSongTrungChoice(roomId, room);
       room.songTrungVictimSearchUsedTonight = {};
@@ -3241,8 +3221,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       }
     } else if (phase === "night") {
       if (room.gameMode === "diet_quy") {
-        room.dietQuyNightDirection = dietQuyNightDirection || "clockwise";
-        room.dietQuyNightStartPlayerId = dietQuyNightStartPlayerId || null;
+        room.dietQuyState!.nightDirection = dietQuyNightDirection || "clockwise";
+        room.dietQuyState!.nightStartPlayerId = dietQuyNightStartPlayerId || null;
       }
       if (previousPhase === "day") {
         const currentNightLog = ensureNightLog(room);
@@ -3277,8 +3257,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.dayLocked = {};
       room.dayDiscussionDeadline = null;
       room.dayDeadline = null;
-      room.soiMuNamThuTargetId = null;
-      room.soiMuSuyThanTargetId = null;
+      room.soiMuState!.namThuTargetId = null;
+      room.soiMuState!.suyThanTargetId = null;
       ctx.io.to(roomId).emit("dayDiscussionStarted", { deadline: null });
       clearTrialState(room);
 
@@ -3315,33 +3295,33 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
       if (ensureRoomGameRules(room).twoHeartsFirstTwoNights) {
         if (room.nightCount <= TWO_HEARTS_NIGHT_LIMIT) {
-          if (!room.sharedHeartsVisible) {
+          if (!room.daNghichState!.sharedHeartsVisible) {
             initTwoHeartsForParticipants(room);
           }
         } else {
-          room.sharedHeartsVisible = false;
-          room.playerHearts = {};
+          room.daNghichState!.sharedHeartsVisible = false;
+          room.daNghichState!.playerHearts = {};
         }
       } else {
-        room.sharedHeartsVisible = false;
-        room.playerHearts = {};
+        room.daNghichState!.sharedHeartsVisible = false;
+        room.daNghichState!.playerHearts = {};
       }
 
       ensureNightLog(room);
 
       const rulesForChief = ensureRoomGameRules(room);
       if (
-        room.elementalSelectedBuffId === PROTECTOR_PERMANENT_BUFF_ID &&
+        room.daNghichState!.elementalSelectedBuffId === PROTECTOR_PERMANENT_BUFF_ID &&
         room.elementalSelectedBuffAppliesNight !== null &&
         typeof room.elementalSelectedBuffAppliesNight !== "undefined" &&
         room.elementalSelectedBuffAppliesNight <= (room.nightCount || 0)
       ) {
         room.protectorImmortalityPermanent = true;
       }
-      room.privatePlayerHearts = {};
-      room.privateHeartVisiblePlayerIds = [];
-      room.playerHeartShakeIds = [];
-      room.villageChiefDyingFramePlayerIds = [];
+      room.daNghichState!.privatePlayerHearts = {};
+      room.daNghichState!.privateHeartVisiblePlayerIds = [];
+      room.daNghichState!.playerHeartShakeIds = [];
+      room.daNghichState!.villageChiefDyingFramePlayerIds = [];
       if (
         rulesForChief.villageChiefKnowsWolfBite &&
         room.villageChiefPendingWolfDeath &&
@@ -3349,15 +3329,15 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         !(room.deadPlayers || []).includes(room.villageChiefPendingWolfDeath.playerId)
       ) {
         const targetId = room.villageChiefPendingWolfDeath.playerId;
-        room.privatePlayerHearts = room.privatePlayerHearts || {};
-        room.privatePlayerHearts[targetId] = 1;
-        room.privateHeartVisiblePlayerIds = [targetId];
-        room.playerHeartShakeIds = [targetId];
+        room.daNghichState!.privatePlayerHearts = room.daNghichState!.privatePlayerHearts || {};
+        room.daNghichState!.privatePlayerHearts[targetId] = 1;
+        room.daNghichState!.privateHeartVisiblePlayerIds = [targetId];
+        room.daNghichState!.playerHeartShakeIds = [targetId];
       }
 
-      if (room.spiritWolfWolfAlignedPending && !room.spiritWolfWolfAligned) {
-        room.spiritWolfWolfAligned = true;
-        room.spiritWolfWolfAlignedPending = false;
+      if (room.daNghichState!.spiritWolfWolfAlignedPending && !room.daNghichState!.spiritWolfWolfAligned) {
+        room.daNghichState!.spiritWolfWolfAligned = true;
+        room.daNghichState!.spiritWolfWolfAlignedPending = false;
         const swid = getSpiritWolfId(room);
         if (swid) {
           ctx.io.in(swid).socketsJoin(`wolves_${roomId}`);
@@ -3368,9 +3348,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         if (room.gameOver) return;
       }
 
-      if (room.banSoiWolfAlignedPending && !room.banSoiWolfAligned) {
-        room.banSoiWolfAligned = true;
-        room.banSoiWolfAlignedPending = false;
+      if (room.daNghichState!.banSoiWolfAlignedPending && !room.daNghichState!.banSoiWolfAligned) {
+        room.daNghichState!.banSoiWolfAligned = true;
+        room.daNghichState!.banSoiWolfAlignedPending = false;
         if (room.banSoiId) {
           appendLogEntry(room, { type: "ban_soi_aligned", phase: "night", targetId: room.banSoiId });
           appendGameEvent(room, {
@@ -3395,13 +3375,13 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       }
 
       const wildWolfId = getWildWolfId(room);
-      room.wildWolfConvertAvailableTonight =
+      room.daNghichState!.wildWolfConvertAvailableTonight =
         room.wildWolfConvertReadyNextNight === true &&
         room.wildWolfConvertUsed !== true &&
         !!wildWolfId &&
         !(room.deadPlayers || []).includes(wildWolfId);
       room.wildWolfConvertReadyNextNight = false;
-      room.wildWolfConvertRequestedTonight = false;
+      room.daNghichState!.wildWolfConvertRequestedTonight = false;
       room.wildWolfConvertActorId = null;
       room.wildWolfConvertTargetId = null;
 
@@ -3453,15 +3433,15 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.witchPoisonTargetTonight = {};
       room.witchHealTargetAt = {};
       room.witchPoisonTargetAt = {};
-      room.wolfVotes = {};
-      room.wolfVotes2 = {};
+      room.daNghichState!.wolfVotes = {};
+      room.daNghichState!.wolfVotes2 = {};
       room.wolfLocked = {};
-      room.wolfDeadline = null;
+      room.daNghichState!.wolfDeadline = null;
       room.wolfVoteResolvedTonight = false;
       room.nightActionExtraTimeMsByPlayerId = {};
       room.nightTurnRemainingMs = null;
-      room.wolfTurnRemainingMs = null;
-      room.spiritWolfDecisionRemainingMs = null;
+      room.daNghichState!.wolfTurnRemainingMs = null;
+      room.daNghichState!.spiritWolfDecisionRemainingMs = null;
       room.wolfAttackResolvedAt = null;
       room.loveEscapeVotesTonight = {};
       room.loveEscapeVoteAt = {};
@@ -3534,11 +3514,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (
       room.gameMode === "diet_quy" &&
       targetRole === "Trinh nữ" &&
-      room.dietQuyVirginTriggered !== true &&
+      room.dietQuyState!.virginTriggered !== true &&
       voterRole &&
       DIET_QUY_TOWNSFOLK.includes(voterRole)
     ) {
-      room.dietQuyVirginTriggered = true;
+      room.dietQuyState!.virginTriggered = true;
       room.deadPlayers = room.deadPlayers || [];
       if (!room.deadPlayers.includes(clientId)) {
         room.deadPlayers.push(clientId);
@@ -3565,22 +3545,22 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.hidePlayerRoleText = true;
       room.nightCount = (room.nightCount || 0) + 1;
 
-      room.dietQuyPoisonedPrevPlayerId = room.dietQuyPoisonedPlayerId || null;
-      room.dietQuyPoisonedPlayerId = null;
-      room.dietQuyRedCharmPlayerId = null;
-      room.dietQuyMonkProtectedPlayerId = null;
-      room.dietQuyImpKillPlayerId = null;
-      room.dietQuyRavenkeeperTargetId = null;
-      room.dietQuyWasherwomanSelectedIds = [];
-      room.dietQuyLibrarianSelectedIds = [];
-      room.dietQuyInvestigatorSelectedIds = [];
-      room.dietQuyFortuneTellerCheckedIds = [];
-      room.dietQuyExecutedToday = false;
-      room.dietQuySaintExecutedToday = false;
-      room.dietQuyMayorReplacementId = null;
+      room.dietQuyState!.poisonedPrevPlayerId = room.dietQuyState!.poisonedPlayerId || null;
+      room.dietQuyState!.poisonedPlayerId = null;
+      room.dietQuyState!.redCharmPlayerId = null;
+      room.dietQuyState!.monkProtectedPlayerId = null;
+      room.dietQuyState!.impKillPlayerId = null;
+      room.dietQuyState!.ravenkeeperTargetId = null;
+      room.dietQuyState!.washerwomanSelectedIds = [];
+      room.dietQuyState!.librarianSelectedIds = [];
+      room.dietQuyState!.investigatorSelectedIds = [];
+      room.dietQuyState!.fortuneTellerCheckedIds = [];
+      room.dietQuyState!.executedToday = false;
+      room.dietQuyState!.saintExecutedToday = false;
+      room.dietQuyState!.mayorReplacementId = null;
       room.nightTurnPlayerId = null;
 
-      room.dietQuyNightTurnOrder = getSeatingOrder(room, room.dietQuyNightDirection === "clockwise", room.dietQuyNightStartPlayerId);
+      room.dietQuyState!.nightTurnOrder = getSeatingOrder(room, room.dietQuyState!.nightDirection === "clockwise", room.dietQuyState!.nightStartPlayerId);
       room.nightTurnIndex = 0;
 
       ctx.io.to(roomId).emit("phaseChanged", "night");
@@ -3616,7 +3596,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!role) return;
 
     if (role === "Độc thủ") {
-      room.dietQuyPoisonedPlayerId = targetId;
+      room.dietQuyState!.poisonedPlayerId = targetId;
       appendLogEntry(room, {
         type: "poisoner_poison",
         phase: "night",
@@ -3624,7 +3604,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         targetId,
       });
     } else if (role === "Nhà sư") {
-      room.dietQuyMonkProtectedPlayerId = targetId;
+      room.dietQuyState!.monkProtectedPlayerId = targetId;
       appendLogEntry(room, {
         type: "monk_protect",
         phase: "night",
@@ -3632,7 +3612,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         targetId,
       });
     } else if (role === "Ác Quỷ") {
-      room.dietQuyImpKillPlayerId = targetId;
+      room.dietQuyState!.impKillPlayerId = targetId;
       appendLogEntry(room, {
         type: "imp_attack",
         phase: "night",
@@ -3641,11 +3621,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       });
     } else if (role === "Thầy bói") {
       if (Array.isArray(targetIds) && targetIds.length === 2) {
-        room.dietQuyFortuneTellerCheckedIds = targetIds;
+        room.dietQuyState!.fortuneTellerCheckedIds = targetIds;
         const hasDemonOrCharm = targetIds.some(
-          (id) => room.playerRoles?.[id] === "Ác Quỷ" || room.dietQuyRedCharmPlayerId === id
+          (id) => room.playerRoles?.[id] === "Ác Quỷ" || room.dietQuyState!.redCharmPlayerId === id
         );
-        const isPoisoned = room.dietQuyPoisonedPlayerId === clientId;
+        const isPoisoned = room.dietQuyState!.poisonedPlayerId === clientId;
         const result = isPoisoned
           ? (Math.random() < 0.5 ? "Yes" : "No")
           : (hasDemonOrCharm ? "Yes" : "No");
@@ -3658,8 +3638,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         });
       }
     } else if (role === "Nuôi quạ") {
-      room.dietQuyRavenkeeperTargetId = targetId;
-      const isPoisoned = room.dietQuyPoisonedPlayerId === clientId;
+      room.dietQuyState!.ravenkeeperTargetId = targetId;
+      const isPoisoned = room.dietQuyState!.poisonedPlayerId === clientId;
       const targetRole = room.playerRoles?.[targetId] || "Không rõ";
       const revealedRole = isPoisoned ? "Dân làng" : targetRole;
       socket.emit("dietQuyRavenkeeperResult", { role: revealedRole });
@@ -3696,7 +3676,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const DIET_QUY_MINIONS = ["Độc thủ", "Gián điệp", "Phò"];
 
     if ((currentRole as string) === "Thợ giặt") {
-      room.dietQuyWasherwomanSelectedIds = targetIds;
+      room.dietQuyState!.washerwomanSelectedIds = targetIds;
       let townsfolkRole = "";
       for (const id of targetIds) {
         const r = room.playerRoles?.[id];
@@ -3712,7 +3692,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         ctx.io.to(wwId).emit("dietQuyWasherwomanInfo", { targetIds, townsfolkRole });
       }
     } else if ((currentRole as string) === "Thủ thư") {
-      room.dietQuyLibrarianSelectedIds = targetIds;
+      room.dietQuyState!.librarianSelectedIds = targetIds;
       let outsiderRole = "";
       for (const id of targetIds) {
         const r = room.playerRoles?.[id];
@@ -3728,7 +3708,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         ctx.io.to(libId).emit("dietQuyLibrarianInfo", { targetIds, role: outsiderRole });
       }
     } else if ((currentRole as string) === "Điều tra viên") {
-      room.dietQuyInvestigatorSelectedIds = targetIds;
+      room.dietQuyState!.investigatorSelectedIds = targetIds;
       let minionRole = "";
       for (const id of targetIds) {
         const r = room.playerRoles?.[id];
@@ -3754,7 +3734,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!room) return;
     if (clientId !== room.hostId) return;
 
-    room.dietQuyMayorReplacementId = replacementId;
+    room.dietQuyState!.mayorReplacementId = replacementId;
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
@@ -3763,7 +3743,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!room) return;
     if (clientId !== room.hostId) return;
 
-    room.dietQuyRedCharmPlayerId = targetId;
+    room.dietQuyState!.redCharmPlayerId = targetId;
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
@@ -3773,11 +3753,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (room.gameOver) return;
     if (room.phase !== "day") return;
     if (room.playerRoles?.[clientId] !== "Diệt quỷ") return;
-    if (room.dietQuySlayerUsed) return;
+    if (room.dietQuyState!.slayerUsed) return;
 
-    room.dietQuySlayerUsed = true;
+    room.dietQuyState!.slayerUsed = true;
     const targetRole = room.playerRoles?.[targetId];
-    const isPoisoned = room.dietQuyPoisonedPlayerId === clientId;
+    const isPoisoned = room.dietQuyState!.poisonedPlayerId === clientId;
 
     if (targetRole === "Ác Quỷ" && !isPoisoned) {
       room.deadPlayers = room.deadPlayers || [];
@@ -4014,9 +3994,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       if (!room.nightTurnPaused) {
         room.nightTurnPaused = true;
         room.nightTurnRemainingMs = room.nightTurnDeadline ? Math.max(0, room.nightTurnDeadline - now) : null;
-        room.wolfTurnRemainingMs = room.wolfDeadline ? Math.max(0, room.wolfDeadline - now) : null;
-        room.spiritWolfDecisionRemainingMs = room.spiritWolfDecisionDeadline
-          ? Math.max(0, room.spiritWolfDecisionDeadline - now)
+        room.daNghichState!.wolfTurnRemainingMs = room.daNghichState!.wolfDeadline ? Math.max(0, room.daNghichState!.wolfDeadline - now) : null;
+        room.daNghichState!.spiritWolfDecisionRemainingMs = room.daNghichState!.spiritWolfDecisionDeadline
+          ? Math.max(0, room.daNghichState!.spiritWolfDecisionDeadline - now)
           : null;
 
         clearNightTurnTimer(room);
@@ -4027,8 +4007,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         }
 
         room.nightTurnDeadline = null;
-        room.wolfDeadline = null;
-        room.spiritWolfDecisionDeadline = null;
+        room.daNghichState!.wolfDeadline = null;
+        room.daNghichState!.spiritWolfDecisionDeadline = null;
 
         ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
         emitHostNightActionProgress(roomId);
@@ -4042,39 +4022,39 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
           : now + Math.max(0, room.nightTurnRemainingMs);
 
       const shouldResumeWolf =
-        room.wolfTurnRemainingMs != null &&
+        room.daNghichState!.wolfTurnRemainingMs != null &&
         !room.wolfVoteResolvedTonight &&
         !room.merchantWolfBiteDisabledTonight;
       if (shouldResumeWolf) {
-        const wolfRemainingMs = Math.max(0, room.wolfTurnRemainingMs ?? 0);
-        room.wolfDeadline = now + wolfRemainingMs;
+        const wolfRemainingMs = Math.max(0, room.daNghichState!.wolfTurnRemainingMs ?? 0);
+        room.daNghichState!.wolfDeadline = now + wolfRemainingMs;
         startWolfPhase(roomId, {
           durationMs: wolfRemainingMs,
           initializeVotes: false,
         });
         rescheduleWolfTimerForCurrentDeadlines(roomId, room);
       } else {
-        room.wolfDeadline = null;
+        room.daNghichState!.wolfDeadline = null;
       }
 
       const shouldResumeSpiritWolf =
-        room.spiritWolfDecisionRemainingMs != null &&
+        room.daNghichState!.spiritWolfDecisionRemainingMs != null &&
         !!room.spiritWolfPendingPoisonedWolfId &&
         !room.spiritWolfDecisionMade;
       if (shouldResumeSpiritWolf) {
-        const spiritRemainingMs = Math.max(0, room.spiritWolfDecisionRemainingMs ?? 0);
+        const spiritRemainingMs = Math.max(0, room.daNghichState!.spiritWolfDecisionRemainingMs ?? 0);
         if (spiritRemainingMs <= 0) {
           finishSpiritWolfTurn(roomId, true);
           return;
         }
-        room.spiritWolfDecisionDeadline = now + spiritRemainingMs;
+        room.daNghichState!.spiritWolfDecisionDeadline = now + spiritRemainingMs;
         emitSpiritWolfDecisionNeeded(roomId);
         clearSpiritWolfDecisionTimer(room);
         room.spiritWolfDecisionTimer = setTimeout(() => {
           finishSpiritWolfTurn(roomId, true);
         }, spiritRemainingMs);
       } else {
-        room.spiritWolfDecisionDeadline = null;
+        room.daNghichState!.spiritWolfDecisionDeadline = null;
       }
 
       if (room.nightTurnDeadline) {
@@ -4173,7 +4153,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       } else if (room.nightTurnRole === SPIRIT_WOLF_ROLE) {
         clearSpiritWolfDecisionTimer(room);
         clearNightTurnTimer(room);
-        room.spiritWolfDecisionDeadline = null;
+        room.daNghichState!.spiritWolfDecisionDeadline = null;
       } else {
         clearNightTurnTimer(room);
       }
@@ -4197,7 +4177,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         return;
       }
       clearNightTurnTimer(room);
-      room.spiritWolfDecisionDeadline = room.nightTurnDeadline;
+      room.daNghichState!.spiritWolfDecisionDeadline = room.nightTurnDeadline;
       room.nightTurnTimer = setTimeout(() => {
         finishSpiritWolfTurn(roomId, true);
       }, remainingMs);
@@ -4244,17 +4224,17 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       const canExtendWhilePaused =
         room.nightTurnPaused &&
         (
-          (isWolfAlignedPlayer(room, targetId) && room.wolfTurnRemainingMs != null) ||
-          (targetRole === SPIRIT_WOLF_ROLE && room.spiritWolfDecisionRemainingMs != null) ||
+          (isWolfAlignedPlayer(room, targetId) && room.daNghichState!.wolfTurnRemainingMs != null) ||
+          (targetRole === SPIRIT_WOLF_ROLE && room.daNghichState!.spiritWolfDecisionRemainingMs != null) ||
           (!isWolfAlignedPlayer(room, targetId) && targetRole !== SPIRIT_WOLF_ROLE && room.nightTurnRemainingMs != null)
         );
       if (!hasActiveDeadline && !canExtendWhilePaused) return;
 
       let baseDeadline = 0;
       if (isWolfAlignedPlayer(room, targetId)) {
-        baseDeadline = room.wolfDeadline ?? Date.now();
+        baseDeadline = room.daNghichState!.wolfDeadline ?? Date.now();
       } else if (targetRole === SPIRIT_WOLF_ROLE) {
-        baseDeadline = room.spiritWolfDecisionDeadline ?? Date.now();
+        baseDeadline = room.daNghichState!.spiritWolfDecisionDeadline ?? Date.now();
       } else {
         baseDeadline = room.nightTurnDeadline ?? Date.now();
         if (targetRole === "Phù thủy" && shouldGrantWitchBonusToPlayer(room, targetId)) {
@@ -4272,15 +4252,15 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.nightActionExtraTimeMsByPlayerId[targetId] = newExtraMs;
 
       if (!room.nightTurnPaused) {
-        if (isWolfAlignedPlayer(room, targetId) && room.wolfDeadline && !room.wolfVoteResolvedTonight) {
+        if (isWolfAlignedPlayer(room, targetId) && room.daNghichState!.wolfDeadline && !room.wolfVoteResolvedTonight) {
           rescheduleWolfTimerForCurrentDeadlines(roomId, room);
         } else if (
           targetRole === SPIRIT_WOLF_ROLE &&
-          room.spiritWolfDecisionDeadline &&
+          room.daNghichState!.spiritWolfDecisionDeadline &&
           room.spiritWolfPendingPoisonedWolfId &&
           !room.spiritWolfDecisionMade
         ) {
-          const remainingMs = Math.max(0, room.spiritWolfDecisionDeadline + getNightActionExtraMs(room, targetId) - Date.now());
+          const remainingMs = Math.max(0, room.daNghichState!.spiritWolfDecisionDeadline + getNightActionExtraMs(room, targetId) - Date.now());
           clearSpiritWolfDecisionTimer(room);
           room.spiritWolfDecisionTimer = setTimeout(() => {
             finishSpiritWolfTurn(roomId, true);
@@ -4350,20 +4330,20 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (rules.allNightActionsSimultaneous) {
       if (room.nightTurnPaused) {
         if (room.nightTurnRemainingMs != null) room.nightTurnRemainingMs = Math.max(0, room.nightTurnRemainingMs) + extraMs;
-        if (room.wolfTurnRemainingMs != null) room.wolfTurnRemainingMs = Math.max(0, room.wolfTurnRemainingMs) + extraMs;
-        if (room.spiritWolfDecisionRemainingMs != null) room.spiritWolfDecisionRemainingMs = Math.max(0, room.spiritWolfDecisionRemainingMs) + extraMs;
+        if (room.daNghichState!.wolfTurnRemainingMs != null) room.daNghichState!.wolfTurnRemainingMs = Math.max(0, room.daNghichState!.wolfTurnRemainingMs) + extraMs;
+        if (room.daNghichState!.spiritWolfDecisionRemainingMs != null) room.daNghichState!.spiritWolfDecisionRemainingMs = Math.max(0, room.daNghichState!.spiritWolfDecisionRemainingMs) + extraMs;
       } else {
         const now = Date.now();
         if (room.nightTurnDeadline) {
           room.nightTurnDeadline = Math.max(room.nightTurnDeadline, now) + extraMs;
         }
-        if (room.wolfDeadline && !room.wolfVoteResolvedTonight) {
-          room.wolfDeadline = Math.max(room.wolfDeadline, now) + extraMs;
+        if (room.daNghichState!.wolfDeadline && !room.wolfVoteResolvedTonight) {
+          room.daNghichState!.wolfDeadline = Math.max(room.daNghichState!.wolfDeadline, now) + extraMs;
           rescheduleWolfTimerForCurrentDeadlines(roomId, room);
         }
-        if (room.spiritWolfDecisionDeadline && room.spiritWolfPendingPoisonedWolfId && !room.spiritWolfDecisionMade) {
-          room.spiritWolfDecisionDeadline = Math.max(room.spiritWolfDecisionDeadline, now) + extraMs;
-          const remainingMs = room.spiritWolfDecisionDeadline - now;
+        if (room.daNghichState!.spiritWolfDecisionDeadline && room.spiritWolfPendingPoisonedWolfId && !room.spiritWolfDecisionMade) {
+          room.daNghichState!.spiritWolfDecisionDeadline = Math.max(room.daNghichState!.spiritWolfDecisionDeadline, now) + extraMs;
+          const remainingMs = room.daNghichState!.spiritWolfDecisionDeadline - now;
           clearSpiritWolfDecisionTimer(room);
           room.spiritWolfDecisionTimer = setTimeout(() => {
             finishSpiritWolfTurn(roomId, true);
@@ -4431,17 +4411,17 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     markWildWolfConversionReadyIfWolfDied(room, targetId);
     clearProtectorTargetIfDead(room, targetId);
 
-    if (room.wolfVotes) {
-      for (const [wolfId, votedTargetId] of Object.entries(room.wolfVotes)) {
-        if (wolfId === targetId || votedTargetId === targetId) room.wolfVotes[wolfId] = null;
+    if (room.daNghichState!.wolfVotes) {
+      for (const [wolfId, votedTargetId] of Object.entries(room.daNghichState!.wolfVotes)) {
+        if (wolfId === targetId || votedTargetId === targetId) room.daNghichState!.wolfVotes[wolfId] = null;
       }
-      ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes);
+      ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.daNghichState!.wolfVotes);
     }
-    if (room.wolfVotes2) {
-      for (const [wolfId, votedTargetId] of Object.entries(room.wolfVotes2)) {
-        if (wolfId === targetId || votedTargetId === targetId) room.wolfVotes2[wolfId] = null;
+    if (room.daNghichState!.wolfVotes2) {
+      for (const [wolfId, votedTargetId] of Object.entries(room.daNghichState!.wolfVotes2)) {
+        if (wolfId === targetId || votedTargetId === targetId) room.daNghichState!.wolfVotes2[wolfId] = null;
       }
-      ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
+      ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.daNghichState!.wolfVotes2);
     }
     if (room.wolfLocked?.[targetId] !== undefined) {
       room.wolfLocked[targetId] = false;
@@ -4516,7 +4496,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!targetId) return;
     if (!room.players.find((player) => player.id === targetId)) return;
     if ((room.deadPlayers || []).includes(targetId)) return;
-    if (room.soiMuNamThuTargetId !== targetId) return;
+    if (room.soiMuState!.namThuTargetId !== targetId) return;
 
     room.deadPlayers = room.deadPlayers || [];
     room.deadPlayers.push(targetId);
@@ -5094,14 +5074,25 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     ctx.io.to(roomId).emit("trialVotesUpdated", room.trialVotes);
   });
 
-  socket.on("hunterChooseTarget", ({ roomId, targetId }) => {
+  socket.on("hunterChooseTarget", ({ roomId, targetId }, callback?: SocketActionAck) => {
     const room = rooms[roomId];
-    if (!room) return;
+    if (!room) {
+      callback?.({ ok: false, reason: "room_not_found", message: "Phòng không còn tồn tại." });
+      return;
+    }
 
-    if (room.phase !== "night") return;
-    if (!canPerformNightRoleAction(room, clientId, "Thợ săn")) return;
-    if (room.playerRoles?.[clientId] !== "Thợ săn") return;
-    if (!canPlayerActAtNight(room, clientId)) return;
+    if (room.gameOver || room.phase !== "night") {
+      callback?.({ ok: false, reason: "phase_changed", message: "Lượt hành động đã kết thúc." });
+      return;
+    }
+    if (
+      !canPerformNightRoleAction(room, clientId, "Thợ săn") ||
+      room.playerRoles?.[clientId] !== "Thợ săn" ||
+      !canPlayerActAtNight(room, clientId)
+    ) {
+      callback?.({ ok: false, reason: "not_allowed", message: "Bạn không còn quyền thực hiện hành động này." });
+      return;
+    }
 
     room.hunterTargetTonight = room.hunterTargetTonight || {};
 
@@ -5111,16 +5102,20 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.hunterTargetTonight[clientId] = null;
       emitHunterTarget(roomId, clientId);
       emitHostNightActionProgress(roomId);
+      callback?.({ ok: true });
       return;
     }
 
-    if (!room.players.find(p => p.id === targetId)) return;
-    if ((room.deadPlayers || []).includes(targetId)) return;
+    if (!room.players.find(p => p.id === targetId) || (room.deadPlayers || []).includes(targetId)) {
+      callback?.({ ok: false, reason: "invalid_target", message: "Mục tiêu không còn hợp lệ." });
+      return;
+    }
 
     if (isLovePairMemberAwayAt(room, targetId, Date.now(), true)) {
       room.hunterTargetTonight[clientId] = null;
       emitHunterTarget(roomId, clientId);
       emitHostNightActionProgress(roomId);
+      callback?.({ ok: false, reason: "target_unavailable", message: "Mục tiêu hiện không thể bị chọn." });
       return;
     }
 
@@ -5131,6 +5126,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (prev !== targetId) {
       appendLogEntry(room, { type: "hunter_mark", phase: "night", actorId: clientId, targetId });
     }
+    callback?.({ ok: true });
   });
 
   socket.on("elementalChooseTarget", ({ roomId, targetId }) => {
@@ -5262,26 +5258,26 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (targetId && !room.players.find(p => p.id === targetId)) return;
     if (targetId && (room.deadPlayers || []).includes(targetId)) return;
 
-    room.songTrungUsedTonight = room.songTrungUsedTonight || {};
-    if (room.songTrungUsedTonight[clientId]) {
+    room.daNghichState!.songTrungUsedTonight = room.daNghichState!.songTrungUsedTonight || {};
+    if (room.daNghichState!.songTrungUsedTonight[clientId]) {
       socket.emit("errorMessage", "Bạn đã thực hiện lựa chọn trong đêm nay rồi!");
       return;
     }
 
-    room.songTrungChoices = room.songTrungChoices || [];
+    room.daNghichState!.songTrungChoices = room.daNghichState!.songTrungChoices || [];
     const maxUses = room.gameRules?.songTrungMaxUses ?? 0;
-    const usedCount = room.songTrungChoices.filter(c => c.playerId === clientId).length;
+    const usedCount = room.daNghichState!.songTrungChoices.filter(c => c.playerId === clientId).length;
     if (maxUses > 0 && usedCount >= maxUses) {
       socket.emit("errorMessage", "Bạn đã hết số lần thực hiện chức năng!");
       return;
     }
 
-    room.songTrungChoices.push({
+    room.daNghichState!.songTrungChoices.push({
       playerId: clientId,
       night: room.nightCount || 1,
       targetId: targetId || null,
     });
-    room.songTrungUsedTonight[clientId] = targetId || null;
+    room.daNghichState!.songTrungUsedTonight[clientId] = targetId || null;
 
 
 
@@ -5356,7 +5352,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     room.seerUsedTonight = room.seerUsedTonight || {};
     const usedCount = room.seerUsedTonight[clientId] || 0;
-    const maxChecks = (room.elementalSelectedBuffId === "seer-check-two" && room.elementalSelectedBuffAppliesNight === room.nightCount) ? 2 : 1;
+    const maxChecks = (room.daNghichState!.elementalSelectedBuffId === "seer-check-two" && room.elementalSelectedBuffAppliesNight === room.nightCount) ? 2 : 1;
     if (usedCount >= maxChecks) {
       socket.emit("errorMessage", "Bạn đã dùng chức năng tiên tri trong đêm này rồi!");
       return;
@@ -5595,29 +5591,49 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   });
 
-  socket.on("guardianProtect", ({ roomId, targetId }) => {
+  socket.on("guardianProtect", ({ roomId, targetId }, callback?: SocketActionAck) => {
     const room = rooms[roomId];
-    if (!room) return;
-
-    if (room.gameOver) return;
-
-    if (room.phase !== "night") return;
-    if (!canPerformNightRoleAction(room, clientId, "Bảo vệ")) return;
-
-    if (room.playerRoles?.[clientId] !== "Bảo vệ") return;
-
-    if (!canPlayerActAtNight(room, clientId)) return;
-
-    if (room.protectedTonight) {
-      socket.emit("errorMessage", "Bạn đã xác nhận bảo vệ đêm nay rồi, không thể thay đổi lựa chọn.");
+    if (!room) {
+      callback?.({ ok: false, reason: "room_not_found", message: "Phòng không còn tồn tại." });
       return;
     }
 
-    if (!room.players.find(p => p.id === targetId)) return;
-    if ((room.deadPlayers || []).includes(targetId) && targetId !== clientId) return;
+    if (room.gameOver || room.phase !== "night") {
+      callback?.({ ok: false, reason: "phase_changed", message: "Lượt hành động đã kết thúc." });
+      return;
+    }
+    if (
+      !canPerformNightRoleAction(room, clientId, "Bảo vệ") ||
+      room.playerRoles?.[clientId] !== "Bảo vệ" ||
+      !canPlayerActAtNight(room, clientId)
+    ) {
+      callback?.({ ok: false, reason: "not_allowed", message: "Bạn không còn quyền thực hiện hành động này." });
+      return;
+    }
+
+    if (room.protectedTonight) {
+      callback?.({
+        ok: false,
+        reason: "already_locked",
+        message: "Bạn đã xác nhận bảo vệ đêm nay rồi, không thể thay đổi lựa chọn.",
+      });
+      return;
+    }
+
+    if (
+      !room.players.find(p => p.id === targetId) ||
+      ((room.deadPlayers || []).includes(targetId) && targetId !== clientId)
+    ) {
+      callback?.({ ok: false, reason: "invalid_target", message: "Mục tiêu không còn hợp lệ." });
+      return;
+    }
 
     if (room.lastProtected && room.lastProtected === targetId) {
-      socket.emit("errorMessage", "Không thể bảo vệ cùng người hai đêm liên tiếp!");
+      callback?.({
+        ok: false,
+        reason: "same_target",
+        message: "Không thể bảo vệ cùng người hai đêm liên tiếp!",
+      });
       return;
     }
 
@@ -5643,6 +5659,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     emitWitchPendingDeath(roomId);
     emitMerchantPrivateStateForAll(roomId);
     emitHostNightActionProgress(roomId);
+    callback?.({ ok: true });
   });
 
   socket.on("protectorChooseTarget", ({ roomId, targetId }) => {
@@ -5824,7 +5841,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.spiritWolfDecisionMade = true;
     room.spiritWolfChoseSave = !!save;
     if (!save) {
-      room.spiritWolfWolfAlignedPending = true;
+      room.daNghichState!.spiritWolfWolfAlignedPending = true;
     }
 
     if (save) {
@@ -5856,7 +5873,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (room.wolfVoteResolvedTonight) return;
 
     if (!active) {
-      room.wildWolfConvertRequestedTonight = false;
+      room.daNghichState!.wildWolfConvertRequestedTonight = false;
       room.wildWolfConvertActorId = null;
       room.wildWolfConvertTargetId = null;
       emitWildWolfConversionState(roomId, room);
@@ -5874,7 +5891,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if ((room.deadPlayers || []).includes(selectedTargetId)) return;
     if (isWolfAlignedPlayer(room, selectedTargetId)) return;
 
-    room.wildWolfConvertRequestedTonight = true;
+    room.daNghichState!.wildWolfConvertRequestedTonight = true;
     room.wildWolfConvertActorId = clientId;
     room.wildWolfConvertTargetId = selectedTargetId;
 
@@ -5896,11 +5913,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       return;
     }
 
-    room.wolfVotes = room.wolfVotes || {};
+    room.daNghichState!.wolfVotes = room.daNghichState!.wolfVotes || {};
 
     if (!targetId) {
-      room.wolfVotes[clientId] = null;
-      ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes);
+      room.daNghichState!.wolfVotes[clientId] = null;
+      ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.daNghichState!.wolfVotes);
       clearWildWolfConversionIfTargetIsNoLongerSelected(roomId, room, clientId);
       return;
     }
@@ -5911,10 +5928,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (targetId === clientId) return;
     if (!room.gameRules?.wolfCanBiteWolf && isWolfAlignedPlayer(room, targetId)) return;
 
-    room.wolfVotes[clientId] = targetId;
+    room.daNghichState!.wolfVotes[clientId] = targetId;
     clearWildWolfConversionIfTargetIsNoLongerSelected(roomId, room, clientId);
 
-    ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes);
+    ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.daNghichState!.wolfVotes);
   });
 
   socket.on("wolfChooseTarget2", ({ roomId, targetId }) => {
@@ -5933,11 +5950,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       return;
     }
 
-    room.wolfVotes2 = room.wolfVotes2 || {};
+    room.daNghichState!.wolfVotes2 = room.daNghichState!.wolfVotes2 || {};
 
     if (!targetId) {
-      room.wolfVotes2[clientId] = null;
-      ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
+      room.daNghichState!.wolfVotes2[clientId] = null;
+      ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.daNghichState!.wolfVotes2);
       clearWildWolfConversionIfTargetIsNoLongerSelected(roomId, room, clientId);
       return;
     }
@@ -5948,28 +5965,69 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (targetId === clientId) return;
     if (!room.gameRules?.wolfCanBiteWolf && isWolfAlignedPlayer(room, targetId)) return;
 
-    if (room.wolfVotes?.[clientId] && room.wolfVotes[clientId] === targetId) return;
+    if (room.daNghichState!.wolfVotes?.[clientId] && room.daNghichState!.wolfVotes[clientId] === targetId) return;
 
-    room.wolfVotes2[clientId] = targetId;
-    ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2);
+    room.daNghichState!.wolfVotes2[clientId] = targetId;
+    ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.daNghichState!.wolfVotes2);
     clearWildWolfConversionIfTargetIsNoLongerSelected(roomId, room, clientId);
   });
 
-  socket.on("wolfLockVote", ({ roomId }) => {
+  socket.on("wolfLockVote", (
+    { roomId, targetId, targetId2 }: { roomId: string; targetId?: string | null; targetId2?: string | null },
+    callback?: SocketActionAck,
+  ) => {
     const room = rooms[roomId];
-    if (!room) return;
+    if (!room) {
+      callback?.({ ok: false, reason: "room_not_found", message: "Phòng không còn tồn tại." });
+      return;
+    }
 
-    if (!isWolfAlignedPlayer(room, clientId)) return;
-    if (room.phase !== "night") return;
-    if (!canPerformNightRoleAction(room, clientId, "Sói")) return;
+    if (room.gameOver || room.phase !== "night") {
+      callback?.({ ok: false, reason: "phase_changed", message: "Lượt cắn đã kết thúc." });
+      return;
+    }
+    if (!isWolfAlignedPlayer(room, clientId) || !canPerformNightRoleAction(room, clientId, "Sói")) {
+      callback?.({ ok: false, reason: "not_allowed", message: "Bạn không còn quyền khóa lựa chọn này." });
+      return;
+    }
+
+    const selectedTargetId = targetId || room.daNghichState!.wolfVotes?.[clientId] || null;
+    const selectedTargetId2 = targetId2 || room.daNghichState!.wolfVotes2?.[clientId] || null;
+    const isInvalidTarget = (candidateId: string | null) => !!candidateId && (
+      candidateId === clientId ||
+      !room.players.some((player) => player.id === candidateId) ||
+      (room.deadPlayers || []).includes(candidateId) ||
+      (!room.gameRules?.wolfCanBiteWolf && isWolfAlignedPlayer(room, candidateId))
+    );
+
+    if (!selectedTargetId || isInvalidTarget(selectedTargetId)) {
+      callback?.({ ok: false, reason: "invalid_target", message: "Mục tiêu cắn không còn hợp lệ." });
+      return;
+    }
+    if (
+      selectedTargetId2 &&
+      (!room.wolfBonusBiteThisNight || selectedTargetId2 === selectedTargetId || isInvalidTarget(selectedTargetId2))
+    ) {
+      callback?.({ ok: false, reason: "invalid_second_target", message: "Mục tiêu cắn thứ hai không còn hợp lệ." });
+      return;
+    }
+
+    room.daNghichState!.wolfVotes = room.daNghichState!.wolfVotes || {};
+    room.daNghichState!.wolfVotes2 = room.daNghichState!.wolfVotes2 || {};
+    room.daNghichState!.wolfVotes[clientId] = selectedTargetId;
+    room.daNghichState!.wolfVotes2[clientId] = room.wolfBonusBiteThisNight ? selectedTargetId2 : null;
+    clearWildWolfConversionIfTargetIsNoLongerSelected(roomId, room, clientId);
 
     room.wolfLocked = room.wolfLocked || {};
     room.wolfLocked![clientId] = true;
 
+    ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.daNghichState!.wolfVotes);
+    ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.daNghichState!.wolfVotes2);
     ctx.io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked);
     emitHostNightActionProgress(roomId);
 
     finishWolfVotingIfAllLocked(roomId, room);
+    callback?.({ ok: true });
   });
 
   // --- SCENARIO REPLAYER HANDLERS ---
@@ -6099,7 +6157,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         logMessage += `Sói chọn cắn ${targetName}`;
         room.killedTonight = target || null;
         if (event.metadata?.votes) {
-          room.wolfVotes = event.metadata.votes as Record<string, string | null>;
+          room.daNghichState!.wolfVotes = event.metadata.votes as Record<string, string | null>;
         }
         break;
       }
@@ -6239,10 +6297,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!room || room.gameMode !== "soi_mu" || room.phase !== "night") return;
     if (room.gameOver) return;
     if ((room.deadPlayers || []).includes(clientId)) return;
-    if (room.soiMuLocked?.[clientId]) return;
+    if (room.soiMuState!.locked?.[clientId]) return;
 
-    room.soiMuTargets = room.soiMuTargets || {};
-    room.soiMuTargets[clientId] = targetId || null;
+    room.soiMuState!.targets = room.soiMuState!.targets || {};
+    room.soiMuState!.targets[clientId] = targetId || null;
     
     // Cập nhật log sự kiện thời gian thực cho host
     updateSoiMuActionLog(room, clientId);
@@ -6258,17 +6316,17 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!room || room.gameMode !== "soi_mu" || room.phase !== "night") return;
     if (room.gameOver) return;
     if ((room.deadPlayers || []).includes(clientId)) return;
-    if (room.soiMuLocked?.[clientId]) return;
+    if (room.soiMuState!.locked?.[clientId]) return;
 
-    room.soiMuThumbDecisions = room.soiMuThumbDecisions || {};
-    room.soiMuThumbDecisions[clientId] = thumb || null;
+    room.soiMuState!.thumbDecisions = room.soiMuState!.thumbDecisions || {};
+    room.soiMuState!.thumbDecisions[clientId] = thumb || null;
 
     // Cập nhật log sự kiện thời gian thực cho host
     updateSoiMuActionLog(room, clientId);
 
     // Tìm Tay Buôn (Ariana) nhắm vào clientId để cập nhật log giao dịch
     const merchantId = Object.keys(room.playerRoles || {}).find(
-      (id) => room.playerRoles?.[id] === "Tay Buôn" && room.soiMuTargets?.[id] === clientId
+      (id) => room.playerRoles?.[id] === "Tay Buôn" && room.soiMuState!.targets?.[id] === clientId
     );
     if (merchantId) {
       updateSoiMuActionLog(room, merchantId);
@@ -6285,9 +6343,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!room || room.gameMode !== "soi_mu" || room.phase !== "night") return;
     if (room.gameOver) return;
     if ((room.deadPlayers || []).includes(clientId)) return;
-    if (room.soiMuLocked?.[clientId]) return;
+    if (room.soiMuState!.locked?.[clientId]) return;
 
-    const targetId = room.soiMuTargets?.[clientId];
+    const targetId = room.soiMuState!.targets?.[clientId];
     if (!targetId) {
       socket.emit("errorMessage", "Bạn phải chọn một mục tiêu trước khi xác nhận.");
       return;
@@ -6295,15 +6353,15 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     const hasMerchant = Object.values(room.playerRoles || {}).includes("Tay Buôn");
     if (hasMerchant) {
-      const thumb = room.soiMuThumbDecisions?.[clientId];
+      const thumb = room.soiMuState!.thumbDecisions?.[clientId];
       if (!thumb) {
         socket.emit("errorMessage", "Bạn phải chọn 👍🏽 hoặc 👎🏽 trước khi xác nhận.");
         return;
       }
     }
 
-    room.soiMuLocked = room.soiMuLocked || {};
-    room.soiMuLocked[clientId] = true;
+    room.soiMuState!.locked = room.soiMuState!.locked || {};
+    room.soiMuState!.locked[clientId] = true;
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     ctx.io.to(room.hostId).emit("hostNightActionProgressUpdated", {
       progressByPlayerId: getHostNightActionProgressByPlayerId(room),
@@ -6314,15 +6372,15 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const room = rooms[roomId];
     if (!room || room.gameMode !== "soi_mu" || room.phase !== "day") return;
     if (room.gameOver) return;
-    if (room.soiMuInvestigationResolved) return;
-    if (clientId !== room.soiMuInvestigatedPlayerId) return;
+    if (room.soiMuState!.investigationResolved) return;
+    if (clientId !== room.soiMuState!.investigatedPlayerId) return;
 
-    room.soiMuDaySelectedTargetId = targetId;
-    const isCorrect = (targetId === room.soiMuInvestigatedPrevTargetId);
+    room.soiMuState!.daySelectedTargetId = targetId;
+    const isCorrect = (targetId === room.soiMuState!.investigatedPrevTargetId);
 
     if (isCorrect) {
-      room.soiMuInvestigationResult = "success";
-      room.soiMuInvestigationResolved = true;
+      room.soiMuState!.investigationResult = "success";
+      room.soiMuState!.investigationResolved = true;
       appendLogEntry(room, {
         type: "custom_log",
         phase: "day",
@@ -6330,10 +6388,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       });
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     } else {
-      room.soiMuInvestigationResult = "fail";
-      room.soiMuInvestigationResolved = true;
+      room.soiMuState!.investigationResult = "fail";
+      room.soiMuState!.investigationResolved = true;
       
-      const deadId = room.soiMuInvestigatedPlayerId;
+      const deadId = room.soiMuState!.investigatedPlayerId;
       room.deadPlayers = room.deadPlayers || [];
       if (!room.deadPlayers.includes(deadId)) {
         room.deadPlayers.push(deadId);

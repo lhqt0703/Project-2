@@ -19,15 +19,15 @@ export function initTwoHeartsForParticipants(room: Room) {
   for (const p of getParticipantPlayers(room)) {
     hp[p.id] = TWO_HEARTS_MAX_HP;
   }
-  room.playerHearts = hp;
-  room.sharedHeartsVisible = true;
+  room.daNghichState!.playerHearts = hp;
+  room.daNghichState!.sharedHeartsVisible = true;
 }
 
 export function isTwoHeartsDamageMode(room: Room) {
   const rules = ensureRoomGameRules(room);
   return (
     rules.twoHeartsFirstTwoNights &&
-    room.sharedHeartsVisible === true &&
+    room.daNghichState!.sharedHeartsVisible === true &&
     (room.nightCount || 0) <= TWO_HEARTS_NIGHT_LIMIT
   );
 }

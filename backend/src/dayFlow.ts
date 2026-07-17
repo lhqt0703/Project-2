@@ -28,15 +28,15 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
   }
 
   function markVillageChiefExtraVoteReady(room: Room) {
-    if (!room.villageChiefExtraVoteAvailable || room.villageChiefExtraVoteUsed) return;
-    room.villageChiefExtraVoteReady = true;
+    if (!room.villageChiefExtraVoteAvailable || room.daNghichState!.villageChiefExtraVoteUsed) return;
+    room.daNghichState!.villageChiefExtraVoteReady = true;
   }
 
   function clearFinishedDayVoteKind(room: Room) {
     if (room.dayVoteKind === "village_chief_extra") {
       room.villageChiefExtraVoteAvailable = false;
-      room.villageChiefExtraVoteReady = false;
-      room.villageChiefExtraVoteUsed = true;
+      room.daNghichState!.villageChiefExtraVoteReady = false;
+      room.daNghichState!.villageChiefExtraVoteUsed = true;
       room.dayVoteKind = "main";
       return;
     }
@@ -76,6 +76,9 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
       room.trialVerdictTimer = null;
     }
 
+    const rules = ensureRoomGameRules(room);
+    const durationSec = rules.trialVerdictDurationSec ?? 20;
+
     room.trialStage = "verdict";
     room.trialInteractionCut = true;
     room.trialInteractionActiveIds = [];
@@ -83,7 +86,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     room.trialSelectedInteractorIds = [];
     room.trialInteractionQueuedIds = [];
     room.trialDefenseDeadline = null;
-    room.trialVerdictDeadline = Date.now() + 20_000 + 500;
+    room.trialVerdictDeadline = Date.now() + durationSec * 1000 + 500;
 
     const voters = getTrialVoters(room);
     room.trialVotes = room.trialVotes || {};
@@ -103,7 +106,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
 
     room.trialVerdictTimer = setTimeout(() => {
       finishTrialVerdict(roomId);
-    }, 20_000 + 500);
+    }, durationSec * 1000 + 500);
   }
 
   function finishTrialVerdict(roomId: string) {
@@ -185,10 +188,10 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
 
     if (executed && !((room.deadPlayers || []).includes(targetId))) {
       if (room.gameMode === "diet_quy") {
-        room.dietQuyExecutedPlayerId = targetId;
-        room.dietQuyExecutedToday = true;
+        room.dietQuyState!.executedPlayerId = targetId;
+        room.dietQuyState!.executedToday = true;
         if (room.playerRoles?.[targetId] === "Thánh nhân") {
-          room.dietQuySaintExecutedToday = true;
+          room.dietQuyState!.saintExecutedToday = true;
         }
       }
       const eliminatedIds: string[] = [];
@@ -254,7 +257,8 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
 
     room.trialTargetId = targetId;
     room.trialStage = "defense";
-    room.trialDefenseDeadline = Date.now() + 120_000 + 500;
+    const durationSec = rules.trialDefenseDurationSec ?? 120;
+    room.trialDefenseDeadline = Date.now() + durationSec * 1000 + 500;
     room.trialInteractionCut = false;
     room.trialInteractionActiveIds = [];
     room.trialSelectedInteractorId = null;
@@ -276,7 +280,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
 
     room.trialDefenseTimer = setTimeout(() => {
       startTrialVerdictVoting(roomId);
-    }, 120_000 + 500);
+    }, durationSec * 1000 + 500);
   }
 
   function startDayVoting(roomId: string, opts?: { kind?: "main" | "village_chief_extra" }) {
@@ -312,7 +316,9 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
       room.dayLocked![id] = false;
     });
 
-    room.dayDeadline = Date.now() + 45_000 + 500;
+    const rules = ensureRoomGameRules(room);
+    const durationSec = rules.dayVotingDurationSec ?? 45;
+    room.dayDeadline = Date.now() + durationSec * 1000 + 500;
 
     ctx.io.to(roomId).emit("dayPhaseStarted", {
       voters: getActiveDayVoters(room),
@@ -325,7 +331,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
 
     room.dayTimer = setTimeout(() => {
       finishDayVoting(roomId);
-    }, 45_000 + 500);
+    }, durationSec * 1000 + 500);
   }
 
   function startDayDiscussion(roomId: string) {
@@ -353,7 +359,9 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     room.dayVotes = {};
     room.dayLocked = {};
     room.dayDeadline = null;
-    room.dayDiscussionDeadline = Date.now() + 240_000 + 500;
+    const rules = ensureRoomGameRules(room);
+    const durationSec = rules.dayDiscussionDurationSec ?? 240;
+    room.dayDiscussionDeadline = Date.now() + durationSec * 1000 + 500;
 
     ctx.io.to(roomId).emit("dayDiscussionStarted", {
       deadline: room.dayDiscussionDeadline,
@@ -364,7 +372,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
 
     room.dayDiscussionTimer = setTimeout(() => {
       startDayVoting(roomId);
-    }, 240_000 + 500);
+    }, durationSec * 1000 + 500);
   }
 
   function finishDayVoting(roomId: string) {
@@ -465,13 +473,13 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
       if (room.phase !== "day") return;
       if (room.dayDeadline || room.dayDiscussionDeadline) return;
       if (room.trialStage && room.trialStage !== "none") return;
-      if (!room.villageChiefExtraVoteReady || room.villageChiefExtraVoteUsed) return;
+      if (!room.daNghichState!.villageChiefExtraVoteReady || room.daNghichState!.villageChiefExtraVoteUsed) return;
       if ((room.deadPlayers || []).includes(chiefId)) return;
       if (getVillageChiefId(room) !== chiefId) return;
 
-      room.villageChiefExtraVoteReady = false;
+      room.daNghichState!.villageChiefExtraVoteReady = false;
       room.villageChiefExtraVoteAvailable = false;
-      room.villageChiefExtraVoteUsed = true;
+      room.daNghichState!.villageChiefExtraVoteUsed = true;
 
       appendLogEntry(room, {
         type: "village_chief_extra_vote_started",

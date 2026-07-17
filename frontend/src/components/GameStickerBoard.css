@@ -1,0 +1,13 @@
+.game-sticker-board {
+  position: absolute;
+  inset: 0;
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  touch-action: none;
+  transition: opacity 0.3s ease;
+}
+
+.game-sticker-board--visible {
+  opacity: 1;
+}

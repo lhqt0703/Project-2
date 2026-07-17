@@ -35,7 +35,7 @@ function getOrCreateClientId() {
   if (devClientId) return devClientId;
 
   let existing = window.localStorage.getItem(CLIENT_ID_STORAGE_KEY);
-  
+
   // ponytail: cookie fallback backup if localStorage is cleared by browser
   if (!existing) {
     const match = document.cookie.match(new RegExp('(^| )' + CLIENT_ID_STORAGE_KEY + '=([^;]+)'));
@@ -44,7 +44,7 @@ function getOrCreateClientId() {
       window.localStorage.setItem(CLIENT_ID_STORAGE_KEY, existing);
     }
   }
-  
+
   if (existing) return existing;
 
 
@@ -64,14 +64,124 @@ function getOrCreateClientId() {
 
 const backendUrl =
   import.meta.env.VITE_BACKEND_URL ??
-  `https://s.gummybears.io.vn`;
-  //`${window.location.protocol}//${window.location.hostname}:3001`;
+  `${window.location.protocol}//${window.location.hostname}:3001`;
 
 export const clientId = getOrCreateClientId();
 
 export const socket = io(backendUrl, {
   auth: { clientId },
 });
+
+export interface SocketActionAck {
+  ok: boolean;
+  reason?: string;
+  message?: string;
+}
+
+const SOCKET_ACK_TIMEOUT_MS = 5000;
+
+export function emitSocketAction<TPayload>(
+  event: string,
+  payload: TPayload,
+  timeoutMs = SOCKET_ACK_TIMEOUT_MS,
+): Promise<SocketActionAck> {
+  if (!socket.connected) {
+    return Promise.resolve({
+      ok: false,
+      reason: "disconnected",
+      message: "Đang mất kết nối với máy chủ.",
+    });
+  }
+
+  return new Promise((resolve) => {
+    socket.timeout(timeoutMs).emit(
+      event,
+      payload,
+      (error: Error | null, response?: SocketActionAck) => {
+        if (error) {
+          resolve({
+            ok: false,
+            reason: "timeout",
+            message: "Máy chủ chưa xác nhận thao tác.",
+          });
+          return;
+        }
+        resolve(response ?? { ok: false, reason: "missing_ack" });
+      },
+    );
+  });
+}
+
+export function requestRoomSync(roomId: string) {
+  return emitSocketAction("getRoom", roomId);
+}
+
+export function startRoomRecovery(roomId: string, onRecovered?: () => void) {
+  let stopped = false;
+  let syncing = false;
+  let consecutiveTimeouts = 0;
+  let retryTimer: number | null = null;
+  let lastSyncAt = 0;
+
+  const syncRoom = async () => {
+    if (stopped || syncing || !socket.connected) return;
+    const now = Date.now();
+    if (now - lastSyncAt < 500) return;
+    lastSyncAt = now;
+    syncing = true;
+
+    const result = await requestRoomSync(roomId);
+    syncing = false;
+    if (stopped) return;
+
+    if (result.ok) {
+      consecutiveTimeouts = 0;
+      onRecovered?.();
+      return;
+    }
+
+    if (result.reason !== "timeout") return;
+    consecutiveTimeouts += 1;
+    if (consecutiveTimeouts >= 2 && navigator.onLine) {
+      consecutiveTimeouts = 0;
+      socket.disconnect().connect();
+      return;
+    }
+
+    retryTimer = window.setTimeout(() => {
+      retryTimer = null;
+      void syncRoom();
+    }, 1500);
+  };
+
+  const handleVisible = () => {
+    if (document.visibilityState === "visible") void syncRoom();
+  };
+  const handleOnline = () => void syncRoom();
+  const handleConnect = () => void syncRoom();
+  const handleDisconnect = (reason: string) => {
+    if (reason === "io server disconnect" && navigator.onLine) socket.connect();
+  };
+
+  socket.on("connect", handleConnect);
+  socket.on("disconnect", handleDisconnect);
+  document.addEventListener("visibilitychange", handleVisible);
+  window.addEventListener("online", handleOnline);
+  window.addEventListener("focus", handleOnline);
+  window.addEventListener("pageshow", handleOnline);
+  void syncRoom();
+
+  return () => {
+    stopped = true;
+    if (retryTimer !== null) window.clearTimeout(retryTimer);
+    socket.off("connect", handleConnect);
+    socket.off("disconnect", handleDisconnect);
+    document.removeEventListener("visibilitychange", handleVisible);
+    window.removeEventListener("online", handleOnline);
+    window.removeEventListener("focus", handleOnline);
+    window.removeEventListener("pageshow", handleOnline);
+  };
+}
 
 function cloneForSocketLog(value: unknown) {
   try {

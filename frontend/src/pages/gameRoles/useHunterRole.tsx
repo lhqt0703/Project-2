@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { socket, clientId } from "../../socket";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { clientId, emitSocketAction, requestRoomSync } from "../../socket";
 import type { GamePhase } from "./socketEvents";
 import ConfirmModal from "../../components/ConfirmModal";
 import { useTargetSelection } from "./useTargetSelection";
@@ -41,6 +41,8 @@ export function useHunterRole({
     lockSelection,
     clearSelection,
   } = useTargetSelection();
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const prevPhaseRef = useRef<GamePhase>(phase);
 
   useEffect(() => {
@@ -91,6 +93,7 @@ export function useHunterRole({
 
   const onPlayerClick = useCallback(
     (playerId: string) => {
+      if (isSubmitting) return true;
       if (!canAct) return false;
 
       // đã xác nhận rồi thì không được đổi
@@ -108,30 +111,55 @@ export function useHunterRole({
       selectTarget(playerId);
       return true;
     },
-    [canAct, lockedTargetId, roomId, selectTarget]
+    [canAct, isSubmitting, lockedTargetId, roomId, selectTarget]
   );
 
-  const confirm = useCallback(() => {
-    if (!canAct) return;
+  const confirm = useCallback(async () => {
+    if (!canAct || isSubmitting) return;
     if (!roomId || !selectedPlayerId) return;
-    // lock ngay khi đã bấm xác nhận
-    lockSelection(selectedPlayerId);
-    if (roomId === "mock-8") return;
-    socket.emit("hunterChooseTarget", { roomId, targetId: selectedPlayerId });
-  }, [canAct, roomId, selectedPlayerId, lockSelection]);
+
+    if (roomId === "mock-8") {
+      lockSelection(selectedPlayerId);
+      return;
+    }
+
+    setShowConfirm(false);
+    setIsSubmitting(true);
+    const result = await emitSocketAction("hunterChooseTarget", { roomId, targetId: selectedPlayerId });
+    setIsSubmitting(false);
+
+    if (result.ok) {
+      lockSelection(selectedPlayerId);
+      return;
+    }
+
+    clearSelection();
+    setInfoMessage(result.message || "Không thể xác nhận thao tác. Trạng thái phòng đang được đồng bộ lại.");
+    void requestRoomSync(roomId);
+  }, [canAct, clearSelection, isSubmitting, lockSelection, roomId, selectedPlayerId, setShowConfirm]);
 
   const resetOnPhaseChange = useCallback((_nextPhase: GamePhase) => {
     clearSelection();
   }, [clearSelection]);
 
   const modal = (
-    <ConfirmModal
-      open={showConfirm && !!selectedPlayerId}
-      title="Xác nhận lựa chọn"
-      message="Bạn có chắc muốn chọn người này?"
-      onConfirm={confirm}
-      onCancel={cancelSelection}
-    />
+    <>
+      <ConfirmModal
+        open={showConfirm && !!selectedPlayerId}
+        title="Xác nhận lựa chọn"
+        message="Bạn có chắc muốn chọn người này?"
+        onConfirm={confirm}
+        onCancel={cancelSelection}
+      />
+      <ConfirmModal
+        open={!!infoMessage}
+        title="Không thể xác nhận"
+        message={infoMessage || ""}
+        infoOnly
+        onConfirm={() => setInfoMessage(null)}
+        onCancel={() => setInfoMessage(null)}
+      />
+    </>
   );
 
   return {

@@ -29,7 +29,7 @@ export function createElementalFlow(ctx: ServerContext) {
     const availableBuffTier = getBuffTier(room.elementalCorrectGuessCountForBuff ?? 0);
     ctx.io.to(playerId).emit("elementalBuffVoteStateUpdated", {
       pendingVote,
-      quickMode: room.elementalBuffQuickMode !== false,
+      quickMode: room.daNghichState!.elementalBuffQuickMode !== false,
       selectedBuffId,
       availableBuffTier,
     });
@@ -80,9 +80,9 @@ export function createElementalFlow(ctx: ServerContext) {
       ? (buffVoteBreakdown.find((item) => item.buffId === chosen)?.voterIds || [])
       : [];
 
-    room.elementalSelectedBuffId = chosen;
+    room.daNghichState!.elementalSelectedBuffId = chosen;
     const appliesNight = chosen
-      ? (room.elementalBuffQuickMode !== false ? (room.nightCount || 0) : (room.nightCount || 0) + 1)
+      ? (room.daNghichState!.elementalBuffQuickMode !== false ? (room.nightCount || 0) : (room.nightCount || 0) + 1)
       : null;
     room.elementalSelectedBuffAppliesNight = appliesNight;
     if (chosen === PROTECTOR_PERMANENT_BUFF_ID && appliesNight !== null && appliesNight <= (room.nightCount || 0)) {

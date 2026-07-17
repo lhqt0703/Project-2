@@ -81,9 +81,6 @@ export function toPublicRoom(room: Room) {
     witchPoisonTargetAt: _witchPoisonTargetAt,
     gameLog: _gameLog,
     playerRoles: _playerRoles,
-    wolves: _wolves,
-    wolfVotes: _wolfVotes,
-    wolfVotes2: _wolfVotes2,
     wolfLocked: _wolfLocked,
     wolfVoteResolvedTonight: _wolfVoteResolvedTonight,
     dayDiscussionTimer: _dayDiscussionTimer,
@@ -94,11 +91,8 @@ export function toPublicRoom(room: Room) {
     spiritWolfDecisionTimer: _spiritWolfDecisionTimer,
     pendingRoleAssignments: _pendingRoleAssignments,
     pendingRoleBlocks: _pendingRoleBlocks,
-    wolfDeadline: _wolfDeadline,
     wildWolfId: _wildWolfId,
     wildWolfConvertReadyNextNight: _wildWolfConvertReadyNextNight,
-    wildWolfConvertAvailableTonight: _wildWolfConvertAvailableTonight,
-    wildWolfConvertRequestedTonight: _wildWolfConvertRequestedTonight,
     wildWolfConvertActorId: _wildWolfConvertActorId,
     wildWolfConvertTargetId: _wildWolfConvertTargetId,
     wildWolfConvertUsed: _wildWolfConvertUsed,
@@ -138,9 +132,6 @@ export function toPublicRoom(room: Room) {
     chiefChecks: _chiefChecks,
     chiefUsedTonight: _chiefUsedTonight,
     rolesBeforeConversion: _rolesBeforeConversion,
-    songTrungChoices: _songTrungChoices,
-    songTrungUsedTonight: _songTrungUsedTonight,
-    songTrungVictimId: _songTrungVictimId,
     songTrungRobbedPlayerId: _songTrungRobbedPlayerId,
     songTrungRobbedOriginalRole: _songTrungRobbedOriginalRole,
     songTrungFoundByVictim: _songTrungFoundByVictim,
@@ -148,8 +139,26 @@ export function toPublicRoom(room: Room) {
     ...rest
   } = room;
 
+  let publicDaNghichState = undefined;
+  if (room.daNghichState) {
+    const {
+      wolves: _w,
+      wolfVotes: _wv,
+      wolfVotes2: _wv2,
+      wolfDeadline: _wd,
+      wildWolfConvertAvailableTonight: _wwcat,
+      wildWolfConvertRequestedTonight: _wwcrt,
+      songTrungChoices: _stc,
+      songTrungUsedTonight: _stut,
+      songTrungVictimId: _stvi,
+      ...daNghichRest
+    } = room.daNghichState;
+    publicDaNghichState = daNghichRest;
+  }
+
   return {
     ...rest,
+    daNghichState: publicDaNghichState,
     serverTime: Date.now(),
     players: room.players.map((p) => ({
       id: p.id,
@@ -195,7 +204,7 @@ function isElementalQuickMode(room: Room) {
 }
 
 function isElementalBuffActive(room: Room, buffId: ElementalBuffId) {
-  return room.elementalSelectedBuffId === buffId
+  return room.daNghichState!.elementalSelectedBuffId === buffId
     && room.elementalSelectedBuffAppliesNight === (room.nightCount || 0);
 }
 
@@ -220,7 +229,7 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
     for (const player of room.players) {
       if (player.id === room.hostId) continue;
       if (dead.has(player.id)) continue;
-      progress[player.id] = room.soiMuLocked?.[player.id] ? "done" : "pending";
+      progress[player.id] = room.soiMuState!.locked?.[player.id] ? "done" : "pending";
     }
     return progress;
   }
@@ -236,7 +245,7 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
   const now = Date.now();
   const isElementalBuffVoteNight = shouldElementalsVoteBuffTonight(room);
   const seerRequiredChecks =
-    room.elementalSelectedBuffId === "seer-check-two" && room.elementalSelectedBuffAppliesNight === currentNight
+    room.daNghichState!.elementalSelectedBuffId === "seer-check-two" && room.elementalSelectedBuffAppliesNight === currentNight
       ? 2
       : 1;
   const nonWolfDurationSec = clampNonWolfNightActionDurationSec(rules.nonWolfNightActionDurationSec);
@@ -263,12 +272,12 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
 
   const getDeadlineForPlayer = (playerId: string, role: string | null | undefined) => {
     if (isWolfAlignedPlayer(room, playerId)) {
-      const wolfDeadline = room.wolfDeadline ?? null;
+      const wolfDeadline = room.daNghichState!.wolfDeadline ?? null;
       if (!wolfDeadline) return null;
       return wolfDeadline + getNightActionExtraMs(playerId);
     }
     if (role === "Linh sói") {
-      const spiritDeadline = room.spiritWolfDecisionDeadline ?? null;
+      const spiritDeadline = room.daNghichState!.spiritWolfDecisionDeadline ?? null;
       if (!spiritDeadline) return null;
       return spiritDeadline + getNightActionExtraMs(playerId);
     }
@@ -335,7 +344,7 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
     }
 
     if (role === "Linh sói") {
-      if (!room.spiritWolfPendingPoisonedWolfId && !room.spiritWolfDecisionDeadline) continue;
+      if (!room.spiritWolfPendingPoisonedWolfId && !room.daNghichState!.spiritWolfDecisionDeadline) continue;
       setProgress(playerId, room.spiritWolfDecisionMade ? "done" : "pending", role);
       continue;
     }
@@ -651,7 +660,7 @@ export function emitSpiritWolfDecisionNeeded(roomId: string) {
   const targetId = room.spiritWolfPendingPoisonedWolfId;
   if (!targetId) return;
   if ((room.deadPlayers || []).includes(targetId)) return;
-  const deadline = room.nightTurnPaused ? null : room.spiritWolfDecisionDeadline ?? room.nightTurnDeadline ?? null;
+  const deadline = room.nightTurnPaused ? null : room.daNghichState!.spiritWolfDecisionDeadline ?? room.nightTurnDeadline ?? null;
   ctx.io.to(swid).emit("spiritWolfDecisionNeeded", {
     targetId,
     deadline,
@@ -826,16 +835,16 @@ export function syncPrivateRoleStateForSocket(
       socket.emit("wolfPhaseStarted", {
         wolves: wolves.map((w) => w.id),
         activeWolves: getActiveWolves(room),
-        deadline: room.wolfDeadline ?? null,
+        deadline: room.daNghichState!.wolfDeadline ?? null,
         maxTargets: room.wolfBonusBiteThisNight ? 2 : 1,
         resetVotes: false,
         wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
         rolesBeforeConversion: room.rolesBeforeConversion || {},
-        wildWolfConvertAvailable: room.wildWolfConvertAvailableTonight === true,
-        wildWolfConvertRequested: room.wildWolfConvertRequestedTonight === true,
+        wildWolfConvertAvailable: room.daNghichState!.wildWolfConvertAvailableTonight === true,
+        wildWolfConvertRequested: room.daNghichState!.wildWolfConvertRequestedTonight === true,
       });
-      socket.emit("wolfVotesUpdated", room.wolfVotes || {});
-      socket.emit("wolfVotes2Updated", room.wolfVotes2 || {});
+      socket.emit("wolfVotesUpdated", room.daNghichState!.wolfVotes || {});
+      socket.emit("wolfVotes2Updated", room.daNghichState!.wolfVotes2 || {});
       socket.emit("wolfLockedUpdated", room.wolfLocked || {});
     }
   } else {

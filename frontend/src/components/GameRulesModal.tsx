@@ -66,7 +66,7 @@ function clampMerchantWinRequiredSuccessfulTrades(value: number) {
 
 function normalizeDurationSec(value: number, fallback: number, minSec = 0) {
   if (!Number.isFinite(value)) return fallback;
-  const rounded = Math.round(value / NIGHT_ACTION_DURATION_STEP_SEC) * NIGHT_ACTION_DURATION_STEP_SEC;
+  const rounded = Math.round(value);
   return Math.max(minSec, Math.min(NIGHT_ACTION_DURATION_MAX_SEC, rounded));
 }
 
@@ -111,7 +111,82 @@ function rowStyle() {
     borderRadius: 14,
     border: "1px solid var(--border)",
     background: "rgba(255,255,255,0.04)",
-  } as const;
+  };
+}
+
+interface RuleNumericInputProps {
+  value: number | undefined;
+  min: number;
+  max: number;
+  step?: number;
+  disabled?: boolean;
+  onChange: (val: number) => void;
+  onBlur?: () => void;
+  style?: React.CSSProperties;
+}
+
+function RuleNumericInput({
+  value,
+  min,
+  max,
+  step = 1,
+  disabled,
+  onChange,
+  onBlur,
+  style,
+}: RuleNumericInputProps) {
+  const [localValue, setLocalValue] = useState<string>(
+    value !== undefined && value !== null ? String(value) : ""
+  );
+
+  useEffect(() => {
+    setLocalValue(value !== undefined && value !== null ? String(value) : "");
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const valStr = e.target.value;
+    setLocalValue(valStr);
+
+    const num = Number(valStr);
+    if (valStr !== "" && Number.isFinite(num)) {
+      const clampedVal = Math.min(max, num);
+      onChange(clampedVal);
+    }
+  };
+
+  const handleBlur = () => {
+    let num = Number(localValue);
+    if (localValue === "" || !Number.isFinite(num)) {
+      num = min;
+    }
+    const clamped = Math.max(min, Math.min(max, Math.round(num)));
+    setLocalValue(String(clamped));
+    onChange(clamped);
+    if (onBlur) onBlur();
+  };
+
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      min={min}
+      max={max}
+      step={step}
+      value={localValue}
+      disabled={disabled}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      style={{
+        width: 96,
+        padding: "10px 12px",
+        borderRadius: 8,
+        border: "1px solid var(--border)",
+        background: "rgba(255,255,255,0.08)",
+        color: "var(--text)",
+        ...style,
+      }}
+    />
+  );
 }
 
 export default function GameRulesModal({
@@ -140,6 +215,7 @@ export default function GameRulesModal({
   const isDietQuy = gameMode === "diet_quy";
   const isSoiMu = gameMode === "soi_mu";
   const [draftRules, setDraftRules] = useState<RoomGameRules>(initialRules);
+  const [baseRules, setBaseRules] = useState<RoomGameRules>(initialRules);
   const [draggedRole, setDraggedRole] = useState<NightActionOrderRole | null>(null);
   const [dragOverRole, setDragOverRole] = useState<NightActionOrderRole | null>(null);
   const selectableNightActionRoles = availableNightActionRoles?.length
@@ -153,7 +229,7 @@ export default function GameRulesModal({
       nonWolfNightActionDurationSec: initialRules.nonWolfNightActionDurationSec,
       wolfNightActionDurationSec: initialRules.wolfNightActionDurationSec,
     }, isDietQuy, isSoiMu);
-    setDraftRules({
+    const merged = {
       ...DEFAULT_ROOM_GAME_RULES,
       ...initialRules,
       nightActionOrder: normalizeNightActionOrder(
@@ -166,7 +242,13 @@ export default function GameRulesModal({
       ),
       nonWolfNightActionDurationSec: normalizedDurations.nonWolfNightActionDurationSec,
       wolfNightActionDurationSec: normalizedDurations.wolfNightActionDurationSec,
-    });
+      dayDiscussionDurationSec: typeof initialRules.dayDiscussionDurationSec === "number" ? initialRules.dayDiscussionDurationSec : DEFAULT_ROOM_GAME_RULES.dayDiscussionDurationSec,
+      trialDefenseDurationSec: typeof initialRules.trialDefenseDurationSec === "number" ? initialRules.trialDefenseDurationSec : DEFAULT_ROOM_GAME_RULES.trialDefenseDurationSec,
+      trialVerdictDurationSec: typeof initialRules.trialVerdictDurationSec === "number" ? initialRules.trialVerdictDurationSec : DEFAULT_ROOM_GAME_RULES.trialVerdictDurationSec,
+      dayVotingDurationSec: typeof initialRules.dayVotingDurationSec === "number" ? initialRules.dayVotingDurationSec : DEFAULT_ROOM_GAME_RULES.dayVotingDurationSec,
+    };
+    setDraftRules(merged);
+    setBaseRules(merged);
   }, [initialRules, open, selectableNightActionRoles, isDietQuy, isSoiMu]);
 
   const includedElementalSummary = useMemo(() => {
@@ -174,6 +256,26 @@ export default function GameRulesModal({
     if (!included.length) return "Chưa chọn vai trò nguyên tố nào";
     return `Bao gồm: ${included.join(", ")}`;
   }, [includedElementalRoles]);
+
+  const hasChanges = useMemo(() => {
+    if (!baseRules) return false;
+    const keys = Object.keys(draftRules) as (keyof RoomGameRules)[];
+    for (const key of keys) {
+      if (key === "nightActionOrder") {
+        const order1 = draftRules.nightActionOrder || [];
+        const order2 = baseRules.nightActionOrder || [];
+        if (order1.length !== order2.length) return true;
+        for (let i = 0; i < order1.length; i++) {
+          if (order1[i] !== order2[i]) return true;
+        }
+        continue;
+      }
+      if (draftRules[key] !== baseRules[key]) {
+        return true;
+      }
+    }
+    return false;
+  }, [draftRules, baseRules]);
 
   if (!open) return null;
 
@@ -187,13 +289,19 @@ export default function GameRulesModal({
     value: number
   ) => {
     if (readOnly) return;
+    setDraftRules((prev) => ({
+      ...prev,
+      [key]: value,
+    } as RoomGameRules));
+  };
+
+  const handleNightActionDurationBlur = () => {
+    if (readOnly) return;
     setDraftRules((prev) => {
       const normalizedDurations = normalizeNightActionDurations({
         allNightActionsSimultaneous: prev.allNightActionsSimultaneous,
-        nonWolfNightActionDurationSec:
-          key === "nonWolfNightActionDurationSec" ? value : prev.nonWolfNightActionDurationSec,
-        wolfNightActionDurationSec:
-          key === "wolfNightActionDurationSec" ? value : prev.wolfNightActionDurationSec,
+        nonWolfNightActionDurationSec: prev.nonWolfNightActionDurationSec,
+        wolfNightActionDurationSec: prev.wolfNightActionDurationSec,
       }, isDietQuy, isSoiMu);
       return { ...prev, ...normalizedDurations } as RoomGameRules;
     });
@@ -349,6 +457,80 @@ export default function GameRulesModal({
     );
   };
 
+  const renderDayPhaseDurations = () => {
+    return (
+      <>
+        <label style={rowStyle()}>
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian thảo luận ban ngày</div>
+            <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+              Thời gian thảo luận tự do vào ban ngày trước khi bắt đầu biểu quyết (giây).
+            </div>
+          </div>
+          <RuleNumericInput
+            min={0}
+            max={600}
+            step={10}
+            value={draftRules.dayDiscussionDurationSec ?? DEFAULT_ROOM_GAME_RULES.dayDiscussionDurationSec}
+            disabled={readOnly}
+            onChange={(val) => updateRule("dayDiscussionDurationSec", val)}
+          />
+        </label>
+
+        <label style={rowStyle()}>
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian tương tác khi lên giàn</div>
+            <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+              Thời gian biện hộ và tương tác của người bị biểu quyết lên giàn (giây).
+            </div>
+          </div>
+          <RuleNumericInput
+            min={10}
+            max={300}
+            step={10}
+            value={draftRules.trialDefenseDurationSec ?? DEFAULT_ROOM_GAME_RULES.trialDefenseDurationSec}
+            disabled={readOnly}
+            onChange={(val) => updateRule("trialDefenseDurationSec", val)}
+          />
+        </label>
+
+        <label style={rowStyle()}>
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian vote sống chết</div>
+            <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+              Thời gian để cả làng bỏ phiếu biểu quyết sống hoặc chết (giây).
+            </div>
+          </div>
+          <RuleNumericInput
+            min={10}
+            max={120}
+            step={5}
+            value={draftRules.trialVerdictDurationSec ?? DEFAULT_ROOM_GAME_RULES.trialVerdictDurationSec}
+            disabled={readOnly}
+            onChange={(val) => updateRule("trialVerdictDurationSec", val)}
+          />
+        </label>
+
+        <label style={rowStyle()}>
+          <div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian bỏ phiếu biểu quyết ban ngày</div>
+            <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+              Thời gian để cả làng bỏ phiếu biểu quyết treo cổ ai đó lên giàn (giây).
+            </div>
+          </div>
+          <RuleNumericInput
+            min={10}
+            max={300}
+            step={10}
+            value={draftRules.dayVotingDurationSec ?? DEFAULT_ROOM_GAME_RULES.dayVotingDurationSec}
+            disabled={readOnly}
+            onChange={(val) => updateRule("dayVotingDurationSec", val)}
+          />
+        </label>
+      </>
+    );
+  };
+
   return (
     <div
       style={{
@@ -368,7 +550,9 @@ export default function GameRulesModal({
         style={{
           width: "min(900px, 100%)",
           maxHeight: "min(92vh, 920px)",
-          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
           borderRadius: 24,
           border: "1px solid rgba(255,255,255,0.14)",
           background: "linear-gradient(180deg, rgba(15,20,36,0.4), rgba(8,12,24,0.6))",
@@ -377,7 +561,7 @@ export default function GameRulesModal({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={{ padding: 24, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+        <div id="PhầnNeo" style={{ padding: 24, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center" }}>
             <div>
               <div style={{ fontSize: 13, letterSpacing: 0.12, textTransform: "uppercase", opacity: 0.7 }}>
@@ -385,17 +569,51 @@ export default function GameRulesModal({
               </div>
               <h2 style={{ margin: "8px 0 0", fontSize: 28 }}>{title}</h2>
             </div>
-            <button onClick={onClose} style={{ padding: "10px 14px", cursor: "pointer" }}>
-              Đóng
-            </button>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <button 
+                onClick={onClose} 
+                style={{ 
+                  padding: "10px 16px", 
+                  cursor: "pointer",
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.15)",
+                  background: "rgba(255,255,255,0.08)",
+                  color: "#fff",
+                  fontWeight: 600,
+                  fontSize: 14,
+                  width: 72,
+                  textAlign: "center"
+                }}
+              >
+                {hasChanges ? "Huỷ" : "Đóng"}
+              </button>
+              {!readOnly && (
+                <button
+                  onClick={handleSave}
+                  style={{
+                    padding: "10px 16px",
+                    cursor: "pointer",
+                    background: "linear-gradient(135deg, #f6c85f, #ff8f42)",
+                    color: "#111",
+                    border: "none",
+                    borderRadius: 10,
+                    fontWeight: 800,
+                    fontSize: 14
+                  }}
+                >
+                  {saveText}
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        <div style={{ padding: 24, display: "grid", gap: 14 }}>
+        <div id="PhầnCuộn" style={{ padding: 24, display: "grid", gap: 14, flex: 1, overflowY: "auto" }}>
           {isDietQuy ? (
             <>
               {renderTwoHeartsFirstTwoNights()}
               {renderForceWolfBiteFirstNight()}
+              {renderDayPhaseDurations()}
 
               <label style={rowStyle()}>
                 <div>
@@ -404,24 +622,20 @@ export default function GameRulesModal({
                     Thời gian giới hạn cho mỗi lượt hành động ban đêm (giây).
                   </div>
                 </div>
-                <input
-                  type="number"
-                  inputMode="numeric"
+                <RuleNumericInput
                   min={0}
                   max={60}
                   step={10}
                   value={draftRules.nonWolfNightActionDurationSec}
                   disabled={readOnly}
-                  onChange={(e) => {
-                    if (readOnly) return;
-                    const val = Number(e.target.value);
+                  onChange={(val) => {
                     setDraftRules(prev => ({
                       ...prev,
                       nonWolfNightActionDurationSec: val,
                       wolfNightActionDurationSec: val
                     }));
                   }}
-                  style={{ width: 96, padding: "10px 12px" }}
+                  style={{ width: 96 }}
                 />
               </label>
             </>
@@ -429,6 +643,7 @@ export default function GameRulesModal({
             <>
               {renderTwoHeartsFirstTwoNights()}
               {renderForceWolfBiteFirstNight()}
+              {renderDayPhaseDurations()}
 
               <label style={rowStyle()}>
                 <div>
@@ -453,24 +668,20 @@ export default function GameRulesModal({
                     Thời gian giới hạn cho lượt hành động ban đêm (giây) của tất cả mọi người chơi.
                   </div>
                 </div>
-                <input
-                  type="number"
-                  inputMode="numeric"
+                <RuleNumericInput
                   min={0}
                   max={60}
                   step={10}
                   value={draftRules.nonWolfNightActionDurationSec}
                   disabled={readOnly}
-                  onChange={(e) => {
-                    if (readOnly) return;
-                    const val = Number(e.target.value);
+                  onChange={(val) => {
                     setDraftRules(prev => ({
                       ...prev,
                       nonWolfNightActionDurationSec: val,
                       wolfNightActionDurationSec: val
                     }));
                   }}
-                  style={{ width: 96, padding: "10px 12px" }}
+                  style={{ width: 96 }}
                 />
               </label>
             </>
@@ -478,6 +689,7 @@ export default function GameRulesModal({
             <>
               {renderTwoHeartsFirstTwoNights()}
               {renderForceWolfBiteFirstNight()}
+              {renderDayPhaseDurations()}
 
               <label style={rowStyle()}>
                 <div>
@@ -786,27 +998,14 @@ export default function GameRulesModal({
                     Khi Tay Buôn đạt đủ số giao dịch này, nhật ký sẽ ghi nhận Tay Buôn thắng nhưng ván chơi vẫn tiếp tục.
                   </div>
                 </div>
-                <input
-                  type="number"
+                <RuleNumericInput
                   min={1}
                   max={10}
                   step={1}
                   value={draftRules.merchantWinRequiredSuccessfulTrades}
                   disabled={readOnly}
-                  onChange={(e) =>
-                    updateRule(
-                      "merchantWinRequiredSuccessfulTrades",
-                      clampMerchantWinRequiredSuccessfulTrades(Number(e.target.value)),
-                    )
-                  }
-                  style={{
-                    width: 76,
-                    padding: "8px 10px",
-                    borderRadius: 8,
-                    border: "1px solid var(--border)",
-                    background: "rgba(255,255,255,0.08)",
-                    color: "var(--text)",
-                  }}
+                  onChange={(val) => updateRule("merchantWinRequiredSuccessfulTrades", val)}
+                  style={{ width: 76 }}
                 />
               </label>
 
@@ -865,18 +1064,15 @@ export default function GameRulesModal({
                 <div>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian hành động trong đêm của phe dân</div>
                 </div>
-                <input
-                  type="number"
-                  inputMode="numeric"
+                <RuleNumericInput
                   min={draftRules.allNightActionsSimultaneous ? 0 : 10}
                   max={60}
                   step={10}
                   value={draftRules.nonWolfNightActionDurationSec}
                   disabled={readOnly}
-                  onChange={(e) =>
-                    updateNightActionDuration("nonWolfNightActionDurationSec", Number(e.target.value))
-                  }
-                  style={{ width: 96, padding: "10px 12px" }}
+                  onChange={(val) => updateNightActionDuration("nonWolfNightActionDurationSec", val)}
+                  onBlur={handleNightActionDurationBlur}
+                  style={{ width: 96 }}
                 />
               </label>
 
@@ -884,18 +1080,15 @@ export default function GameRulesModal({
                 <div>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian hành động trong đêm của phe sói</div>
                 </div>
-                <input
-                  type="number"
-                  inputMode="numeric"
+                <RuleNumericInput
                   min={0}
                   max={60}
                   step={10}
                   value={draftRules.wolfNightActionDurationSec}
                   disabled={readOnly}
-                  onChange={(e) =>
-                    updateNightActionDuration("wolfNightActionDurationSec", Number(e.target.value))
-                  }
-                  style={{ width: 96, padding: "10px 12px" }}
+                  onChange={(val) => updateNightActionDuration("wolfNightActionDurationSec", val)}
+                  onBlur={handleNightActionDurationBlur}
+                  style={{ width: 96 }}
                 />
               </label>
 
@@ -903,14 +1096,13 @@ export default function GameRulesModal({
                 <div>
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>Số lượt tương tác của người bị lên giàn</div>
                 </div>
-                <input
-                  type="number"
+                <RuleNumericInput
                   min={0}
                   max={10}
                   value={draftRules.trialInteractionSelectionLimit}
                   disabled={readOnly}
-                  onChange={(e) => updateRule("trialInteractionSelectionLimit", clampSelectionLimit(Number(e.target.value)))}
-                  style={{ width: 96, padding: "10px 12px" }}
+                  onChange={(val) => updateRule("trialInteractionSelectionLimit", val)}
+                  style={{ width: 96 }}
                 />
               </label>
 
@@ -921,14 +1113,13 @@ export default function GameRulesModal({
                     Số lần tối đa Song Trùng có thể thực hiện chức năng chọn partner Cupid (0 để không giới hạn).
                   </div>
                 </div>
-                <input
-                  type="number"
+                <RuleNumericInput
                   min={0}
                   max={20}
                   value={draftRules.songTrungMaxUses ?? 0}
                   disabled={readOnly}
-                  onChange={(e) => updateRule("songTrungMaxUses", Math.max(0, Number(e.target.value)))}
-                  style={{ width: 96, padding: "10px 12px" }}
+                  onChange={(val) => updateRule("songTrungMaxUses", val)}
+                  style={{ width: 96 }}
                 />
               </label>
 
@@ -1002,26 +1193,7 @@ export default function GameRulesModal({
           )}
         </div>
 
-        {!readOnly && (
-          <div style={{ padding: 24, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "flex-end", gap: 12 }}>
-            <button onClick={onClose} style={{ padding: "11px 16px", cursor: "pointer" }}>
-              Huỷ
-            </button>
-            <button
-              onClick={handleSave}
-              style={{
-                padding: "11px 16px",
-                cursor: "pointer",
-                background: "linear-gradient(135deg, #f6c85f, #ff8f42)",
-                color: "#111",
-                border: "none",
-                fontWeight: 800,
-              }}
-            >
-              {saveText}
-            </button>
-          </div>
-        )}
+
       </div>
     </div>
   );

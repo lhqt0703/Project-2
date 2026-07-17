@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { clientId, socket } from "../../socket";
+import { clientId, socket, startRoomRecovery } from "../../socket";
 import type {
   GamePhase,
   Sticker,
@@ -190,14 +190,6 @@ export function useGameSocketSync({
   const [rolesBeforeConversion, setRolesBeforeConversion] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const syncGameRoom = () => {
-      if (!roomId || roomId === "mock-8") return;
-      socket.emit("getRoom", roomId);
-    };
-
-    syncGameRoom();
-    socket.on("connect", syncGameRoom);
-
     const applyPhaseTransition = (newPhase: GamePhase) => {
       setPhase(newPhase);
       setSeerResults([]);
@@ -975,6 +967,10 @@ export function useGameSocketSync({
     socket.on("yourOriginalRole", handleYourOriginalRole);
     socket.on("songTrungRobbedState", handleSongTrungRobbedState);
 
+    const stopRoomRecovery = roomId && roomId !== "mock-8"
+      ? startRoomRecovery(roomId)
+      : () => {};
+
     return () => {
       socket.off("roomUpdated", handleRoomUpdated);
       socket.off("positionsUpdated", handlePositionsUpdated);
@@ -1044,7 +1040,7 @@ export function useGameSocketSync({
       socket.off("hostNightActionProgressUpdated", handleHostNightActionProgressUpdated);
       socket.off("yourOriginalRole", handleYourOriginalRole);
       socket.off("songTrungRobbedState", handleSongTrungRobbedState);
-      socket.off("connect", syncGameRoom);
+      stopRoomRecovery();
     };
   }, [roomId, setRoom]);
 

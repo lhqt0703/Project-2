@@ -48,8 +48,12 @@ const createMockRoom = (rules: Partial<RoomGameRules>, votes: Record<string, str
       wolfCanBiteWolf: false,
       ...rules,
     },
-    wolfVotes: votes,
-    wolfVotes2: votes2,
+    daNghichState: {
+      daNghichState: {
+      wolfVotes: votes,
+      wolfVotes2: votes2,
+    },
+    },
     wolfBonusBiteThisNight: true,
     killedTonight: null,
     killedTonightExtra: null,
@@ -63,7 +67,7 @@ test("Wolf Bonus Bite: smooth tied rule enabled", () => {
     { w1: "A", w2: "B" },
     { w1: "B", w2: null }
   );
-  const results1 = calculateWolfBiteResults(room1, room1.wolfVotes!, room1.wolfVotes2!, ["w1", "w2"], room1.gameRules, () => null);
+  const results1 = calculateWolfBiteResults(room1, room1.daNghichState!.wolfVotes!, room1.daNghichState!.wolfVotes2!, ["w1", "w2"], room1.gameRules, () => null);
   assert.strictEqual(results1.killedTonight, "B");
   assert.strictEqual(results1.killedTonightExtra, "A");
 
@@ -73,7 +77,7 @@ test("Wolf Bonus Bite: smooth tied rule enabled", () => {
     { w1: "A", w2: "A" },
     { w1: "B", w2: "C" }
   );
-  const results2 = calculateWolfBiteResults(room2, room2.wolfVotes!, room2.wolfVotes2!, ["w1", "w2"], room2.gameRules, () => null);
+  const results2 = calculateWolfBiteResults(room2, room2.daNghichState!.wolfVotes!, room2.daNghichState!.wolfVotes2!, ["w1", "w2"], room2.gameRules, () => null);
   assert.strictEqual(results2.killedTonight, "A");
   assert.strictEqual(results2.killedTonightExtra, null);
 
@@ -85,7 +89,7 @@ test("Wolf Bonus Bite: smooth tied rule enabled", () => {
     { w1: "A", w2: "C", w3: "E" },
     { w1: "B", w2: "D", w3: null }
   );
-  const results3 = calculateWolfBiteResults(room3, room3.wolfVotes!, room3.wolfVotes2!, ["w1", "w2", "w3"], room3.gameRules, () => null);
+  const results3 = calculateWolfBiteResults(room3, room3.daNghichState!.wolfVotes!, room3.daNghichState!.wolfVotes2!, ["w1", "w2", "w3"], room3.gameRules, () => null);
   assert.strictEqual(results3.killedTonight, null);
   assert.strictEqual(results3.killedTonightExtra, null);
 });
@@ -99,7 +103,7 @@ test("Wolf Bonus Bite: smooth tied rule disabled (fallback to old logic)", () =>
     { w1: "A", w2: "B" },
     { w1: "B", w2: null }
   );
-  const results1 = calculateWolfBiteResults(room1, room1.wolfVotes!, room1.wolfVotes2!, ["w1", "w2"], room1.gameRules, () => null);
+  const results1 = calculateWolfBiteResults(room1, room1.daNghichState!.wolfVotes!, room1.daNghichState!.wolfVotes2!, ["w1", "w2"], room1.gameRules, () => null);
   assert.strictEqual(results1.killedTonight, "B");
   assert.strictEqual(results1.killedTonightExtra, null);
 
@@ -111,7 +115,7 @@ test("Wolf Bonus Bite: smooth tied rule disabled (fallback to old logic)", () =>
     { w1: "A", w2: "A" },
     { w1: "B", w2: "C" }
   );
-  const results2 = calculateWolfBiteResults(room2, room2.wolfVotes!, room2.wolfVotes2!, ["w1", "w2"], room2.gameRules, () => null);
+  const results2 = calculateWolfBiteResults(room2, room2.daNghichState!.wolfVotes!, room2.daNghichState!.wolfVotes2!, ["w1", "w2"], room2.gameRules, () => null);
   assert.strictEqual(results2.killedTonight, "A");
   assert.strictEqual(results2.killedTonightExtra, null);
 });

@@ -1286,7 +1286,7 @@ export default function SplashCursor({
         position: 'fixed',
         top: 0,
         left: 0,
-        zIndex: 99999, // zIndex rất cao để đè lên mọi thứ
+        zIndex: 100,
         pointerEvents: 'none',
         width: '100vw',
         height: '100dvh'

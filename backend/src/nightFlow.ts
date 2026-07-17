@@ -84,12 +84,12 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     const rules = ensureRoomGameRules(room);
     if (!rules.allNightActionsSimultaneous) return null;
     if (role === "Sói") {
-      if (!room.wolfDeadline) return null;
-      return room.wolfDeadline + getNightActionExtraMs(room, playerId);
+      if (!room.daNghichState!.wolfDeadline) return null;
+      return room.daNghichState!.wolfDeadline + getNightActionExtraMs(room, playerId);
     }
     if (role === "Linh sói") {
-      if (!room.spiritWolfDecisionDeadline) return null;
-      return room.spiritWolfDecisionDeadline + getNightActionExtraMs(room, playerId);
+      if (!room.daNghichState!.spiritWolfDecisionDeadline) return null;
+      return room.daNghichState!.spiritWolfDecisionDeadline + getNightActionExtraMs(room, playerId);
     }
 
     const baseDeadline = room.nightTurnDeadline ?? null;
@@ -271,7 +271,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       clearTimeout(room.spiritWolfDecisionTimer);
       room.spiritWolfDecisionTimer = null;
     }
-    room.spiritWolfDecisionDeadline = null;
+    room.daNghichState!.spiritWolfDecisionDeadline = null;
 
     const pendingTargetId = room.spiritWolfPendingPoisonedWolfId;
     if (timedOut && !room.spiritWolfDecisionMade && pendingTargetId) {
@@ -309,7 +309,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
         clearTimeout(room.spiritWolfDecisionTimer);
         room.spiritWolfDecisionTimer = null;
       }
-      room.spiritWolfDecisionDeadline = Date.now() + durationMs + 500;
+      room.daNghichState!.spiritWolfDecisionDeadline = Date.now() + durationMs + 500;
       emitSpiritWolfDecisionNeeded(roomId);
       room.spiritWolfDecisionTimer = setTimeout(() => {
         finishSpiritWolfTurn(roomId, true);
@@ -342,38 +342,38 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     const wolves = room.players.filter((p) => isWolfAlignedPlayer(room, p.id));
 
     if (initializeVotes) {
-      room.wolfVotes = {};
-      room.wolfVotes2 = {};
+      room.daNghichState!.wolfVotes = {};
+      room.daNghichState!.wolfVotes2 = {};
       room.wolfLocked = {};
       wolves.forEach((w) => {
-        room.wolfVotes![w.id] = null;
-        room.wolfVotes2![w.id] = null;
+        room.daNghichState!.wolfVotes![w.id] = null;
+        room.daNghichState!.wolfVotes2![w.id] = null;
         room.wolfLocked![w.id] = false;
       });
       room.wolfVoteResolvedTonight = false;
     } else {
-      room.wolfVotes = room.wolfVotes || {};
-      room.wolfVotes2 = room.wolfVotes2 || {};
+      room.daNghichState!.wolfVotes = room.daNghichState!.wolfVotes || {};
+      room.daNghichState!.wolfVotes2 = room.daNghichState!.wolfVotes2 || {};
       room.wolfLocked = room.wolfLocked || {};
     }
 
     const useTimer = opts?.useTimer !== false;
     const durationMs = useTimer ? Math.max(0, Math.floor(opts?.durationMs ?? getWolfTurnDurationMs(room))) : null;
 
-    room.wolfDeadline = durationMs === null ? null : Date.now() + durationMs + 500;
+    room.daNghichState!.wolfDeadline = durationMs === null ? null : Date.now() + durationMs + 500;
     ctx.io.to(`wolves_${roomId}`).emit("wolfPhaseStarted", {
       wolves: wolves.map((w) => w.id),
       activeWolves: getActiveWolves(room),
-      deadline: room.wolfDeadline,
+      deadline: room.daNghichState!.wolfDeadline,
       maxTargets: room.wolfBonusBiteThisNight ? 2 : 1,
       resetVotes: initializeVotes,
       wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
-      wildWolfConvertAvailable: room.wildWolfConvertAvailableTonight === true,
-      wildWolfConvertRequested: room.wildWolfConvertRequestedTonight === true,
+      wildWolfConvertAvailable: room.daNghichState!.wildWolfConvertAvailableTonight === true,
+      wildWolfConvertRequested: room.daNghichState!.wildWolfConvertRequestedTonight === true,
     });
 
-    ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.wolfVotes || {});
-    ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.wolfVotes2 || {});
+    ctx.io.to(`wolves_${roomId}`).emit("wolfVotesUpdated", room.daNghichState!.wolfVotes || {});
+    ctx.io.to(`wolves_${roomId}`).emit("wolfVotes2Updated", room.daNghichState!.wolfVotes2 || {});
     ctx.io.to(`wolves_${roomId}`).emit("wolfLockedUpdated", room.wolfLocked || {});
 
     if (room.wolfTimer) {
@@ -449,7 +449,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
 
     const role = order[index]!;
     if (role === "Sói" && room.merchantWolfBiteDisabledTonight) {
-      room.wolfDeadline = null;
+      room.daNghichState!.wolfDeadline = null;
       room.wolfVoteResolvedTonight = true;
       startNightTurnByIndex(roomId, index + 1);
       return;
@@ -461,7 +461,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     room.nightTurnPaused = false;
     room.nightTurnRemainingMs = durationMs;
     room.nightTurnDeadline = Date.now() + durationMs + 500;
-    room.spiritWolfDecisionDeadline = role === "Linh sói" ? room.nightTurnDeadline : room.spiritWolfDecisionDeadline ?? null;
+    room.daNghichState!.spiritWolfDecisionDeadline = role === "Linh sói" ? room.nightTurnDeadline : room.daNghichState!.spiritWolfDecisionDeadline ?? null;
     room.hidePlayerRoleText = false;
 
     if (role === "Sói") {
@@ -505,7 +505,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
 
     clearNightTurnTimer(room);
 
-    const order = room.dietQuyNightTurnOrder || [];
+    const order = room.dietQuyState!.nightTurnOrder || [];
     const index = room.nightTurnIndex ?? 0;
 
     if (index >= order.length) {
@@ -515,10 +515,10 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       );
       const isRavenkeeperKilledTonight =
         ravenkeeperId &&
-        room.dietQuyImpKillPlayerId === ravenkeeperId &&
-        room.dietQuyMonkProtectedPlayerId !== ravenkeeperId;
+        room.dietQuyState!.impKillPlayerId === ravenkeeperId &&
+        room.dietQuyState!.monkProtectedPlayerId !== ravenkeeperId;
 
-      if (isRavenkeeperKilledTonight && !room.dietQuyRavenkeeperTargetId && room.nightTurnPlayerId !== ravenkeeperId) {
+      if (isRavenkeeperKilledTonight && !room.dietQuyState!.ravenkeeperTargetId && room.nightTurnPlayerId !== ravenkeeperId) {
         room.nightTurnPlayerId = ravenkeeperId;
         room.nightTurnRole = "Nuôi quạ";
         room.nightTurnPaused = false;
@@ -614,22 +614,22 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     if (room.phase !== "night") return;
 
     if (room.gameMode === "diet_quy") {
-      room.dietQuyPoisonedPrevPlayerId = room.dietQuyPoisonedPlayerId || null;
-      room.dietQuyPoisonedPlayerId = null;
-      room.dietQuyRedCharmPlayerId = null;
-      room.dietQuyMonkProtectedPlayerId = null;
-      room.dietQuyImpKillPlayerId = null;
-      room.dietQuyRavenkeeperTargetId = null;
-      room.dietQuyWasherwomanSelectedIds = [];
-      room.dietQuyLibrarianSelectedIds = [];
-      room.dietQuyInvestigatorSelectedIds = [];
-      room.dietQuyFortuneTellerCheckedIds = [];
-      room.dietQuyExecutedToday = false;
-      room.dietQuySaintExecutedToday = false;
-      room.dietQuyMayorReplacementId = null;
+      room.dietQuyState!.poisonedPrevPlayerId = room.dietQuyState!.poisonedPlayerId || null;
+      room.dietQuyState!.poisonedPlayerId = null;
+      room.dietQuyState!.redCharmPlayerId = null;
+      room.dietQuyState!.monkProtectedPlayerId = null;
+      room.dietQuyState!.impKillPlayerId = null;
+      room.dietQuyState!.ravenkeeperTargetId = null;
+      room.dietQuyState!.washerwomanSelectedIds = [];
+      room.dietQuyState!.librarianSelectedIds = [];
+      room.dietQuyState!.investigatorSelectedIds = [];
+      room.dietQuyState!.fortuneTellerCheckedIds = [];
+      room.dietQuyState!.executedToday = false;
+      room.dietQuyState!.saintExecutedToday = false;
+      room.dietQuyState!.mayorReplacementId = null;
       room.nightTurnPlayerId = null;
 
-      room.dietQuyNightTurnOrder = getSeatingOrder(room, room.dietQuyNightDirection === "clockwise", room.dietQuyNightStartPlayerId);
+      room.dietQuyState!.nightTurnOrder = getSeatingOrder(room, room.dietQuyState!.nightDirection === "clockwise", room.dietQuyState!.nightStartPlayerId);
       room.nightTurnIndex = 0;
       room.hidePlayerRoleText = true;
       room.nightTurnPaused = false;
@@ -651,7 +651,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       const baseDeadline = room.nightTurnDeadline;
 
       if (room.merchantWolfBiteDisabledTonight) {
-        room.wolfDeadline = null;
+        room.daNghichState!.wolfDeadline = null;
         room.wolfVoteResolvedTonight = true;
         emitWolfBiteDisabled(roomId);
       } else {
@@ -703,7 +703,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     if (room.wolfVoteResolvedTonight) return;
     const rules = ensureRoomGameRules(room);
     if (room.merchantWolfBiteDisabledTonight) {
-      room.wolfDeadline = null;
+      room.daNghichState!.wolfDeadline = null;
       room.wolfVoteResolvedTonight = true;
       emitWolfBiteDisabled(roomId);
       emitHostNightActionProgress(roomId);
@@ -717,12 +717,12 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       clearTimeout(room.wolfTimer);
       room.wolfTimer = null;
     }
-    room.wolfDeadline = null;
+    room.daNghichState!.wolfDeadline = null;
     room.wolfVoteResolvedTonight = true;
     room.wolfAttackResolvedAt = Date.now();
 
-    const votes = room.wolfVotes || {};
-    const votes2 = room.wolfVotes2 || {};
+    const votes = room.daNghichState!.wolfVotes || {};
+    const votes2 = room.daNghichState!.wolfVotes2 || {};
     const activeWolves = getActiveWolves(room);
 
     appendLogEntry(
@@ -792,15 +792,15 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     }
 
     const wildConversionTargetId =
-      room.wildWolfConvertRequestedTonight &&
-      room.wildWolfConvertAvailableTonight &&
+      room.daNghichState!.wildWolfConvertRequestedTonight &&
+      room.daNghichState!.wildWolfConvertAvailableTonight &&
       !room.wildWolfConvertUsed
         ? room.wildWolfConvertTargetId || null
         : null;
     const wildConversionTargetWasBitten = !!wildConversionTargetId && wolfTargets.includes(wildConversionTargetId);
     if (
-      room.wildWolfConvertRequestedTonight &&
-      room.wildWolfConvertAvailableTonight &&
+      room.daNghichState!.wildWolfConvertRequestedTonight &&
+      room.daNghichState!.wildWolfConvertAvailableTonight &&
       !room.wildWolfConvertUsed &&
       (!wildConversionTargetId || !wildConversionTargetWasBitten)
     ) {
@@ -813,19 +813,19 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
         previousTargetRole: wildConversionTargetId ? room.playerRoles?.[wildConversionTargetId] || null : null,
         reason: "no_target",
       });
-      room.wildWolfConvertAvailableTonight = false;
-      room.wildWolfConvertRequestedTonight = false;
+      room.daNghichState!.wildWolfConvertAvailableTonight = false;
+      room.daNghichState!.wildWolfConvertRequestedTonight = false;
       room.wildWolfConvertActorId = null;
     }
 
     if (rules.villageChiefKnowsWolfBite && villageChiefDelayedTargetIds.length) {
       for (const targetId of villageChiefDelayedTargetIds) {
         if ((room.deadPlayers || []).includes(targetId)) continue;
-        room.privatePlayerHearts = room.privatePlayerHearts || {};
-        room.privatePlayerHearts[targetId] = 1;
-        room.privateHeartVisiblePlayerIds = Array.from(new Set([...(room.privateHeartVisiblePlayerIds || []), targetId]));
-        room.playerHeartShakeIds = (room.playerHeartShakeIds || []).filter((id) => id !== targetId);
-        room.villageChiefDyingFramePlayerIds = Array.from(new Set([...(room.villageChiefDyingFramePlayerIds || []), targetId]));
+        room.daNghichState!.privatePlayerHearts = room.daNghichState!.privatePlayerHearts || {};
+        room.daNghichState!.privatePlayerHearts[targetId] = 1;
+        room.daNghichState!.privateHeartVisiblePlayerIds = Array.from(new Set([...(room.daNghichState!.privateHeartVisiblePlayerIds || []), targetId]));
+        room.daNghichState!.playerHeartShakeIds = (room.daNghichState!.playerHeartShakeIds || []).filter((id) => id !== targetId);
+        room.daNghichState!.villageChiefDyingFramePlayerIds = Array.from(new Set([...(room.daNghichState!.villageChiefDyingFramePlayerIds || []), targetId]));
       }
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     }

@@ -149,7 +149,7 @@ test("Chief Protector Search and Shield Redirection", async (t) => {
     room.chiefFoundProtectorId = "protector_1";
 
     // Wolves vote to bite the Protector
-    room.wolfVotes = {
+    room.daNghichState!.wolfVotes = {
       wolf_1: "protector_1",
     };
 

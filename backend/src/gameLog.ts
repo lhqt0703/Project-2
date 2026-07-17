@@ -94,7 +94,7 @@ export function updateSoiMuActionLog(room: Room, actorId: string) {
   const nightLog = ensureNightLog(room);
   if (!nightLog) return;
 
-  const targetId = room.soiMuTargets?.[actorId] || null;
+  const targetId = room.soiMuState!.targets?.[actorId] || null;
   const role = room.playerRoles?.[actorId];
   if (!role) return;
 
@@ -139,13 +139,13 @@ export function updateSoiMuActionLog(room: Room, actorId: string) {
     const aliveIds = getAlivePlayerIds(room).filter(id => id !== room.hostId);
     const dead = new Set(room.deadPlayers || []);
     // Xác định active wolf
-    const aliveWolves = (room.wolves || []).filter(wid => !dead.has(wid));
+    const aliveWolves = (room.daNghichState!.wolves || []).filter(wid => !dead.has(wid));
     const activeWolfId = aliveWolves[0] || "";
     const isActive = (actorId === activeWolfId);
 
     // Xác định nhãn của sói này
-    const totalWolves = (room.wolves || []).length;
-    const wolfIndex = (room.wolves || []).indexOf(actorId);
+    const totalWolves = (room.daNghichState!.wolves || []).length;
+    const wolfIndex = (room.daNghichState!.wolves || []).indexOf(actorId);
     const wolfLabel = totalWolves <= 1 ? "Sói" : `Sói ${wolfIndex !== -1 ? wolfIndex + 1 : 1}`;
 
     if (isActive) {
@@ -156,7 +156,7 @@ export function updateSoiMuActionLog(room: Room, actorId: string) {
       }
     } else {
       // Sói không hoạt động
-      const activeWolfIndex = (room.wolves || []).indexOf(activeWolfId);
+      const activeWolfIndex = (room.daNghichState!.wolves || []).indexOf(activeWolfId);
       const activeWolfLabel = totalWolves <= 1 ? "Sói" : `Sói ${activeWolfIndex !== -1 ? activeWolfIndex + 1 : 1}`;
       newEntry = {
         type: "soi_mu_wolf_inactive_choose",
@@ -169,9 +169,9 @@ export function updateSoiMuActionLog(room: Room, actorId: string) {
     }
   } else if (role === "Tay Buôn") {
     // Ariana (Tay Buôn)
-    const actorThumb = room.soiMuThumbDecisions?.[actorId] || null;
+    const actorThumb = room.soiMuState!.thumbDecisions?.[actorId] || null;
     if (actorThumb) {
-      const targetThumb = room.soiMuThumbDecisions?.[targetId] || null;
+      const targetThumb = room.soiMuState!.thumbDecisions?.[targetId] || null;
       newEntry = {
         type: "soi_mu_ariana_trade",
         phase: "night",

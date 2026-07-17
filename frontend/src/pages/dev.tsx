@@ -89,8 +89,8 @@ function MockPlayerCircle({
         width: circleSizePx,
         height: circleSizePx,
         borderRadius: circleRadiusPx,
-        backgroundImage: maskedAvatarUrl 
-          ? `url("${nenLungAsset}")` 
+        backgroundImage: maskedAvatarUrl
+          ? `url("${nenLungAsset}")`
           : undefined,
         backgroundColor: avatarType === "solid" ? "#3b82f6" : (avatarType === "none" ? "rgba(255,255,255,0.05)" : undefined),
         backgroundPosition: maskedAvatarUrl ? "center" : undefined,
@@ -261,13 +261,13 @@ function MockPlayerCircle({
         const hasRoleBadge = showWolfBadge;
         const isNameAtBottom = hasAvatar && !hasRoleBadge;
         return (
-          <div style={{ 
+          <div style={{
             position: "absolute",
             left: "50%",
             top: "50%",
             transform: isNameAtBottom ? `translate(-50%, ${circleSizePx / 2.2}px)` : "translate(-50%, -50%)",
-            textAlign: "center", 
-            pointerEvents: "none", 
+            textAlign: "center",
+            pointerEvents: "none",
             zIndex: 1,
             width: "max-content",
           }}>
@@ -808,10 +808,10 @@ export default function DevSpawn() {
                 setTestWinner("wolves");
                 setTestScoreResult({
                   gameId: "mock-game-2",
-                  mvp: { playerId: "p2", name: "Sói Chúa", score: 120 },
+                  mvp: { playerId: "p2", name: "Sói Con", score: 120 },
                   ranking: [
                     { playerId: "p1", name: "Dân Thường", role: "Dân làng", team: "villagers", aliveAtEnd: false, totalScore: 30 },
-                    { playerId: "p2", name: "Sói Chúa", role: "Sói", team: "wolves", aliveAtEnd: true, totalScore: 120 }
+                    { playerId: "p2", name: "Sói Con", role: "Sói", team: "wolves", aliveAtEnd: true, totalScore: 120 }
                   ]
                 });
                 shootWinnerConfettiFromSides("wolves");
@@ -840,11 +840,11 @@ export default function DevSpawn() {
                   gameId: "mock-game-3",
                   mvp: [
                     { playerId: "p1", name: "Cupid", score: 95 },
-                    { playerId: "p2", name: "Sói Yêu", score: 95 }
+                    { playerId: "p2", name: "Sói", score: 95 }
                   ],
                   ranking: [
                     { playerId: "p1", name: "Cupid", role: "Thần tình yêu", team: "couple", aliveAtEnd: true, totalScore: 95 },
-                    { playerId: "p2", name: "Sói Yêu", role: "Sói", team: "couple", aliveAtEnd: true, totalScore: 95 }
+                    { playerId: "p2", name: "Sói", role: "Sói", team: "couple", aliveAtEnd: true, totalScore: 95 }
                   ]
                 });
                 shootWinnerConfettiFromSides("lovers", {
@@ -1143,7 +1143,7 @@ export default function DevSpawn() {
                     }}>
                       {/* Emoji */}
                       <td style={{ padding: "16px 12px", fontSize: "1.75rem", verticalAlign: "top" }}>{emoji}</td>
-                      
+
                       {/* Avif Preview */}
                       <td style={{ padding: "16px 12px", verticalAlign: "top" }}>
                         {isMapped ? (
@@ -1501,7 +1501,7 @@ export default function DevSpawn() {
             <h3 style={{ fontSize: "1.1rem", fontWeight: 600, margin: "0 0 16px 0", color: "#cbd5e1", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "8px" }}>
               🛠️ Bảng Điều Khiển (Playground Controls)
             </h3>
-            
+
             {/* Range sliders */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
               <div>

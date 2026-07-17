@@ -1097,45 +1097,30 @@ input {
   }
 }
 
-/* Room Role Portraits Lineup Wrapper and Sub-containers */
+/* Room role portraits: one centered lineup ordered by faction */
 .room-role-portraits-wrapper {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
   height: 220px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 12px;
+  box-sizing: border-box;
   pointer-events: none;
   z-index: 5;
   overflow: visible;
 }
 
-.room-role-portraits-left {
-  position: absolute;
-  bottom: 0;
-  display: flex;
-  flex-direction: row-reverse;
-  align-items: flex-end;
-  height: 100%;
-}
-
-.room-role-portraits-center {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 0;
+.room-role-portraits-lineup {
   display: flex;
   align-items: flex-end;
+  justify-content: center;
   height: 100%;
-  z-index: 6;
-}
-
-.room-role-portraits-right {
-  position: absolute;
-  bottom: 0;
-  display: flex;
-  flex-direction: row;
-  align-items: flex-end;
-  height: 100%;
+  max-width: 100%;
+  gap: clamp(2px, 0.5vw, 8px);
 }
 
 .room-role-portrait-item {
@@ -1147,23 +1132,34 @@ input {
   align-items: center;
   justify-content: flex-end;
   position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
   pointer-events: none;
   transform-origin: bottom center;
 }
 
+.room-role-portrait-item.is-faction-start {
+  padding-left: clamp(12px, 2vw, 28px);
+}
+
 .room-role-portrait-inner {
   transform-origin: bottom center;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .room-role-portrait-image {
   height: 100%;
+  width: auto;
+  max-width: 100%;
   object-fit: contain;
+  object-position: center bottom;
   user-select: none;
   -webkit-user-drag: none;
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.4));
 }
 
-/* Animations and Flip for Left & Right halves */
+/* Villagers enter from the left; opposing factions enter from the right. */
 .room-role-portrait-item.is-left-slide {
   animation: slideInFromLeft 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
 }

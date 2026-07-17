@@ -39,7 +39,7 @@ export function getDayVoteWeight(room: Room, voterId: string) {
 
 export function isProtectorImmortalityPermanent(room: Room) {
   if (room.protectorImmortalityPermanent) return true;
-  if (room.elementalSelectedBuffId !== PROTECTOR_PERMANENT_BUFF_ID) return false;
+  if (room.daNghichState!.elementalSelectedBuffId !== PROTECTOR_PERMANENT_BUFF_ID) return false;
   const appliesNight = room.elementalSelectedBuffAppliesNight;
   if (!appliesNight) return false;
   return appliesNight <= (room.nightCount || 0);

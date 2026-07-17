@@ -36,18 +36,18 @@ import ChieuBg from "../assets/nền chiều.avif";
 import { gsap } from "gsap";
 import { GameRoleStatusBar } from "../components/GameRoleStatusBar";
 import medalSvg from "../assets/medal.svg";
-import trashIcon from "../assets/trash-x.svg";
 import GridMotionOverlay from "../components/GridMotionOverlay";
 import RoleCompanionOverlay from "../components/RoleCompanionOverlay";
 import { AvifIcon } from "../components/AvifIcon";
 import { CountdownButton } from "../components/CountdownButton";
 import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
-import StickerPeel from "../components/StickerPeel";
-import { getStickerUrlByFileName } from "../utils/stickerAssets";
 import { VIP_REAL_NAMES } from "../constants/vip";
 import { VillagerVictoryAnimation } from "../components/VillagerVictoryAnimation";
 import { GameFinishedModal } from "../components/GameFinishedModal";
 import { getVillagerAndWolfRoles } from "../utils/gameEndHelper";
+import { GameStickerBoard } from "../components/GameStickerBoard";
+import { StickerTrashZone } from "../components/StickerTrashZone";
+import { useGameSocialInteractions } from "./gameRoles/useGameSocialInteractions";
 
 
 const WOLF_TEAM_REVEAL_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
@@ -109,59 +109,28 @@ export default function GameDaNghich() {
   const debugWitch = query.get("debugWitch") === "1";
   const isDebugMode = roomId === "mock-8" || debugAnim || debugCupid || debugHeartExplosion || debugWitch;
   const [testHeartExplosionTrigger, setTestHeartExplosionTrigger] = useState(0);
-  const [windowDimensions, setWindowDimensions] = useState({
-    width: window.innerWidth,
-    height: window.innerHeight,
-  });
-
-  useEffect(() => {
-    const handleResize = () => {
-      setWindowDimensions({
-        width: window.innerWidth,
-        height: window.innerHeight,
-      });
-    };
-    window.addEventListener("resize", handleResize);
-    window.addEventListener("orientationchange", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      window.removeEventListener("orientationchange", handleResize);
-    };
-  }, []);
-
   const sync = useGameSocketSync({ roomId, setRoom });
-  const [dismissedStickerIds, setDismissedStickerIds] = useState<string[]>([]);
-
-  useEffect(() => {
-    setDismissedStickerIds([]);
-  }, [sync.phase]);
-
-  const handleSendPlayerMessage = useCallback((text: string, channel: "wolf" | "lovers") => {
-    if (roomId === "mock-8") {
-      const id = Math.random().toString(36).substring(2, 9);
-      const msg = {
-        id,
-        senderId: clientId || "me",
-        text,
-        channel,
-        createdAt: Date.now()
-      };
-      sync.setPlayerMessages((prev: any) => [...prev, msg]);
-      return;
-    }
-
-    const id = Math.random().toString(36).substring(2, 9);
-    socket.emit("placePlayerMessage", {
-      roomId,
-      message: {
-        id,
-        text,
-        channel,
-        createdAt: Date.now()
-      }
-    });
-  }, [roomId, clientId, sync]);
   const phase: GamePhase = sync.phase;
+  const {
+    dismissedStickerIds,
+    dismissSticker,
+    draggingStickerId,
+    setDraggingStickerId,
+    isOverTrash,
+    setIsOverTrash,
+    handleSendPlayerMessage,
+    dismissPlayerMessage,
+    handleSelectSticker,
+    handleDragUpdateSticker,
+    handleDragStartSticker,
+    handleDeleteSticker,
+  } = useGameSocialInteractions({
+    roomId,
+    phase,
+    stickers: sync.stickers,
+    setStickers: sync.setStickers,
+    setPlayerMessages: sync.setPlayerMessages,
+  });
   const isDusk = phase === "dusk";
   const isDayDiscussion =
     phase === "day" &&
@@ -176,157 +145,6 @@ export default function GameDaNghich() {
   const isCurrentPlayerHiddenRevived = sync.angelReviveState.reviveStage === "hidden";
   const isCurrentPlayerDeadForNightActions = isCurrentPlayerDead && !isCurrentPlayerHiddenRevived;
 
-  const handleSelectSticker = useCallback((filename: string, channel: "wolf" | "lovers", event?: React.MouseEvent | React.TouchEvent | null) => {
-    const id = `sticker-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
-    const isStaticPaste = !event; // Nếu không có event -> dán tĩnh luôn (click/tap nhanh)
-
-    let xPct = 0.5;
-    let yPct = 0.5;
-    let clientX = windowDimensions.width / 2;
-    let clientY = windowDimensions.height / 2;
-
-    if (event) {
-      const nativeEvent = 'nativeEvent' in event ? event.nativeEvent : event;
-      if ('touches' in nativeEvent) {
-        const touches = (nativeEvent as TouchEvent).touches;
-        if (touches && touches.length > 0) {
-          clientX = touches[0].clientX;
-          clientY = touches[0].clientY;
-        }
-      } else if ('clientX' in nativeEvent) {
-        clientX = (nativeEvent as MouseEvent).clientX;
-        clientY = (nativeEvent as MouseEvent).clientY;
-      }
-
-      const frameEl = document.querySelector(".player-position-frame");
-      const frameRect = frameEl ? frameEl.getBoundingClientRect() : null;
-      const stickerWidth = 100;
-
-      if (frameRect) {
-        const absX = clientX - frameRect.left - stickerWidth / 2;
-        const absY = clientY - frameRect.top - stickerWidth / 2;
-        xPct = absX / frameRect.width;
-        yPct = absY / frameRect.height;
-      } else {
-        const absX = clientX - stickerWidth / 2;
-        const absY = clientY - stickerWidth / 2;
-        xPct = absX / windowDimensions.width;
-        yPct = absY / windowDimensions.height;
-      }
-    }
-
-    const rotate = Math.floor(Math.random() * 40 - 20);
-    const createdAt = Date.now();
-
-    const sticker: any = {
-      id,
-      imageSrc: filename,
-      x: xPct,
-      y: yPct,
-      rotate,
-      channel,
-      createdAt,
-      owner: clientId,
-      isPasted: isStaticPaste,
-      pastedAt: isStaticPaste ? Date.now() : undefined
-    };
-
-    if (event) {
-      sticker.startDragEvent = 'nativeEvent' in event ? event.nativeEvent : event;
-    }
-
-    // Always update local state for fast UI response
-    sync.setStickers((prev: any) => [...prev, sticker]);
-
-    if (roomId === "mock-8") {
-      return;
-    }
-
-    socket.emit("placeSticker", {
-      roomId,
-      sticker: {
-        id,
-        imageSrc: filename,
-        x: xPct,
-        y: yPct,
-        rotate,
-        channel,
-        createdAt,
-        isPasted: isStaticPaste,
-        pastedAt: isStaticPaste ? Date.now() : undefined
-      }
-    });
-  }, [roomId, sync, clientId, windowDimensions]);
-
-  const handleDragUpdateSticker = useCallback((
-    stickerId: string, 
-    xPct: number, 
-    yPct: number, 
-    channel: "wolf" | "lovers", 
-    isPasted?: boolean, 
-    pastedAt?: number, 
-    rotate?: number
-  ) => {
-    // Always update local state for fast UI response
-    sync.setStickers((prev: any) =>
-      prev.map((s: any) => (s.id === stickerId ? { ...s, x: xPct, y: yPct, isPasted: isPasted ?? s.isPasted, pastedAt: pastedAt ?? s.pastedAt, rotate: rotate ?? s.rotate } : s))
-    );
-
-    if (roomId === "mock-8") {
-      return;
-    }
-
-    socket.emit("moveSticker", {
-      roomId,
-      stickerId,
-      x: xPct,
-      y: yPct,
-      channel,
-      isPasted,
-      pastedAt,
-      rotate
-    });
-  }, [roomId, sync]);
-
-  const handleDragStartSticker = useCallback((stickerId: string, channel: "wolf" | "lovers") => {
-    // Set isPasted to false locally
-    sync.setStickers((prev: any) =>
-      prev.map((s: any) => (s.id === stickerId ? { ...s, isPasted: false } : s))
-    );
-
-    if (roomId === "mock-8") {
-      return;
-    }
-
-    const sticker = sync.stickers.find((s: any) => s.id === stickerId);
-    if (!sticker) return;
-
-    socket.emit("moveSticker", {
-      roomId,
-      stickerId,
-      x: sticker.x,
-      y: sticker.y,
-      channel,
-      isPasted: false,
-      rotate: sticker.rotate
-    });
-  }, [roomId, sync]);
-
-  const handleDeleteSticker = useCallback((stickerId: string, channel: "wolf" | "lovers") => {
-    // Always update local state for fast UI response
-    sync.setStickers((prev: any) => prev.filter((s: any) => s.id !== stickerId));
-
-    if (roomId === "mock-8") {
-      return;
-    }
-
-    socket.emit("deleteSticker", {
-      roomId,
-      stickerId,
-      channel
-    });
-  }, [roomId, sync]);
   const shouldForceHideAngelReviveIdentity =
     phase === "day" &&
     isCurrentPlayerDead &&
@@ -339,8 +157,8 @@ export default function GameDaNghich() {
   const shouldBlockDeadNightRoleReveal = phase === "night" && isCurrentPlayerDeadForNightActions;
   const shouldHidePlayerRoleText = !isHost && (!!room?.hidePlayerRoleText || shouldBlockDeadNightRoleReveal || shouldForceHideAngelReviveIdentity);
   const allNightActionsSimultaneous = room?.gameRules?.allNightActionsSimultaneous === true;
-  const isBanSoiAligned = room?.banSoiWolfAligned === true;
-  const isWildWolfConverted = room?.wildWolfConvertedSelf === true;
+  const isBanSoiAligned = room?.daNghichState?.banSoiWolfAligned === true;
+  const isWildWolfConverted = room?.daNghichState?.wildWolfConvertedSelf === true;
   const isBanSoiOrWildConverted = isBanSoiAligned || isWildWolfConverted;
   const shouldRevealHunterShotInDay = room?.gameRules?.hunterShotPublicInDay !== false;
   const currentNightTurnRole = (room?.nightTurnRole || null) as NightActionRole | null;
@@ -354,8 +172,6 @@ export default function GameDaNghich() {
   const [nightTurnNow, setNightTurnNow] = useState(() => Date.now() + serverTimeOffset);
   const [noticeModal, setNoticeModal] = useState<{ title: string; message: string; onConfirm?: () => void } | null>(null);
   const [isNightInfoVisible, setIsNightInfoVisible] = useState(true);
-  const [draggingStickerId, setDraggingStickerId] = useState<string | null>(null);
-  const [isOverTrash, setIsOverTrash] = useState(false);
   const [cardFlippedToFront, setCardFlippedToFront] = useState(false);
   const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
   const [scoreboardOpen, setScoreboardOpen] = useState(false);
@@ -749,7 +565,7 @@ export default function GameDaNghich() {
     const value = room?.nightActionExtraTimeMsByPlayerId?.[clientId] || 0;
     return Math.max(0, Math.floor(value));
   }, [room?.nightActionExtraTimeMsByPlayerId]);
-  const baseWolfDeadline = room?.wolfDeadline ?? sync.wolfDeadline ?? null;
+  const baseWolfDeadline = room?.daNghichState?.wolfDeadline ?? sync.wolfDeadline ?? null;
 
   const isWolfTeamRole =
     role === "Sói" ||
@@ -773,7 +589,7 @@ export default function GameDaNghich() {
     if (isWolfTeamRole) return myWolfDeadline;
     if (role === "Linh sói") {
       if (!sync.spiritWolfDecisionTargetId) return null;
-      const spiritBaseDeadline = room ? room.spiritWolfDecisionDeadline ?? null : sync.spiritWolfDecisionDeadline ?? null;
+      const spiritBaseDeadline = room ? room.daNghichState?.spiritWolfDecisionDeadline ?? null : sync.spiritWolfDecisionDeadline ?? null;
       if (!spiritBaseDeadline) return null;
       return spiritBaseDeadline + myNightActionExtraMs;
     }
@@ -797,7 +613,7 @@ export default function GameDaNghich() {
     myWolfDeadline,
     nightTurnDeadline,
     role,
-    room?.spiritWolfDecisionDeadline,
+    room?.daNghichState?.spiritWolfDecisionDeadline,
     sync.spiritWolfDecisionDeadline,
     sync.spiritWolfDecisionTargetId,
     witchBonusApplies,
@@ -838,8 +654,8 @@ export default function GameDaNghich() {
     if (phase !== "night" || !!sync.gameEnded) return false;
     if (isSequentialNight) return !!currentNightTurnRole;
     if (!allNightActionsSimultaneous) return false;
-    const wolfDeadline = room?.wolfDeadline ?? sync.wolfDeadline ?? null;
-    const spiritDeadline = room?.spiritWolfDecisionDeadline ?? sync.spiritWolfDecisionDeadline ?? null;
+    const wolfDeadline = room?.daNghichState?.wolfDeadline ?? sync.wolfDeadline ?? null;
+    const spiritDeadline = room?.daNghichState?.spiritWolfDecisionDeadline ?? sync.spiritWolfDecisionDeadline ?? null;
     return nightTurnPaused || !!nightTurnDeadline || !!wolfDeadline || !!spiritDeadline;
   }, [
     allNightActionsSimultaneous,
@@ -848,8 +664,8 @@ export default function GameDaNghich() {
     nightTurnDeadline,
     nightTurnPaused,
     phase,
-    room?.spiritWolfDecisionDeadline,
-    room?.wolfDeadline,
+    room?.daNghichState?.spiritWolfDecisionDeadline,
+    room?.daNghichState?.wolfDeadline,
     sync.gameEnded,
     sync.spiritWolfDecisionDeadline,
     sync.wolfDeadline,
@@ -1151,7 +967,7 @@ export default function GameDaNghich() {
   const visibleLoveRoleBadges = useMemo(() => {
     if (!clientId) return {};
     const partnerId = sync.loveState.partnerId;
-    if (!partnerId || !sync.loveState.pairIds.includes(clientId) || clientId === sync.songTrungRobbedPlayerId || clientId === room?.songTrungVictimId) return {};
+    if (!partnerId || !sync.loveState.pairIds.includes(clientId) || clientId === sync.songTrungRobbedPlayerId || clientId === room?.daNghichState?.songTrungVictimId) return {};
     if (!sync.gameEnded) {
       if (phase !== "night") return {};
       if (!isNightInfoVisible) return {};
@@ -1169,7 +985,7 @@ export default function GameDaNghich() {
     sync.loveState.rolesByPlayerId,
     isNightInfoVisible,
     sync.songTrungRobbedPlayerId,
-    room?.songTrungVictimId,
+    room?.daNghichState?.songTrungVictimId,
   ]);
 
   const dayVoteWeightsByVoterId = useMemo(() => {
@@ -1334,8 +1150,8 @@ export default function GameDaNghich() {
     phase,
     role,
     deadPlayers: deadPlayersForNightActions,
-    songTrungUsedTonight: room?.songTrungUsedTonight || {},
-    songTrungChoices: room?.songTrungChoices || [],
+    songTrungUsedTonight: room?.daNghichState?.songTrungUsedTonight || {},
+    songTrungChoices: room?.daNghichState?.songTrungChoices || [],
     maxUses: room?.gameRules?.songTrungMaxUses ?? 0,
     allNightActionsSimultaneous,
     currentNightTurnRole,
@@ -1482,7 +1298,7 @@ export default function GameDaNghich() {
     nightActionDeadline: allNightActionsSimultaneous ? (mySimultaneousDeadline ?? nightTurnDeadline) : nightTurnDeadline,
     nightActionNow: nightTurnNow,
     doesNightTurnMatchMyRole,
-    songTrungRobbedPlayerId: sync.songTrungRobbedPlayerId || room?.songTrungVictimId,
+    songTrungRobbedPlayerId: sync.songTrungRobbedPlayerId || room?.daNghichState?.songTrungVictimId,
   });
 
   const spiritWolf = useSpiritWolfRole({
@@ -1568,7 +1384,7 @@ export default function GameDaNghich() {
     const lovePartnerRequestedEscape = !!lovePartnerId && sync.loveState.escapeVotes.includes(lovePartnerId);
 
     let hintText = "";
-    const isRobbed = !!(clientId && (sync.songTrungRobbedPlayerId === clientId || room?.songTrungVictimId === clientId));
+    const isRobbed = !!(clientId && (sync.songTrungRobbedPlayerId === clientId || room?.daNghichState?.songTrungVictimId === clientId));
 
     if (isRobbed) {
       hintText = "Song Trùng đã cướp mất vai trò của bạn khiến bạn không thể thực hiện chức năng được nữa, hãy cố gắng tìm ra Song Trùng trước khi Song Trùng bị giết để có thể lấy lại được vai trò.<br><br><b>Hãy nhớ rằng bạn sẽ không thể nói chuyện được nữa cho đến khi lấy lại được những thứ thuộc về bạn</b>";
@@ -1599,7 +1415,7 @@ export default function GameDaNghich() {
         const knowsBite = rules?.villageChiefKnowsWolfBite === true;
         const canFindProtector = rules?.villageChiefCanFindProtector && hasProtectorInGame;
 
-        const isBitten = sync.isChiefBitten || (room?.villageChiefDyingFramePlayerIds || []).includes(clientId || "");
+        const isBitten = sync.isChiefBitten || (room?.daNghichState?.villageChiefDyingFramePlayerIds || []).includes(clientId || "");
         if (knowsBite && isBitten) {
           if (hasProtectorInGame) {
             baseHintText = "Bạn đã bị sói cắn, bạn sẽ chỉ còn cầm cự được sức lực được đến đêm sau. Khi trời sáng, hãy cố thông báo cho mọi người biết nếu cần thiết, Hộ Nhân là người sẽ có khả năng có thể cứu bạn";
@@ -1673,14 +1489,14 @@ export default function GameDaNghich() {
 
     const isWolf =
       isWolfTeamRole ||
-      (role === "Linh sói" && !!room?.spiritWolfWolfAligned) ||
+      (role === "Linh sói" && !!room?.daNghichState?.spiritWolfWolfAligned) ||
       (role === "Thiên Sứ" && sync.angelReviveState.selectedGuess === "wolves");
 
     const isHybrid =
       role === "Thần tình yêu" ||
       role === "Tay Buôn" ||
       (role === "Thiên Sứ" && !sync.angelReviveState.selectedGuess) ||
-      (role === "Linh sói" && !room?.spiritWolfWolfAligned) ||
+      (role === "Linh sói" && !room?.daNghichState?.spiritWolfWolfAligned) ||
       !!loveHybridBackgroundAsset;
 
     const isLovePink = (role === "Thần tình yêu" || love.isPaired) && (loveHasVotedEscape || lovePartnerRequestedEscape);
@@ -1930,8 +1746,8 @@ export default function GameDaNghich() {
   const canStartVillageChiefExtraVote =
     role === "Trưởng làng" &&
     phase === "day" &&
-    !!room?.villageChiefExtraVoteReady &&
-    !room?.villageChiefExtraVoteUsed &&
+    !!room?.daNghichState?.villageChiefExtraVoteReady &&
+    !room?.daNghichState?.villageChiefExtraVoteUsed &&
     !!clientId &&
     !deadPlayers.includes(clientId) &&
     !sync.dayDeadline &&
@@ -2244,7 +2060,7 @@ export default function GameDaNghich() {
     role === "Trưởng làng" &&
     !!clientId &&
     !sync.gameEnded &&
-    (room?.villageChiefDyingFramePlayerIds || []).includes(clientId);
+    (room?.daNghichState?.villageChiefDyingFramePlayerIds || []).includes(clientId);
 
   if (!room) {
     return (
@@ -2612,7 +2428,7 @@ export default function GameDaNghich() {
                 onPlayerClick={handlePlayerClick}
                 onPlayerDoubleClick={handlePlayerDoubleClick}
                 activeMessages={sync.playerMessages}
-                onDismissMessage={(id) => sync.setPlayerMessages((prev: any) => prev.filter((m: any) => m.id !== id))}
+                onDismissMessage={dismissPlayerMessage}
                 isNightInfoVisible={isNightInfoVisible}
                 seerResults={(isSeerTurnActive && isNightInfoVisible) ? seer.seerResults : null}
                 deadPlayersOverride={deadPlayersOverrideForRender}
@@ -2689,83 +2505,17 @@ export default function GameDaNghich() {
                 dayVotes={dayVote.playerPositionsProps.dayVotes}
               >
                 {phase === "night" && !sync.gameEnded && (
-                  <div
-                    className="stickers-board"
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      pointerEvents: "none",
-                      zIndex: 999,
-                      opacity: isNightInfoVisible ? 1 : 0,
-                      transition: "opacity 0.3s ease",
-                      touchAction: "none"
-                    }}
-                  >
-                    {sync.stickers
-                      .filter((s: any) => !dismissedStickerIds.includes(s.id))
-                      .map((sticker: any) => {
-                        const resolvedUrl = getStickerUrlByFileName(sticker.imageSrc);
-                        if (!resolvedUrl) return null;
-
-                        return (
-                          <StickerPeel
-                            key={sticker.id}
-                            imageSrc={resolvedUrl}
-                            createdAt={sticker.createdAt}
-                            isOwner={sticker.owner === clientId}
-                            isPasted={sticker.isPasted}
-                            pastedAt={sticker.pastedAt}
-                            startDragEvent={sticker.startDragEvent}
-                            onDismiss={() => setDismissedStickerIds(prev => [...prev, sticker.id])}
-                            onDragStart={() => {
-                              if (sticker.owner === clientId) {
-                                setDraggingStickerId(sticker.id);
-                                handleDragStartSticker(sticker.id, sticker.channel);
-                              }
-                            }}
-                            onDragUpdate={(_x, _y, overTrash, _rotateVal) => {
-                              if (sticker.owner === clientId) {
-                                setIsOverTrash(overTrash);
-                              }
-                            }}
-                            onRelease={() => {
-                              if (sticker.owner === clientId) {
-                                setDraggingStickerId(null);
-                                setIsOverTrash(false);
-                              }
-                            }}
-                            onDragEnd={(isDeleted, finalX, finalY, finalRotation) => {
-                              if (sticker.owner === clientId) {
-                                if (isDeleted) {
-                                  handleDeleteSticker(sticker.id, sticker.channel);
-                                } else {
-                                  setDraggingStickerId(null);
-                                  setIsOverTrash(false);
-                                  handleDragUpdateSticker(
-                                    sticker.id,
-                                    finalX,
-                                    finalY,
-                                    sticker.channel,
-                                    true,
-                                    Date.now(),
-                                    finalRotation !== undefined ? finalRotation : sticker.rotate
-                                  );
-                                }
-                              }
-                            }}
-                            onDeleteClick={() => handleDeleteSticker(sticker.id, sticker.channel)}
-                            onAnimationEnd={() => {
-                              if (sticker.owner === clientId) {
-                                handleDeleteSticker(sticker.id, sticker.channel);
-                              }
-                            }}
-                            rotate={sticker.rotate}
-                            x={sticker.x}
-                            y={sticker.y}
-                          />
-                        );
-                      })}
-                  </div>
+                  <GameStickerBoard
+                    visible={isNightInfoVisible}
+                    stickers={sync.stickers}
+                    dismissedStickerIds={dismissedStickerIds}
+                    onDismissSticker={dismissSticker}
+                    onDraggingStickerChange={setDraggingStickerId}
+                    onTrashHoverChange={setIsOverTrash}
+                    onDragStartSticker={handleDragStartSticker}
+                    onDragUpdateSticker={handleDragUpdateSticker}
+                    onDeleteSticker={handleDeleteSticker}
+                  />
                 )}
               </PlayerPositions>
             </div>
@@ -2782,7 +2532,7 @@ export default function GameDaNghich() {
               normalizedRole={normalizedRole}
               playerFrameHeightPx={playerFrameHeightPx}
               seerResults={isNightInfoVisible ? sync.seerResults : null}
-              isRobbed={room?.gameRules?.songTrungVictimStaysAlive === true && !!(clientId && (sync.songTrungRobbedPlayerId === clientId || room?.songTrungVictimId === clientId))}
+              isRobbed={room?.gameRules?.songTrungVictimStaysAlive === true && !!(clientId && (sync.songTrungRobbedPlayerId === clientId || room?.daNghichState?.songTrungVictimId === clientId))}
             />
           </>
         );
@@ -3670,64 +3420,7 @@ export default function GameDaNghich() {
 
 
 
-      {/* Trash Zone */}
-      <div
-        id="sticker-trash-zone"
-        style={{
-          position: "fixed",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: "12dvh",
-          zIndex: 1010,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          pointerEvents: "none",
-          transform: draggingStickerId ? "translateY(0)" : "translateY(100%)",
-          opacity: draggingStickerId ? 1 : 0,
-          transition: draggingStickerId
-            ? "transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease"
-            : "transform 0.35s cubic-bezier(0.3, 0, 0.8, 0.15), opacity 0.35s ease-in",
-          overflow: "hidden"
-        }}
-      >
-        {/* Lớp nền đen mặc định */}
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background: "linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.3) 60%, transparent 100%)",
-            zIndex: -1
-          }}
-        />
-        
-        {/* Lớp nền đỏ khi rê sticker vào - Transition opacity tạo hiệu ứng chuyển màu gradient cực mượt */}
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background: "linear-gradient(to top, rgba(239, 68, 68, 0.95) 0%, rgba(239, 68, 68, 0.4) 60%, transparent 100%)",
-            opacity: isOverTrash ? 1 : 0,
-            transition: "opacity 0.3s ease-in-out",
-            zIndex: -1
-          }}
-        />
-
-        <img
-          src={trashIcon}
-          alt="Thùng rác"
-          style={{
-            width: "36px",
-            height: "36px",
-            filter: isOverTrash 
-              ? "invert(21%) sepia(84%) saturate(7415%) hue-rotate(354deg) brightness(93%) contrast(92%)"
-              : "invert(100%) brightness(200%)",
-            transform: isOverTrash ? "translateY(-10px) scale(1.15)" : "translateY(0) scale(1.0)",
-            transition: "transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), filter 0.25s ease"
-          }}
-        />
-      </div>
+      <StickerTrashZone visible={draggingStickerId !== null} active={isOverTrash} />
 
       <VillagerVictoryAnimation
         open={villagerVictoryAnimOpen}

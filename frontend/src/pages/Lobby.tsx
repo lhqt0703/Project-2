@@ -13,7 +13,7 @@ const PLAYER_NAME_STORAGE_KEY = "werewolfPlayerName";
 const ALLOWED_CREATOR_IDS = [
   "16ab4278-4d7a-40e5-a856-c9bf490d5fc3",
   "757a9407-202f-4c2b-acd9-50abdefd3aeb",
-  "53bc353c-f61b-4146-a53e-5ee6b7697039",
+  "77acf041-77a3-4bbb-9fd3-a6cec949a3c5", //mac
   //"046fa88a-a719-47c3-8b97-ddfc8337cf83", // Sicula 
   //"79b02851-1b5d-46fb-8935-5d8031dc9a7f" // mẹ
 ];
@@ -193,22 +193,22 @@ export default function Lobby() {
         gap: 24
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <button
-          onClick={() => nav('/')}
-          aria-label="Quay lại"
-          style={{
-            border: "none",
-            background: "transparent",
-            padding: "0",
-            cursor: "pointer",
-            width: 28,
-            height: 28,
-            margin: "0",
-          }}
-        >
-          <img src={ArrowLeft} alt="Quay lại" style={{ width: 22, height: 22, filter: "brightness(0.75)", display: "block" }} />
-        </button>
-        <h1 id="Sanh-cho">Sảnh Chờ</h1></div>
+          <button
+            onClick={() => nav('/')}
+            aria-label="Quay lại"
+            style={{
+              border: "none",
+              background: "transparent",
+              padding: "0",
+              cursor: "pointer",
+              width: 28,
+              height: 28,
+              margin: "0",
+            }}
+          >
+            <img src={ArrowLeft} alt="Quay lại" style={{ width: 22, height: 22, filter: "brightness(0.75)", display: "block" }} />
+          </button>
+          <h1 id="Sanh-cho">Sảnh Chờ</h1></div>
 
         {/* Lobby Header Card */}
         <div className="lobby-card" style={{ position: "relative", padding: "32px 36px" }}>
@@ -224,9 +224,9 @@ export default function Lobby() {
             }}>
               {greeting}
             </h1>
-            
+
             {/* Player Circle Token */}
-            <div 
+            <div
               onClick={() => setShowAvatarModal(true)}
               style={{
                 width: 60,
@@ -259,16 +259,16 @@ export default function Lobby() {
               title="Đổi Avatar VIP"
             >
               {!currentAvatarUrl && (
-                <img 
-                  src={UserIcon} 
-                  alt="User" 
-                  style={{ 
-                    width: "100%", 
-                    height: "100%", 
+                <img
+                  src={UserIcon}
+                  alt="User"
+                  style={{
+                    width: "100%",
+                    height: "100%",
                     objectFit: "contain",
                     transform: "scale(1.2) translateY(10%)",
                     opacity: 0.5
-                  }} 
+                  }}
                 />
               )}
             </div>

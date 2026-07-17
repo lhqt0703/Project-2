@@ -56,16 +56,18 @@ export default function Game() {
           ...DEFAULT_ROOM_GAME_RULES,
           twoHeartsFirstTwoNights: true,
         },
-        sharedHeartsVisible: isDebugHeartExplosion ? true : undefined,
-        playerHearts: isDebugHeartExplosion ? {
-          P2: 2,
-          P3: 2,
-          P4: 2,
-          P5: 2,
-          P6: 2,
-          P7: 2,
-          P8: 2,
-        } : undefined,
+        daNghichState: {
+          sharedHeartsVisible: isDebugHeartExplosion ? true : undefined,
+          playerHearts: isDebugHeartExplosion ? {
+            P2: 2,
+            P3: 2,
+            P4: 2,
+            P5: 2,
+            P6: 2,
+            P7: 2,
+            P8: 2,
+          } : undefined,
+        },
       });
       return;
     }

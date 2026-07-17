@@ -131,19 +131,10 @@ interface RoomLike {
   phase?: string;
   gameOver?: boolean;
   gameMode?: string;
-  wolfVotes?: Record<string, string | null>;
-  wolfVotes2?: Record<string, string | null>;
   deadPlayers?: string[];
   warnedPlayerIds?: string[];
-  sharedHeartsVisible?: boolean;
-  playerHearts?: Record<string, number>;
-  privatePlayerHearts?: Record<string, number>;
-  privateHeartVisiblePlayerIds?: string[];
-  playerHeartShakeIds?: string[];
   nightActionProgressByPlayerId?: Record<string, "pending" | "done">;
   nightTurnDeadline?: number | null;
-  wolfDeadline?: number | null;
-  spiritWolfDecisionDeadline?: number | null;
   nightActionExtraTimeMsByPlayerId?: Record<string, number>;
   gameRules?: {
     allNightActionsSimultaneous?: boolean;
@@ -153,10 +144,24 @@ interface RoomLike {
     twoHeartsFirstTwoNights?: boolean;
   };
   playerRoles?: Record<string, string>;
-  soiMuNamThuTargetId?: string | null;
-  soiMuSuyThanTargetId?: string | null;
+  soiMuState?: {
+    namThuTargetId?: string | null;
+    suyThanTargetId?: string | null;
+  };
+  daNghichState?: {
+    sharedHeartsVisible?: boolean;
+    playerHearts?: Record<string, number>;
+    privatePlayerHearts?: Record<string, number>;
+    privateHeartVisiblePlayerIds?: string[];
+    playerHeartShakeIds?: string[];
+    villageChiefDyingFramePlayerIds?: string[];
+    wolfVotes?: Record<string, string | null>;
+    wolfVotes2?: Record<string, string | null>;
+    wolfDeadline?: number | null;
+    spiritWolfDecisionDeadline?: number | null;
+    wolves?: string[];
+  };
   publicRevealedRolesByPlayerId?: Record<string, string>;
-  wolves?: string[];
   pendingRoleAssignments?: Record<string, string>;
   pendingRoleBlocks?: Record<string, string[]>;
   roles?: string[];
@@ -915,14 +920,14 @@ export default function PlayerPositions({
   useEffect(() => {
     if (!isHost) return;
     if (!isSimultaneousNight) return;
-    const hasAnyCountdown = !!room.nightTurnDeadline || !!room.wolfDeadline || !!room.spiritWolfDecisionDeadline;
+    const hasAnyCountdown = !!room.nightTurnDeadline || !!room.daNghichState?.wolfDeadline || !!room.daNghichState?.spiritWolfDecisionDeadline;
     if (!hasAnyCountdown) return;
     if (!hasPendingNightActionProgress) return;
 
     setNightActionNow(Date.now());
     const t = window.setInterval(() => setNightActionNow(Date.now()), 1000);
     return () => window.clearInterval(t);
-  }, [hasPendingNightActionProgress, isHost, isSimultaneousNight, room.nightTurnDeadline, room.spiritWolfDecisionDeadline, room.wolfDeadline]);
+  }, [hasPendingNightActionProgress, isHost, isSimultaneousNight, room.nightTurnDeadline, room.daNghichState?.spiritWolfDecisionDeadline, room.daNghichState?.wolfDeadline]);
 
   const witchBonusApplies =
     (room.gameRules?.nonWolfNightActionDurationSec || 0) > 0
@@ -938,13 +943,13 @@ export default function PlayerPositions({
     const roleName = roleBadges?.[playerId] || wolfBadgeRoles?.[playerId] || "";
     const isWolfProgress = roleName === "Sói" || roleName === "Sói con" || roleName === "Sói Dại" || roleName === "Bán sói";
     if (isWolfProgress) {
-      const wolfDeadline = room.wolfDeadline ?? null;
+      const wolfDeadline = room.daNghichState?.wolfDeadline ?? null;
       if (!wolfDeadline) return progress;
       return nightActionNow >= wolfDeadline + extraMs ? undefined : progress;
     }
 
     if (roleName === "Linh sói") {
-      const spiritDeadline = room.spiritWolfDecisionDeadline ?? null;
+      const spiritDeadline = room.daNghichState?.spiritWolfDecisionDeadline ?? null;
       if (!spiritDeadline) return progress;
       return nightActionNow >= spiritDeadline + extraMs ? undefined : progress;
     }
@@ -976,8 +981,8 @@ export default function PlayerPositions({
   const hpBadgePadding = `${scalePx(2, 1)}px ${scalePx(8, 4)}px`;
   const dashCamXoay = { inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px dashed #f59e0b` };
 
-  const wolfVotes = room.wolfVotes as Record<string, string | null> | undefined;
-  const wolfVotes2 = room.wolfVotes2 as Record<string, string | null> | undefined;
+  const wolfVotes = room.daNghichState?.wolfVotes as Record<string, string | null> | undefined;
+  const wolfVotes2 = room.daNghichState?.wolfVotes2 as Record<string, string | null> | undefined;
   const deadPlayers =
     mode === "view"
       ? (deadPlayersOverride ?? (room.deadPlayers as string[] | undefined))
@@ -1058,19 +1063,19 @@ export default function PlayerPositions({
 
   const prevPlayerHeartsRef = useRef<Record<string, number>>({});
   useEffect(() => {
-    if (room?.playerHearts) {
-      if (Object.keys(room.playerHearts).length > 0) {
-        prevPlayerHeartsRef.current = room.playerHearts;
+    if (room?.daNghichState?.playerHearts) {
+      if (Object.keys(room.daNghichState?.playerHearts).length > 0) {
+        prevPlayerHeartsRef.current = room.daNghichState?.playerHearts;
       }
     }
-  }, [room?.playerHearts]);
+  }, [room?.daNghichState?.playerHearts]);
 
   const [pendingHeartExplosion, setPendingHeartExplosion] = useState(false);
   const prevSharedHeartsVisibleRef = useRef<boolean | undefined>(undefined);
 
   useEffect(() => {
     const prevSharedHeartsVisible = prevSharedHeartsVisibleRef.current;
-    const currentSharedHeartsVisible = room?.sharedHeartsVisible;
+    const currentSharedHeartsVisible = room?.daNghichState?.sharedHeartsVisible;
     prevSharedHeartsVisibleRef.current = currentSharedHeartsVisible;
 
     if (prevSharedHeartsVisible === true && currentSharedHeartsVisible === false) {
@@ -1078,7 +1083,7 @@ export default function PlayerPositions({
         setPendingHeartExplosion(true);
       }
     }
-  }, [room?.sharedHeartsVisible, room?.gameRules?.twoHeartsFirstTwoNights, room?.phase, room?.id]);
+  }, [room?.daNghichState?.sharedHeartsVisible, room?.gameRules?.twoHeartsFirstTwoNights, room?.phase, room?.id]);
 
   useEffect(() => {
     if (pendingHeartExplosion && !bulletAnimation) {
@@ -1120,7 +1125,7 @@ export default function PlayerPositions({
         alivePlayers.forEach(p => {
           const pos = localPositions.find(pos => pos.playerId === p.id);
           if (pos) {
-            const hpCount = room.playerHearts?.[p.id] ?? 2;
+            const hpCount = room.daNghichState?.playerHearts?.[p.id] ?? 2;
             if (hpCount > 0) {
               const circleRadiusPx = circleSizePx / 2;
               const badgeLeft = -circleRadiusPx - scalePx(6, 3);
@@ -2007,10 +2012,10 @@ export default function PlayerPositions({
             (revealedRoles && revealedRoles[p.id]) ||
             (loveState && loveState.rolesByPlayerId && loveState.rolesByPlayerId[p.id]) ||
             (p.id === clientId ? (p.id === songTrungRobbedPlayerId && !room.gameOver ? undefined : role) : undefined);
-          const isCurrentlyWolf = currentRoleOfP === "Sói" || room.wolves?.includes(p.id);
+          const isCurrentlyWolf = currentRoleOfP === "Sói" || room.daNghichState?.wolves?.includes(p.id);
           const isChiefConverted = !!(isChiefRevealed && isCurrentlyWolf);
 
-          const isViewerWolf = ["Sói", "Sói con", "Sói Dại", "Bán sói", "Linh sói"].includes(role || "") || room.wolves?.includes(clientId || "");
+          const isViewerWolf = ["Sói", "Sói con", "Sói Dại", "Bán sói", "Linh sói"].includes(role || "") || room.daNghichState?.wolves?.includes(clientId || "");
           const isViewerCupidAndPaired = role === "Thần tình yêu" && clientId !== songTrungRobbedPlayerId && loveState?.pairIds?.includes(p.id);
           const isSongTrungConversion = originalRoleOfP === "Song Trùng";
           const isRobbedPlayerWhoFound = clientId && songTrungRobbedPlayerId === clientId && songTrungFoundByVictim;
@@ -2062,18 +2067,18 @@ export default function PlayerPositions({
             p.connected === false && (isHost || (revealDisconnectedToAll && !isDead));
           const showInGameBadge = mode === "edit" && p.inGame === true;
           const privateHeartVisible =
-            (room.privateHeartVisiblePlayerIds || []).includes(pos.playerId) &&
+            (room.daNghichState?.privateHeartVisiblePlayerIds || []).includes(pos.playerId) &&
             (isHost || pos.playerId === clientId);
-          const heartVisible = room.sharedHeartsVisible || privateHeartVisible;
-          const privatePlayerHp = privateHeartVisible ? room.privatePlayerHearts?.[pos.playerId] : undefined;
+          const heartVisible = room.daNghichState?.sharedHeartsVisible || privateHeartVisible;
+          const privatePlayerHp = privateHeartVisible ? room.daNghichState?.privatePlayerHearts?.[pos.playerId] : undefined;
           const playerHp =
             privateHeartVisible && typeof privatePlayerHp === "number"
               ? privatePlayerHp
               : heartVisible
-                ? room.playerHearts?.[pos.playerId]
+                ? room.daNghichState?.playerHearts?.[pos.playerId]
                 : undefined;
           const showHpBadge = heartVisible && !isDead && typeof playerHp === "number";
-          const heartShaking = privateHeartVisible && (room.playerHeartShakeIds || []).includes(pos.playerId);
+          const heartShaking = privateHeartVisible && (room.daNghichState?.playerHeartShakeIds || []).includes(pos.playerId);
           const hpSafe = Math.max(0, Math.min(2, playerHp ?? 0));
           const filledHearts = Array.from({ length: hpSafe });
           const emptyHearts = Array.from({ length: 2 - hpSafe });
@@ -2603,8 +2608,8 @@ export default function PlayerPositions({
           const rolesInGame = room?.roles || [];
           const hasNamThuInGame = rolesInGame.includes("Nam Thư");
           const hasSuyThanInGame = rolesInGame.includes("Suy Thận");
-          const showNamThuBoard = !!isSoiMu && !!isDay && room?.soiMuNamThuTargetId === pos.playerId;
-          const showSuyThanBoard = !!isSoiMu && !!isDay && room?.soiMuSuyThanTargetId === pos.playerId;
+          const showNamThuBoard = !!isSoiMu && !!isDay && room?.soiMuState?.namThuTargetId === pos.playerId;
+          const showSuyThanBoard = !!isSoiMu && !!isDay && room?.soiMuState?.suyThanTargetId === pos.playerId;
 
           // Xác định danh sách các bảng thực sự đang hiển thị
           const visibleBlank = !!showVoteReview && isBlankVoter;

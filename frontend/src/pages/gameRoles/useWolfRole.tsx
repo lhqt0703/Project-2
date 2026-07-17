@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { socket, clientId } from "../../socket";
+import { clientId, emitSocketAction, requestRoomSync, socket } from "../../socket";
 import type { GamePhase } from "./socketEvents";
 import { AvifIcon } from "../../components/AvifIcon";
 import { getAvatarUrlByFileName, MASKED_AVATAR_MAP } from "../../components/PlayerPositions";
@@ -11,13 +11,15 @@ type Player = { id: string; name: string; connected?: boolean; playerAvatar?: st
 
 type RoomLike = {
   players: Player[];
-  wolfVotes?: Record<string, string | null>;
-  wolfVotes2?: Record<string, string | null>;
   deadPlayers?: string[];
-  banSoiWolfAligned?: boolean;
-  wildWolfConvertAvailableTonight?: boolean;
-  wildWolfConvertRequestedTonight?: boolean;
-  wildWolfConvertedSelf?: boolean;
+  daNghichState?: {
+    wolfVotes?: Record<string, string | null>;
+    wolfVotes2?: Record<string, string | null>;
+    banSoiWolfAligned?: boolean;
+    wildWolfConvertAvailableTonight?: boolean;
+    wildWolfConvertRequestedTonight?: boolean;
+    wildWolfConvertedSelf?: boolean;
+  };
   gameRules?: {
     wolfNightActionDurationSec?: number;
     wolfCanBiteWolf?: boolean;
@@ -161,6 +163,7 @@ export function useWolfRole({
   const [localSelectedTarget, setLocalSelectedTarget] = useState<string | null>(null);
   const [localSelectedTarget2, setLocalSelectedTarget2] = useState<string | null>(null);
   const [hasSubmittedLock, setHasSubmittedLock] = useState(false);
+  const [isSubmittingLock, setIsSubmittingLock] = useState(false);
   const hasSubmittedLockRef = useRef(false);
   const [wildWolfConversionPickerOpen, setWildWolfConversionPickerOpen] = useState(false);
   const [wildWolfLocalConversionTarget, setWildWolfLocalConversionTarget] = useState<string | null>(null);
@@ -171,14 +174,14 @@ export function useWolfRole({
     infoOnly?: boolean;
   } | null>(null);
 
-  const isBanSoiAligned = room.banSoiWolfAligned === true;
-  const isWildWolfConverted = room.wildWolfConvertedSelf === true;
+  const isBanSoiAligned = room.daNghichState?.banSoiWolfAligned === true;
+  const isWildWolfConverted = room.daNghichState?.wildWolfConvertedSelf === true;
   const isWolfTeam = useMemo(() => {
     if (role === "Sói" || role === "Sói con" || role === "Sói Dại") return true;
     return role === "Bán sói" && (isBanSoiAligned || isWildWolfConverted);
   }, [isBanSoiAligned, isWildWolfConverted, role]);
   const isWildWolf = role === "Sói Dại";
-  const wildWolfConversionRequested = room.wildWolfConvertRequestedTonight === true;
+  const wildWolfConversionRequested = room.daNghichState?.wildWolfConvertRequestedTonight === true;
   const wolfDurationSec =
     typeof room.gameRules?.wolfNightActionDurationSec === "number"
       ? Math.max(0, room.gameRules.wolfNightActionDurationSec)
@@ -207,6 +210,7 @@ export function useWolfRole({
       setWildWolfLocalConversionTarget(null);
       hasSubmittedLockRef.current = false;
       setHasSubmittedLock(false);
+      setIsSubmittingLock(false);
     }
   }, [isWolfTeam, isWolfTurnActive]);
 
@@ -221,29 +225,29 @@ export function useWolfRole({
   }, [clientId, wolfLocked, hasSubmittedLock]);
 
   useEffect(() => {
-    if (clientId && isWolfTeam && isWolfTurnActive && room.wolfVotes) {
-      const serverVote = room.wolfVotes[clientId] || null;
+    if (clientId && isWolfTeam && isWolfTurnActive && room.daNghichState?.wolfVotes) {
+      const serverVote = room.daNghichState?.wolfVotes[clientId] || null;
       if (serverVote !== localSelectedTarget) {
         setLocalSelectedTarget(serverVote);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room.wolfVotes, clientId, isWolfTeam, isWolfTurnActive]);
+  }, [room.daNghichState?.wolfVotes, clientId, isWolfTeam, isWolfTurnActive]);
 
   useEffect(() => {
-    if (clientId && isWolfTeam && isWolfTurnActive && room.wolfVotes2) {
-      const serverVote2 = room.wolfVotes2[clientId] || null;
+    if (clientId && isWolfTeam && isWolfTurnActive && room.daNghichState?.wolfVotes2) {
+      const serverVote2 = room.daNghichState?.wolfVotes2[clientId] || null;
       if (serverVote2 !== localSelectedTarget2) {
         setLocalSelectedTarget2(serverVote2);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room.wolfVotes2, clientId, isWolfTeam, isWolfTurnActive]);
+  }, [room.daNghichState?.wolfVotes2, clientId, isWolfTeam, isWolfTurnActive]);
 
   const isLocked = useMemo(() => {
     if (clientId && wolfLocked?.[clientId]) return true;
-    return hasSubmittedLock;
-  }, [hasSubmittedLock, wolfLocked]);
+    return hasSubmittedLock || isSubmittingLock;
+  }, [hasSubmittedLock, isSubmittingLock, wolfLocked]);
 
   const canAct = useMemo(() => {
     if (roomId === "mock-8") return isWolfTeam && phase === "night";
@@ -258,8 +262,8 @@ export function useWolfRole({
   }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, isWolfTeam, phase, wolfBiteDisabled, roomId]);
 
   const deadlineReached = !!(wolfDeadline && nightActionNow >= wolfDeadline && !nightTurnPaused);
-  const effectiveSelectedTarget = localSelectedTarget || (clientId ? room.wolfVotes?.[clientId] || null : null);
-  const effectiveSelectedTarget2 = localSelectedTarget2 || (clientId ? room.wolfVotes2?.[clientId] || null : null);
+  const effectiveSelectedTarget = localSelectedTarget || (clientId ? room.daNghichState?.wolfVotes?.[clientId] || null : null);
+  const effectiveSelectedTarget2 = localSelectedTarget2 || (clientId ? room.daNghichState?.wolfVotes2?.[clientId] || null : null);
   const wildWolfConversionCandidateIds = useMemo(
     () =>
       (wolfMaxTargets >= 2
@@ -285,7 +289,7 @@ export function useWolfRole({
   }, [nightActionNow, wolfDeadline, wolfDurationSec]);
   const shouldPulseWildWolfConversion =
     isWildWolf &&
-    room.wildWolfConvertAvailableTonight === true &&
+    room.daNghichState?.wildWolfConvertAvailableTonight === true &&
     !wildWolfConversionRequested &&
     !deadlineReached &&
     !nightTurnPaused &&
@@ -401,12 +405,38 @@ export function useWolfRole({
                   ? `Bạn có chắc chắn muốn cắn ${name1} và ${name2}?${wildWolfNote}`
                   : `Bạn có chắc chắn muốn cắn ${name1}?${wildWolfNote}`,
                 onConfirm: () => {
-                  hasSubmittedLockRef.current = true;
-                  setHasSubmittedLock(true);
-                  if (roomId !== "mock-8") {
-                    socket.emit("wolfLockVote", { roomId });
-                  }
+                  if (!roomId) return;
+                  const activeRoomId = roomId;
                   setConfirmConfig(null);
+                  if (activeRoomId === "mock-8") {
+                    hasSubmittedLockRef.current = true;
+                    setHasSubmittedLock(true);
+                    return;
+                  }
+
+                  setIsSubmittingLock(true);
+                  void emitSocketAction("wolfLockVote", {
+                    roomId: activeRoomId,
+                    targetId: localSelectedTarget,
+                    targetId2: localSelectedTarget2,
+                  }).then((result) => {
+                    setIsSubmittingLock(false);
+                    if (result.ok) {
+                      hasSubmittedLockRef.current = true;
+                      setHasSubmittedLock(true);
+                      return;
+                    }
+
+                    hasSubmittedLockRef.current = false;
+                    setHasSubmittedLock(false);
+                    setConfirmConfig({
+                      title: "Không thể xác nhận",
+                      message: result.message || "Trạng thái lượt cắn đã thay đổi. Phòng đang được đồng bộ lại.",
+                      infoOnly: true,
+                      onConfirm: () => setConfirmConfig(null),
+                    });
+                    void requestRoomSync(activeRoomId);
+                  });
                 }
               });
             };
@@ -437,7 +467,7 @@ export function useWolfRole({
           <AvifIcon name="🐺" style={{ marginRight: 4 }} /> CẮN!
         </button>
 
-        {isWildWolf && room.wildWolfConvertAvailableTonight && (
+        {isWildWolf && room.daNghichState?.wildWolfConvertAvailableTonight && (
           <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
             <style>{`
               @keyframes wildWolfConversionPulse {

@@ -235,8 +235,8 @@ export function createLifecycleFlow(ctx: ServerContext) {
     });
     room.players = room.players.map((p) => ({ ...p, inGame: p.id !== room.hostId }));
 
-    room.wolves = participants.filter((p) => isWolfRole(room.playerRoles?.[p.id])).map((p) => p.id);
-    room.wolves.forEach((wolfId) => {
+    room.daNghichState!.wolves = participants.filter((p) => isWolfRole(room.playerRoles?.[p.id])).map((p) => p.id);
+    room.daNghichState!.wolves.forEach((wolfId) => {
       ctx.io.in(wolfId).socketsJoin(`wolves_${roomId}`);
     });
     broadcastWolvesListSync(roomId);
@@ -261,12 +261,12 @@ export function createLifecycleFlow(ctx: ServerContext) {
     room.deadPlayers = [];
     room.warnedPlayerIds = [];
     room.publicRevealedRolesByPlayerId = {};
-    room.sharedHeartsVisible = false;
-    room.playerHearts = {};
-    room.privatePlayerHearts = {};
-    room.privateHeartVisiblePlayerIds = [];
-    room.playerHeartShakeIds = [];
-    room.villageChiefDyingFramePlayerIds = [];
+    room.daNghichState!.sharedHeartsVisible = false;
+    room.daNghichState!.playerHearts = {};
+    room.daNghichState!.privatePlayerHearts = {};
+    room.daNghichState!.privateHeartVisiblePlayerIds = [];
+    room.daNghichState!.playerHeartShakeIds = [];
+    room.daNghichState!.villageChiefDyingFramePlayerIds = [];
     room.protectedTonight = null;
     room.protectedTonightBy = null;
     room.protectedTonightAt = null;
@@ -287,10 +287,10 @@ export function createLifecycleFlow(ctx: ServerContext) {
     room.killedTonight = null;
     room.killedTonightExtra = null;
     room.wolfAttackResolvedAt = null;
-    room.wolfVotes = {};
-    room.wolfVotes2 = {};
+    room.daNghichState!.wolfVotes = {};
+    room.daNghichState!.wolfVotes2 = {};
     room.wolfLocked = {};
-    room.wolfDeadline = null;
+    room.daNghichState!.wolfDeadline = null;
     room.wolfVoteResolvedTonight = false;
     room.wolfExtraBiteNextNight = false;
     room.wolfBonusBiteThisNight = false;
@@ -311,25 +311,25 @@ export function createLifecycleFlow(ctx: ServerContext) {
     room.spiritWolfId = getSpiritWolfId(room);
     room.spiritWolfDecisionMade = false;
     room.spiritWolfChoseSave = false;
-    room.spiritWolfWolfAligned = false;
-    room.spiritWolfWolfAlignedPending = false;
+    room.daNghichState!.spiritWolfWolfAligned = false;
+    room.daNghichState!.spiritWolfWolfAlignedPending = false;
     room.spiritWolfPendingPoisonedWolfId = null;
-    room.spiritWolfDecisionDeadline = null;
+    room.daNghichState!.spiritWolfDecisionDeadline = null;
     room.wildWolfConvertedPlayerIds = [];
     room.banSoiId = getBanSoiId(room);
-    room.banSoiWolfAligned = false;
-    room.banSoiWolfAlignedPending = false;
+    room.daNghichState!.banSoiWolfAligned = false;
+    room.daNghichState!.banSoiWolfAlignedPending = false;
     room.wildWolfId = getWildWolfId(room);
     room.wildWolfConvertReadyNextNight = false;
-    room.wildWolfConvertAvailableTonight = false;
-    room.wildWolfConvertRequestedTonight = false;
+    room.daNghichState!.wildWolfConvertAvailableTonight = false;
+    room.daNghichState!.wildWolfConvertRequestedTonight = false;
     room.wildWolfConvertActorId = null;
     room.wildWolfConvertTargetId = null;
     room.wildWolfConvertUsed = false;
     room.villageChiefPendingWolfDeath = null;
     room.villageChiefExtraVoteAvailable = false;
-    room.villageChiefExtraVoteReady = false;
-    room.villageChiefExtraVoteUsed = false;
+    room.daNghichState!.villageChiefExtraVoteReady = false;
+    room.daNghichState!.villageChiefExtraVoteUsed = false;
     room.protectorActorId = null;
     room.protectorTargetId = null;
     room.protectorTargetSetNight = null;
@@ -340,9 +340,9 @@ export function createLifecycleFlow(ctx: ServerContext) {
     room.elementalPendingBuffVoteNight = null;
     room.elementalBuffVotesTonight = {};
     room.elementalBuffVotesResolvedNight = null;
-    room.elementalSelectedBuffId = null;
+    room.daNghichState!.elementalSelectedBuffId = null;
     room.elementalSelectedBuffAppliesNight = null;
-    room.elementalBuffQuickMode = true;
+    room.daNghichState!.elementalBuffQuickMode = true;
     room.angelReviveAvailableByPlayerId = {};
     room.angelReviveUsedPlayerIds = [];
     room.angelReviveRecordsByAngelId = {};
@@ -351,21 +351,21 @@ export function createLifecycleFlow(ctx: ServerContext) {
     resetMerchantRoundState(room);
 
     // Reset Soi Mu state
-    room.soiMuTargets = {};
-    room.soiMuThumbDecisions = {};
-    room.soiMuLocked = {};
-    room.soiMuInvestigatedPlayerId = null;
-    room.soiMuInvestigatedPrevTargetId = null;
-    room.soiMuInvestigationResolved = true;
-    room.soiMuDaySelectedTargetId = null;
-    room.soiMuInvestigationResult = null;
-    room.soiMuHasMerchant = room.gameMode === "soi_mu" && Object.values(room.playerRoles || {}).includes("Tay Buôn");
+    room.soiMuState!.targets = {};
+    room.soiMuState!.thumbDecisions = {};
+    room.soiMuState!.locked = {};
+    room.soiMuState!.investigatedPlayerId = null;
+    room.soiMuState!.investigatedPrevTargetId = null;
+    room.soiMuState!.investigationResolved = true;
+    room.soiMuState!.daySelectedTargetId = null;
+    room.soiMuState!.investigationResult = null;
+    room.soiMuState!.hasMerchant = room.gameMode === "soi_mu" && Object.values(room.playerRoles || {}).includes("Tay Buôn");
 
     // Reset Song Trung state
     room.rolesBeforeConversion = {};
-    room.songTrungChoices = [];
-    room.songTrungUsedTonight = {};
-    room.songTrungVictimId = null;
+    room.daNghichState!.songTrungChoices = [];
+    room.daNghichState!.songTrungUsedTonight = {};
+    room.daNghichState!.songTrungVictimId = null;
     room.songTrungRobbedPlayerId = null;
     room.songTrungRobbedOriginalRole = null;
     room.songTrungFoundByVictim = false;
@@ -445,7 +445,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
       const latestAliveIds = getAlivePlayerIds(room);
 
       // 1. Saint executed: evil wins
-      if (room.dietQuySaintExecutedToday) {
+      if (room.dietQuyState!.saintExecutedToday) {
         endGame(roomId, room, "wolves", reason || "saint_executed");
         return;
       }
@@ -465,7 +465,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
 
       // 4. Mayor win condition: 3 players left, Mayor alive, and no execution today
       const hasMayorAlive = latestAliveIds.some((id) => room.playerRoles?.[id] === "Thị trưởng");
-      if (latestAliveIds.length === 3 && hasMayorAlive && !room.dietQuyExecutedToday) {
+      if (latestAliveIds.length === 3 && hasMayorAlive && !room.dietQuyState!.executedToday) {
         endGame(roomId, room, "villagers", reason || "mayor_survived_no_execution");
         return;
       }

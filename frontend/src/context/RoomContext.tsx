@@ -209,6 +209,7 @@ export interface RoomData {
   nightTurnIndex?: number;
   nightTurnRole?: NightActionRole | null;
   nightTurnDeadline?: number | null;
+  nightTransitionEndsAt?: number | null;
   nightTurnPaused?: boolean;
   nightTurnRemainingMs?: number | null;
   dayPaused?: boolean;

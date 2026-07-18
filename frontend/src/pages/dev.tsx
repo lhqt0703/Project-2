@@ -475,6 +475,7 @@ export default function DevSpawn() {
     debugCupid?: boolean;
     debugHeartExplosion?: boolean;
     debugWitch?: boolean;
+    debugNightTransition?: boolean;
   }) => {
     const params = new URLSearchParams();
     params.set("roomId", "mock-8");
@@ -482,6 +483,7 @@ export default function DevSpawn() {
     if (opts.debugCupid) params.set("debugCupid", "1");
     if (opts.debugHeartExplosion) params.set("debugHeartExplosion", "1");
     if (opts.debugWitch) params.set("debugWitch", "1");
+    if (opts.debugNightTransition) params.set("debugNightTransition", "1");
     window.open(`/game?${params.toString()}`, "_blank");
   };
 
@@ -771,6 +773,26 @@ export default function DevSpawn() {
                 }}
               >
                 Mở Phòng Thử Nghiệm Tổng Hợp (Mock-8) 🧪
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
+              <button
+                onClick={() => openMockGame({ debugNightTransition: true })}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  borderRadius: "8px",
+                  border: "1px solid rgba(255, 255, 255, 0.38)",
+                  background: "rgba(255, 255, 255, 0.12)",
+                  color: "#ffffff",
+                  fontWeight: 600,
+                  fontSize: "0.875rem",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                  textAlign: "center"
+                }}
+              >
+                Test chuyển cảnh Hoàng hôn → Đêm (Mock-8)
               </button>
             </div>
 

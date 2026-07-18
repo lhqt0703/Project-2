@@ -608,10 +608,28 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     }
   }
 
-  function startNightTurnFlow(roomId: string) {
+  function startNightTurnFlow(roomId: string, options?: { delayMs?: number }) {
     const room = ctx.rooms[roomId];
     if (!room) return;
     if (room.phase !== "night") return;
+
+    const delayMs = Math.max(0, Math.floor(options?.delayMs || 0));
+    if (delayMs > 0) {
+      const transitionEndsAt = Math.max(Date.now(), room.nightTransitionEndsAt || Date.now() + delayMs);
+      const remainingTransitionMs = Math.max(0, transitionEndsAt - Date.now());
+      room.nightTransitionEndsAt = transitionEndsAt;
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      setTimeout(() => {
+        const latest = ctx.rooms[roomId];
+        if (!latest || latest.phase !== "night") return;
+        if (latest.nightTransitionEndsAt !== transitionEndsAt) return;
+        latest.nightTransitionEndsAt = null;
+        startNightTurnFlow(roomId);
+      }, remainingTransitionMs);
+      return;
+    }
+
+    room.nightTransitionEndsAt = null;
 
     if (room.gameMode === "diet_quy") {
       room.dietQuyState!.poisonedPrevPlayerId = room.dietQuyState!.poisonedPlayerId || null;

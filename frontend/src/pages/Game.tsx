@@ -24,6 +24,7 @@ export default function Game() {
 
     if (roomId === "mock-8") {
       const isDebugHeartExplosion = new URLSearchParams(window.location.search).get("debugHeartExplosion") === "1";
+      const isDebugNightTransition = new URLSearchParams(window.location.search).get("debugNightTransition") === "1";
       setRoom({
         id: "mock-8",
         hostId: "P1",
@@ -48,6 +49,7 @@ export default function Game() {
           { playerId: "P8", x: 0.585, y: 0.7 },
         ],
         phase: "night",
+        nightTransitionEndsAt: isDebugNightTransition ? Date.now() + 3_000 : null,
         nightCount: isDebugHeartExplosion ? 2 : 1,
         nightTurnRemainingMs: 690 * 1000,
         nightTurnPaused: true,

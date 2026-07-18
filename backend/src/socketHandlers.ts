@@ -3144,6 +3144,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (room.gameOver) return;
 
     const previousPhase = room.phase;
+    const nightTransitionDelayMs =
+      phase === "night" && previousPhase === "dusk" && (room.gameMode || "da_nghich") === "da_nghich"
+        ? 3_000
+        : 0;
+    room.nightTransitionEndsAt = nightTransitionDelayMs > 0 ? Date.now() + nightTransitionDelayMs : null;
     room.phase = phase;
     if (phase === "dusk" || phase === "day" || phase === "night") {
       room.hidePlayerRoleText = true;
@@ -3450,8 +3455,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       emitLoveStateToPair(ctx, roomId, room);
       emitMerchantPrivateStateForAll(roomId);
 
-      // Create a time-ordered action sequence.
-      startNightTurnFlow(roomId);
+      // Give the reusable dusk-to-night card transition time to finish before any action timer starts.
+      startNightTurnFlow(roomId, { delayMs: nightTransitionDelayMs });
     }
   });
 

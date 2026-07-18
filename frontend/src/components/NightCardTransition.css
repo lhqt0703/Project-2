@@ -1,0 +1,137 @@
+.night-card-transition {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  overflow: hidden;
+  pointer-events: all;
+  opacity: 1;
+  isolation: isolate;
+  animation: nightCardTransitionFade var(--night-card-transition-duration) linear both;
+}
+
+.night-card-transition__backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: #130f20 center / cover no-repeat;
+}
+
+.night-card-transition .pc-card-wrapper {
+  top: 50%;
+  width: min(40dvw, 420px);
+  height: min(70dvh, 680px);
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(1);
+  transform-origin: calc(50% - 16px) calc(50% - 16px);
+  animation: nightCardTransitionExpand var(--night-card-transition-duration) cubic-bezier(0.76, 0, 0.24, 1) both;
+}
+
+.night-card-transition .pc-card,
+.night-card-transition .pc-card-front,
+.night-card-transition .pc-card-back {
+  transition: none;
+}
+
+.night-card-transition .pc-card-wrapper .pc-card {
+  backface-visibility: visible;
+  transform: rotateY(var(--base-rotation-y)) !important;
+  box-shadow:
+    0 0 5px 2px rgba(255, 255, 255, 0.9),
+    0 0 28px 9px rgba(255, 255, 255, 0.75),
+    0 0 72px 24px rgba(224, 239, 255, 0.48);
+  animation: nightCardTransitionGlow var(--night-card-transition-duration) ease-out both;
+}
+
+.night-card-transition__whiteout {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  background: #fff;
+  opacity: 0;
+  animation: nightCardTransitionWhiteout calc(var(--night-card-transition-duration) - 0.69s) linear both;
+}
+
+@keyframes nightCardTransitionExpand {
+
+  0%,
+  8% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  56.666% {
+    transform: translate(-50%, -50%) scale(16);
+  }
+
+  100% {
+    transform: translate(-50%, -50%) scale(16);
+  }
+}
+
+@keyframes nightCardTransitionGlow {
+  0% {
+    filter: brightness(1);
+  }
+
+  18% {
+    filter: brightness(1.45) saturate(0.75);
+  }
+
+  56.666%,
+  100% {
+    filter: brightness(3.5) saturate(0);
+    box-shadow:
+      0 0 10px 5px #fff,
+      0 0 56px 24px rgba(255, 255, 255, 0.95),
+      0 0 120px 50px rgba(255, 255, 255, 0.85);
+  }
+}
+
+@keyframes nightCardTransitionWhiteout {
+
+  0%,
+  43% {
+    opacity: 0;
+  }
+
+  56.666%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes nightCardTransitionFade {
+
+  0%,
+  80% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .night-card-transition .pc-card-wrapper {
+    width: 75dvw;
+    height: 65dvh;
+  }
+}
+
+@media (max-width: 480px) {
+  .night-card-transition .pc-card-wrapper {
+    width: 80dvw;
+    height: 75dvh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .night-card-transition .pc-card-wrapper,
+  .night-card-transition .pc-card,
+  .night-card-transition__whiteout,
+  .night-card-transition {
+    animation-timing-function: linear;
+  }
+}

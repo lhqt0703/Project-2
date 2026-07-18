@@ -40,6 +40,7 @@ import GridMotionOverlay from "../components/GridMotionOverlay";
 import RoleCompanionOverlay from "../components/RoleCompanionOverlay";
 import { AvifIcon } from "../components/AvifIcon";
 import { CountdownButton } from "../components/CountdownButton";
+import NightCardTransition from "../components/NightCardTransition";
 import { shootWinnerConfettiFromSides } from "../utils/winnerConfetti";
 import { VIP_REAL_NAMES } from "../constants/vip";
 import { VillagerVictoryAnimation } from "../components/VillagerVictoryAnimation";
@@ -312,6 +313,7 @@ export default function GameDaNghich() {
   } | null>(null);
 
   const [duskTransitionActive, setDuskTransitionActive] = useState(false);
+  const [dismissedNightTransitionEndsAt, setDismissedNightTransitionEndsAt] = useState<number | null>(null);
   const [lowPerformanceMode, setLowPerformanceMode] = useState(() => {
     if (typeof window !== "undefined") {
       return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.matchMedia("(pointer: coarse)").matches;
@@ -2081,6 +2083,15 @@ export default function GameDaNghich() {
   const isDuskTransitionPending = room.phase === "dusk" && !duskRevealGameUI;
   const gameUIOpacity = isDuskTransitionPending ? 0 : 1;
   const gameUIPointerEvents = isDuskTransitionPending ? "none" : "auto";
+  const nightTransitionEndsAt = room.nightTransitionEndsAt ?? null;
+  const nightTransitionDurationMs = nightTransitionEndsAt
+    ? Math.max(0, nightTransitionEndsAt - (room.serverTime ?? Date.now()))
+    : 0;
+  const isNightCardTransitionActive =
+    phase === "night" &&
+    nightTransitionEndsAt !== null &&
+    nightTransitionEndsAt !== dismissedNightTransitionEndsAt &&
+    nightTransitionDurationMs > 0;
 
   const hasNightAction = useMemo(() => {
     if (!role) return false;
@@ -2328,7 +2339,7 @@ export default function GameDaNghich() {
               )}
 
               <CountdownButton
-                showCountdown={room?.id === "mock-8" ? true : !!showCountdown}
+                showCountdown={!isNightCardTransitionActive && (room?.id === "mock-8" ? true : !!showCountdown)}
                 countdownSeconds={room?.id === "mock-8" ? mock8.countdownSeconds : countdownSeconds}
                 isPaused={room?.id === "mock-8" ? mock8.isPaused : !!nightTurnPaused}
               />
@@ -3417,6 +3428,16 @@ export default function GameDaNghich() {
           onComplete={() => setDuskTransitionActive(false)}
         />
       )}
+
+      <NightCardTransition
+        active={isNightCardTransitionActive}
+        durationMs={nightTransitionDurationMs}
+        role={role}
+        revealed={!!role}
+        backdropImage={ChieuBg}
+        lowPerformanceMode={lowPerformanceMode}
+        onComplete={() => setDismissedNightTransitionEndsAt(nightTransitionEndsAt)}
+      />
 
 
 

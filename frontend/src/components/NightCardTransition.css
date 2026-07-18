@@ -1,12 +1,12 @@
 .night-card-transition {
   position: fixed;
   inset: 0;
-  z-index: 20000;
+  z-index: 69;
   overflow: hidden;
   pointer-events: all;
   opacity: 1;
   isolation: isolate;
-  animation: nightCardTransitionFade var(--night-card-transition-duration) linear both;
+  animation: nightCardTransitionFade var(--night-card-effect-duration) var(--night-card-flip-duration) ease-in-out both;
 }
 
 .night-card-transition__backdrop {
@@ -18,15 +18,15 @@
 
 .night-card-transition .pc-card-wrapper {
   top: 50%;
-  width: min(40dvw, 420px);
-  height: min(70dvh, 680px);
+  width: min(40dvw, 420px, 43.235dvh);
+  height: auto;
+  aspect-ratio: 21 / 34;
   pointer-events: none;
   transform: translate(-50%, -50%) scale(1);
-  transform-origin: calc(50% - 16px) calc(50% - 16px);
-  animation: nightCardTransitionExpand var(--night-card-transition-duration) cubic-bezier(0.76, 0, 0.24, 1) both;
+  transform-origin: calc(50% + 16px) calc(50% - 16px);
+  animation: nightCardTransitionExpand var(--night-card-effect-duration) var(--night-card-flip-duration) cubic-bezier(0.76, 0, 0.24, 1) both;
 }
 
-.night-card-transition .pc-card,
 .night-card-transition .pc-card-front,
 .night-card-transition .pc-card-back {
   transition: none;
@@ -35,11 +35,13 @@
 .night-card-transition .pc-card-wrapper .pc-card {
   backface-visibility: visible;
   transform: rotateY(var(--base-rotation-y)) !important;
-  box-shadow:
-    0 0 5px 2px rgba(255, 255, 255, 0.9),
-    0 0 28px 9px rgba(255, 255, 255, 0.75),
-    0 0 72px 24px rgba(224, 239, 255, 0.48);
-  animation: nightCardTransitionGlow var(--night-card-transition-duration) ease-out both;
+  transition: transform 0.72s cubic-bezier(0.175, 0.885, 0.32, 1.15), box-shadow 0.3s ease-in-out;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+  animation: nightCardTransitionGlow var(--night-card-effect-duration) var(--night-card-flip-duration) ease-out both;
+}
+
+.night-card-transition .pc-card-back svg {
+  filter: none !important;
 }
 
 .night-card-transition__whiteout {
@@ -49,7 +51,7 @@
   pointer-events: none;
   background: #fff;
   opacity: 0;
-  animation: nightCardTransitionWhiteout calc(var(--night-card-transition-duration) - 0.69s) linear both;
+  animation: nightCardTransitionWhiteout calc(var(--night-card-effect-duration) - 0.69s) var(--night-card-flip-duration) ease-out both;
 }
 
 @keyframes nightCardTransitionExpand {
@@ -71,15 +73,20 @@
 @keyframes nightCardTransitionGlow {
   0% {
     filter: brightness(1);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
   }
 
   18% {
     filter: brightness(1.45) saturate(0.75);
+    box-shadow:
+      0 0 4px 1px rgba(255, 255, 255, 0.65),
+      0 0 18px 5px rgba(224, 239, 255, 0.35);
   }
+
 
   56.666%,
   100% {
-    filter: brightness(3.5) saturate(0);
+    filter: brightness(3.5) saturate(0) blur(1px);
     box-shadow:
       0 0 10px 5px #fff,
       0 0 56px 24px rgba(255, 255, 255, 0.95),
@@ -132,6 +139,6 @@
   .night-card-transition .pc-card,
   .night-card-transition__whiteout,
   .night-card-transition {
-    animation-timing-function: linear;
+    animation-timing-function: ease-out;
   }
 }

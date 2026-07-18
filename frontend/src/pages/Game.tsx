@@ -49,7 +49,7 @@ export default function Game() {
           { playerId: "P8", x: 0.585, y: 0.7 },
         ],
         phase: "night",
-        nightTransitionEndsAt: isDebugNightTransition ? Date.now() + 3_000 : null,
+        nightTransitionEndsAt: isDebugNightTransition ? Date.now() + 3_720 : null,
         nightCount: isDebugHeartExplosion ? 2 : 1,
         nightTurnRemainingMs: 690 * 1000,
         nightTurnPaused: true,

@@ -6,7 +6,7 @@ import PlayerPositions, { AVA_IMAGES, getAvatarUrlByFileName } from "../componen
 import GameLogPanel from "../components/GameLogPanel";
 import ConfirmModal from "../components/ConfirmModal";
 import RoleCharacterPortrait, { HYBRID_BACKGROUND_ASSET } from "../components/RoleCharacterPortrait";
-import type { GamePhase } from "./gameRoles/socketEvents";
+import type { CursedResultPayload, GamePhase } from "./gameRoles/socketEvents";
 import type { NightActionRole } from "../context/RoomContext";
 import { ELEMENTAL_ROLE_SET } from "../constants/elemental";
 import { useSeerRole } from "./gameRoles/useSeerRole";
@@ -103,6 +103,7 @@ export default function GameDaNghich() {
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const roomId = query.get("roomId");
   const [roleOverride, setRoleOverride] = useState<string | null>("Thần tình yêu");
+  const [mockSkillHintScenario, setMockSkillHintScenario] = useState<string>("default");
   const role = roomId === "mock-8" ? roleOverride : contextRole;
   const debugAnim = query.get("debugAnim") === "1";
   const debugCupid = query.get("debugCupid") === "1";
@@ -110,6 +111,7 @@ export default function GameDaNghich() {
   const debugWitch = query.get("debugWitch") === "1";
   const isDebugMode = roomId === "mock-8" || debugAnim || debugCupid || debugHeartExplosion || debugWitch;
   const [testHeartExplosionTrigger, setTestHeartExplosionTrigger] = useState(0);
+  const [mockCursedResult, setMockCursedResult] = useState<CursedResultPayload | null>(null);
   const sync = useGameSocketSync({ roomId, setRoom });
   const phase: GamePhase = sync.phase;
   const {
@@ -264,7 +266,7 @@ export default function GameDaNghich() {
             const isUnknownSaved = /^M unknownID \d+/i.test(savedAvatar);
             const isAssignedServer = (p.playerAvatar || "").includes("M-");
             const isPlayerOwnVip = !p.playerAvatar || p.playerAvatar.toLowerCase().includes(p.id.toLowerCase());
-            
+
             if ((isUnknownSaved && isAssignedServer) || isPlayerOwnVip) {
               customAvatars[p.id] = p.playerAvatar;
               changed = true;
@@ -421,7 +423,7 @@ export default function GameDaNghich() {
   const lastGameLogCountRef = useRef<number>(0);
   const lastTrialVotesRef = useRef<Record<string, "live" | "die" | null> | null>(null);
   const lastTrialVerdictHighlightSeqRef = useRef<number>(0);
-  
+
   const clearVerdictHighlight = useCallback(() => {
     setAutoTrialHighlight(null);
     setAutoTrialHighlightSuppressed(false);
@@ -1012,15 +1014,15 @@ export default function GameDaNghich() {
 
   const [hunterBulletAnim, setHunterBulletAnim] = useState<
     | {
-        fromPlayerId: string;
-        toPlayerId: string;
-        startedAt: number;
-        durationMs: number;
-        assetSrc?: string;
-        alt?: string;
-        rotationOffsetDeg?: number;
-        kind: "hunter" | "love";
-      }
+      fromPlayerId: string;
+      toPlayerId: string;
+      startedAt: number;
+      durationMs: number;
+      assetSrc?: string;
+      alt?: string;
+      rotationOffsetDeg?: number;
+      kind: "hunter" | "love";
+    }
     | null
   >(null);
   const hunterBulletTimeoutRef = useRef<number | null>(null);
@@ -1190,7 +1192,7 @@ export default function GameDaNghich() {
     role,
     nightCount: room?.nightCount,
     deadPlayers: deadPlayersForNightActions,
-    cursedResult: sync.cursedResult,
+    cursedResult: roomId === "mock-8" ? mockCursedResult : sync.cursedResult,
     cursedTargetId: sync.cursedTargetId,
     cursedLastTargetId: sync.cursedLastTargetId,
     cursedUsesRemaining: sync.cursedUsesRemaining,
@@ -1377,21 +1379,99 @@ export default function GameDaNghich() {
 
   // ponytail: hasVisibleActionPanel was declared but never read, so deleted
 
-  const renderSkillHint = () => {
-    if (phase !== "night" || !role || isCurrentPlayerDeadForNightActions || !isNightInfoVisible) return null;
-    
+  const renderSkillHint = (forceShow = false) => {
+    if (!forceShow && (phase !== "night" || !role || isCurrentPlayerDeadForNightActions || !isNightInfoVisible)) return null;
+    if (forceShow && !role) return null;
+
     // Tính toán trực tiếp escape state để tránh lỗi cache của Vite
-    const lovePartnerId = sync.loveState.partnerId;
-    const loveHasVotedEscape = !!clientId && sync.loveState.escapeVotes.includes(clientId);
-    const lovePartnerRequestedEscape = !!lovePartnerId && sync.loveState.escapeVotes.includes(lovePartnerId);
+    let lovePartnerId = sync.loveState.partnerId;
+    let loveHasVotedEscape = !!clientId && sync.loveState.escapeVotes.includes(clientId);
+    let lovePartnerRequestedEscape = !!lovePartnerId && sync.loveState.escapeVotes.includes(lovePartnerId);
 
     let hintText = "";
-    const isRobbed = !!(clientId && (sync.songTrungRobbedPlayerId === clientId || room?.daNghichState?.songTrungVictimId === clientId));
+    let isRobbed = !!(clientId && (sync.songTrungRobbedPlayerId === clientId || room?.daNghichState?.songTrungVictimId === clientId));
+    let currentRole = role;
+
+    let mockLoveTargetId = love.targetId;
+    let mockLoveCanUseEscape = love.canUseEscape;
+    let mockLoveIsPaired = love.isPaired;
+    let mockChiefFoundProtectorId = sync.chiefFoundProtectorId;
+    let mockIsChiefBitten = sync.isChiefBitten;
+    let mockIsBanSoiAligned = isBanSoiAligned;
+    let mockIsWildWolfConverted = isWildWolfConverted;
+    let mockSeerResults = seer.seerResults;
+    let mockWolfMaxTargets = sync.wolfMaxTargets;
+
+    // ponytail: override variables when testing mock scenarios
+    if (roomId === "mock-8" && mockSkillHintScenario !== "default") {
+      isRobbed = false;
+      mockLoveTargetId = null;
+      mockLoveCanUseEscape = false;
+      mockLoveIsPaired = false;
+      mockChiefFoundProtectorId = null;
+      mockIsChiefBitten = false;
+      mockIsBanSoiAligned = false;
+      mockIsWildWolfConverted = false;
+      mockSeerResults = [];
+      mockWolfMaxTargets = 1;
+      loveHasVotedEscape = false;
+      lovePartnerRequestedEscape = false;
+
+      if (mockSkillHintScenario === "isRobbed") {
+        isRobbed = true;
+      } else if (mockSkillHintScenario.startsWith("cupid_")) {
+        currentRole = "Thần tình yêu";
+        if (mockSkillHintScenario === "cupid_no_target") {
+          mockLoveTargetId = null;
+        } else {
+          mockLoveTargetId = "target-123";
+          mockLoveIsPaired = true;
+          if (mockSkillHintScenario === "cupid_escape_both") {
+            loveHasVotedEscape = true;
+            lovePartnerRequestedEscape = true;
+          } else if (mockSkillHintScenario === "cupid_escape_me") {
+            loveHasVotedEscape = true;
+          } else if (mockSkillHintScenario === "cupid_escape_partner") {
+            lovePartnerRequestedEscape = true;
+          } else if (mockSkillHintScenario === "cupid_can_escape") {
+            mockLoveCanUseEscape = true;
+          }
+        }
+      } else if (mockSkillHintScenario.startsWith("chief_")) {
+        currentRole = "Trưởng làng";
+        if (mockSkillHintScenario === "chief_bitten_has_protector") {
+          mockIsChiefBitten = true;
+        } else if (mockSkillHintScenario === "chief_bitten_no_protector") {
+          mockIsChiefBitten = true;
+        } else if (mockSkillHintScenario === "chief_find_protector_found") {
+          mockChiefFoundProtectorId = "protector-123";
+        } else if (mockSkillHintScenario === "chief_find_protector_not_found") {
+          mockChiefFoundProtectorId = null;
+        }
+      } else if (mockSkillHintScenario.startsWith("wild_wolf_")) {
+        currentRole = "Bán sói";
+        if (mockSkillHintScenario === "wild_wolf_aligned") {
+          mockIsBanSoiAligned = true;
+        }
+      } else if (mockSkillHintScenario.startsWith("seer_result_")) {
+        currentRole = "Tiên tri";
+        if (mockSkillHintScenario === "seer_result_wolf") {
+          mockSeerResults = [{ playerId: "player-123", isWolf: true }];
+        } else {
+          mockSeerResults = [{ playerId: "player-123", isWolf: false }];
+        }
+      } else if (mockSkillHintScenario === "wolf_bite_two") {
+        currentRole = "Sói";
+        mockWolfMaxTargets = 2;
+      } else if (mockSkillHintScenario === "elemental_guess") {
+        currentRole = "Băng Giá";
+      }
+    }
 
     if (isRobbed) {
       hintText = "Song Trùng đã cướp mất vai trò của bạn khiến bạn không thể thực hiện chức năng được nữa, hãy cố gắng tìm ra Song Trùng trước khi Song Trùng bị giết để có thể lấy lại được vai trò.<br><br><b>Hãy nhớ rằng bạn sẽ không thể nói chuyện được nữa cho đến khi lấy lại được những thứ thuộc về bạn</b>";
-    } else if (role === "Thần tình yêu") {
-      if (!love.targetId) {
+    } else if (currentRole === "Thần tình yêu") {
+      if (!mockLoveTargetId) {
         hintText = "Hãy chọn một người mà bạn muốn ghép đôi bản thân với họ";
       } else {
         if (loveHasVotedEscape && lovePartnerRequestedEscape) {
@@ -1400,24 +1480,26 @@ export default function GameDaNghich() {
           hintText = "Đã gửi tín hiệu hãy rời khỏi làng đêm nay cho nửa kia. Hãy nhớ rằng hành động này chỉ có thể thực hiện thành công một lần";
         } else if (lovePartnerRequestedEscape) {
           hintText = "Nửa kia ra đang ra tín hiệu hãy rời khỏi làng đêm nay để né được mọi sự kiện nhắm vào cả hai, bạn có thể đồng ý hoặc không phản hồi để từ chối, hãy nhớ rằng việc đồng ý ra khỏi làng sẽ chỉ có thể thực hiện được một lần";
-        } else if (love.canUseEscape) {
+        } else if (mockLoveCanUseEscape) {
           hintText = "Bạn có thể gửi tín hiệu muốn ra khỏi làng cho nửa kia và nếu cả hai đều đồng ý thì cả bạn và họ sẽ đều né được mọi sự kiện nhắm vào trong đêm, tuy nhiên hành động này sẽ chỉ có thể thực hiện thành công một lần";
         } else {
           hintText = "Hãy cẩn trọng và cố gắng sống sót, vì nửa kia cũng như vì chính bản thân bạn";
         }
       }
-      if (isDebugMode) {
-        hintText += `<br><br><span style="color: #ffb703; font-size: 0.6rem;">[DEBUG] hasVotedEscape: ${loveHasVotedEscape}, partnerRequestedEscape: ${lovePartnerRequestedEscape}, votes: ${JSON.stringify(sync.loveState.escapeVotes)}, clientId: ${clientId}</span>`;
-      }
     } else {
-      let baseHintText = ROLE_SKILL_HINTS[role] || "";
-      if (role === "Trưởng làng") {
-        const rules = room?.gameRules;
-        const hasProtectorInGame = room?.roles?.includes("Hộ nhân");
+      let baseHintText = (currentRole ? ROLE_SKILL_HINTS[currentRole] : "") || "";
+      if (currentRole === "Trưởng làng") {
+        const rules = (roomId === "mock-8" && mockSkillHintScenario !== "default")
+          ? { villageChiefKnowsWolfBite: true, villageChiefCanFindProtector: true }
+          : room?.gameRules;
+        const hasProtectorInGame = (roomId === "mock-8" && mockSkillHintScenario !== "default")
+          ? (mockSkillHintScenario === "chief_bitten_has_protector" || mockSkillHintScenario.startsWith("chief_find_protector"))
+          : room?.roles?.includes("Hộ nhân");
+
         const knowsBite = rules?.villageChiefKnowsWolfBite === true;
         const canFindProtector = rules?.villageChiefCanFindProtector && hasProtectorInGame;
 
-        const isBitten = sync.isChiefBitten || (room?.daNghichState?.villageChiefDyingFramePlayerIds || []).includes(clientId || "");
+        const isBitten = mockIsChiefBitten || (room?.daNghichState?.villageChiefDyingFramePlayerIds || []).includes(clientId || "");
         if (knowsBite && isBitten) {
           if (hasProtectorInGame) {
             baseHintText = "Bạn đã bị sói cắn, bạn sẽ chỉ còn cầm cự được sức lực được đến đêm sau. Khi trời sáng, hãy cố thông báo cho mọi người biết nếu cần thiết, Hộ Nhân là người sẽ có khả năng có thể cứu bạn";
@@ -1430,7 +1512,7 @@ export default function GameDaNghich() {
             : "Vào lần đầu tiên bạn bị biểu quyết chết bạn sẽ lộ diện thân phận và sống tiếp, nhưng cũng hãy cẩn thận vì dù bạn có lộ diện thân phận hay không thì sói vẫn có thể cắn bạn";
 
           if (canFindProtector) {
-            if (sync.chiefFoundProtectorId) {
+            if (mockChiefFoundProtectorId) {
               baseHintText = `Cố gắng sóng sót và bảo vệ Hộ nhân. Ngoài ra ${voteDeathPart.charAt(0).toLowerCase()}${voteDeathPart.slice(1)}`;
             } else {
               baseHintText = `Hãy cố gắng tìm lại được Hộ Nhân khi còn có thể. Ngoài ra ${voteDeathPart.charAt(0).toLowerCase()}${voteDeathPart.slice(1)}`;
@@ -1440,34 +1522,34 @@ export default function GameDaNghich() {
           }
         }
       }
-      if (role === "Bán sói") {
-        if (isBanSoiAligned || isWildWolfConverted) {
+      if (currentRole === "Bán sói") {
+        if (mockIsBanSoiAligned || mockIsWildWolfConverted) {
           baseHintText = ROLE_SKILL_HINTS["Sói"];
         } else {
           baseHintText = "Bạn hiện vẫn là một dân làng nên chưa có khả năng thực hiện hành động đêm. Nhưng hãy cẩn thận vì nếu bạn bị sói tấn công thì dòng máu sói của bạn sẽ trỗi dậy";
         }
       }
-      if (role === "Tiên tri" && seer.seerResults && seer.seerResults.length > 0) {
-        const lastResult = seer.seerResults[seer.seerResults.length - 1];
+      if (currentRole === "Tiên tri" && mockSeerResults && mockSeerResults.length > 0) {
+        const lastResult = mockSeerResults[mockSeerResults.length - 1];
         if (lastResult) {
           const targetPlayer = roomForDisplay?.players?.find((p: any) => p.id === lastResult.playerId);
           const targetName = targetPlayer ? targetPlayer.name : "Người chơi";
-          baseHintText = lastResult.isWolf 
-            ? `${targetName} có lẽ thật sự là sói . . .` 
+          baseHintText = lastResult.isWolf
+            ? `${targetName} có lẽ thật sự là sói . . .`
             : `${targetName} có lẽ là một con người`;
         }
       }
-      if (!baseHintText && ELEMENTAL_ROLE_SET.has(role)) {
+      if (currentRole && !baseHintText && ELEMENTAL_ROLE_SET.has(currentRole)) {
         baseHintText = "Chọn một người mà bạn nghĩ họ cũng là dân làng nắm giữ nguyên tố";
       }
 
-      const isWolfTeamAction = role === "Sói" || role === "Sói con" || role === "Sói Dại" || (role === "Bán sói" && (isBanSoiAligned || isWildWolfConverted));
-      if (isWolfTeamAction && sync.wolfMaxTargets >= 2) {
+      const isWolfTeamAction = currentRole === "Sói" || currentRole === "Sói con" || currentRole === "Sói Dại" || (currentRole === "Bán sói" && (mockIsBanSoiAligned || mockIsWildWolfConverted));
+      if (isWolfTeamAction && mockWolfMaxTargets >= 2) {
         baseHintText = baseHintText.replace("chọn một người", 'Chọn <span class="breath-glow-2">2</span> người');
       }
-      
+
       hintText = baseHintText;
-      if (love.isPaired) {
+      if (mockLoveIsPaired) {
         let escapeText = "";
         if (loveHasVotedEscape && lovePartnerRequestedEscape) {
           escapeText = "Đã cùng nhau rời khỏi làng, miễn nhiễm tất cả sự kiện nhắm vào đêm nay";
@@ -1475,33 +1557,37 @@ export default function GameDaNghich() {
           escapeText = "Đã gửi tín hiệu hãy rời khỏi làng đêm nay cho nửa kia. Hãy nhớ rằng hành động này chỉ có thể thực hiện thành công một lần";
         } else if (lovePartnerRequestedEscape) {
           escapeText = "Nửa kia ra đang ra tín hiệu hãy rời khỏi làng đêm nay để né được mọi sự kiện nhắm vào cả hai, bạn có thể đồng ý hoặc không phản hồi để từ chối, hãy nhớ rằng việc đồng ý ra khỏi làng sẽ chỉ có thể thực hiện được một lần";
-        } else if (love.canUseEscape) {
+        } else if (mockLoveCanUseEscape) {
           escapeText = "Bạn có thể gửi tín hiệu muốn ra khỏi làng cho nửa kia và nếu cả hai đều đồng ý thì cả bạn và họ sẽ đều né được mọi sự kiện nhắm vào trong đêm, tuy nhiên hành động này sẽ chỉ có thể thực hiện thành công một lần";
         } else {
           escapeText = "Hãy cẩn trọng và cố gắng sống sót, vì nửa kia cũng như vì chính bản thân bạn";
         }
         hintText = baseHintText + "<br><br>* " + escapeText;
       }
-      if (isDebugMode) {
-        hintText += `<br><br><span style="color: #ffb703; font-size: 0.6rem;">[DEBUG] isPaired: ${love.isPaired}, hasVotedEscape: ${loveHasVotedEscape}, partnerRequestedEscape: ${lovePartnerRequestedEscape}, votes: ${JSON.stringify(sync.loveState.escapeVotes)}, clientId: ${clientId}</span>`;
-      }
+
     }
-    
+
     if (!hintText) return null;
 
+    const mockIsWolfTeamRole =
+      currentRole === "Sói" ||
+      currentRole === "Sói con" ||
+      currentRole === "Sói Dại" ||
+      (currentRole === "Bán sói" && (mockIsBanSoiAligned || mockIsWildWolfConverted));
+
     const isWolf =
-      isWolfTeamRole ||
-      (role === "Linh sói" && !!room?.daNghichState?.spiritWolfWolfAligned) ||
-      (role === "Thiên Sứ" && sync.angelReviveState.selectedGuess === "wolves");
+      mockIsWolfTeamRole ||
+      (currentRole === "Linh sói" && !!room?.daNghichState?.spiritWolfWolfAligned) ||
+      (currentRole === "Thiên Sứ" && sync.angelReviveState.selectedGuess === "wolves");
 
     const isHybrid =
-      role === "Thần tình yêu" ||
-      role === "Tay Buôn" ||
-      (role === "Thiên Sứ" && !sync.angelReviveState.selectedGuess) ||
-      (role === "Linh sói" && !room?.daNghichState?.spiritWolfWolfAligned) ||
+      currentRole === "Thần tình yêu" ||
+      currentRole === "Tay Buôn" ||
+      (currentRole === "Thiên Sứ" && !sync.angelReviveState.selectedGuess) ||
+      (currentRole === "Linh sói" && !room?.daNghichState?.spiritWolfWolfAligned) ||
       !!loveHybridBackgroundAsset;
 
-    const isLovePink = (role === "Thần tình yêu" || love.isPaired) && (loveHasVotedEscape || lovePartnerRequestedEscape);
+    const isLovePink = (currentRole === "Thần tình yêu" || mockLoveIsPaired) && (loveHasVotedEscape || lovePartnerRequestedEscape);
 
     let borderStyle = "1px solid rgba(85, 99, 247, 0.22)";
     let backgroundStyle = "rgba(14, 18, 38, 0.65)";
@@ -1564,7 +1650,7 @@ export default function GameDaNghich() {
             }
           }
         `}</style>
-        <div 
+        <div
           key={hintText}
           className="role-skill-hint"
           style={{
@@ -1969,11 +2055,11 @@ export default function GameDaNghich() {
     room?.id === "mock-8"
       ? true
       : (!isHost &&
-         !!role &&
-         (!!sync.gameEnded ||
-           (!shouldBlockDeadNightRoleReveal &&
-             (phase === "night" ? isNightInfoVisible : true) &&
-             (isRoleRevealLimitedToCurrentNightTurn ? doesNightTurnMatchMyRole : !shouldHidePlayerRoleText))));
+        !!role &&
+        (!!sync.gameEnded ||
+          (!shouldBlockDeadNightRoleReveal &&
+            (phase === "night" ? isNightInfoVisible : true) &&
+            (isRoleRevealLimitedToCurrentNightTurn ? doesNightTurnMatchMyRole : !shouldHidePlayerRoleText))));
 
   const masonryItems = useMemo(() => {
     const roles = room?.roles || [];
@@ -2037,6 +2123,7 @@ export default function GameDaNghich() {
         [normalizeRoleName("Thần tình yêu")]: "C Thần Tình Yêu",
         [normalizeRoleName("Tay Buôn")]: "C Tay Buôn",
         [normalizeRoleName("Thiên Sứ")]: "C Thiên Sứ",
+        [normalizeRoleName("Kẻ bị nguyền")]: "C Kẻ Bị Nguyền",
       }) as Record<string, string>,
     [normalizeRoleName]
   );
@@ -2066,11 +2153,11 @@ export default function GameDaNghich() {
 
   if (!room) {
     return (
-      <div 
-        className="page-shell game-page" 
-        style={{ 
-          padding: "1.25rem", 
-          minHeight: "100vh", 
+      <div
+        className="page-shell game-page"
+        style={{
+          padding: "1.25rem",
+          minHeight: "100vh",
           backgroundColor: "#0f1115",
           display: "flex",
           alignItems: "center",
@@ -2132,9 +2219,9 @@ export default function GameDaNghich() {
   const countdownSeconds = isHost
     ? hostNightRemainingSec
     : (isSequentialNight
-        ? nightTurnRemainingSec
-        : (mySimultaneousDeadline ? simultaneousRemainingSec : hostNightRemainingSec)
-      );
+      ? nightTurnRemainingSec
+      : (mySimultaneousDeadline ? simultaneousRemainingSec : hostNightRemainingSec)
+    );
 
   const showCountdown = !sync.gameEnded && (
     isHost ? (phase === "night" && countdownSeconds !== null) : (
@@ -2148,9 +2235,9 @@ export default function GameDaNghich() {
 
 
   return (
-    <div 
-      className={`page-shell game-page${shouldShowRolePortrait ? " has-role-portrait" : ""}`} 
-      style={{ 
+    <div
+      className={`page-shell game-page${shouldShowRolePortrait ? " has-role-portrait" : ""}`}
+      style={{
         pointerEvents: gameUIPointerEvents,
         opacity: gameUIOpacity,
       }}
@@ -2224,7 +2311,7 @@ export default function GameDaNghich() {
           />
         );
       })()}
-      
+
       {sync.gameEnded && (
         <h2>
           {sync.gameEnded.winner === "nobody" ? (
@@ -2311,27 +2398,27 @@ export default function GameDaNghich() {
             </>
           ) : (
             //Height 46 để cố định chiều cao của cái dòng div này cho nó đừng có nhảy layout khi hiển thị nút đếm ngược
-            <div id="infoThờiGian" style={{ display: "flex", alignItems: "center", gap: "0.9rem", flexWrap: "wrap", height: "46px" }}> 
+            <div id="infoThờiGian" style={{ display: "flex", alignItems: "center", gap: "0.9rem", flexWrap: "wrap", height: "46px" }}>
               {phase === "day" ? (
-                <h1 
+                <h1
                   onClick={room?.id === "mock-8" ? (mock8.handleHeaderClick || undefined) : undefined}
-                  style={{ 
-                    margin: 0, 
-                    display: "flex", 
-                    alignItems: "center", 
-                    cursor: (room?.id === "mock-8" && mock8.handleHeaderClick) ? "pointer" : "default" 
+                  style={{
+                    margin: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    cursor: (room?.id === "mock-8" && mock8.handleHeaderClick) ? "pointer" : "default"
                   }}
                 >
                   <AvifIcon name="🌞" style={{ marginRight: 8 }} /> Ngày {displayNightNumber}
                 </h1>
               ) : (
-                <h1 
+                <h1
                   onClick={room?.id === "mock-8" ? (mock8.handleHeaderClick || undefined) : undefined}
-                  style={{ 
-                    margin: 0, 
-                    display: "flex", 
-                    alignItems: "center", 
-                    cursor: (room?.id === "mock-8" && mock8.handleHeaderClick) ? "pointer" : "default" 
+                  style={{
+                    margin: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    cursor: (room?.id === "mock-8" && mock8.handleHeaderClick) ? "pointer" : "default"
                   }}
                 >
                   <AvifIcon name="🌙" style={{ marginRight: 8 }} /> Đêm {displayNightNumber}
@@ -2404,7 +2491,7 @@ export default function GameDaNghich() {
                 padding: "8px 16px",
                 borderRadius: "8px",
                 boxShadow: "0 4px 12px rgba(168, 85, 247, 0.3)",
-                
+
                 display: "inline-flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -2453,14 +2540,14 @@ export default function GameDaNghich() {
                 cursedHighlightIsDanger={cursed.playerPositionsProps.cursedHighlightIsDanger}
                 verdictLivePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.secondaryIds}
                 verdictDiePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.dangerIds}
-                 showRoleBadges={!!roleBadgesForDisplay}
-                 roleBadges={roleBadgesForDisplay}
-                  loveState={sync.loveState}
-                  revealedRoles={sync.revealedRolesByPlayerId}
-                  rolesBeforeConversion={sync.rolesBeforeConversion}
-                  chiefFoundProtectorId={sync.chiefFoundProtectorId}
-                  songTrungRobbedPlayerId={sync.songTrungRobbedPlayerId || roomForDisplay?.songTrungVictimId}
-                  songTrungFoundByVictim={sync.songTrungFoundByVictim}
+                showRoleBadges={!!roleBadgesForDisplay}
+                roleBadges={roleBadgesForDisplay}
+                loveState={sync.loveState}
+                revealedRoles={sync.revealedRolesByPlayerId}
+                rolesBeforeConversion={sync.rolesBeforeConversion}
+                chiefFoundProtectorId={sync.chiefFoundProtectorId}
+                songTrungRobbedPlayerId={sync.songTrungRobbedPlayerId || roomForDisplay?.songTrungVictimId}
+                songTrungFoundByVictim={sync.songTrungFoundByVictim}
                 activeNightRole={isHost && isSequentialNight ? currentNightTurnRole : null}
                 suppressNightActionProgress={autoTrialHighlightSuppressed}
                 selectedOutlinePlayerId={
@@ -2545,6 +2632,7 @@ export default function GameDaNghich() {
               seerResults={isNightInfoVisible ? sync.seerResults : null}
               isRobbed={room?.gameRules?.songTrungVictimStaysAlive === true && !!(clientId && (sync.songTrungRobbedPlayerId === clientId || room?.daNghichState?.songTrungVictimId === clientId))}
             />
+            {shouldRevealMyRole && !sync.gameEnded && cursed.effect}
           </>
         );
       })()}
@@ -2572,7 +2660,7 @@ export default function GameDaNghich() {
 
       {shouldRevealMyRole && !sync.gameEnded && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-start" }}>
-          {role === "Tay Buôn" && renderSkillHint()}
+          {roomId !== "mock-8" && role === "Tay Buôn" && renderSkillHint()}
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
             {witch.panel}
             {protector.panel}
@@ -2675,7 +2763,7 @@ export default function GameDaNghich() {
             </button>
           )}
           {isHost && !sync.gameEnded && (
-            <button 
+            <button
               onClick={() => setEndGameConfirmOpen(true)}
               style={{ background: "#e74c3c", color: "#fff" }}
             >
@@ -2695,7 +2783,7 @@ export default function GameDaNghich() {
           </div>
         </div>
       )}
-      {role !== "Tay Buôn" && renderSkillHint()}
+      {roomId !== "mock-8" && role !== "Tay Buôn" && renderSkillHint()}
       {isDebugMode && (() => {
         const btnStyle = {
           width: "18px",
@@ -2711,45 +2799,73 @@ export default function GameDaNghich() {
           transition: "all 0.2s",
         };
         return (
-          <div style={{
-            marginTop: "18px",
-            maxWidth: "450px",
-            width: "100%",
-            display: "flex",
-            justifyContent: "flex-start",
-            flexDirection: "column",
-            gap: "10px",
-            zIndex: 9999,
-            pointerEvents: "auto",
-          }}>
-            {/* Left side: Role switcher */}
+          <>
+            {/* ponytail: render skill hint inline for mock scenario switcher */}
             {roomId === "mock-8" && (
-              <div style={{ display: "flex", gap: "4px", alignItems: "center", fontSize: "0.75rem", color: "#cbd5e1" }}>
-                <select
-                  value={roleOverride || ""}
-                  onChange={(e) => setRoleOverride(e.target.value || null)}
-                  style={{
-                    background: "rgba(0, 0, 0, 0.5)",
-                    color: "#fff",
-                    border: "1px solid rgba(255, 255, 255, 0.15)",
-                    borderRadius: "4px",
-                    padding: "2px 4px",
-                    fontSize: "0.72rem",
-                    outline: "none"
-                  }}
-                >
-                  <option value="Thần tình yêu">💘</option>
-                  <option value="Thợ săn">🏹</option>
-                  <option value="Phù thủy">🧙</option>
-                  <option value="Sói Dại">🐺</option>
-                  <option value="Tiên tri">🔮</option>
-                  <option value="Bảo vệ">🛡️</option>
-                </select>
+              <div style={{
+                marginTop: "18px",
+                maxWidth: "450px",
+                width: "100%",
+                pointerEvents: "auto",
+              }}>
+                {renderSkillHint(true)}
               </div>
             )}
 
-            {/* Right side: Action Emojis */}
-            <div style={{ display: "flex", gap: "10px", alignItems: "center", }}>
+            {/* Right side: Action Emojis fixed bottom */}
+            <div style={{
+              position: "fixed",
+              bottom: "16px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              display: "flex",
+              gap: "10px",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(0, 0, 0, 0.75)",
+              backdropFilter: "blur(8px)",
+              padding: "6px 12px",
+              borderRadius: "20px",
+              border: "1px solid rgba(255, 255, 255, 0.15)",
+              zIndex: 99999,
+              pointerEvents: "auto",
+              boxShadow: "0 8px 32px rgba(0, 0, 0, 0.5)",
+            }}>
+
+              <div
+                title="Kẻ Bị Nguyền: Không Có"
+                onClick={() => {
+                  setRoleOverride("Kẻ bị nguyền");
+                  setCardFlippedToFront(true);
+                  setMockCursedResult({
+                    targetId: `mock-clear-${performance.now()}`,
+                    areaIds: [],
+                    hasWolf: false,
+                  });
+                }}
+                style={{ ...btnStyle, borderColor: "rgba(226, 232, 240, 0.45)", background: "rgba(226, 232, 240, 0.12)" }}
+                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              >
+                ◯
+              </div>
+              <div
+                title="Kẻ Bị Nguyền: Chính Nó"
+                onClick={() => {
+                  setRoleOverride("Kẻ bị nguyền");
+                  setCardFlippedToFront(true);
+                  setMockCursedResult({
+                    targetId: `mock-wolf-${performance.now()}`,
+                    areaIds: [],
+                    hasWolf: true,
+                  });
+                }}
+                style={{ ...btnStyle, borderColor: "rgba(225, 29, 46, 0.55)", background: "rgba(225, 29, 46, 0.18)" }}
+                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              >
+                🐺
+              </div>
               <div
                 title="Bắn Thợ Săn (🔫)"
                 onClick={() => {
@@ -2806,26 +2922,63 @@ export default function GameDaNghich() {
               >
                 💖
               </div>
-              <div
-                title="Bật/Tắt Tim (🔄)"
-                onClick={() => {
-                  setRoom((prev: any) => {
-                    if (!prev) return prev;
-                    const currentHeartsVisible = !!prev.sharedHeartsVisible;
-                    return {
-                      ...prev,
-                      sharedHeartsVisible: !currentHeartsVisible,
-                      playerHearts: currentHeartsVisible ? {} : {
-                        P2: 2, P3: 2, P4: 2, P5: 2, P6: 2, P7: 2, P8: 2
-                      }
-                    };
-                  });
-                }}
-                style={{ ...btnStyle, borderColor: "rgba(59, 130, 246, 0.4)", background: "rgba(59, 130, 246, 0.15)" }}
-                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
-                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
-              >
-                🔄
+              <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                <select
+                  title="Mock Skill Hint (Scenario Switcher)"
+                  value={mockSkillHintScenario}
+                  onChange={(e) => setMockSkillHintScenario(e.target.value)}
+                  style={{
+                    ...btnStyle,
+                    border: "1px solid rgba(59, 130, 246, 0.4)",
+                    background: "rgba(59, 130, 246, 0.15)",
+                    color: "#fff",
+                    cursor: "pointer",
+                    fontSize: "0.6rem",
+                    outline: "none",
+                    appearance: "none",
+                    WebkitAppearance: "none",
+                    MozAppearance: "none",
+                    textAlign: "center",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 0,
+                    lineHeight: "18px",
+                  }}
+                  onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                  onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                >
+                  <optgroup label="Chung" style={{ background: "#222", color: "#a78bfa" }}>
+                    <option value="default" style={{ background: "#222", color: "#fff" }}>🔄 Mặc định (Theo game)</option>
+                    <option value="isRobbed" style={{ background: "#222", color: "#fff" }}>🎭 Bị cướp vai trò (Song Trùng)</option>
+                  </optgroup>
+                  <optgroup label="Thần Tình Yêu" style={{ background: "#222", color: "#a78bfa" }}>
+                    <option value="cupid_no_target" style={{ background: "#222", color: "#fff" }}>💘 Cupid: Chưa chọn mục tiêu</option>
+                    <option value="cupid_escape_both" style={{ background: "#222", color: "#fff" }}>💖 Cupid: Cả hai trốn làng</option>
+                    <option value="cupid_escape_me" style={{ background: "#222", color: "#fff" }}>💞 Cupid: Mình xin trốn</option>
+                    <option value="cupid_escape_partner" style={{ background: "#222", color: "#fff" }}>💕 Cupid: Nửa kia xin trốn</option>
+                    <option value="cupid_can_escape" style={{ background: "#222", color: "#fff" }}>💓 Cupid: Có thể trốn</option>
+                    <option value="cupid_paired_normal" style={{ background: "#222", color: "#fff" }}>💗 Cupid: Sống bình thường</option>
+                  </optgroup>
+                  <optgroup label="Trưởng Làng" style={{ background: "#222", color: "#a78bfa" }}>
+                    <option value="chief_bitten_has_protector" style={{ background: "#222", color: "#fff" }}>🛡️ Trưởng làng: Bị cắn (Có Hộ nhân)</option>
+                    <option value="chief_bitten_no_protector" style={{ background: "#222", color: "#fff" }}>☠️ Trưởng làng: Bị cắn (Không Hộ nhân)</option>
+                    <option value="chief_find_protector_found" style={{ background: "#222", color: "#fff" }}>👁️ Trưởng làng: Đã thấy Hộ nhân</option>
+                    <option value="chief_find_protector_not_found" style={{ background: "#222", color: "#fff" }}>🔍 Trưởng làng: Đang tìm Hộ nhân</option>
+                    <option value="chief_normal" style={{ background: "#222", color: "#fff" }}>🌾 Trưởng làng: Bình thường</option>
+                  </optgroup>
+                  <optgroup label="Bán Sói" style={{ background: "#222", color: "#a78bfa" }}>
+                    <option value="wild_wolf_normal" style={{ background: "#222", color: "#fff" }}>🐏 Bán sói: Bình thường (Dân)</option>
+                    <option value="wild_wolf_aligned" style={{ background: "#222", color: "#fff" }}>🐺 Bán sói: Đã thức tỉnh (Sói)</option>
+                  </optgroup>
+                  <optgroup label="Tiên Tri & Khác" style={{ background: "#222", color: "#a78bfa" }}>
+                    <option value="seer_result_wolf" style={{ background: "#222", color: "#fff" }}>🔮 Tiên tri: Soi ra Sói</option>
+                    <option value="seer_result_human" style={{ background: "#222", color: "#fff" }}>🔮 Tiên tri: Soi ra Người</option>
+                    <option value="wolf_bite_two" style={{ background: "#222", color: "#fff" }}>🧛 Sói: Cắn 2 mục tiêu</option>
+                    <option value="elemental_guess" style={{ background: "#222", color: "#fff" }}>🔥 Nguyên tố: Chọn mục tiêu</option>
+                  </optgroup>
+                </select>
+                <span style={{ position: "absolute", pointerEvents: "none", fontSize: "0.55rem", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}>🔄</span>
               </div>
               <div
                 title="Phù Thủy Cứu (🧪)"
@@ -2870,7 +3023,7 @@ export default function GameDaNghich() {
                 💀
               </div>
             </div>
-          </div>
+          </>
         );
       })()}
       {dayVote.panel}
@@ -3004,7 +3157,7 @@ export default function GameDaNghich() {
                 </button>
               </div>
             </div>
-            
+
             <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 12, marginTop: 12 }}>
               <div style={{ fontWeight: 600, marginBottom: 8 }}>Tên thật của người chơi</div>
               <div style={{ display: "flex", gap: 8 }}>
@@ -3070,7 +3223,7 @@ export default function GameDaNghich() {
 
             <div style={{ border: "1px solid var(--border)", borderRadius: 8, padding: 12, marginTop: 12 }}>
               <div style={{ fontWeight: 600, marginBottom: 12 }}>Ảnh đại diện của người chơi</div>
-              
+
               {/* Row 1: Preview & Current Selection Info & Clear Button */}
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
                 {/* Vòng tròn xem trước (Avatar Preview) */}
@@ -3084,8 +3237,8 @@ export default function GameDaNghich() {
                         height: 52,
                         borderRadius: "50%",
                         border: "2px solid rgba(255, 255, 255, 0.15)",
-                        background: isMaskedPreview 
-                          ? `url(${nenLungAsset}) center/cover no-repeat` 
+                        background: isMaskedPreview
+                          ? `url(${nenLungAsset}) center/cover no-repeat`
                           : (previewUrl ? `url(${previewUrl}) center/cover no-repeat` : "rgba(255, 255, 255, 0.05)"),
                         position: "relative",
                         display: "flex",
@@ -3142,17 +3295,17 @@ export default function GameDaNghich() {
                 {/* Tên file hiện tại và nút xóa */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: "11px", color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 0.5 }}>Đang chọn:</div>
-                  <div style={{ 
-                    fontSize: "13px", 
-                    fontWeight: 500, 
-                    whiteSpace: "nowrap", 
-                    overflow: "hidden", 
+                  <div style={{
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
                     textOverflow: "ellipsis",
                     color: editingAvatar ? "#fff" : "rgba(255,255,255,0.3)"
                   }}>
                     {editingAvatar ? (
                       (editingAvatar.includes("M-") || editingAvatar.startsWith("M ")) ? `🖼️ Tách nền: ${editingAvatar.substring(editingAvatar.indexOf(" ") + 1)}` :
-                      editingAvatar.startsWith("S ") ? `👤 Thường: ${editingAvatar.substring(2)}` : editingAvatar
+                        editingAvatar.startsWith("S ") ? `👤 Thường: ${editingAvatar.substring(2)}` : editingAvatar
                     ) : "Chưa chọn (Ẩn avatar)"}
                   </div>
                   {editingAvatar && (
@@ -3194,7 +3347,7 @@ export default function GameDaNghich() {
                     outline: "none"
                   }}
                 />
-                
+
                 {/* Tabs */}
                 <div style={{ display: "flex", gap: 2, background: "rgba(0, 0, 0, 0.2)", borderRadius: 6, padding: 2 }}>
                   {[
@@ -3255,8 +3408,8 @@ export default function GameDaNghich() {
                         aspectRatio: "1",
                         borderRadius: "50%",
                         border: isSelected ? "2px solid var(--accent)" : "1px solid rgba(255, 255, 255, 0.1)",
-                        background: isMasked 
-                          ? `url(${nenLungAsset}) center/cover no-repeat` 
+                        background: isMasked
+                          ? `url(${nenLungAsset}) center/cover no-repeat`
                           : "rgba(255, 255, 255, 0.03)",
                         position: "relative",
                         cursor: "pointer",
@@ -3433,7 +3586,7 @@ export default function GameDaNghich() {
         active={isNightCardTransitionActive}
         durationMs={nightTransitionDurationMs}
         role={role}
-        revealed={!!role}
+        revealed={cardFlippedToFront}
         backdropImage={ChieuBg}
         lowPerformanceMode={lowPerformanceMode}
         onComplete={() => setDismissedNightTransitionEndsAt(nightTransitionEndsAt)}

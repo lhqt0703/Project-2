@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { socket, clientId } from "../../socket";
 import ConfirmModal from "../../components/ConfirmModal";
+import CursedSniffResultEffect from "../../components/CursedSniffResultEffect";
 import { CURSED_ROLE } from "../../constants/merchant";
 import type { CursedResultPayload, GamePhase } from "./socketEvents";
 
@@ -87,6 +88,10 @@ export function useCursedRole({
 
   return {
     onPlayerClick,
+    effect:
+      role === CURSED_ROLE && cursedResult ? (
+        <CursedSniffResultEffect targetId={cursedResult.targetId} hasWolf={cursedResult.hasWolf} />
+      ) : null,
     modal: (
       <>
         <ConfirmModal

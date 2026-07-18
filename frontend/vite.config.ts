@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: true,
-    allowedHosts: ['gummybears.io.vn']
+    allowedHosts: ['gummybears.io.vn'],
+    port: 5169
   }
 })

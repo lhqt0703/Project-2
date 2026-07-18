@@ -75,6 +75,6 @@ io.on("connection", (socket) => {
   });
 });
 
-httpServer.listen(3001, () => {
-  console.log("Backend đang chạy tại http://localhost:3001");
+httpServer.listen(3069, () => {
+  console.log("Backend đang chạy tại http://localhost:3069");
 });

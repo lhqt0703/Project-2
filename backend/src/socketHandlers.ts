@@ -3146,7 +3146,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const previousPhase = room.phase;
     const nightTransitionDelayMs =
       phase === "night" && previousPhase === "dusk" && (room.gameMode || "da_nghich") === "da_nghich"
-        ? 3_000
+        ? 3_720
         : 0;
     room.nightTransitionEndsAt = nightTransitionDelayMs > 0 ? Date.now() + nightTransitionDelayMs : null;
     room.phase = phase;

@@ -27,6 +27,7 @@ import { useAngelRole } from "./gameRoles/useAngelRole";
 import { useSongTrungRole } from "./gameRoles/useSongTrungRole";
 import { useSongTrungRobbedRole } from "./gameRoles/useSongTrungRobbedRole";
 import { useMock8Test } from "./gameRoles/useMock8Test";
+import { PhaseTextMorph } from "../components/PhaseTextMorph";
 import { ScoreboardModal } from "../components/ScoreboardModal";
 import RoleCard3D from "../components/RoleCard3D";
 import Masonry from "../components/Masonry";
@@ -1094,13 +1095,10 @@ export default function GameDaNghich() {
   const mock8 = useMock8Test({
     roomId,
     room,
-    deadPlayers,
-    playHunterShotAnim,
-    setIsNightInfoVisible,
-    setCardFlippedToFront,
-    debugAnim,
     roleOverride,
     setRoleOverride,
+    setRoom,
+    setPhase: sync.setPhase,
   });
 
   const handleToggleNightInfoVisible = useCallback((visible: boolean | ((prev: boolean) => boolean)) => {
@@ -2053,7 +2051,7 @@ export default function GameDaNghich() {
   const isRoleRevealLimitedToCurrentNightTurn = isSequentialNight && !sync.gameEnded;
   const shouldRevealMyRole =
     room?.id === "mock-8"
-      ? true
+      ? phase === "night"
       : (!isHost &&
         !!role &&
         (!!sync.gameEnded ||
@@ -2399,31 +2397,18 @@ export default function GameDaNghich() {
           ) : (
             //Height 46 để cố định chiều cao của cái dòng div này cho nó đừng có nhảy layout khi hiển thị nút đếm ngược
             <div id="infoThờiGian" style={{ display: "flex", alignItems: "center", gap: "0.9rem", flexWrap: "wrap", height: "46px" }}>
-              {phase === "day" ? (
-                <h1
-                  onClick={room?.id === "mock-8" ? (mock8.handleHeaderClick || undefined) : undefined}
-                  style={{
-                    margin: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    cursor: (room?.id === "mock-8" && mock8.handleHeaderClick) ? "pointer" : "default"
-                  }}
-                >
-                  <AvifIcon name="🌞" style={{ marginRight: 8 }} /> Ngày {displayNightNumber}
-                </h1>
-              ) : (
-                <h1
-                  onClick={room?.id === "mock-8" ? (mock8.handleHeaderClick || undefined) : undefined}
-                  style={{
-                    margin: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    cursor: (room?.id === "mock-8" && mock8.handleHeaderClick) ? "pointer" : "default"
-                  }}
-                >
-                  <AvifIcon name="🌙" style={{ marginRight: 8 }} /> Đêm {displayNightNumber}
-                </h1>
-              )}
+              <h1
+                onClick={room?.id === "mock-8" ? (mock8.handleHeaderClick || undefined) : undefined}
+                style={{
+                  margin: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  cursor: (room?.id === "mock-8" && mock8.handleHeaderClick) ? "pointer" : "default"
+                }}
+              >
+                <AvifIcon name={phase === "day" ? "🌞" : "🌙"} style={{ marginRight: 8 }} />
+                <PhaseTextMorph text={`${phase === "day" ? "Ngày" : "Đêm"} ${displayNightNumber}`} />
+              </h1>
 
               <CountdownButton
                 showCountdown={!isNightCardTransitionActive && (room?.id === "mock-8" ? true : !!showCountdown)}
@@ -2801,7 +2786,7 @@ export default function GameDaNghich() {
         return (
           <>
             {/* ponytail: render skill hint inline for mock scenario switcher */}
-            {roomId === "mock-8" && (
+            {roomId === "mock-8" && phase === "night" && (
               <div style={{
                 marginTop: "18px",
                 maxWidth: "450px",

@@ -1047,6 +1047,7 @@ export function useGameSocketSync({
   return useMemo(
     () => ({
       phase,
+      setPhase,
       deadPlayers,
       seerResults,
       cursedResult,
@@ -1130,6 +1131,7 @@ export function useGameSocketSync({
     }),
     [
       phase,
+      setPhase,
       deadPlayers,
       seerResults,
       cursedResult,

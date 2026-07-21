@@ -1,0 +1,1135 @@
+{
+  "gameId": "750",
+  "timestamp": 1784650148382,
+  "hostId": "757a9407-202f-4c2b-acd9-50abdefd3aeb",
+  "playerCount": 9,
+  "winner": "villagers",
+  "players": [
+    {
+      "id": "757a9407-202f-4c2b-acd9-50abdefd3aeb",
+      "name": "Tofu",
+      "role": "Dân làng"
+    },
+    {
+      "id": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+      "name": "Sea you soon",
+      "playerRealName": "Duy",
+      "playerAvatar": "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd M-2.avif",
+      "role": "Dung Nham"
+    },
+    {
+      "id": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+      "name": "Đức Huy",
+      "playerAvatar": "Thiết kế chưa có tênciodkd.avif",
+      "role": "Phù thủy"
+    },
+    {
+      "id": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+      "name": "Stella",
+      "playerRealName": "Cường",
+      "playerAvatar": "8dfc1d63-988f-460d-8569-8a1964be99a0 M-1.avif",
+      "role": "Sói"
+    },
+    {
+      "id": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+      "name": "Heeus",
+      "playerRealName": "Hiếu",
+      "playerAvatar": "c3a97ba3-250d-49c7-8d00-436bc8056bf5 M-2.avif",
+      "role": "Tiên tri"
+    },
+    {
+      "id": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+      "name": "Mochi",
+      "playerAvatar": "Thiết kế chưa có tênciod.avif",
+      "role": "Sấm Sét"
+    },
+    {
+      "id": "6a0d0c5d-6e85-4021-920b-9224f8306d6f",
+      "name": "HuyHa",
+      "playerRealName": "Huy Hà",
+      "playerAvatar": "16ab4278-4d7a-40e5-a856-c9bf490d5fc3 M-1.avif",
+      "role": "Sói Dại"
+    },
+    {
+      "id": "c3baa0ec-1bef-40a3-9812-27236222029b",
+      "name": "Bánh trôi nhỏ",
+      "playerAvatar": "c3baa0ec-1bef-40a3-9812-27236222029b M-1.avif",
+      "role": "Thợ săn"
+    },
+    {
+      "id": "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+      "name": "Huy",
+      "role": "Băng Giá"
+    }
+  ],
+  "positions": [
+    {
+      "playerId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+      "x": 0.27,
+      "y": 0.32
+    },
+    {
+      "playerId": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+      "x": 0.41500000000000004,
+      "y": 0.16
+    },
+    {
+      "playerId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+      "x": 0.73,
+      "y": 0.32
+    },
+    {
+      "playerId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+      "x": 0.27,
+      "y": 0.54
+    },
+    {
+      "playerId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+      "x": 0.41500000000000004,
+      "y": 0.7000000000000001
+    },
+    {
+      "playerId": "6a0d0c5d-6e85-4021-920b-9224f8306d6f",
+      "x": 0.585,
+      "y": 0.16
+    },
+    {
+      "playerId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+      "x": 0.73,
+      "y": 0.54
+    },
+    {
+      "playerId": "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+      "x": 0.585,
+      "y": 0.7000000000000001
+    }
+  ],
+  "gameEventLog": [
+    {
+      "id": "ev_1784649321181_nc0vjvu",
+      "timestamp": 1784649321181,
+      "night": 1,
+      "type": "WOLF_BITE",
+      "phase": "night",
+      "actorIds": [
+        "8dfc1d63-988f-460d-8569-8a1964be99a0"
+      ],
+      "targetIds": [
+        "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+      ],
+      "metadata": {
+        "votes": {
+          "8dfc1d63-988f-460d-8569-8a1964be99a0": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "6a0d0c5d-6e85-4021-920b-9224f8306d6f": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+        },
+        "wolfBonusBite": false
+      }
+    },
+    {
+      "id": "ev_1784649404254_t6oip4e",
+      "timestamp": 1784649404254,
+      "night": 1,
+      "type": "DAY_VOTE",
+      "phase": "day",
+      "targetIds": [],
+      "metadata": {
+        "tie": true,
+        "skipped": false,
+        "votes": {
+          "b2a5788c-2a27-480f-a149-6b194d53d7c4": null,
+          "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a": null,
+          "8dfc1d63-988f-460d-8569-8a1964be99a0": null,
+          "c3a97ba3-250d-49c7-8d00-436bc8056bf5": null,
+          "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b": null,
+          "6a0d0c5d-6e85-4021-920b-9224f8306d6f": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "c3baa0ec-1bef-40a3-9812-27236222029b": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "2246ac39-bdf7-42aa-bef6-0d597929d40f": null
+        },
+        "voteKind": "main"
+      }
+    },
+    {
+      "id": "ev_1784649590240_j2blc8b",
+      "timestamp": 1784649590240,
+      "night": 2,
+      "type": "DAY_VOTE",
+      "phase": "day",
+      "targetIds": [
+        "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+      ],
+      "metadata": {
+        "tie": false,
+        "skipped": false,
+        "votes": {
+          "b2a5788c-2a27-480f-a149-6b194d53d7c4": null,
+          "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a": null,
+          "8dfc1d63-988f-460d-8569-8a1964be99a0": null,
+          "c3a97ba3-250d-49c7-8d00-436bc8056bf5": null,
+          "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b": null,
+          "6a0d0c5d-6e85-4021-920b-9224f8306d6f": null,
+          "c3baa0ec-1bef-40a3-9812-27236222029b": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "2246ac39-bdf7-42aa-bef6-0d597929d40f": null
+        },
+        "voteKind": "main"
+      }
+    },
+    {
+      "id": "ev_1784649660493_mvmrqwq",
+      "timestamp": 1784649660493,
+      "night": 2,
+      "type": "TRIAL_VERDICT",
+      "phase": "day",
+      "targetIds": [
+        "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+      ],
+      "metadata": {
+        "executed": false,
+        "liveVotes": 6,
+        "dieVotes": 1,
+        "liveVoterIds": [
+          "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+          "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "6a0d0c5d-6e85-4021-920b-9224f8306d6f",
+          "2246ac39-bdf7-42aa-bef6-0d597929d40f"
+        ],
+        "dieVoterIds": [
+          "c3baa0ec-1bef-40a3-9812-27236222029b"
+        ]
+      }
+    },
+    {
+      "id": "ev_1784649684586_2s08jek",
+      "timestamp": 1784649684586,
+      "night": 3,
+      "type": "WITCH_POISON",
+      "phase": "night",
+      "actorIds": [
+        "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a"
+      ],
+      "targetIds": [
+        "c3baa0ec-1bef-40a3-9812-27236222029b"
+      ]
+    },
+    {
+      "id": "ev_1784649690193_t5jceq3",
+      "timestamp": 1784649690193,
+      "night": 3,
+      "type": "PLAYER_ELIMINATED",
+      "phase": "night",
+      "targetIds": [
+        "c3baa0ec-1bef-40a3-9812-27236222029b"
+      ],
+      "metadata": {
+        "cause": {
+          "type": "witch_poison",
+          "sourceActorId": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+          "killerId": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a"
+        }
+      }
+    },
+    {
+      "id": "ev_1784649690194_tns1uhs",
+      "timestamp": 1784649690194,
+      "night": 3,
+      "type": "HUNTER_SHOT",
+      "phase": "day",
+      "actorIds": [
+        "c3baa0ec-1bef-40a3-9812-27236222029b"
+      ],
+      "targetIds": [
+        "6a0d0c5d-6e85-4021-920b-9224f8306d6f"
+      ],
+      "metadata": {
+        "blockedByArmor": false
+      }
+    },
+    {
+      "id": "ev_1784649690194_8l9zm17",
+      "timestamp": 1784649690194,
+      "night": 3,
+      "type": "PLAYER_ELIMINATED",
+      "phase": "day",
+      "targetIds": [
+        "6a0d0c5d-6e85-4021-920b-9224f8306d6f"
+      ],
+      "metadata": {
+        "cause": {
+          "type": "hunter_shot"
+        }
+      }
+    },
+    {
+      "id": "ev_1784649813445_4bfyyhu",
+      "timestamp": 1784649813445,
+      "night": 3,
+      "type": "DAY_VOTE",
+      "phase": "day",
+      "targetIds": [],
+      "metadata": {
+        "tie": true,
+        "skipped": false,
+        "votes": {
+          "b2a5788c-2a27-480f-a149-6b194d53d7c4": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+          "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "8dfc1d63-988f-460d-8569-8a1964be99a0": "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+          "c3a97ba3-250d-49c7-8d00-436bc8056bf5": null,
+          "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "2246ac39-bdf7-42aa-bef6-0d597929d40f": null
+        },
+        "voteKind": "main"
+      }
+    },
+    {
+      "id": "ev_1784649829544_2z39p3x",
+      "timestamp": 1784649829544,
+      "night": 4,
+      "type": "WOLF_BITE",
+      "phase": "night",
+      "actorIds": [
+        "8dfc1d63-988f-460d-8569-8a1964be99a0"
+      ],
+      "targetIds": [
+        "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+      ],
+      "metadata": {
+        "votes": {
+          "8dfc1d63-988f-460d-8569-8a1964be99a0": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "6a0d0c5d-6e85-4021-920b-9224f8306d6f": null
+        },
+        "wolfBonusBite": false
+      }
+    },
+    {
+      "id": "ev_1784649835524_gp5tu2z",
+      "timestamp": 1784649835524,
+      "night": 4,
+      "type": "WITCH_HEAL",
+      "phase": "night",
+      "actorIds": [
+        "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a"
+      ],
+      "targetIds": [
+        "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+      ]
+    },
+    {
+      "id": "ev_1784649973385_dp2z5hx",
+      "timestamp": 1784649973385,
+      "night": 4,
+      "type": "DAY_VOTE",
+      "phase": "day",
+      "targetIds": [
+        "c3a97ba3-250d-49c7-8d00-436bc8056bf5"
+      ],
+      "metadata": {
+        "tie": false,
+        "skipped": false,
+        "votes": {
+          "b2a5788c-2a27-480f-a149-6b194d53d7c4": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "8dfc1d63-988f-460d-8569-8a1964be99a0": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "c3a97ba3-250d-49c7-8d00-436bc8056bf5": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "2246ac39-bdf7-42aa-bef6-0d597929d40f": "c3a97ba3-250d-49c7-8d00-436bc8056bf5"
+        },
+        "voteKind": "main"
+      }
+    },
+    {
+      "id": "ev_1784650007898_kjsdfr8",
+      "timestamp": 1784650007898,
+      "night": 4,
+      "type": "TRIAL_VERDICT",
+      "phase": "day",
+      "targetIds": [
+        "c3a97ba3-250d-49c7-8d00-436bc8056bf5"
+      ],
+      "metadata": {
+        "executed": false,
+        "liveVotes": 3,
+        "dieVotes": 1,
+        "liveVoterIds": [
+          "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+          "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+        ],
+        "dieVoterIds": [
+          "8dfc1d63-988f-460d-8569-8a1964be99a0"
+        ]
+      }
+    },
+    {
+      "id": "ev_1784650031257_br58kl0",
+      "timestamp": 1784650031257,
+      "night": 5,
+      "type": "WOLF_BITE",
+      "phase": "night",
+      "actorIds": [
+        "8dfc1d63-988f-460d-8569-8a1964be99a0"
+      ],
+      "targetIds": [
+        "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+      ],
+      "metadata": {
+        "votes": {
+          "8dfc1d63-988f-460d-8569-8a1964be99a0": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "6a0d0c5d-6e85-4021-920b-9224f8306d6f": null
+        },
+        "wolfBonusBite": false
+      }
+    },
+    {
+      "id": "ev_1784650071559_exwyv43",
+      "timestamp": 1784650071559,
+      "night": 5,
+      "type": "PLAYER_ELIMINATED",
+      "phase": "night",
+      "targetIds": [
+        "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+      ],
+      "metadata": {
+        "cause": {
+          "type": "wolf",
+          "attackerIds": [
+            "8dfc1d63-988f-460d-8569-8a1964be99a0"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ev_1784650121831_wtehrgy",
+      "timestamp": 1784650121831,
+      "night": 5,
+      "type": "DAY_VOTE",
+      "phase": "day",
+      "targetIds": [
+        "8dfc1d63-988f-460d-8569-8a1964be99a0"
+      ],
+      "metadata": {
+        "tie": false,
+        "skipped": false,
+        "votes": {
+          "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "8dfc1d63-988f-460d-8569-8a1964be99a0": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "c3a97ba3-250d-49c7-8d00-436bc8056bf5": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b": null,
+          "2246ac39-bdf7-42aa-bef6-0d597929d40f": "8dfc1d63-988f-460d-8569-8a1964be99a0"
+        },
+        "voteKind": "main"
+      }
+    },
+    {
+      "id": "ev_1784650148380_gg9fxmw",
+      "timestamp": 1784650148380,
+      "night": 5,
+      "type": "TRIAL_VERDICT",
+      "phase": "day",
+      "targetIds": [
+        "8dfc1d63-988f-460d-8569-8a1964be99a0"
+      ],
+      "metadata": {
+        "executed": true,
+        "liveVotes": 0,
+        "dieVotes": 4,
+        "liveVoterIds": [],
+        "dieVoterIds": [
+          "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+          "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "2246ac39-bdf7-42aa-bef6-0d597929d40f"
+        ]
+      }
+    },
+    {
+      "id": "ev_1784650148380_h83yv6v",
+      "timestamp": 1784650148380,
+      "night": 5,
+      "type": "PLAYER_ELIMINATED",
+      "phase": "day",
+      "targetIds": [
+        "8dfc1d63-988f-460d-8569-8a1964be99a0"
+      ],
+      "metadata": {
+        "cause": {
+          "type": "trial_verdict",
+          "voterIds": [
+            "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+            "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+            "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+            "2246ac39-bdf7-42aa-bef6-0d597929d40f"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ev_1784650148381_tb86b1v",
+      "timestamp": 1784650148381,
+      "night": 5,
+      "type": "GAME_OVER",
+      "phase": "day",
+      "metadata": {
+        "winner": "villagers",
+        "reason": "after_trial_verdict"
+      }
+    }
+  ],
+  "gameLog": [
+    {
+      "night": 1,
+      "at": 1784649301985,
+      "entries": [
+        {
+          "type": "hunter_mark",
+          "phase": "night",
+          "actorId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "targetId": "6a0d0c5d-6e85-4021-920b-9224f8306d6f"
+        },
+        {
+          "type": "seer_check",
+          "phase": "night",
+          "actorId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "targetId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "isWolf": false,
+          "actualIsWolf": false
+        },
+        {
+          "type": "elemental_guess",
+          "phase": "night",
+          "actorId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "isCorrect": false
+        },
+        {
+          "type": "elemental_guess",
+          "phase": "night",
+          "actorId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "targetId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "isCorrect": false
+        },
+        {
+          "type": "wolf_vote",
+          "phase": "night",
+          "voteBreakdown": [
+            {
+              "targetId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+              "voterIds": [
+                "6a0d0c5d-6e85-4021-920b-9224f8306d6f"
+              ]
+            },
+            {
+              "targetId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+              "voterIds": [
+                "8dfc1d63-988f-460d-8569-8a1964be99a0"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "wolf_result",
+          "phase": "night",
+          "targetIds": [
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+          ],
+          "selectedByByTarget": {
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4": [
+              "8dfc1d63-988f-460d-8569-8a1964be99a0"
+            ]
+          },
+          "villageChiefDelayedTargetIds": []
+        },
+        {
+          "type": "elemental_guess",
+          "phase": "night",
+          "actorId": "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+          "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "isCorrect": false
+        },
+        {
+          "type": "elemental_guess_summary",
+          "phase": "night",
+          "correctCount": 0,
+          "totalCount": 3,
+          "correctIds": [],
+          "triggeredBuffVote": false
+        },
+        {
+          "type": "no_death",
+          "phase": "day"
+        },
+        {
+          "type": "day_vote",
+          "phase": "day",
+          "voteBreakdown": [
+            {
+              "targetId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+              "voterIds": [
+                "6a0d0c5d-6e85-4021-920b-9224f8306d6f"
+              ]
+            },
+            {
+              "targetId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+              "voterIds": [
+                "c3baa0ec-1bef-40a3-9812-27236222029b"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "day_result",
+          "phase": "day",
+          "targetId": null,
+          "tie": true
+        }
+      ]
+    },
+    {
+      "night": 2,
+      "at": 1784649414012,
+      "entries": [
+        {
+          "type": "elemental_guess",
+          "phase": "night",
+          "actorId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "targetId": "6a0d0c5d-6e85-4021-920b-9224f8306d6f",
+          "isCorrect": false
+        },
+        {
+          "type": "elemental_guess",
+          "phase": "night",
+          "actorId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "targetId": "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+          "isCorrect": true
+        },
+        {
+          "type": "seer_check",
+          "phase": "night",
+          "actorId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "targetId": "6a0d0c5d-6e85-4021-920b-9224f8306d6f",
+          "isWolf": true,
+          "actualIsWolf": true
+        },
+        {
+          "type": "elemental_guess",
+          "phase": "night",
+          "actorId": "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+          "targetId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "isCorrect": true
+        },
+        {
+          "type": "wolf_vote",
+          "phase": "night",
+          "voteBreakdown": [
+            {
+              "targetId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+              "voterIds": [
+                "8dfc1d63-988f-460d-8569-8a1964be99a0"
+              ]
+            },
+            {
+              "targetId": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+              "voterIds": [
+                "6a0d0c5d-6e85-4021-920b-9224f8306d6f"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "wolf_result",
+          "phase": "night",
+          "targetIds": [],
+          "selectedByByTarget": {},
+          "villageChiefDelayedTargetIds": []
+        },
+        {
+          "type": "hunter_mark",
+          "phase": "night",
+          "actorId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "targetId": "6a0d0c5d-6e85-4021-920b-9224f8306d6f"
+        },
+        {
+          "type": "elemental_guess_summary",
+          "phase": "night",
+          "correctCount": 2,
+          "totalCount": 3,
+          "correctIds": [
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+            "2246ac39-bdf7-42aa-bef6-0d597929d40f"
+          ],
+          "triggeredBuffVote": true,
+          "nextBuffVoteNight": 3
+        },
+        {
+          "type": "no_death",
+          "phase": "day"
+        },
+        {
+          "type": "day_vote",
+          "phase": "day",
+          "voteBreakdown": [
+            {
+              "targetId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+              "voterIds": [
+                "c3baa0ec-1bef-40a3-9812-27236222029b"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "day_result",
+          "phase": "day",
+          "targetId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "tie": false
+        },
+        {
+          "type": "trial_started",
+          "phase": "day",
+          "targetId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+        },
+        {
+          "type": "trial_verdict",
+          "phase": "day",
+          "targetId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "liveVotes": 6,
+          "dieVotes": 1,
+          "liveVoterIds": [
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+            "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+            "8dfc1d63-988f-460d-8569-8a1964be99a0",
+            "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+            "6a0d0c5d-6e85-4021-920b-9224f8306d6f",
+            "2246ac39-bdf7-42aa-bef6-0d597929d40f"
+          ],
+          "dieVoterIds": [
+            "c3baa0ec-1bef-40a3-9812-27236222029b"
+          ],
+          "executed": false
+        }
+      ]
+    },
+    {
+      "night": 3,
+      "at": 1784649670174,
+      "entries": [
+        {
+          "type": "seer_check",
+          "phase": "night",
+          "actorId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "targetId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "isWolf": false,
+          "actualIsWolf": false
+        },
+        {
+          "type": "hunter_mark",
+          "phase": "night",
+          "actorId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "targetId": "6a0d0c5d-6e85-4021-920b-9224f8306d6f"
+        },
+        {
+          "type": "wolf_vote",
+          "phase": "night",
+          "voteBreakdown": [
+            {
+              "targetId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+              "voterIds": [
+                "8dfc1d63-988f-460d-8569-8a1964be99a0"
+              ]
+            },
+            {
+              "targetId": "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+              "voterIds": [
+                "6a0d0c5d-6e85-4021-920b-9224f8306d6f"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "wolf_result",
+          "phase": "night",
+          "targetIds": [],
+          "selectedByByTarget": {},
+          "villageChiefDelayedTargetIds": []
+        },
+        {
+          "type": "witch_poison",
+          "phase": "night",
+          "actorId": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+          "targetId": "c3baa0ec-1bef-40a3-9812-27236222029b"
+        },
+        {
+          "type": "elemental_buff_vote",
+          "phase": "night",
+          "voteBreakdown": [
+            {
+              "buffId": "reduce-next-night-effect",
+              "voterIds": [
+                "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+                "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+              ]
+            },
+            {
+              "buffId": "seer-immune",
+              "voterIds": [
+                "2246ac39-bdf7-42aa-bef6-0d597929d40f"
+              ]
+            }
+          ],
+          "chosenBuffId": "reduce-next-night-effect",
+          "tier": 2,
+          "randomTieBreak": false,
+          "tiedBuffIds": [],
+          "chosenVoterIds": [
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+            "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+          ]
+        },
+        {
+          "type": "hunter_shot",
+          "phase": "day",
+          "actorId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "targetId": "6a0d0c5d-6e85-4021-920b-9224f8306d6f"
+        },
+        {
+          "type": "eliminated",
+          "phase": "day",
+          "targetIds": [
+            "6a0d0c5d-6e85-4021-920b-9224f8306d6f",
+            "c3baa0ec-1bef-40a3-9812-27236222029b"
+          ],
+          "causesByTarget": {
+            "c3baa0ec-1bef-40a3-9812-27236222029b": [
+              {
+                "type": "witch_poison",
+                "sourceActorId": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+                "killerId": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a"
+              }
+            ],
+            "6a0d0c5d-6e85-4021-920b-9224f8306d6f": [
+              {
+                "type": "hunter_shot"
+              }
+            ]
+          }
+        },
+        {
+          "type": "day_vote",
+          "phase": "day",
+          "voteBreakdown": [
+            {
+              "targetId": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+              "voterIds": [
+                "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+              ]
+            },
+            {
+              "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+              "voterIds": [
+                "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+              ]
+            },
+            {
+              "targetId": "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+              "voterIds": [
+                "8dfc1d63-988f-460d-8569-8a1964be99a0"
+              ]
+            },
+            {
+              "targetId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+              "voterIds": [
+                "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "day_result",
+          "phase": "day",
+          "targetId": null,
+          "tie": true
+        }
+      ]
+    },
+    {
+      "night": 4,
+      "at": 1784649819029,
+      "entries": [
+        {
+          "type": "elemental_guess",
+          "phase": "night",
+          "actorId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "targetId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "isCorrect": true
+        },
+        {
+          "type": "elemental_guess",
+          "phase": "night",
+          "actorId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "targetId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "isCorrect": true
+        },
+        {
+          "type": "elemental_guess",
+          "phase": "night",
+          "actorId": "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+          "targetId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "isCorrect": true
+        },
+        {
+          "type": "seer_check",
+          "phase": "night",
+          "actorId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "targetId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "isWolf": true,
+          "actualIsWolf": true
+        },
+        {
+          "type": "wolf_vote",
+          "phase": "night",
+          "voteBreakdown": [
+            {
+              "targetId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+              "voterIds": [
+                "8dfc1d63-988f-460d-8569-8a1964be99a0"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "wolf_result",
+          "phase": "night",
+          "targetIds": [
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+          ],
+          "selectedByByTarget": {
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4": [
+              "8dfc1d63-988f-460d-8569-8a1964be99a0"
+            ]
+          },
+          "villageChiefDelayedTargetIds": []
+        },
+        {
+          "type": "witch_heal",
+          "phase": "night",
+          "actorId": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+          "targetId": "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+        },
+        {
+          "type": "elemental_guess_summary",
+          "phase": "night",
+          "correctCount": 3,
+          "totalCount": 3,
+          "correctIds": [
+            "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+            "2246ac39-bdf7-42aa-bef6-0d597929d40f"
+          ],
+          "triggeredBuffVote": true,
+          "nextBuffVoteNight": 5
+        },
+        {
+          "type": "no_death",
+          "phase": "day"
+        },
+        {
+          "type": "day_vote",
+          "phase": "day",
+          "voteBreakdown": [
+            {
+              "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+              "voterIds": [
+                "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+                "8dfc1d63-988f-460d-8569-8a1964be99a0",
+                "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+                "2246ac39-bdf7-42aa-bef6-0d597929d40f"
+              ]
+            },
+            {
+              "targetId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+              "voterIds": [
+                "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+                "c3a97ba3-250d-49c7-8d00-436bc8056bf5"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "day_result",
+          "phase": "day",
+          "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "tie": false
+        },
+        {
+          "type": "trial_started",
+          "phase": "day",
+          "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5"
+        },
+        {
+          "type": "trial_verdict",
+          "phase": "day",
+          "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "liveVotes": 3,
+          "dieVotes": 1,
+          "liveVoterIds": [
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+            "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+            "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+          ],
+          "dieVoterIds": [
+            "8dfc1d63-988f-460d-8569-8a1964be99a0"
+          ],
+          "executed": false
+        }
+      ]
+    },
+    {
+      "night": 5,
+      "at": 1784650023384,
+      "entries": [
+        {
+          "type": "seer_check",
+          "phase": "night",
+          "actorId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "targetId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "isWolf": false,
+          "actualIsWolf": false
+        },
+        {
+          "type": "wolf_vote",
+          "phase": "night",
+          "voteBreakdown": [
+            {
+              "targetId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+              "voterIds": [
+                "8dfc1d63-988f-460d-8569-8a1964be99a0"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "wolf_result",
+          "phase": "night",
+          "targetIds": [
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+          ],
+          "selectedByByTarget": {
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4": [
+              "8dfc1d63-988f-460d-8569-8a1964be99a0"
+            ]
+          },
+          "villageChiefDelayedTargetIds": []
+        },
+        {
+          "type": "elemental_buff_vote",
+          "phase": "night",
+          "voteBreakdown": [
+            {
+              "buffId": "guardian-double-protect",
+              "voterIds": [
+                "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+                "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+              ]
+            },
+            {
+              "buffId": "witch-restore-potion",
+              "voterIds": [
+                "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+              ]
+            }
+          ],
+          "chosenBuffId": "guardian-double-protect",
+          "tier": 3,
+          "randomTieBreak": false,
+          "tiedBuffIds": [],
+          "chosenVoterIds": [
+            "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+            "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+          ]
+        },
+        {
+          "type": "eliminated",
+          "phase": "day",
+          "targetIds": [
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+          ],
+          "causesByTarget": {
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4": [
+              {
+                "type": "wolf",
+                "attackerIds": [
+                  "8dfc1d63-988f-460d-8569-8a1964be99a0"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "day_vote",
+          "phase": "day",
+          "voteBreakdown": [
+            {
+              "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+              "voterIds": [
+                "8dfc1d63-988f-460d-8569-8a1964be99a0"
+              ]
+            },
+            {
+              "targetId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+              "voterIds": [
+                "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+                "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+                "2246ac39-bdf7-42aa-bef6-0d597929d40f"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "day_result",
+          "phase": "day",
+          "targetId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "tie": false
+        },
+        {
+          "type": "trial_started",
+          "phase": "day",
+          "targetId": "8dfc1d63-988f-460d-8569-8a1964be99a0"
+        },
+        {
+          "type": "trial_verdict",
+          "phase": "day",
+          "targetId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "liveVotes": 0,
+          "dieVotes": 4,
+          "liveVoterIds": [],
+          "dieVoterIds": [
+            "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+            "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+            "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+            "2246ac39-bdf7-42aa-bef6-0d597929d40f"
+          ],
+          "executed": true
+        },
+        {
+          "type": "eliminated",
+          "phase": "day",
+          "targetIds": [
+            "8dfc1d63-988f-460d-8569-8a1964be99a0"
+          ],
+          "causesByTarget": {
+            "8dfc1d63-988f-460d-8569-8a1964be99a0": [
+              {
+                "type": "trial_verdict",
+                "voterIds": [
+                  "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+                  "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+                  "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+                  "2246ac39-bdf7-42aa-bef6-0d597929d40f"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+.player-name-vaporize-layer {
+  position: absolute;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 2;
+}
+
+.player-name-vaporize-anchor {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.player-name-vaporize-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  visibility: hidden;
+  transform: translate(-50%, -50%);
+}

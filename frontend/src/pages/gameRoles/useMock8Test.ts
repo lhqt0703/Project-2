@@ -3,9 +3,7 @@ import { VILLAGER_BACKGROUND_ASSET, WOLF_BACKGROUND_ASSET } from "../../componen
 
 export function useMock8Test({
   roomId,
-  room,
   roleOverride,
-  setRoleOverride: _setRoleOverride,
   setRoom,
   setPhase,
 }: {
@@ -33,6 +31,8 @@ export function useMock8Test({
         return {
           ...prev,
           phase: nextPhase,
+          // ponytail: P2 chết lúc trời sáng để mock-8 tái hiện hiệu ứng token mất màu + tan tên.
+          deadPlayers: nextPhase === "day" ? ["P2"] : [],
         };
       });
     }

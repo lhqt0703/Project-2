@@ -317,6 +317,15 @@ export default function GameDaNghich() {
 
   const [duskTransitionActive, setDuskTransitionActive] = useState(false);
   const [dismissedNightTransitionEndsAt, setDismissedNightTransitionEndsAt] = useState<number | null>(null);
+  const nightTransitionEndsAt = room?.nightTransitionEndsAt ?? null;
+  const nightTransitionDurationMs = nightTransitionEndsAt
+    ? Math.max(0, nightTransitionEndsAt - (room?.serverTime ?? Date.now()))
+    : 0;
+  const isNightCardTransitionActive =
+    phase === "night" &&
+    nightTransitionEndsAt !== null &&
+    nightTransitionEndsAt !== dismissedNightTransitionEndsAt;
+  const presentationPhase = isNightCardTransitionActive ? "dusk" : phase;
   const [lowPerformanceMode, setLowPerformanceMode] = useState(() => {
     if (typeof window !== "undefined") {
       return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.matchMedia("(pointer: coarse)").matches;
@@ -346,7 +355,7 @@ export default function GameDaNghich() {
   const isSelectingLocally = useRef(false);
 
   useEffect(() => {
-    if (phase === "dusk") {
+    if (phase === "dusk" || isNightCardTransitionActive) {
       const hasChosen = room?.duskCardSelections && room.duskCardSelections[clientId] !== undefined;
       if (hasChosen) {
         if (!isSelectingLocally.current) {
@@ -384,7 +393,7 @@ export default function GameDaNghich() {
       isSelectingLocally.current = false;
     }
     prevPhaseRef.current = phase;
-  }, [phase, room?.duskCardSelections, clientId]);
+  }, [phase, room?.duskCardSelections, clientId, isNightCardTransitionActive]);
 
   useEffect(() => {
     if (phase === "dusk" && room?.phase === "dusk") {
@@ -2168,15 +2177,6 @@ export default function GameDaNghich() {
   const isDuskTransitionPending = room.phase === "dusk" && !duskRevealGameUI;
   const gameUIOpacity = isDuskTransitionPending ? 0 : 1;
   const gameUIPointerEvents = isDuskTransitionPending ? "none" : "auto";
-  const nightTransitionEndsAt = room.nightTransitionEndsAt ?? null;
-  const nightTransitionDurationMs = nightTransitionEndsAt
-    ? Math.max(0, nightTransitionEndsAt - (room.serverTime ?? Date.now()))
-    : 0;
-  const isNightCardTransitionActive =
-    phase === "night" &&
-    nightTransitionEndsAt !== null &&
-    nightTransitionEndsAt !== dismissedNightTransitionEndsAt;
-
   const hasNightAction = useMemo(() => {
     if (!role) return false;
     if (role === "Bán sói" && !isBanSoiOrWildConverted) return false;
@@ -2240,11 +2240,11 @@ export default function GameDaNghich() {
       }}
     >
 
-      {(phase === "day" || phase === "dusk") && (
+      {(presentationPhase === "day" || presentationPhase === "dusk") && (
         <div
           className="game-bg-layer"
           style={{
-            backgroundImage: `url(${phase === "day" ? RoomBg : ChieuBg})`
+            backgroundImage: `url(${presentationPhase === "day" ? RoomBg : ChieuBg})`
           }}
         />
       )}
@@ -2282,7 +2282,7 @@ export default function GameDaNghich() {
 
       {(() => {
         const isLover = roomId === "mock-8" ? true : (sync.loveState?.pairIds?.includes(clientId || "") === true);
-        const showStickersButton = roomId === "mock-8" || (phase === "night" && !sync.gameEnded && !isCurrentPlayerDeadForNightActions && (isWolfTeamRole || isLover));
+        const showStickersButton = roomId === "mock-8" || (presentationPhase === "night" && !sync.gameEnded && !isCurrentPlayerDeadForNightActions && (isWolfTeamRole || isLover));
         const isWolfForStatus = roomId === "mock-8" ? true : isWolfTeamRole;
         return (
           <GameRoleStatusBar
@@ -2294,10 +2294,10 @@ export default function GameDaNghich() {
             showLowPerfToast={showLowPerfToast}
             isAnimatingLeaf={isAnimatingLeaf}
             setIsAnimatingLeaf={setIsAnimatingLeaf}
-            phase={phase}
+            phase={presentationPhase}
             roles={room?.roles}
             gameMode={room?.gameMode}
-            showEyeIcon={phase === "night" && !sync.gameEnded && !isCurrentPlayerDeadForNightActions}
+            showEyeIcon={presentationPhase === "night" && !sync.gameEnded && !isCurrentPlayerDeadForNightActions}
             isNightInfoVisible={isNightInfoVisible}
             setIsNightInfoVisible={handleToggleNightInfoVisible}
             showStickersButton={showStickersButton}
@@ -2328,7 +2328,7 @@ export default function GameDaNghich() {
       )}
       {!sync.gameEnded && (
         <>
-          {phase === "dusk" ? (
+          {presentationPhase === "dusk" ? (
             <>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: "12px" }}>
                 <h1 style={{ display: "flex", alignItems: "center" }}><AvifIcon name="🌥️" style={{ marginRight: 8 }} /> Hoàng hôn</h1>

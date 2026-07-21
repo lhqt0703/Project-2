@@ -88,7 +88,7 @@ export function createConnectionState(ctx: ServerContext, state: ConnectionState
       ctx.io.to(room.hostId).emit("pendingRoleAssignmentsUpdated", room.pendingRoleAssignments || {});
       ctx.io.to(room.hostId).emit("pendingRoleBlocksUpdated", room.pendingRoleBlocks || {});
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-    }, 5 * 60 * 1000);
+    }, 10 * 60 * 1000); // Tomedited điều chỉnh thời gian auto kick
   }
 
   return {

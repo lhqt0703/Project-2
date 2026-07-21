@@ -9,6 +9,7 @@ import ElementalVFX from "./ElementalVFX";
 import Orb from "./Orb";
 import { AvifIcon } from "./AvifIcon";
 import ConfirmModal from "./ConfirmModal";
+import PlayerNameVaporize from "./PlayerNameVaporize";
 
 import PlayerShotEffect from "./PlayerShotEffect";
 import SplashCursor from "./SplashCursor";
@@ -984,7 +985,9 @@ export default function PlayerPositions({
   const wolfVotes = room.daNghichState?.wolfVotes as Record<string, string | null> | undefined;
   const wolfVotes2 = room.daNghichState?.wolfVotes2 as Record<string, string | null> | undefined;
   const deadPlayers =
-    mode === "view"
+    room.id === "mock-8"
+      ? (room.deadPlayers as string[] | undefined) ?? []
+      : mode === "view"
       ? (deadPlayersOverride ?? (room.deadPlayers as string[] | undefined))
       : (deadPlayersOverride ?? []);
   const wolfCount = wolfVoteVoterIds && wolfVoteVoterIds.length
@@ -2676,15 +2679,31 @@ export default function PlayerPositions({
           const suyThanStyle = getBoardStyle("suythan");
           const warningStyle = getBoardStyle("warning");
 
+          const hasAvatar = !!(avatarUrl || maskedAvatarUrl);
+          const isNameAtBottom = hasAvatar && !(roleBadgeText || showWolfBadge);
+
           return (
-            <div key={pos.playerId} {...tokenProps} data-player-id={pos.playerId}>
-              {innerContent}
-              <BlankVoteBoard visible={visibleBlank} style={blankStyle} />
-              <DisconnectedBoard visible={visibleDisconnected} style={disconnectedStyle} />
-              {hasNamThuInGame && <NamThuBoard visible={visibleNamThu} style={namThuStyle} />}
-              {hasSuyThanInGame && <SuyThanBoard visible={visibleSuyThan} style={suyThanStyle} />}
-              <WarningBoard visible={visibleWarning} style={warningStyle} />
-            </div>
+            <React.Fragment key={pos.playerId}>
+              <div {...tokenProps} data-player-id={pos.playerId}>
+                {innerContent}
+                <BlankVoteBoard visible={visibleBlank} style={blankStyle} />
+                <DisconnectedBoard visible={visibleDisconnected} style={disconnectedStyle} />
+                {hasNamThuInGame && <NamThuBoard visible={visibleNamThu} style={namThuStyle} />}
+                {hasSuyThanInGame && <SuyThanBoard visible={visibleSuyThan} style={suyThanStyle} />}
+                <WarningBoard visible={visibleWarning} style={warningStyle} />
+              </div>
+              <PlayerNameVaporize
+                active={isDead && room.phase === "day"}
+                isDead={isDead}
+                text={displayName}
+                left={left}
+                top={top}
+                tokenTransform={circleTransform}
+                tokenSize={circleSizePx}
+                fontSize={playerFontSizePx}
+                nameAtBottom={isNameAtBottom}
+              />
+            </React.Fragment>
           );
         })}
       </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import MoonCardLogo from "./MoonCardLogo";
 import RoleCard3D from "./RoleCard3D";
 import "./NightCardTransition.css";
@@ -50,10 +50,31 @@ function ActiveNightCardTransition({
   lowPerformanceMode,
   onComplete,
 }: Omit<NightCardTransitionProps, "active">) {
+  const transitionRef = useRef<HTMLDivElement>(null);
   const [initialDurationMs] = useState(durationMs);
   const [transitionRevealed, setTransitionRevealed] = useState(revealed);
+  const [sourceCardStyle, setSourceCardStyle] = useState<CSSProperties>({});
   const flipDurationMs = Math.min(700, Math.max(0, initialDurationMs - 1));
   const effectDurationMs = Math.max(1, initialDurationMs - flipDurationMs);
+
+  useLayoutEffect(() => {
+    const transitionRoot = transitionRef.current;
+    if (!transitionRoot) return;
+
+    const sourceCard = Array.from(document.querySelectorAll<HTMLElement>(".pc-card-wrapper"))
+      .find((element) => !transitionRoot.contains(element));
+    if (!sourceCard) return;
+
+    const rect = sourceCard.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    setSourceCardStyle({
+      "--night-card-start-left": `${rect.left + rect.width / 2}px`,
+      "--night-card-start-top": `${rect.top + rect.height / 2}px`,
+      "--night-card-start-width": `${rect.width}px`,
+      "--night-card-start-height": `${rect.height}px`,
+    } as CSSProperties);
+  }, []);
 
   useEffect(() => {
     if (!revealed) return;
@@ -63,8 +84,10 @@ function ActiveNightCardTransition({
 
   return (
     <div
+      ref={transitionRef}
       className="night-card-transition"
       style={{
+        ...sourceCardStyle,
         "--night-card-flip-duration": `${flipDurationMs}ms`,
         "--night-card-effect-duration": `${effectDurationMs}ms`,
       } as CSSProperties}

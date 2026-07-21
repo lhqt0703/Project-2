@@ -1,0 +1,399 @@
+{
+  "gameId": "810",
+  "timestamp": 1784646821186,
+  "hostId": "757a9407-202f-4c2b-acd9-50abdefd3aeb",
+  "playerCount": 10,
+  "winner": "wolves",
+  "players": [
+    {
+      "id": "757a9407-202f-4c2b-acd9-50abdefd3aeb",
+      "name": "Tofu",
+      "role": "Dân làng"
+    },
+    {
+      "id": "6a0d0c5d-6e85-4021-920b-9224f8306d6f",
+      "name": "HuyHa",
+      "playerRealName": "Huy Hà",
+      "playerAvatar": "16ab4278-4d7a-40e5-a856-c9bf490d5fc3 M-1.avif",
+      "role": "Bác sĩ ung thư"
+    },
+    {
+      "id": "c3baa0ec-1bef-40a3-9812-27236222029b",
+      "name": "Hề Mộng Hy",
+      "playerAvatar": "c3baa0ec-1bef-40a3-9812-27236222029b M-3.avif",
+      "role": "Sói"
+    },
+    {
+      "id": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+      "name": "Sea you soon",
+      "playerRealName": "Duy",
+      "playerAvatar": "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd M-2.avif",
+      "role": "Nam Thư"
+    },
+    {
+      "id": "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+      "name": "Huy",
+      "role": "Sói"
+    },
+    {
+      "id": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+      "name": "Heeus",
+      "playerRealName": "Hiếu",
+      "playerAvatar": "c3a97ba3-250d-49c7-8d00-436bc8056bf5 M-2.avif",
+      "role": "Tay Buôn"
+    },
+    {
+      "id": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+      "name": "Stella",
+      "playerRealName": "Cường",
+      "playerAvatar": "8dfc1d63-988f-460d-8569-8a1964be99a0 M-1.avif",
+      "role": "Sói"
+    },
+    {
+      "id": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+      "name": "Mochi",
+      "playerAvatar": "Thiết kế chưa có tênciod.avif",
+      "role": "Phù thủy"
+    },
+    {
+      "id": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+      "name": "Chưa yêu lần nao biết ra làm sao",
+      "playerRealName": "Nhật",
+      "playerAvatar": "79b02851-1b5d-46fb-8935-5d8031dc9a7f M-3.avif",
+      "role": "Tiên tri"
+    },
+    {
+      "id": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+      "name": "Đức Huy",
+      "playerAvatar": "Thiết kế chưa có tênciodkd.avif",
+      "role": "Bảo vệ"
+    }
+  ],
+  "positions": [
+    {
+      "playerId": "6a0d0c5d-6e85-4021-920b-9224f8306d6f",
+      "x": 0.137,
+      "y": 0.27
+    },
+    {
+      "playerId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+      "x": 0.437,
+      "y": 0.727
+    },
+    {
+      "playerId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+      "x": 0.28300000000000003,
+      "y": 0.169
+    },
+    {
+      "playerId": "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+      "x": 0.097,
+      "y": 0.518
+    },
+    {
+      "playerId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+      "x": 0.5,
+      "y": 0.159
+    },
+    {
+      "playerId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+      "x": 0.713,
+      "y": 0.773
+    },
+    {
+      "playerId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+      "x": 0.735,
+      "y": 0.162
+    },
+    {
+      "playerId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+      "x": 0.857,
+      "y": 0.309
+    },
+    {
+      "playerId": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+      "x": 0.23700000000000002,
+      "y": 0.728
+    }
+  ],
+  "gameEventLog": [
+    {
+      "id": "ev_1784646686313_u8ausgo",
+      "timestamp": 1784646686313,
+      "night": 1,
+      "type": "DAY_VOTE",
+      "phase": "day",
+      "targetIds": [
+        "8dfc1d63-988f-460d-8569-8a1964be99a0"
+      ],
+      "metadata": {
+        "tie": false,
+        "skipped": false,
+        "votes": {
+          "6a0d0c5d-6e85-4021-920b-9224f8306d6f": null,
+          "c3baa0ec-1bef-40a3-9812-27236222029b": null,
+          "2246ac39-bdf7-42aa-bef6-0d597929d40f": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "c3a97ba3-250d-49c7-8d00-436bc8056bf5": null,
+          "8dfc1d63-988f-460d-8569-8a1964be99a0": null,
+          "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b": null,
+          "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a": null
+        },
+        "voteKind": "main"
+      }
+    },
+    {
+      "id": "ev_1784646778562_dwc0kch",
+      "timestamp": 1784646778562,
+      "night": 1,
+      "type": "TRIAL_VERDICT",
+      "phase": "day",
+      "targetIds": [
+        "8dfc1d63-988f-460d-8569-8a1964be99a0"
+      ],
+      "metadata": {
+        "executed": false,
+        "liveVotes": 5,
+        "dieVotes": 0,
+        "liveVoterIds": [
+          "6a0d0c5d-6e85-4021-920b-9224f8306d6f",
+          "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+          "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a"
+        ],
+        "dieVoterIds": []
+      }
+    },
+    {
+      "id": "ev_1784646821186_y2yztgj",
+      "timestamp": 1784646821186,
+      "night": 2,
+      "type": "GAME_OVER",
+      "phase": "day",
+      "metadata": {
+        "winner": "wolves",
+        "reason": "after_night_kills"
+      }
+    }
+  ],
+  "gameLog": [
+    {
+      "night": 1,
+      "at": 1784646521339,
+      "entries": [
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "targetId": "c3baa0ec-1bef-40a3-9812-27236222029b"
+        },
+        {
+          "type": "soi_mu_wolf_bite",
+          "phase": "night",
+          "actorId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "targetId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+          "wolfLabel": "Sói 1"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5"
+        },
+        {
+          "type": "soi_mu_ariana_trade",
+          "phase": "night",
+          "actorId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "targetId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "actorThumb": "up",
+          "targetThumb": "down"
+        },
+        {
+          "type": "soi_mu_wolf_inactive_choose",
+          "phase": "night",
+          "actorId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "wolfLabel": "Sói 3",
+          "activeWolfLabel": "Sói 1"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "6a0d0c5d-6e85-4021-920b-9224f8306d6f",
+          "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5"
+        },
+        {
+          "type": "soi_mu_wolf_inactive_choose",
+          "phase": "night",
+          "actorId": "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+          "targetId": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+          "wolfLabel": "Sói 2",
+          "activeWolfLabel": "Sói 1"
+        },
+        {
+          "type": "guardian_protect",
+          "phase": "night",
+          "actorId": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+          "targetId": "8dfc1d63-988f-460d-8569-8a1964be99a0"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+          "targetId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+        },
+        {
+          "type": "custom_log",
+          "phase": "day",
+          "message": "Hề Mộng Hy đã bị Nam Thư chọn và Hề Mộng Hy sẽ không thể cười vì có cái gì mà buồn cười"
+        },
+        {
+          "type": "eliminated",
+          "phase": "night",
+          "targetIds": [
+            "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+          ],
+          "causesByTarget": {
+            "79b02851-1b5d-46fb-8935-5d8031dc9a7f": [
+              {
+                "type": "wolf",
+                "attackerIds": [
+                  "c3baa0ec-1bef-40a3-9812-27236222029b"
+                ]
+              }
+            ],
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4": [
+              {
+                "type": "merchant_gunpowder",
+                "sourceId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5"
+              }
+            ]
+          }
+        },
+        {
+          "type": "custom_log",
+          "phase": "day",
+          "message": "Người chơi bị điều tra đã chọn đúng mục tiêu cũ. Sự trong sạch được làm rõ."
+        },
+        {
+          "type": "day_vote",
+          "phase": "day",
+          "voteBreakdown": [
+            {
+              "targetId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+              "voterIds": [
+                "2246ac39-bdf7-42aa-bef6-0d597929d40f"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "day_result",
+          "phase": "day",
+          "targetId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "tie": false
+        },
+        {
+          "type": "trial_started",
+          "phase": "day",
+          "targetId": "8dfc1d63-988f-460d-8569-8a1964be99a0"
+        },
+        {
+          "type": "trial_verdict",
+          "phase": "day",
+          "targetId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "liveVotes": 5,
+          "dieVotes": 0,
+          "liveVoterIds": [
+            "6a0d0c5d-6e85-4021-920b-9224f8306d6f",
+            "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+            "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+            "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+            "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a"
+          ],
+          "dieVoterIds": [],
+          "executed": false
+        }
+      ]
+    },
+    {
+      "night": 2,
+      "at": 1784646787255,
+      "entries": [
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "targetId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+        },
+        {
+          "type": "guardian_protect",
+          "phase": "night",
+          "actorId": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a",
+          "targetId": "6a0d0c5d-6e85-4021-920b-9224f8306d6f"
+        },
+        {
+          "type": "soi_mu_wolf_bite",
+          "phase": "night",
+          "actorId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "wolfLabel": "Sói 1"
+        },
+        {
+          "type": "soi_mu_wolf_inactive_choose",
+          "phase": "night",
+          "actorId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "targetId": "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+          "wolfLabel": "Sói 3",
+          "activeWolfLabel": "Sói 1"
+        },
+        {
+          "type": "soi_mu_ariana_trade",
+          "phase": "night",
+          "actorId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "targetId": "6a0d0c5d-6e85-4021-920b-9224f8306d6f",
+          "actorThumb": "up",
+          "targetThumb": null
+        },
+        {
+          "type": "soi_mu_wolf_inactive_choose",
+          "phase": "night",
+          "actorId": "2246ac39-bdf7-42aa-bef6-0d597929d40f",
+          "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "wolfLabel": "Sói 2",
+          "activeWolfLabel": "Sói 1"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "6a0d0c5d-6e85-4021-920b-9224f8306d6f",
+          "targetId": "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a"
+        },
+        {
+          "type": "eliminated",
+          "phase": "night",
+          "targetIds": [
+            "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+            "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a"
+          ],
+          "causesByTarget": {
+            "c3a97ba3-250d-49c7-8d00-436bc8056bf5": [
+              {
+                "type": "wolf",
+                "attackerIds": [
+                  "c3baa0ec-1bef-40a3-9812-27236222029b"
+                ]
+              }
+            ],
+            "04b1aa54-ecd5-4e2b-a083-0023c1ed8b7a": [
+              {
+                "type": "cancer_doctor"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

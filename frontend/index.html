@@ -1,39 +1,42 @@
 <!doctype html>
 <html lang="vi">
-  <head>
-    <meta charset="UTF-8" />
-    <script>
-      // ponytail: force redirect from http to https to prevent clientId changes and same-origin localstorage split (exclude local IPs)
-      const hostname = window.location.hostname;
-      const isLocal = hostname === "localhost" ||
-        hostname.startsWith("127.") ||
-        hostname.startsWith("192.168.") ||
-        hostname.startsWith("10.") ||
-        /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname);
 
-      if (window.location.protocol === "http:" && !isLocal) {
-        window.location.href = "https://" + hostname + window.location.pathname + window.location.search + window.location.hash;
-      }
-    </script>
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>Gummy Bears Force</title>
-    <!-- Open Graph / Facebook / Zalo -->
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://gummybears.io.vn" />
-    <meta property="og:title" content="Mừng bạn đến buổi offline của Gummy Bears Force ~✦" />
-    <meta property="og:description" content="Chơi Boardgame trực tuyến cùng bạn bè - Gummy Bears Force" />
-    <meta property="og:image" content="https://gummybears.io.vn/thumbnail.webp" />
-    <style>
-      html, body {
-        background-color: #0f1115;
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-      }
-</style>
-    <!-- 
+<head>
+  <meta charset="UTF-8" />
+  <script>
+    // ponytail: force redirect from http to https to prevent clientId changes and same-origin localstorage split (exclude local IPs)
+    const hostname = window.location.hostname;
+    const isLocal = hostname === "localhost" ||
+      hostname.startsWith("127.") ||
+      hostname.startsWith("192.168.") ||
+      hostname.startsWith("10.") ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname);
+
+    if (window.location.protocol === "http:" && !isLocal) {
+      window.location.href = "https://" + hostname + window.location.pathname + window.location.search + window.location.hash;
+    }
+  </script>
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Gummy Bears Force</title>
+  <!-- Open Graph / Facebook / Zalo -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://gummybears.io.vn" />
+  <meta property="og:title" content="Mừng bạn đến buổi offline của Gummy Bears Force ~✦" />
+  <meta property="og:description" content="Chơi Boardgame trực tuyến cùng bạn bè - Gummy Bears Force" />
+  <meta property="og:image" content="https://gummybears.io.vn/thumbnail2.webp" />
+  <style>
+    html,
+    body {
+      background-color: #0f1115;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+  <!-- 
       ==========================================================================
       [TỐI ƯU HÓA MÀN HÌNH TRẮNG KHI TẢI LẠI TRANG / KHỞI ĐỘNG APP]
       Để bật hiệu ứng màn hình chờ tối ưu chống màn hình trắng khi tải lại trang, 
@@ -87,17 +90,19 @@
       }
     </style>
     -->
-  </head>
-  <body>
-    <div id="root">
-      <!-- 
+</head>
+
+<body>
+  <div id="root">
+    <!-- 
       [MÀN HÌNH CHỜ CHỐNG CHỚP TRẮNG - HỦY COMMENT KHI BẬT TỐI ƯU]
       <div class="app-loading-container">
         <div class="app-loading-logo">DẠ NGHỊCH</div>
         <div class="app-loading-spinner"></div>
       </div>
       -->
-    </div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+  </div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
 </html>

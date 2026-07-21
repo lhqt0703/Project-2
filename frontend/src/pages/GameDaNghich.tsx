@@ -2175,8 +2175,7 @@ export default function GameDaNghich() {
   const isNightCardTransitionActive =
     phase === "night" &&
     nightTransitionEndsAt !== null &&
-    nightTransitionEndsAt !== dismissedNightTransitionEndsAt &&
-    nightTransitionDurationMs > 0;
+    nightTransitionEndsAt !== dismissedNightTransitionEndsAt;
 
   const hasNightAction = useMemo(() => {
     if (!role) return false;

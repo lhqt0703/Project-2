@@ -41,15 +41,15 @@ export default function Game() {
         positions: [
           { playerId: "P1", x: 0.415, y: 0.16 },
           { playerId: "P2", x: 0.585, y: 0.16 },
-          { playerId: "P3", x: 0.27,  y: 0.32 },
-          { playerId: "P4", x: 0.73,  y: 0.32 },
-          { playerId: "P5", x: 0.27,  y: 0.54 },
-          { playerId: "P6", x: 0.73,  y: 0.54 },
+          { playerId: "P3", x: 0.27, y: 0.32 },
+          { playerId: "P4", x: 0.73, y: 0.32 },
+          { playerId: "P5", x: 0.27, y: 0.54 },
+          { playerId: "P6", x: 0.73, y: 0.54 },
           { playerId: "P7", x: 0.415, y: 0.7 },
           { playerId: "P8", x: 0.585, y: 0.7 },
         ],
         phase: "night",
-        nightTransitionEndsAt: isDebugNightTransition ? Date.now() + 3_720 : null,
+        nightTransitionEndsAt: isDebugNightTransition ? Date.now() + 3_900 : null,
         nightCount: isDebugHeartExplosion ? 2 : 1,
         nightTurnRemainingMs: 690 * 1000,
         nightTurnPaused: true,
@@ -106,11 +106,11 @@ export default function Game() {
 
   if (!room) {
     return (
-      <div 
-        className="page-shell game-page" 
-        style={{ 
-          padding: "1.25rem", 
-          minHeight: "100vh", 
+      <div
+        className="page-shell game-page"
+        style={{
+          padding: "1.25rem",
+          minHeight: "100vh",
           backgroundColor: "#0f1115",
           display: "flex",
           alignItems: "center",
@@ -139,19 +139,19 @@ export default function Game() {
   }
 
   return (
-    <Suspense 
+    <Suspense
       fallback={
-        <div 
-          /* style={{ 
-            color: "#fff", 
-            display: "flex", 
-            alignItems: "center", 
-            justifyContent: "center", 
-            minHeight: "100vh",
-            backgroundColor: "#0f1115",
-            fontFamily: "var(--font-family, sans-serif)",
-            fontSize: "1.25rem"
-          }} */
+        <div
+        /* style={{ 
+          color: "#fff", 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: "center", 
+          minHeight: "100vh",
+          backgroundColor: "#0f1115",
+          fontFamily: "var(--font-family, sans-serif)",
+          fontSize: "1.25rem"
+        }} */
         >
           {/* Đang tải giao diện trò chơi... */}
         </div>

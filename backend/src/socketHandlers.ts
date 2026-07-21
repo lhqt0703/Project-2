@@ -1106,8 +1106,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const banSoiId = getBanSoiId(room);
     const wildWolfConvertTargetId =
       room.daNghichState!.wildWolfConvertRequestedTonight &&
-      room.daNghichState!.wildWolfConvertAvailableTonight &&
-      !room.wildWolfConvertUsed
+        room.daNghichState!.wildWolfConvertAvailableTonight &&
+        !room.wildWolfConvertUsed
         ? room.wildWolfConvertTargetId || null
         : null;
 
@@ -1502,10 +1502,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (wolfBittenTargetId && !wolfSuicideId) {
       const isProtected = (protectedTargetId === wolfBittenTargetId);
       const isSavedByWitch = witchSaved;
-      
+
       if (!isProtected && !isSavedByWitch) {
         const isChief = (room.playerRoles?.[wolfBittenTargetId] === "Trưởng làng");
-        
+
         // Kiểm tra sát thương 2 tim
         const twoHeartsDamage = getTwoHeartsWolfDamage(room);
         if (twoHeartsDamage > 0) {
@@ -1513,7 +1513,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
           const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.daNghichState!.playerHearts[wolfBittenTargetId] ?? TWO_HEARTS_MAX_HP));
           const nextHp = Math.max(0, currentHp - twoHeartsDamage);
           room.daNghichState!.playerHearts[wolfBittenTargetId] = nextHp;
-          
+
           if (nextHp <= 0) {
             if (isChief) {
               if (!room.villageChiefPendingWolfDeath) {
@@ -1825,11 +1825,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         ctx.io.to(stId).emit("yourRole", victimRole);
         // Gửi yourOriginalRole cho Song Trùng
         ctx.io.to(stId).emit("yourOriginalRole", "Song Trùng");
-        
+
         // Gửi love state trống cho nạn nhân cũ và cập nhật cho cặp đôi mới
         emitLoveStateToPlayer(ctx, roomId, room, targetId);
         emitLoveStateToPair(ctx, roomId, room);
-        
+
         // Phát trạng thái cướp cho người chơi liên quan
         emitSongTrungRobbedStateToPlayers(ctx, roomId, room);
         if (room.hostId) {
@@ -2508,15 +2508,18 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     checkAndEndGame(roomId, "after_game_start");
 
-    room.lockedPlayerIds = getParticipantIds(room);  });
+    room.lockedPlayerIds = getParticipantIds(room);
+  });
 
   socket.on("updatePositions", ({ roomId, positions, markAutoArrangeUsed }) => {
     const room = rooms[roomId];
-    if (!room) {      return;
-    }    const isHost = clientId === room.hostId;
+    if (!room) {
+      return;
+    } const isHost = clientId === room.hostId;
     const isEditor = room.positionEditors?.includes(clientId);
 
-    if (!isHost && !isEditor) {      socket.emit("errorMessage", "Bạn không có quyền chỉnh vị trí.");
+    if (!isHost && !isEditor) {
+      socket.emit("errorMessage", "Bạn không có quyền chỉnh vị trí.");
       return;
     }
 
@@ -2568,7 +2571,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (markAutoArrangeUsed && !room.autoArrangeUsed) {
       room.autoArrangeUsed = true;
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-    }  });
+    }
+  });
 
   socket.on("setCompactCircles", ({ roomId, compact }: { roomId: string; compact: boolean }) => {
     const room = rooms[roomId];
@@ -2709,12 +2713,14 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const roomId = typeof payload === "string" ? payload : payload?.roomId;
     const forceAdjustWolfCount = typeof payload === "object" && payload !== null ? !!payload.forceAdjustWolfCount : false;
 
-    if (!roomId) {      return;
+    if (!roomId) {
+      return;
     }
 
     const room = rooms[roomId];
-    if (!room) {      return;
-    }    if (room.pendingGameRules) {
+    if (!room) {
+      return;
+    } if (room.pendingGameRules) {
       room.gameRules = buildRoomGameRules(room.pendingGameRules, room.gameMode);
       delete room.pendingGameRules;
     }
@@ -2727,7 +2733,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
           p => !room.lockedPlayerIds!.includes(p.id)
         );
         const missingRoles = Math.max(0, currentCount - (room.roles?.length || 0));
-        if (missingRoles > 0) {          ctx.io.to(room.hostId).emit("roleMismatch", {
+        if (missingRoles > 0) {
+          ctx.io.to(room.hostId).emit("roleMismatch", {
             newPlayers,
             missingRoles
           });
@@ -2738,7 +2745,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     const roles = room.roles;
     const participantCount = getParticipantCount(room);
-    if (!roles || roles.length < participantCount) {      socket.emit("errorMessage", "Danh sách vai trò không hợp lệ hoặc chưa được chọn.");
+    if (!roles || roles.length < participantCount) {
+      socket.emit("errorMessage", "Danh sách vai trò không hợp lệ hoặc chưa được chọn.");
       return;
     }
 
@@ -2746,7 +2754,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const maxAllowedWolfCount = getMaxAllowedWolfCount(participantCount);
 
     if (wolfCount > maxAllowedWolfCount) {
-      if (!forceAdjustWolfCount) {        ctx.io.to(room.hostId).emit("wolfRoleMismatch", {
+      if (!forceAdjustWolfCount) {
+        ctx.io.to(room.hostId).emit("wolfRoleMismatch", {
           currentWolfCount: wolfCount,
           maxAllowedWolfCount,
           playerCount: participantCount,
@@ -2962,11 +2971,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     clearLoveStateForPlayers(ctx, room, roomId);
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     ctx.io.to(roomId).emit("gameStarted");
-    
+
     emitRolesRevealToSocket(roomId, room.hostId);
     emitPublicDayGameLogToRoom(roomId);
     emitGameLogToSocket(roomId, room.hostId);
-    
+
     checkAndEndGame(roomId, "after_game_start");
   });
 
@@ -3146,7 +3155,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const previousPhase = room.phase;
     const nightTransitionDelayMs =
       phase === "night" && previousPhase === "dusk" && (room.gameMode || "da_nghich") === "da_nghich"
-        ? 3_720
+        ? 3_900
         : 0;
     room.nightTransitionEndsAt = nightTransitionDelayMs > 0 ? Date.now() + nightTransitionDelayMs : null;
     room.phase = phase;
@@ -3508,8 +3517,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!activeVoters.includes(clientId)) return;
 
     const DIET_QUY_TOWNSFOLK = [
-      "Thợ giặt", "Thủ thư", "Điều tra viên", "Đầu bếp", "Đồng cảm", 
-      "Thầy bói", "Chôn cất", "Nhà sư", "Nuôi quạ", "Trinh nữ", 
+      "Thợ giặt", "Thủ thư", "Điều tra viên", "Đầu bếp", "Đồng cảm",
+      "Thầy bói", "Chôn cất", "Nhà sư", "Nuôi quạ", "Trinh nữ",
       "Diệt quỷ", "Chiến sĩ", "Thị trưởng"
     ];
     const voterRole = room.playerRoles?.[clientId];
@@ -3673,8 +3682,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const currentRole = room.nightTurnRole;
 
     const DIET_QUY_TOWNSFOLK = [
-      "Thợ giặt", "Thủ thư", "Điều tra viên", "Đầu bếp", "Đồng cảm", 
-      "Thầy bói", "Chôn cất", "Nhà sư", "Nuôi quạ", "Trinh nữ", 
+      "Thợ giặt", "Thủ thư", "Điều tra viên", "Đầu bếp", "Đồng cảm",
+      "Thầy bói", "Chôn cất", "Nhà sư", "Nuôi quạ", "Trinh nữ",
       "Diệt quỷ", "Chiến sĩ", "Thị trưởng"
     ];
     const DIET_QUY_OUTSIDERS = ["Người ẩn dật", "Thánh nhân"];
@@ -4302,7 +4311,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       } else {
         clearNightTurnTimer(room);
         clearSpiritWolfDecisionTimer(room);
-        
+
         // Give them the full extra 10 seconds to act.
         const durationMs = extraMs;
         startNightTurnByIndex(roomId, targetRoleIndex, { durationMs, initializeWolfVotes: false });
@@ -4693,7 +4702,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
             const files = fs.readdirSync(avaDir);
             const escapedId = targetId.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
             const idRegex = new RegExp(`^${escapedId}\\s+M-(\\d+)\\.(avif|png|jpg|jpeg)$`, 'i');
-            
+
             let maxNum = 0;
             for (const file of files) {
               const m = file.match(idRegex);
@@ -4707,10 +4716,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
             const nextNum = maxNum + 1;
             const ext = match[2];
             const newFileName = `${targetId} M-${nextNum}.${ext}`;
-            
+
             const oldPath = path.join(avaDir, finalAvatar);
             const newPath = path.join(avaDir, newFileName);
-            
+
             if (fs.existsSync(oldPath)) {
               fs.renameSync(oldPath, newPath);
               console.log(`[Avatar Rename] Đã đổi tên avatar: ${finalAvatar} -> ${newFileName}`);
@@ -4746,7 +4755,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
             const ext = fileName.substring(extIdx);
             const newFileName = `${baseName} deleted${ext}`;
             const newPath = path.join(avaDir, newFileName);
-            
+
             fs.renameSync(oldPath, newPath);
             console.log(`[Avatar Delete] Đã đổi tên file sang deleted: ${fileName} -> ${newFileName}`);
           }
@@ -6104,10 +6113,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
       rooms[replayRoomId] = room;
       socket.join(replayRoomId);
-      
+
       const publicRoom = toPublicRoom(room);
       socket.emit("roomCreated", publicRoom);
-      
+
       if (callback) {
         callback({ ok: true, roomId: replayRoomId, room: publicRoom });
       }
@@ -6306,7 +6315,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     room.soiMuState!.targets = room.soiMuState!.targets || {};
     room.soiMuState!.targets[clientId] = targetId || null;
-    
+
     // Cập nhật log sự kiện thời gian thực cho host
     updateSoiMuActionLog(room, clientId);
 
@@ -6395,7 +6404,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     } else {
       room.soiMuState!.investigationResult = "fail";
       room.soiMuState!.investigationResolved = true;
-      
+
       const deadId = room.soiMuState!.investigatedPlayerId;
       room.deadPlayers = room.deadPlayers || [];
       if (!room.deadPlayers.includes(deadId)) {

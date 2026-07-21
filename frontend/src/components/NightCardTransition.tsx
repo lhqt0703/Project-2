@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import MoonCardLogo from "./MoonCardLogo";
 import RoleCard3D from "./RoleCard3D";
 import "./NightCardTransition.css";
 
@@ -21,7 +22,13 @@ export default function NightCardTransition({
   lowPerformanceMode,
   onComplete,
 }: NightCardTransitionProps) {
-  if (!active) return null;
+  useEffect(() => {
+    if (active && durationMs <= 0) {
+      onComplete?.();
+    }
+  }, [active, durationMs, onComplete]);
+
+  if (!active || durationMs <= 0) return null;
 
   return (
     <ActiveNightCardTransition
@@ -43,9 +50,10 @@ function ActiveNightCardTransition({
   lowPerformanceMode,
   onComplete,
 }: Omit<NightCardTransitionProps, "active">) {
+  const [initialDurationMs] = useState(durationMs);
   const [transitionRevealed, setTransitionRevealed] = useState(revealed);
-  const flipDurationMs = Math.min(720, Math.max(0, durationMs - 1));
-  const effectDurationMs = Math.max(1, durationMs - flipDurationMs);
+  const flipDurationMs = Math.min(700, Math.max(0, initialDurationMs - 1));
+  const effectDurationMs = Math.max(1, initialDurationMs - flipDurationMs);
 
   useEffect(() => {
     if (!revealed) return;
@@ -76,6 +84,10 @@ function ActiveNightCardTransition({
         revealed={transitionRevealed}
         lowPerformanceMode={lowPerformanceMode}
       />
+      <div className="night-card-transition__moon">
+        <MoonCardLogo className="night-card-transition__moon-rainbow" />
+        <MoonCardLogo className="night-card-transition__moon-white" white />
+      </div>
       <div className="night-card-transition__whiteout" />
     </div>
   );

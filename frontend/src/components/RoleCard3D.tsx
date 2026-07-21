@@ -467,6 +467,7 @@ export default function RoleCard3D({
             {/* Logo Moon SVG ở giữa mặt sau */}
             <svg
               viewBox="0 0 511.99928 511"
+              className="moon-card-logo"
               style={{
                 width: "120px",
                 height: "120px",

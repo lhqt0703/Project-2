@@ -108,13 +108,16 @@ export default function GameDietQuy() {
   const location = useLocation();
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const roomId = query.get("roomId");
+  const isMockDusk = roomId === "mock-dusk";
+  const [mockDuskCardCount, setMockDuskCardCount] = useState<number>(12);
+  const [mockDuskTargetRole, setMockDuskTargetRole] = useState<string>("Sói Dại");
   const [roleOverride, setRoleOverride] = useState<string | null>("Thần tình yêu");
-  const role = roomId === "mock-8" ? roleOverride : contextRole;
+  const role = (roomId === "mock-8" || isMockDusk) ? (roleOverride || mockDuskTargetRole) : contextRole;
   const debugAnim = query.get("debugAnim") === "1";
   const debugCupid = query.get("debugCupid") === "1";
   const debugHeartExplosion = query.get("debugHeartExplosion") === "1";
   const debugWitch = query.get("debugWitch") === "1";
-  const isDebugMode = roomId === "mock-8" || debugAnim || debugCupid || debugHeartExplosion || debugWitch;
+  const isDebugMode = roomId === "mock-8" || isMockDusk || debugAnim || debugCupid || debugHeartExplosion || debugWitch;
   const [testHeartExplosionTrigger, setTestHeartExplosionTrigger] = useState(0);
   const sync = useGameSocketSync({ roomId, setRoom });
   const phase: GamePhase = sync.phase;
@@ -145,7 +148,7 @@ export default function GameDietQuy() {
     sync.trialStage === "none" &&
     !sync.gameEnded;
   const deadPlayers = sync.deadPlayers;
-  const isHost = !!room?.hostId && clientId === room.hostId;
+  const isHost = isMockDusk ? false : (!!room?.hostId && clientId === room.hostId);
   const isPositionEditor = !!room?.positionEditors?.includes(clientId);
   const canControlTrialFlow = isHost || isPositionEditor;
   const isCurrentPlayerDead = !!clientId && deadPlayers.includes(clientId);
@@ -1504,6 +1507,7 @@ export default function GameDietQuy() {
   useEffect(() => {
     const handleErrorMessage = (msg: string) => {
       if (msg) {
+        if (roomId === "mock-8" || roomId === "mock-dusk") return;
         const onConfirm = msg.includes("Phòng không tồn tại") ? () => nav("/lobby") : undefined;
         showNotice("Thông báo", msg, onConfirm);
       }
@@ -1512,11 +1516,11 @@ export default function GameDietQuy() {
     return () => {
       socket.off("errorMessage", handleErrorMessage);
     };
-  }, [showNotice, nav]);
+  }, [showNotice, nav, roomId]);
 
   useEffect(() => {
     const handleRoomClosed = (payload?: { roomId?: string }) => {
-      if (!roomId) return;
+      if (!roomId || roomId === "mock-8" || roomId === "mock-dusk") return;
       if (payload?.roomId && payload.roomId !== roomId) return;
       showNotice("Phòng đã đóng", "Quản trò đã đóng phòng. Bạn sẽ được đưa về sảnh chờ.", () => {
         setRoom(null);
@@ -1700,6 +1704,14 @@ export default function GameDietQuy() {
              (isRoleRevealLimitedToCurrentNightTurn ? doesNightTurnMatchMyRole : !shouldHidePlayerRoleText))));
 
   const masonryItems = useMemo(() => {
+    if (isMockDusk) {
+      return Array.from({ length: mockDuskCardCount }, (_, index) => ({
+        id: String(index),
+        img: nenLungAsset,
+        height: 360,
+        roleName: mockDuskTargetRole,
+      }));
+    }
     const roles = room?.roles || [];
     return roles.map((roleName, index) => ({
       id: String(index),
@@ -1707,7 +1719,7 @@ export default function GameDietQuy() {
       height: 360,
       roleName
     }));
-  }, [room?.roles]);
+  }, [isMockDusk, mockDuskCardCount, mockDuskTargetRole, room?.roles]);
 
   useEffect(() => {
     setCardFlippedToFront(shouldRevealMyRole);
@@ -1941,14 +1953,21 @@ export default function GameDietQuy() {
                   {!masonryComplete ? (
                     <Masonry
                       items={masonryItems}
-                      duskCardSelections={room.duskCardSelections || {}}
+                      duskCardSelections={room?.duskCardSelections || {}}
                       clientId={clientId}
                       onSelectCard={(index) => {
+                        if (isMockDusk) {
+                          setRoleOverride(mockDuskTargetRole);
+                          setCardFlippedToFront(true);
+                          setMasonryComplete(true);
+                          return;
+                        }
                         isSelectingLocally.current = true;
                         socket.emit("duskSelectCard", { roomId, cardIndex: index });
                       }}
                       onSelectionComplete={() => {
                         isSelectingLocally.current = false;
+                        setCardFlippedToFront(true);
                         setMasonryComplete(true);
                       }}
                     />

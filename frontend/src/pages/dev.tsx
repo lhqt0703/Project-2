@@ -799,6 +799,26 @@ export default function DevSpawn() {
                 Test chuyển cảnh Hoàng hôn → Đêm (Mock-8)
               </button>
             </div>
+            <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
+              <button
+                onClick={() => window.open("/game?roomId=mock-dusk", "_blank")}
+                style={{
+                  flex: 1,
+                  padding: "10px",
+                  borderRadius: "8px",
+                  border: "1px solid rgba(251, 146, 60, 0.4)",
+                  background: "rgba(251, 146, 60, 0.15)",
+                  color: "#ffedd5",
+                  fontWeight: 600,
+                  fontSize: "0.875rem",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                  textAlign: "center"
+                }}
+              >
+                Test Dusk Masonry & RoleCard3D (Mock-Dusk) 🌥️
+              </button>
+            </div>
 
             <button
               onClick={() => {

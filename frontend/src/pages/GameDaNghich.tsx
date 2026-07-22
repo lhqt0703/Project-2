@@ -104,14 +104,17 @@ export default function GameDaNghich() {
   const location = useLocation();
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const roomId = query.get("roomId");
+  const isMockDusk = roomId === "mock-dusk";
+  const [mockDuskCardCount, setMockDuskCardCount] = useState<number>(12);
+  const [mockDuskTargetRole, setMockDuskTargetRole] = useState<string>("Sói Dại");
   const [roleOverride, setRoleOverride] = useState<string | null>("Thần tình yêu");
   const [mockSkillHintScenario, setMockSkillHintScenario] = useState<string>("default");
-  const role = roomId === "mock-8" ? roleOverride : contextRole;
+  const role = (roomId === "mock-8" || isMockDusk) ? (roleOverride || mockDuskTargetRole) : contextRole;
   const debugAnim = query.get("debugAnim") === "1";
   const debugCupid = query.get("debugCupid") === "1";
   const debugHeartExplosion = query.get("debugHeartExplosion") === "1";
   const debugWitch = query.get("debugWitch") === "1";
-  const isDebugMode = roomId === "mock-8" || debugAnim || debugCupid || debugHeartExplosion || debugWitch;
+  const isDebugMode = roomId === "mock-8" || isMockDusk || debugAnim || debugCupid || debugHeartExplosion || debugWitch;
   const [testHeartExplosionTrigger, setTestHeartExplosionTrigger] = useState(0);
   const [mockCursedResult, setMockCursedResult] = useState<CursedResultPayload | null>(null);
   const sync = useGameSocketSync({ roomId, setRoom });
@@ -143,7 +146,7 @@ export default function GameDaNghich() {
     sync.trialStage === "none" &&
     !sync.gameEnded;
   const deadPlayers = sync.deadPlayers;
-  const isHost = !!room?.hostId && clientId === room.hostId;
+  const isHost = isMockDusk ? false : (!!room?.hostId && clientId === room.hostId);
   const isPositionEditor = !!room?.positionEditors?.includes(clientId);
   const canControlTrialFlow = isHost || isPositionEditor;
   const isCurrentPlayerDead = !!clientId && deadPlayers.includes(clientId);
@@ -326,7 +329,7 @@ export default function GameDaNghich() {
     phase === "night" &&
     nightTransitionEndsAt !== null &&
     nightTransitionEndsAt !== dismissedNightTransitionEndsAt;
-  const presentationPhase = isNightCardTransitionActive ? "dusk" : phase;
+  const presentationPhase = phase;
   const [lowPerformanceMode, setLowPerformanceMode] = useState(() => {
     if (typeof window !== "undefined") {
       return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.matchMedia("(pointer: coarse)").matches;
@@ -1906,6 +1909,7 @@ export default function GameDaNghich() {
   useEffect(() => {
     const handleErrorMessage = (msg: string) => {
       if (msg) {
+        if (roomId === "mock-8" || roomId === "mock-dusk") return;
         const onConfirm = msg.includes("Phòng không tồn tại") ? () => nav("/lobby") : undefined;
         showNotice("Thông báo", msg, onConfirm);
       }
@@ -1914,11 +1918,11 @@ export default function GameDaNghich() {
     return () => {
       socket.off("errorMessage", handleErrorMessage);
     };
-  }, [showNotice, nav]);
+  }, [showNotice, nav, roomId]);
 
   useEffect(() => {
     const handleRoomClosed = (payload?: { roomId?: string }) => {
-      if (!roomId) return;
+      if (!roomId || roomId === "mock-8" || roomId === "mock-dusk") return;
       if (payload?.roomId && payload.roomId !== roomId) return;
       showNotice("Phòng đã đóng", "Quản trò đã đóng phòng. Bạn sẽ được đưa về sảnh chờ.", () => {
         setRoom(null);
@@ -2109,6 +2113,14 @@ export default function GameDaNghich() {
             (isRoleRevealLimitedToCurrentNightTurn ? doesNightTurnMatchMyRole : !shouldHidePlayerRoleText))));
 
   const masonryItems = useMemo(() => {
+    if (isMockDusk) {
+      return Array.from({ length: mockDuskCardCount }, (_, index) => ({
+        id: String(index),
+        img: nenLungAsset,
+        height: 360,
+        roleName: mockDuskTargetRole,
+      }));
+    }
     const roles = room?.roles || [];
     return roles.map((roleName, index) => ({
       id: String(index),
@@ -2116,7 +2128,7 @@ export default function GameDaNghich() {
       height: 360,
       roleName
     }));
-  }, [room?.roles]);
+  }, [isMockDusk, mockDuskCardCount, mockDuskTargetRole, room?.roles]);
 
   useEffect(() => {
     setCardFlippedToFront(shouldRevealMyRole);
@@ -2378,14 +2390,21 @@ export default function GameDaNghich() {
                   {!masonryComplete ? (
                     <Masonry
                       items={masonryItems}
-                      duskCardSelections={room.duskCardSelections || {}}
+                      duskCardSelections={room?.duskCardSelections || {}}
                       clientId={clientId}
                       onSelectCard={(index) => {
+                        if (isMockDusk) {
+                          setRoleOverride(mockDuskTargetRole);
+                          setCardFlippedToFront(true);
+                          setMasonryComplete(true);
+                          return;
+                        }
                         isSelectingLocally.current = true;
                         socket.emit("duskSelectCard", { roomId, cardIndex: index });
                       }}
                       onSelectionComplete={() => {
                         isSelectingLocally.current = false;
+                        setCardFlippedToFront(true);
                         setMasonryComplete(true);
                       }}
                     />
@@ -2859,196 +2878,302 @@ export default function GameDaNghich() {
               boxShadow: "0 8px 32px rgba(0, 0, 0, 0.5)",
             }}>
 
-              <div
-                title="Kẻ Bị Nguyền: Không Có"
-                onClick={() => {
-                  setRoleOverride("Kẻ bị nguyền");
-                  setCardFlippedToFront(true);
-                  setMockCursedResult({
-                    targetId: `mock-clear-${performance.now()}`,
-                    areaIds: [],
-                    hasWolf: false,
-                  });
-                }}
-                style={{ ...btnStyle, borderColor: "rgba(226, 232, 240, 0.45)", background: "rgba(226, 232, 240, 0.12)" }}
-                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
-                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
-              >
-                ◯
-              </div>
-              <div
-                title="Kẻ Bị Nguyền: Chính Nó"
-                onClick={() => {
-                  setRoleOverride("Kẻ bị nguyền");
-                  setCardFlippedToFront(true);
-                  setMockCursedResult({
-                    targetId: `mock-wolf-${performance.now()}`,
-                    areaIds: [],
-                    hasWolf: true,
-                  });
-                }}
-                style={{ ...btnStyle, borderColor: "rgba(225, 29, 46, 0.55)", background: "rgba(225, 29, 46, 0.18)" }}
-                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
-                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
-              >
-                🐺
-              </div>
-              <div
-                title="Bắn Thợ Săn (🔫)"
-                onClick={() => {
-                  if (!room) return;
-                  const alive = room.players
-                    .map(p => p.id)
-                    .filter(id => !deadPlayers.includes(id));
-                  if (alive.length < 2) return;
-                  const from = alive[Math.floor(Math.random() * alive.length)]!;
-                  let to = from;
-                  for (let i = 0; i < 10 && to === from; i++) {
-                    to = alive[Math.floor(Math.random() * alive.length)]!;
-                  }
-                  if (to === from) return;
-                  playHunterShotAnim(from, to);
-                }}
-                style={{ ...btnStyle, borderColor: "rgba(239, 68, 68, 0.4)", background: "rgba(239, 68, 68, 0.15)" }}
-                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
-                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
-              >
-                🔫
-              </div>
+              {isMockDusk ? (
+                <>
+                  {/* 🔻 Giảm thẻ bài */}
+                  <div
+                    title="Giảm số thẻ bài (🔻)"
+                    onClick={() => {
+                      setMockDuskCardCount((prev) => Math.max(1, prev - 1));
+                      setMasonryComplete(false);
+                    }}
+                    style={{ ...btnStyle, borderColor: "rgba(226, 232, 240, 0.45)", background: "rgba(226, 232, 240, 0.12)", cursor: "pointer" }}
+                    onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                    onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                  >
+                    🔻
+                  </div>
 
-              <div
-                title="Cupid Bắn (🏹)"
-                onClick={() => {
-                  if (!room) return;
-                  const alive = room.players
-                    .map((p: any) => p.id)
-                    .filter((id: string) => !deadPlayers.includes(id));
-                  if (alive.length === 0) return;
-                  const to = alive[Math.floor(Math.random() * alive.length)]!;
-                  playHunterShotAnim("P1", to, {
-                    assetSrc: encodeURI("/Mũi tên.svg"),
-                    alt: "Mũi tên",
-                    rotationOffsetDeg: -45,
-                    kind: "love",
-                  });
-                }}
-                style={{ ...btnStyle, borderColor: "rgba(244, 63, 94, 0.4)", background: "rgba(244, 63, 94, 0.15)" }}
-                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
-                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
-              >
-                🏹
-              </div>
-              <div
-                title="Test Văng Tim (💖)"
-                onClick={() => {
-                  setTestHeartExplosionTrigger(prev => prev + 1);
-                }}
-                style={{ ...btnStyle, borderColor: "rgba(236, 72, 153, 0.4)", background: "rgba(236, 72, 153, 0.15)" }}
-                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
-                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
-              >
-                💖
-              </div>
-              <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                <select
-                  title="Mock Skill Hint (Scenario Switcher)"
-                  value={mockSkillHintScenario}
-                  onChange={(e) => setMockSkillHintScenario(e.target.value)}
-                  style={{
-                    ...btnStyle,
-                    border: "1px solid rgba(59, 130, 246, 0.4)",
-                    background: "rgba(59, 130, 246, 0.15)",
-                    color: "#fff",
-                    cursor: "pointer",
-                    fontSize: "0.6rem",
-                    outline: "none",
-                    appearance: "none",
-                    WebkitAppearance: "none",
-                    MozAppearance: "none",
-                    textAlign: "center",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: 0,
-                    lineHeight: "18px",
-                  }}
-                  onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
-                  onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
-                >
-                  <optgroup label="Chung" style={{ background: "#222", color: "#a78bfa" }}>
-                    <option value="default" style={{ background: "#222", color: "#fff" }}>🔄 Mặc định (Theo game)</option>
-                    <option value="isRobbed" style={{ background: "#222", color: "#fff" }}>🎭 Bị cướp vai trò (Song Trùng)</option>
-                  </optgroup>
-                  <optgroup label="Thần Tình Yêu" style={{ background: "#222", color: "#a78bfa" }}>
-                    <option value="cupid_no_target" style={{ background: "#222", color: "#fff" }}>💘 Cupid: Chưa chọn mục tiêu</option>
-                    <option value="cupid_escape_both" style={{ background: "#222", color: "#fff" }}>💖 Cupid: Cả hai trốn làng</option>
-                    <option value="cupid_escape_me" style={{ background: "#222", color: "#fff" }}>💞 Cupid: Mình xin trốn</option>
-                    <option value="cupid_escape_partner" style={{ background: "#222", color: "#fff" }}>💕 Cupid: Nửa kia xin trốn</option>
-                    <option value="cupid_can_escape" style={{ background: "#222", color: "#fff" }}>💓 Cupid: Có thể trốn</option>
-                    <option value="cupid_paired_normal" style={{ background: "#222", color: "#fff" }}>💗 Cupid: Sống bình thường</option>
-                  </optgroup>
-                  <optgroup label="Trưởng Làng" style={{ background: "#222", color: "#a78bfa" }}>
-                    <option value="chief_bitten_has_protector" style={{ background: "#222", color: "#fff" }}>🛡️ Trưởng làng: Bị cắn (Có Hộ nhân)</option>
-                    <option value="chief_bitten_no_protector" style={{ background: "#222", color: "#fff" }}>☠️ Trưởng làng: Bị cắn (Không Hộ nhân)</option>
-                    <option value="chief_find_protector_found" style={{ background: "#222", color: "#fff" }}>👁️ Trưởng làng: Đã thấy Hộ nhân</option>
-                    <option value="chief_find_protector_not_found" style={{ background: "#222", color: "#fff" }}>🔍 Trưởng làng: Đang tìm Hộ nhân</option>
-                    <option value="chief_normal" style={{ background: "#222", color: "#fff" }}>🌾 Trưởng làng: Bình thường</option>
-                  </optgroup>
-                  <optgroup label="Bán Sói" style={{ background: "#222", color: "#a78bfa" }}>
-                    <option value="wild_wolf_normal" style={{ background: "#222", color: "#fff" }}>🐏 Bán sói: Bình thường (Dân)</option>
-                    <option value="wild_wolf_aligned" style={{ background: "#222", color: "#fff" }}>🐺 Bán sói: Đã thức tỉnh (Sói)</option>
-                  </optgroup>
-                  <optgroup label="Tiên Tri & Khác" style={{ background: "#222", color: "#a78bfa" }}>
-                    <option value="seer_result_wolf" style={{ background: "#222", color: "#fff" }}>🔮 Tiên tri: Soi ra Sói</option>
-                    <option value="seer_result_human" style={{ background: "#222", color: "#fff" }}>🔮 Tiên tri: Soi ra Người</option>
-                    <option value="wolf_bite_two" style={{ background: "#222", color: "#fff" }}>🧛 Sói: Cắn 2 mục tiêu</option>
-                    <option value="elemental_guess" style={{ background: "#222", color: "#fff" }}>🔥 Nguyên tố: Chọn mục tiêu</option>
-                  </optgroup>
-                </select>
-                <span style={{ position: "absolute", pointerEvents: "none", fontSize: "0.55rem", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}>🔄</span>
-              </div>
-              <div
-                title="Phù Thủy Cứu (🧪)"
-                onClick={() => {
-                  const alive = room?.players
-                    ?.map((p: any) => p.id)
-                    ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
-                  if (alive.length > 0) {
-                    const to = alive[Math.floor(Math.random() * alive.length)]!;
-                    sync.setWitchPotionEffect({
-                      targetId: to,
-                      type: "heal",
-                      startedAt: performance.now()
-                    });
-                  }
-                }}
-                style={{ ...btnStyle, borderColor: "rgba(168, 85, 247, 0.4)", background: "rgba(168, 85, 247, 0.15)" }}
-                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
-                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
-              >
-                🧪
-              </div>
-              <div
-                title="Phù Thủy Giết (💀)"
-                onClick={() => {
-                  const alive = room?.players
-                    ?.map((p: any) => p.id)
-                    ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
-                  if (alive.length > 0) {
-                    const to = alive[Math.floor(Math.random() * alive.length)]!;
-                    sync.setWitchPotionEffect({
-                      targetId: to,
-                      type: "poison",
-                      startedAt: performance.now()
-                    });
-                  }
-                }}
-                style={{ ...btnStyle, borderColor: "rgba(244, 63, 94, 0.4)", background: "rgba(244, 63, 94, 0.15)" }}
-                onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
-                onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
-              >
-                💀
-              </div>
+                  {/* 🔺 Tăng thẻ bài */}
+                  <div
+                    title="Tăng số thẻ bài (🔺)"
+                    onClick={() => {
+                      setMockDuskCardCount((prev) => Math.min(30, prev + 1));
+                      setMasonryComplete(false);
+                    }}
+                    style={{ ...btnStyle, borderColor: "rgba(167, 139, 250, 0.55)", background: "rgba(167, 139, 250, 0.18)", cursor: "pointer" }}
+                    onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                    onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                  >
+                    🔺
+                  </div>
+
+                  {/* Số thẻ hiện tại */}
+                  <div
+                    title={`Số thẻ hiện tại: ${mockDuskCardCount}`}
+                    style={{
+                      ...btnStyle,
+                      borderColor: "rgba(99, 102, 241, 0.5)",
+                      background: "rgba(99, 102, 241, 0.2)",
+                      color: "#a78bfa",
+                      fontWeight: "bold",
+                      fontSize: "0.85rem",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      userSelect: "none"
+                    }}
+                  >
+                    {mockDuskCardCount}
+                  </div>
+
+                  {/* Select chọn Role chỉ định */}
+                  <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                    <select
+                      title="Chọn Role chỉ định (🎭)"
+                      value={mockDuskTargetRole}
+                      onChange={(e) => {
+                        const newRole = e.target.value;
+                        setMockDuskTargetRole(newRole);
+                        setRoleOverride(newRole);
+                      }}
+                      style={{
+                        ...btnStyle,
+                        border: "1px solid rgba(139, 92, 246, 0.5)",
+                        background: "rgba(139, 92, 246, 0.2)",
+                        color: "#fff",
+                        cursor: "pointer",
+                        fontSize: "0.6rem",
+                        outline: "none",
+                        appearance: "none",
+                        WebkitAppearance: "none",
+                        MozAppearance: "none",
+                        textAlign: "center",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 0,
+                        lineHeight: "18px",
+                      }}
+                      onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                      onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                    >
+                      {[
+                        "Sói Dại", "Tiên tri", "Phù thủy", "Bảo vệ", "Thợ săn",
+                        "Thần tình yêu", "Dân làng", "Sói thường", "Bán Sói",
+                        "Trưởng làng", "Hộ nhân", "Thiên Sứ", "Ma Cà Rồng", "Kẻ Mạo Danh"
+                      ].map((r) => (
+                        <option key={r} value={r} style={{ background: "#222", color: "#fff" }}>{r}</option>
+                      ))}
+                    </select>
+                    <span style={{ position: "absolute", pointerEvents: "none", fontSize: "0.55rem", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}>🎭</span>
+                  </div>
+
+                  {/* ♻️ Thử lại Masonry */}
+                  <div
+                    title="Thử lại Masonry (♻️)"
+                    onClick={() => setMasonryComplete(false)}
+                    style={{ ...btnStyle, borderColor: "rgba(16, 185, 129, 0.5)", background: "rgba(16, 185, 129, 0.2)", cursor: "pointer" }}
+                    onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                    onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                  >
+                    ♻️
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div
+                    title="Kẻ Bị Nguyền: Không Có"
+                    onClick={() => {
+                      setRoleOverride("Kẻ bị nguyền");
+                      setCardFlippedToFront(true);
+                      setMockCursedResult({
+                        targetId: `mock-clear-${performance.now()}`,
+                        areaIds: [],
+                        hasWolf: false,
+                      });
+                    }}
+                    style={{ ...btnStyle, borderColor: "rgba(226, 232, 240, 0.45)", background: "rgba(226, 232, 240, 0.12)" }}
+                    onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                    onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                  >
+                    ◯
+                  </div>
+                  <div
+                    title="Kẻ Bị Nguyền: Chính Nó"
+                    onClick={() => {
+                      setRoleOverride("Kẻ bị nguyền");
+                      setCardFlippedToFront(true);
+                      setMockCursedResult({
+                        targetId: `mock-wolf-${performance.now()}`,
+                        areaIds: [],
+                        hasWolf: true,
+                      });
+                    }}
+                    style={{ ...btnStyle, borderColor: "rgba(225, 29, 46, 0.55)", background: "rgba(225, 29, 46, 0.18)" }}
+                    onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                    onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                  >
+                    🐺
+                  </div>
+                  <div
+                    title="Bắn Thợ Săn (🔫)"
+                    onClick={() => {
+                      if (!room) return;
+                      const alive = room.players
+                        .map(p => p.id)
+                        .filter(id => !deadPlayers.includes(id));
+                      if (alive.length < 2) return;
+                      const from = alive[Math.floor(Math.random() * alive.length)]!;
+                      let to = from;
+                      for (let i = 0; i < 10 && to === from; i++) {
+                        to = alive[Math.floor(Math.random() * alive.length)]!;
+                      }
+                      if (to === from) return;
+                      playHunterShotAnim(from, to);
+                    }}
+                    style={{ ...btnStyle, borderColor: "rgba(239, 68, 68, 0.4)", background: "rgba(239, 68, 68, 0.15)" }}
+                    onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                    onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                  >
+                    🔫
+                  </div>
+
+                  <div
+                    title="Cupid Bắn (🏹)"
+                    onClick={() => {
+                      if (!room) return;
+                      const alive = room.players
+                        .map((p: any) => p.id)
+                        .filter((id: string) => !deadPlayers.includes(id));
+                      if (alive.length === 0) return;
+                      const to = alive[Math.floor(Math.random() * alive.length)]!;
+                      playHunterShotAnim("P1", to, {
+                        assetSrc: encodeURI("/Mũi tên.svg"),
+                        alt: "Mũi tên",
+                        rotationOffsetDeg: -45,
+                        kind: "love",
+                      });
+                    }}
+                    style={{ ...btnStyle, borderColor: "rgba(244, 63, 94, 0.4)", background: "rgba(244, 63, 94, 0.15)" }}
+                    onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                    onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                  >
+                    🏹
+                  </div>
+                  <div
+                    title="Test Văng Tim (💖)"
+                    onClick={() => {
+                      setTestHeartExplosionTrigger(prev => prev + 1);
+                    }}
+                    style={{ ...btnStyle, borderColor: "rgba(236, 72, 153, 0.4)", background: "rgba(236, 72, 153, 0.15)" }}
+                    onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                    onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                  >
+                    💖
+                  </div>
+                  <div style={{ position: "relative", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                    <select
+                      title="Mock Skill Hint (Scenario Switcher)"
+                      value={mockSkillHintScenario}
+                      onChange={(e) => setMockSkillHintScenario(e.target.value)}
+                      style={{
+                        ...btnStyle,
+                        border: "1px solid rgba(59, 130, 246, 0.4)",
+                        background: "rgba(59, 130, 246, 0.15)",
+                        color: "#fff",
+                        cursor: "pointer",
+                        fontSize: "0.6rem",
+                        outline: "none",
+                        appearance: "none",
+                        WebkitAppearance: "none",
+                        MozAppearance: "none",
+                        textAlign: "center",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 0,
+                        lineHeight: "18px",
+                      }}
+                      onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                      onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                    >
+                      <optgroup label="Chung" style={{ background: "#222", color: "#a78bfa" }}>
+                        <option value="default" style={{ background: "#222", color: "#fff" }}>🔄 Mặc định (Theo game)</option>
+                        <option value="isRobbed" style={{ background: "#222", color: "#fff" }}>🎭 Bị cướp vai trò (Song Trùng)</option>
+                      </optgroup>
+                      <optgroup label="Thần Tình Yêu" style={{ background: "#222", color: "#a78bfa" }}>
+                        <option value="cupid_no_target" style={{ background: "#222", color: "#fff" }}>💘 Cupid: Chưa chọn mục tiêu</option>
+                        <option value="cupid_escape_both" style={{ background: "#222", color: "#fff" }}>💖 Cupid: Cả hai trốn làng</option>
+                        <option value="cupid_escape_me" style={{ background: "#222", color: "#fff" }}>💞 Cupid: Mình xin trốn</option>
+                        <option value="cupid_escape_partner" style={{ background: "#222", color: "#fff" }}>💕 Cupid: Nửa kia xin trốn</option>
+                        <option value="cupid_can_escape" style={{ background: "#222", color: "#fff" }}>💓 Cupid: Có thể trốn</option>
+                        <option value="cupid_paired_normal" style={{ background: "#222", color: "#fff" }}>💗 Cupid: Sống bình thường</option>
+                      </optgroup>
+                      <optgroup label="Trưởng Làng" style={{ background: "#222", color: "#a78bfa" }}>
+                        <option value="chief_bitten_has_protector" style={{ background: "#222", color: "#fff" }}>🛡️ Trưởng làng: Bị cắn (Có Hộ nhân)</option>
+                        <option value="chief_bitten_no_protector" style={{ background: "#222", color: "#fff" }}>☠️ Trưởng làng: Bị cắn (Không Hộ nhân)</option>
+                        <option value="chief_find_protector_found" style={{ background: "#222", color: "#fff" }}>👁️ Trưởng làng: Đã thấy Hộ nhân</option>
+                        <option value="chief_find_protector_not_found" style={{ background: "#222", color: "#fff" }}>🔍 Trưởng làng: Đang tìm Hộ nhân</option>
+                        <option value="chief_normal" style={{ background: "#222", color: "#fff" }}>🌾 Trưởng làng: Bình thường</option>
+                      </optgroup>
+                      <optgroup label="Bán Sói" style={{ background: "#222", color: "#a78bfa" }}>
+                        <option value="wild_wolf_normal" style={{ background: "#222", color: "#fff" }}>🐏 Bán sói: Bình thường (Dân)</option>
+                        <option value="wild_wolf_aligned" style={{ background: "#222", color: "#fff" }}>🐺 Bán sói: Đã thức tỉnh (Sói)</option>
+                      </optgroup>
+                      <optgroup label="Tiên Tri & Khác" style={{ background: "#222", color: "#a78bfa" }}>
+                        <option value="seer_result_wolf" style={{ background: "#222", color: "#fff" }}>🔮 Tiên tri: Soi ra Sói</option>
+                        <option value="seer_result_human" style={{ background: "#222", color: "#fff" }}>🔮 Tiên tri: Soi ra Người</option>
+                        <option value="wolf_bite_two" style={{ background: "#222", color: "#fff" }}>🧛 Sói: Cắn 2 mục tiêu</option>
+                        <option value="elemental_guess" style={{ background: "#222", color: "#fff" }}>🔥 Nguyên tố: Chọn mục tiêu</option>
+                      </optgroup>
+                    </select>
+                    <span style={{ position: "absolute", pointerEvents: "none", fontSize: "0.55rem", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}>🔄</span>
+                  </div>
+                  <div
+                    title="Phù Thủy Cứu (🧪)"
+                    onClick={() => {
+                      const alive = room?.players
+                        ?.map((p: any) => p.id)
+                        ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
+                      if (alive.length > 0) {
+                        const to = alive[Math.floor(Math.random() * alive.length)]!;
+                        sync.setWitchPotionEffect({
+                          targetId: to,
+                          type: "heal",
+                          startedAt: performance.now()
+                        });
+                      }
+                    }}
+                    style={{ ...btnStyle, borderColor: "rgba(168, 85, 247, 0.4)", background: "rgba(168, 85, 247, 0.15)" }}
+                    onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                    onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                  >
+                    🧪
+                  </div>
+                  <div
+                    title="Phù Thủy Giết (💀)"
+                    onClick={() => {
+                      const alive = room?.players
+                        ?.map((p: any) => p.id)
+                        ?.filter((id: string) => !(room.deadPlayers || []).includes(id)) || [];
+                      if (alive.length > 0) {
+                        const to = alive[Math.floor(Math.random() * alive.length)]!;
+                        sync.setWitchPotionEffect({
+                          targetId: to,
+                          type: "poison",
+                          startedAt: performance.now()
+                        });
+                      }
+                    }}
+                    style={{ ...btnStyle, borderColor: "rgba(244, 63, 94, 0.4)", background: "rgba(244, 63, 94, 0.15)" }}
+                    onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                    onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                  >
+                    💀
+                  </div>
+                </>
+              )}
             </div>
           </>
         );

@@ -1930,6 +1930,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
   });
 
   socket.on("joinRoom", ({ roomId, name }) => {
+    if (roomId === "mock-8" || roomId === "mock-dusk") return;
     const room = rooms[roomId];
     if (!room) {
       socket.emit("errorMessage", "Phòng không tồn tại :(");
@@ -1973,6 +1974,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
   });
 
   socket.on("getRoom", (roomId: string, callback?: SocketActionAck) => {
+    if (roomId === "mock-8" || roomId === "mock-dusk") {
+      callback?.({ ok: false, reason: "mock_room" });
+      return;
+    }
     const room = rooms[roomId];
     if (room) {
       ensureRoomGameRules(room);

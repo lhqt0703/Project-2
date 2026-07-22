@@ -969,7 +969,7 @@ export function useGameSocketSync({
     socket.on("yourOriginalRole", handleYourOriginalRole);
     socket.on("songTrungRobbedState", handleSongTrungRobbedState);
 
-    const stopRoomRecovery = roomId && roomId !== "mock-8"
+    const stopRoomRecovery = roomId && roomId !== "mock-8" && roomId !== "mock-dusk"
       ? startRoomRecovery(roomId)
       : () => {};
 

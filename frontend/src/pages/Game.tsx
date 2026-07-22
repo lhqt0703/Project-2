@@ -22,12 +22,13 @@ export default function Game() {
     if (!roomId) return;
     if (room && room.id === roomId) return;
 
-    if (roomId === "mock-8") {
+    if (roomId === "mock-8" || roomId === "mock-dusk") {
       const isDebugHeartExplosion = new URLSearchParams(window.location.search).get("debugHeartExplosion") === "1";
       const isDebugNightTransition = new URLSearchParams(window.location.search).get("debugNightTransition") === "1";
       setRoom({
-        id: "mock-8",
+        id: roomId,
         hostId: "P1",
+        gameMode: "da_nghich",
         players: [
           { id: "P1", name: "Player 1" },
           { id: "P2", name: "Player 2" },
@@ -48,7 +49,8 @@ export default function Game() {
           { playerId: "P7", x: 0.415, y: 0.7 },
           { playerId: "P8", x: 0.585, y: 0.7 },
         ],
-        phase: "night",
+        roles: ["Sói Dại", "Tiên tri", "Phù thủy", "Bảo vệ", "Thợ săn", "Thần tình yêu", "Dân làng", "Sói thường"],
+        phase: roomId === "mock-dusk" ? "dusk" : "night",
         nightTransitionEndsAt: isDebugNightTransition ? Date.now() + 3_900 : null,
         nightCount: isDebugHeartExplosion ? 2 : 1,
         nightTurnRemainingMs: 690 * 1000,
@@ -91,7 +93,7 @@ export default function Game() {
     socket.on("errorMessage", handleErrorMessage);
 
     const handleConnect = () => {
-      if (roomId !== "mock-8") {
+      if (roomId !== "mock-8" && roomId !== "mock-dusk") {
         socket.emit("getRoom", roomId);
       }
     };

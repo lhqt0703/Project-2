@@ -285,7 +285,7 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const rId = query.get("roomId");
-    if (!rId || rId === "mock-8") return;
+    if (!rId || rId === "mock-8" || rId === "mock-dusk") return;
 
     const phase = room?.phase;
     const isGameActive = phase === "dusk" || phase === "night" || phase === "day";

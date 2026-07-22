@@ -124,7 +124,7 @@ export interface PlayerPosition {
 interface RoomLike {
   id: string;
   hostId: string;
-  players: Array<{ id: string; name: string; connected?: boolean; inGame?: boolean; playerRealName?: string; playerAvatar?: string }>;
+  players: Array<{ id: string; name: string; connected?: boolean; playerRealName?: string; playerAvatar?: string }>;
   positions?: PlayerPosition[];
   positionEditors?: string[];
   autoArrangeUsed?: boolean;
@@ -134,6 +134,14 @@ interface RoomLike {
   gameMode?: string;
   deadPlayers?: string[];
   warnedPlayerIds?: string[];
+  trialStage?: "none" | "defense" | "verdict";
+  trialTargetId?: string | null;
+  trialVotes?: Record<string, "live" | "die" | null>;
+  dayLocked?: Record<string, boolean>;
+  dayVotes?: Record<string, string | null>;
+  dayDeadline?: number | null;
+  wolfVotes?: Record<string, string | null>;
+  wolfVotes2?: Record<string, string | null>;
   nightActionProgressByPlayerId?: Record<string, "pending" | "done">;
   nightTurnDeadline?: number | null;
   nightActionExtraTimeMsByPlayerId?: Record<string, number>;
@@ -406,59 +414,149 @@ function applyMagnetSnap(
   return { snapped: { ...snapped, ...clamped }, lockedAxis: "y" };
 }
 
-const getRoleBadgeStyle = (role: string, isHost: boolean = false) => {
-  const isCupid = role === "Thần tình yêu";
-  const isWolf = ["Sói", "Sói con", "Sói Dại", "Bán sói", "Linh sói"].includes(role);
-  const isSongTrung = role === "Song Trùng";
-  // const isSpecialBlue = ["Tiên tri", "Tiên tri tập sự", "Thợ săn", "Hiệp sĩ"].includes(role);
-  // const isSpecialGreen = ["Bảo vệ", "Phù thủy", "Già làng", "Sinh đôi", "Bác sĩ ung thư", "Hộ nhân"].includes(role);
-  // const isSpecialPurple = ["Thổi sáo", "Linh hồn", "Kẻ nguyền rủa", "Nam Thư", "Đàn bà", "Suy Thận"].includes(role);
+const STYLE_CHUA_THA_HOA: React.CSSProperties = {
+  background: "linear-gradient(135deg, rgba(28, 18, 45, 0.95), rgba(15, 8, 25, 0.98)) padding-box padding-box, linear-gradient(135deg, rgb(247 85 85 / 60%), rgb(40 94 217 / 30%)) border-box border-box",
+  border: "1px solid transparent",
+  color: "rgb(226, 232, 240)",
+  boxShadow: "0px 3px 8px rgba(85, 134, 247, 0.25)",
+  transition: "background 0.5s ease-in-out, box-shadow 0.5s ease-in-out, color 0.5s ease-in-out, border-color 0.5s ease-in-out",
+};
 
-  let borderGradient = "linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05))";
-  let bgGradient = "linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95))";
-  let textColor = "#e2e8f0";
-  let glow = "rgba(0, 0, 0, 0.4)";
+const STYLE_DA_THA_HOA: React.CSSProperties = {
+  background: "linear-gradient(135deg, rgba(28, 18, 45, 0.95), rgba(15, 8, 25, 0.98)) padding-box padding-box, linear-gradient(135deg, rgb(85 131 247 / 60%), rgb(217 40 40 / 30%)) border-box border-box",
+  border: "1px solid transparent",
+  color: "rgb(226, 232, 240)",
+  boxShadow: "0px 3px 8px rgba(247, 85, 85, 0.25)",
+  transition: "background 0.5s ease-in-out, box-shadow 0.5s ease-in-out, color 0.5s ease-in-out, border-color 0.5s ease-in-out",
+};
 
-  // ponytail: simplify host styling - only wolves get colored badge for host
-  if (isWolf) {
-    borderGradient = "linear-gradient(135deg, rgba(239, 68, 68, 0.6), rgba(153, 27, 27, 0.3))";
-    bgGradient = "linear-gradient(135deg, rgba(45, 18, 18, 0.95), rgba(20, 10, 10, 0.98))";
-    textColor = "#ff6b6b";
-    glow = "rgba(239, 68, 68, 0.25)";
-  } else if (!isHost) {
-    if (isCupid) {
-      borderGradient = "linear-gradient(135deg, rgba(244, 114, 182, 0.6), rgba(219, 39, 119, 0.3))";
-      bgGradient = "linear-gradient(135deg, rgba(74, 20, 45, 0.95), rgba(40, 10, 25, 0.98))";
-      textColor = "#f472b6";
-      glow = "rgba(244, 114, 182, 0.25)";
-    } else if (isSongTrung) {
-      borderGradient = "linear-gradient(135deg, rgba(168, 85, 247, 0.6), rgba(109, 40, 217, 0.3))";
-      bgGradient = "linear-gradient(135deg, rgba(28, 18, 45, 0.95), rgba(15, 8, 25, 0.98))";
-      textColor = "#e2e8f0";
-      glow = "rgba(168, 85, 247, 0.25)";
-    }
-  }/*   } else if (isSpecialBlue) {
-    borderGradient = "linear-gradient(135deg, rgba(6, 182, 212, 0.6), rgba(8, 145, 178, 0.3))";
-    bgGradient = "linear-gradient(135deg, rgba(12, 34, 45, 0.95), rgba(8, 20, 30, 0.98))";
-    textColor = "#22d3ee";
-    glow = "rgba(6, 182, 212, 0.25)";
-  } else if (isSpecialGreen) {
-    borderGradient = "linear-gradient(135deg, rgba(16, 185, 129, 0.6), rgba(4, 120, 87, 0.3))";
-    bgGradient = "linear-gradient(135deg, rgba(12, 38, 28, 0.95), rgba(6, 20, 15, 0.98))";
-    textColor = "#34d399";
-    glow = "rgba(16, 185, 129, 0.25)";
-  } else if (isSpecialPurple) {
-    borderGradient = "linear-gradient(135deg, rgba(168, 85, 247, 0.6), rgba(109, 40, 217, 0.3))";
-    bgGradient = "linear-gradient(135deg, rgba(28, 18, 45, 0.95), rgba(15, 8, 25, 0.98))";
-    textColor = "#c084fc";
-    glow = "rgba(168, 85, 247, 0.25)"; */
+const NEUTRAL_ROLES = ["Linh sói", "Thiên Sứ", "Bán sói", "Song Trùng", "Tay Buôn", "Ariana", "Thần tình yêu"];
 
+const isNeutralRole = (r: string) => {
+  if (!r) return false;
+  const norm = r.trim().toLowerCase();
+  return NEUTRAL_ROLES.some(n => n.toLowerCase() === norm);
+};
 
+const isRoleWolfCorrupted = (
+  role: string,
+  playerId?: string,
+  room?: any,
+  loveState?: any,
+  revealedRoles?: any
+): boolean => {
+  if (!playerId) return false;
+  const r = role.trim();
+
+  // 1. Linh Sói
+  if (r === "Linh sói") {
+    return room?.daNghichState?.spiritWolfWolfAligned === true || room?.daNghichState?.spiritWolfWolfAlignedPending === true;
+  }
+
+  // 2. Thiên Sứ
+  if (r === "Thiên Sứ" || r.toLowerCase() === "thiên sứ" || r.toLowerCase() === "angel") {
+    const angelRecord = room?.angelReviveRecordsByAngelId?.[playerId];
+    const guess = typeof angelRecord === "object" ? angelRecord?.guess : angelRecord;
+    return guess === "wolves";
+  }
+
+  // 3. Bán sói
+  if (r === "Bán sói") {
+    return room?.daNghichState?.banSoiWolfAligned === true;
+  }
+
+  // 4. Song Trùng
+  if (r === "Song Trùng") {
+    const stolenRole = room?.playerRoles?.[playerId] || revealedRoles?.[playerId];
+    if (!stolenRole || stolenRole === "Song Trùng") return false;
+    const isWolfRole = ["Sói", "Sói con", "Sói Dại", "Bán sói", "Linh sói"].includes(stolenRole);
+    return isWolfRole || (room?.daNghichState?.wolves || []).includes(playerId);
+  }
+
+  // 5. Tay Buôn
+  if (r === "Tay Buôn" || r === "Ariana" || r.toLowerCase() === "tay buôn") {
+    const wolfTrades = room?.merchantWolfTradeCountsByPlayerId?.[playerId] || 0;
+    const villagerTrades = room?.merchantVillagerTradeCountsByPlayerId?.[playerId] || 0;
+    return wolfTrades > villagerTrades;
+  }
+
+  // 6. Thần tình yêu
+  if (r === "Thần tình yêu") {
+    const cupidTargetId = room?.loveTargetId || loveState?.targetId;
+    if (!cupidTargetId) return false;
+    const targetRole = room?.playerRoles?.[cupidTargetId] || revealedRoles?.[cupidTargetId];
+    const isTargetWolfRole = ["Sói", "Sói con", "Sói Dại", "Bán sói", "Linh sói"].includes(targetRole || "");
+    const isTargetInWolves = (room?.daNghichState?.wolves || []).includes(cupidTargetId);
+    const isTargetBanSoiWolf = targetRole === "Bán sói" && room?.daNghichState?.banSoiWolfAligned === true;
+    const isTargetLinhSoiWolf = targetRole === "Linh sói" && (room?.daNghichState?.spiritWolfWolfAligned === true || room?.daNghichState?.spiritWolfWolfAlignedPending === true);
+    const isTargetConverted = !!(room?.rolesBeforeConversion?.[cupidTargetId]);
+    return isTargetWolfRole || isTargetInWolves || isTargetBanSoiWolf || isTargetLinhSoiWolf || isTargetConverted;
+  }
+
+  return false;
+};
+
+const getRoleBadgeStyle = (
+  role: string,
+  targetPlayerId?: string,
+  isHost: boolean = false,
+  room?: any,
+  loveState?: any,
+  revealedRoles?: any,
+  clientId?: string
+): React.CSSProperties => {
+  const normRole = role ? role.trim() : "";
+  const isCupid = normRole === "Thần tình yêu";
+  const isPureWolf = ["Sói", "Sói con", "Sói Dại"].includes(normRole);
+  const isGameOver = room?.gameOver === true;
+
+  // Check Cupid special visibility during active game (!isGameOver)
+  const isViewerCupidOrPartner = !isGameOver && clientId && isCupid && targetPlayerId && (
+    targetPlayerId === clientId || (loveState?.pairIds || []).includes(targetPlayerId)
+  );
+
+  // If Cupid looking at Cupid's own role (or Cupid's partner looking at Cupid's role) during game, show Pink Cupid style
+  if (isCupid && isViewerCupidOrPartner && !isHost) {
+    return {
+      background: "linear-gradient(135deg, rgba(74, 20, 45, 0.95), rgba(40, 10, 25, 0.98)) padding-box, linear-gradient(135deg, rgba(244, 114, 182, 0.6), rgba(219, 39, 119, 0.3)) border-box",
+      border: "1px solid transparent",
+      color: "#f472b6",
+      boxShadow: "0 3px 8px rgba(244, 114, 182, 0.25)",
+      transition: "background 0.5s ease-in-out, box-shadow 0.5s ease-in-out, color 0.5s ease-in-out, border-color 0.5s ease-in-out",
+    };
+  }
+
+  // Check if neutral role should use ChưaThaHoá / ĐãThaHoá style
+  // Applied to: Host (always), Everyone at GameOver, or Cupid viewing paired partner's badge
+  const myRole = room?.playerRoles?.[clientId || ""] || loveState?.rolesByPlayerId?.[clientId || ""];
+  const isViewerCupidViewingPartner = clientId && targetPlayerId && (
+    (myRole === "Thần tình yêu" || loveState?.cupidId === clientId) &&
+    (loveState?.partnerId === targetPlayerId || (loveState?.pairIds || []).includes(targetPlayerId))
+  );
+
+  if (isNeutralRole(normRole) && (isHost || isGameOver || isViewerCupidViewingPartner)) {
+    const isCorrupted = isRoleWolfCorrupted(normRole, targetPlayerId, room, loveState, revealedRoles);
+    return isCorrupted ? STYLE_DA_THA_HOA : STYLE_CHUA_THA_HOA;
+  }
+
+  // Pure wolf style
+  if (isPureWolf) {
+    return {
+      background: "linear-gradient(135deg, rgba(45, 18, 18, 0.95), rgba(20, 10, 10, 0.98)) padding-box, linear-gradient(135deg, rgba(239, 68, 68, 0.6), rgba(153, 27, 27, 0.3)) border-box",
+      border: "1px solid transparent",
+      color: "#ff6b6b",
+      boxShadow: "0 3px 8px rgba(239, 68, 68, 0.25)",
+      transition: "background 0.5s ease-in-out, box-shadow 0.5s ease-in-out, color 0.5s ease-in-out, border-color 0.5s ease-in-out",
+    };
+  }
+
+  // Default villager / other role style
   return {
-    background: `${bgGradient} padding-box, ${borderGradient} border-box`,
+    background: "linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95)) padding-box, linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05)) border-box",
     border: "1px solid transparent",
-    color: textColor,
-    boxShadow: `0 3px 8px ${glow}`,
+    color: "#e2e8f0",
+    boxShadow: "0 3px 8px rgba(0, 0, 0, 0.4)",
+    transition: "background 0.5s ease-in-out, box-shadow 0.5s ease-in-out, color 0.5s ease-in-out, border-color 0.5s ease-in-out",
   };
 };
 
@@ -497,11 +595,11 @@ function PlayerWoodBoard({
         width: "1.8rem",
         height: "1.8rem",
         cursor: "pointer",
-        rotate: "28deg",
+        rotate: "34deg",
         zIndex: -1,
         opacity: visible ? 1 : 0,
         transform: visible ? "scale(1)" : "scale(0)",
-        pointerEvents: visible ? "auto" : "none", 
+        pointerEvents: visible ? "auto" : "none",
         transformOrigin: "bottom center",
         transition: "opacity 0.35s ease, transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), top 0.35s ease, right 0.35s ease, rotate 0.35s ease",
         display: "flex",
@@ -578,6 +676,17 @@ function BlankVoteBoard({ visible, style }: { visible: boolean; style?: React.CS
       visible={visible}
       iconName="⭕"
       textLines={["Phiếu", "trống"]}
+      style={style}
+    />
+  );
+}
+
+function TrialVotedBoard({ visible, style }: { visible: boolean; style?: React.CSSProperties }) {
+  return (
+    <PlayerWoodBoard
+      visible={visible}
+      iconName="🗳️"
+      textLines={["Đã", "chốt"]}
       style={style}
     />
   );
@@ -776,6 +885,7 @@ export default function PlayerPositions({
   showRoleBadges,
   roleBadges,
   loveState,
+  loveArrowShot,
   revealedRoles,
   rolesBeforeConversion,
   chiefFoundProtectorId,
@@ -794,6 +904,7 @@ export default function PlayerPositions({
   viewMode = "nick-names",
   showVoteReview,
   dayVotes,
+  dayLocked,
   activeMessages = [],
   onDismissMessage,
   isNightInfoVisible = true,
@@ -830,6 +941,7 @@ export default function PlayerPositions({
   showRoleBadges?: boolean;
   roleBadges?: Record<string, string>;
   loveState?: any;
+  loveArrowShot?: { cupidId: string; targetId: string; timestamp?: number } | null;
   revealedRoles?: Record<string, string>;
   rolesBeforeConversion?: Record<string, string>;
   chiefFoundProtectorId?: string | null;
@@ -848,6 +960,7 @@ export default function PlayerPositions({
   viewMode?: "real-names" | "nick-names" | "real-names-roles" | "nick-names-roles";
   showVoteReview?: boolean;
   dayVotes?: Record<string, string | null> | null;
+  dayLocked?: Record<string, boolean> | null;
   activeMessages?: any[];
   onDismissMessage?: (messageId: string) => void;
   isNightInfoVisible?: boolean;
@@ -977,25 +1090,26 @@ export default function PlayerPositions({
   const badgeFontSizePx = scalePx(11, 8);
   const hpBadgeFontSizePx = scalePx(12, 9);
   const badgeOffsetPx = scalePx(10, 6);
+  const voteBadgeTopPx = scalePx(40, 26);
   const hpBadgeTopPx = scalePx(26, 16);
   const badgePadding = `${scalePx(2, 1)}px ${scalePx(6, 3)}px`;
   const hpBadgePadding = `${scalePx(2, 1)}px ${scalePx(8, 4)}px`;
   const dashCamXoay = { inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px dashed #f59e0b` };
 
-  const wolfVotes = room.daNghichState?.wolfVotes as Record<string, string | null> | undefined;
-  const wolfVotes2 = room.daNghichState?.wolfVotes2 as Record<string, string | null> | undefined;
+  const wolfVotes = ((room as any).wolfVotes || room.daNghichState?.wolfVotes) as Record<string, string | null> | undefined;
+  const wolfVotes2 = ((room as any).wolfVotes2 || room.daNghichState?.wolfVotes2) as Record<string, string | null> | undefined;
   const deadPlayers =
     room.id === "mock-8"
       ? (room.deadPlayers as string[] | undefined) ?? []
       : mode === "view"
-      ? (deadPlayersOverride ?? (room.deadPlayers as string[] | undefined))
-      : (deadPlayersOverride ?? []);
+        ? (deadPlayersOverride ?? (room.deadPlayers as string[] | undefined))
+        : (deadPlayersOverride ?? []);
   const wolfCount = wolfVoteVoterIds && wolfVoteVoterIds.length
     ? wolfVoteVoterIds.length
     : (() => {
-        const ids = Object.keys({ ...(wolfVotes || {}), ...(wolfVotes2 || {}) });
-        return ids.length;
-      })();
+      const ids = Object.keys({ ...(wolfVotes || {}), ...(wolfVotes2 || {}) });
+      return ids.length;
+    })();
 
   const onPointerDown = (e: React.PointerEvent, playerId: string) => {
     if (!isEditor) return;
@@ -1043,8 +1157,6 @@ export default function PlayerPositions({
     };
   }, []);
 
-  const hasDisconnectedPlayers = room.players.some((p) => p.connected === false);
-  
   // We need local state for smooth dragging
   const [localPositions, setLocalPositions] = useState<PlayerPosition[]>([]);
   useEffect(() => {
@@ -1529,7 +1641,7 @@ export default function PlayerPositions({
     const activePlayers = room.players.filter((p) => p.id !== room.hostId);
     const votesMap = new Map<string, number>();
     const eligibleList: { id: string; count: number }[] = [];
-    
+
     activePlayers.forEach((ap) => {
       const voteCount = getPlayerVoteCount(ap.id);
       votesMap.set(ap.id, voteCount);
@@ -1663,6 +1775,20 @@ export default function PlayerPositions({
             transform: translate(-50%, 0) scale(1);
           }
         }
+        @keyframes voteBadgePopIn {
+          0% {
+            opacity: 0;
+            transform: scale(0.35) translateY(6px);
+          }
+          70% {
+            opacity: 1;
+            transform: scale(1.15) translateY(-1px);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
         @keyframes breatheSoft {
           0%, 100% { opacity: 0.65; transform: scale(1); }
           50% { opacity: 1; transform: scale(1.03); }
@@ -1694,7 +1820,6 @@ export default function PlayerPositions({
         }
         .halo-die {
           box-shadow: 0 0 16px rgba(239, 68, 68, 0.85), inset 0 0 6px rgba(239, 68, 68, 0.4);
-          animation: breatheSoft 2.2s ease-in-out infinite;
         }
         .halo-danger {
           animation: warningPulse 1.2s ease-in-out infinite;
@@ -1727,7 +1852,6 @@ export default function PlayerPositions({
           box-shadow: 0 0 14px rgba(241, 245, 249, 0.5);
         }
         .halo-trial-green {
-          animation: breatheSoft 2s ease-in-out infinite;
           box-shadow: 0 0 20px rgba(52, 211, 153, 0.65);
         }
         .halo-dash-cam-xoay {
@@ -1776,20 +1900,8 @@ export default function PlayerPositions({
         </div>
       )}
 
-      {isHost && hasDisconnectedPlayers && (
-        <div style={{ marginBottom: 8, textAlign: "center" }}>
-          <button
-            onClick={() => {
-              const next = !revealDisconnectedToAll;
-              socket.emit("hostRevealDisconnectedBadge", { roomId: room.id, show: next });
-              setRevealDisconnectedToAll(next);
-            }}
-          >
-            {revealDisconnectedToAll ? "Ẩn mất kết nối cho mọi người" : "Hiện mất kết nối cho mọi người"}
-          </button>
-        </div>
-      )}
-      
+
+
       <div
         className="player-position-frame"
         ref={containerRef}
@@ -1910,7 +2022,7 @@ export default function PlayerPositions({
           }
 
           if (!avatarUrl && !maskedAvatarUrl) {
-            
+
             maskedAvatarUrl = MASKED_AVATAR_MAP[pos.playerId];
             if (pos.playerId.startsWith("dev-")) {
               const parts = pos.playerId.split("-");
@@ -1939,17 +2051,18 @@ export default function PlayerPositions({
 
           const effectiveVoterIds = wolfVoteVoterIds && wolfVoteVoterIds.length ? wolfVoteVoterIds : undefined;
           const effectiveWolfCount = effectiveVoterIds ? effectiveVoterIds.length : wolfCount;
-          const voteCountForThis = (wolfVotes || wolfVotes2)
+          const activeVotesMap = dayVotes || wolfVotes || wolfVotes2;
+          const voteCountForThis = activeVotesMap
             ? (effectiveVoterIds
-                ? effectiveVoterIds.reduce((total, wid) => {
-                    const votedThis = (wolfVotes?.[wid] === pos.playerId) || (wolfVotes2?.[wid] === pos.playerId);
-                    if (!votedThis) return total;
-                    return total + (voteWeightsByVoterId?.[wid] || 1);
-                  }, 0)
-                : (() => {
-                    const ids = Object.keys({ ...(wolfVotes || {}), ...(wolfVotes2 || {}) });
-                    return ids.filter(wid => (wolfVotes?.[wid] === pos.playerId) || (wolfVotes2?.[wid] === pos.playerId)).length;
-                  })())
+              ? effectiveVoterIds.reduce((total, wid) => {
+                const votedThis = (activeVotesMap?.[wid] === pos.playerId) || (wolfVotes2?.[wid] === pos.playerId);
+                if (!votedThis) return total;
+                return total + (voteWeightsByVoterId?.[wid] || 1);
+              }, 0)
+              : (() => {
+                const ids = Object.keys({ ...(activeVotesMap || {}), ...(wolfVotes2 || {}) });
+                return ids.filter(wid => (activeVotesMap?.[wid] === pos.playerId) || (wolfVotes2?.[wid] === pos.playerId)).length;
+              })())
             : 0;
           const isDead = (deadPlayers || []).includes(pos.playerId);
           const isSwapSelected = swapSource === pos.playerId;
@@ -1963,7 +2076,10 @@ export default function PlayerPositions({
             (!!dangerPlayerIds && dangerPlayerIds.includes(pos.playerId))
             && !verdictDiePlayerIds?.includes(pos.playerId);
           const isHighlighted = !!highlightPlayerId && highlightPlayerId === pos.playerId;
-          const isSecondaryHighlighted = !!secondaryHighlightPlayerIds && secondaryHighlightPlayerIds.includes(pos.playerId);
+          const isSecondaryHighlighted =
+            !!secondaryHighlightPlayerIds &&
+            secondaryHighlightPlayerIds.includes(pos.playerId) &&
+            !verdictLivePlayerIds?.includes(pos.playerId);
           const isBlankVoter =
             !isDead &&
             pos.playerId !== room.hostId &&
@@ -1976,9 +2092,7 @@ export default function PlayerPositions({
           const showSelectedOutline =
             (!!selectedOutlinePlayerId && selectedOutlinePlayerId === pos.playerId) ||
             (!!selectedOutlinePlayerIds && selectedOutlinePlayerIds.includes(pos.playerId));
-          const showWolfBadge = !!showWolfBadges && (wolfBadgePlayerIds || []).includes(p.id);
           const showCheeseBadge = !!cheesePlayerIds && cheesePlayerIds.includes(p.id);
-          const wolfBadgeText = showWolfBadge ? (wolfBadgeRoles?.[p.id] || "Sói") : undefined;
           let rawRoleBadgeText = (showRoleBadges && roleBadges) ? roleBadges[p.id] : undefined;
 
           if (!rawRoleBadgeText && chiefFoundProtectorId && p.id === chiefFoundProtectorId) {
@@ -1989,25 +2103,9 @@ export default function PlayerPositions({
             }
           }
 
-          // Delay showing role badges during Cupid's shot animation
-          if (bulletAnimation && bulletAnimation.kind === "love" && rawRoleBadgeText) {
-            const elapsed = recoilState ? recoilState.elapsedMs : 0;
-            const targetId = bulletAnimation.toPlayerId;
-            const cupidId = bulletAnimation.fromPlayerId;
-
-            // 1. Hide the target's badge until the explosion starts (2400ms)
-            if (p.id === targetId && elapsed < 2400) {
-              rawRoleBadgeText = undefined;
-            }
-            // 2. Hide Cupid's badge ("Thần tình yêu") until the explosion ends completely (4400ms)
-            if (p.id === cupidId && rawRoleBadgeText === "Thần tình yêu" && elapsed < 4400) {
-              rawRoleBadgeText = undefined;
-            }
-          }
-
           // Kiểm tra xem người chơi có bị biến đổi bởi Sói Dại không
           const originalRoleOfP = rolesBeforeConversion?.[p.id];
-          
+
           // Trưởng làng đã lộ diện cũng là một dạng conversion cần hiển thị kể cả khi không có rolesBeforeConversion (để dự phòng)
           const isChiefRevealed = room.publicRevealedRolesByPlayerId?.[p.id] === "Trưởng làng";
           const currentRoleOfP =
@@ -2017,11 +2115,13 @@ export default function PlayerPositions({
             (p.id === clientId ? (p.id === songTrungRobbedPlayerId && !room.gameOver ? undefined : role) : undefined);
           const isCurrentlyWolf = currentRoleOfP === "Sói" || room.daNghichState?.wolves?.includes(p.id);
           const isChiefConverted = !!(isChiefRevealed && isCurrentlyWolf);
+          const isChiefRoleConverted = originalRoleOfP === "Trưởng làng" || isChiefConverted;
 
           const isViewerWolf = ["Sói", "Sói con", "Sói Dại", "Bán sói", "Linh sói"].includes(role || "") || room.daNghichState?.wolves?.includes(clientId || "");
           const isViewerCupidAndPaired = role === "Thần tình yêu" && clientId !== songTrungRobbedPlayerId && loveState?.pairIds?.includes(p.id);
           const isSongTrungConversion = originalRoleOfP === "Song Trùng";
           const isRobbedPlayerWhoFound = clientId && songTrungRobbedPlayerId === clientId && songTrungFoundByVictim;
+
           const canSeeConversion = !!(
             isHost ||
             room.gameOver ||
@@ -2030,27 +2130,66 @@ export default function PlayerPositions({
             (!isSongTrungConversion && (isViewerWolf || isViewerCupidAndPaired))
           );
 
-          // Kết hợp cả hai trường hợp: bất kỳ role nào có originalRoleOfP, hoặc Trưởng làng lộ diện hóa Sói
-          const isConverted = !!(originalRoleOfP || isChiefConverted);
-          
+          const isViewerAlive = !clientId || !(deadPlayers || []).includes(clientId);
+
+          // Trưởng làng biến đổi thành Sói chỉ hiển thị badge kép cho Host, khi kết thúc game, hoặc phe Sói (còn sống) / bản thân Trưởng làng (còn sống) / Thần tình yêu ghép đôi (còn sống) VÀO BAN ĐÊM
+          const isChiefConvertedActive = isChiefRoleConverted && (
+            isHost ||
+            room.gameOver ||
+            (room.phase === "night" && isViewerAlive && (
+              (clientId && p.id === clientId) ||
+              isViewerWolf ||
+              isViewerCupidAndPaired
+            ))
+          );
+
           // Chỉ hiển thị badge kép của Song Trùng vào ban đêm, khi kết thúc game hoặc đối với Host
           const isNightOrGameOverOrHost = room.phase === "night" || room.gameOver || isHost;
           const isSongTrungConversionActive = isSongTrungConversion && isNightOrGameOverOrHost;
 
+          const isGeneralConversion = !!originalRoleOfP && originalRoleOfP !== "Trưởng làng" && originalRoleOfP !== "Song Trùng";
+
           const showSpecialConvertedWolfBadge = !!(
-            isConverted && 
-            canSeeConversion && 
-            (!isSongTrungConversion || isSongTrungConversionActive)
+            (isGeneralConversion && canSeeConversion) ||
+            (isSongTrungConversion && canSeeConversion && isSongTrungConversionActive) ||
+            isChiefConvertedActive
           );
 
-          const effectiveOriginalRole = originalRoleOfP || (isChiefConverted ? "Trưởng làng" : undefined);
+          const effectiveOriginalRole = (originalRoleOfP && originalRoleOfP !== "Trưởng làng" ? originalRoleOfP : undefined) || (isChiefConvertedActive ? "Trưởng làng" : undefined);
 
           if (showRoleBadges && showSpecialConvertedWolfBadge && effectiveOriginalRole) {
             rawRoleBadgeText = effectiveOriginalRole;
+          } else if (showRoleBadges && (isChiefRevealed || isChiefRoleConverted) && !showSpecialConvertedWolfBadge) {
+            rawRoleBadgeText = "Trưởng làng";
+          }
+
+          const showWolfBadge = !!showWolfBadges && (wolfBadgePlayerIds || []).includes(p.id) && (!isChiefRoleConverted || showSpecialConvertedWolfBadge);
+          const wolfBadgeText = showWolfBadge ? (wolfBadgeRoles?.[p.id] || "Sói") : undefined;
+
+          // Delay showing role badges during Cupid's shot animation (checks both active animation & socket shot event timestamp)
+          const isLoveBullet = bulletAnimation && bulletAnimation.kind === "love";
+          const isLoveSocketShot = loveArrowShot && loveArrowShot.cupidId && loveArrowShot.targetId;
+
+          if ((isLoveBullet || isLoveSocketShot) && rawRoleBadgeText) {
+            let elapsed = recoilState ? recoilState.elapsedMs : 0;
+            if (!recoilState && loveArrowShot?.timestamp) {
+              elapsed = Math.max(0, Date.now() - loveArrowShot.timestamp);
+            }
+            const targetId = isLoveBullet ? bulletAnimation.toPlayerId : loveArrowShot?.targetId;
+            const cupidId = isLoveBullet ? bulletAnimation.fromPlayerId : loveArrowShot?.cupidId;
+
+            // 1. Hide the target's badge until the explosion starts (2400ms)
+            if (p.id === targetId && elapsed < 2400) {
+              rawRoleBadgeText = undefined;
+            }
+            // 2. Hide Cupid's badge until the explosion ends completely (4400ms)
+            if (p.id === cupidId && elapsed < 4400) {
+              rawRoleBadgeText = undefined;
+            }
           }
 
           const roleBadgeText = rawRoleBadgeText;
-          
+
           const vfxType = (() => {
             if (!roleBadgeText) return null;
             if (roleBadgeText === "Băng Giá") return "ice";
@@ -2068,7 +2207,6 @@ export default function PlayerPositions({
           // Only show disconnected badge to host by default. Host can broadcast visibility to all clients
           const showDisconnectedBadge =
             p.connected === false && (isHost || (revealDisconnectedToAll && !isDead));
-          const showInGameBadge = mode === "edit" && p.inGame === true;
           const privateHeartVisible =
             (room.daNghichState?.privateHeartVisiblePlayerIds || []).includes(pos.playerId) &&
             (isHost || pos.playerId === clientId);
@@ -2261,13 +2399,28 @@ export default function PlayerPositions({
                 <div className="player-halo halo-dietquy-red" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #ef4444`, boxShadow: "0 0 8px #ef4444" }} />
               )}
 
-              {/* Mid Concentric Rings */}
+              {/* Concentric Rings */}
               {isSecondaryHighlighted && (
                 <div className="player-halo" style={{ inset: -scalePx(10, 6), border: `${scalePx(4, 1)}px solid #ffffff`, boxShadow: "0 0 10px rgba(255, 255, 255, 0.8)" }} />
               )}
-              {(trialWhitePlayerIds || []).includes(pos.playerId) && (
-                <div className="player-halo halo-trial-white" style={{ inset: -scalePx(10, 6), border: `${scalePx(2, 1)}px solid #f1f5f9` }} />
-              )}
+              {(() => {
+                const isTrialGreen = trialGreenPlayerId === pos.playerId;
+                const isTrialWhite = (trialWhitePlayerIds || []).includes(pos.playerId);
+                if (!isTrialGreen && !isTrialWhite) return null;
+
+                return (
+                  <div
+                    className={`player-halo ${isTrialGreen ? "halo-trial-green" : "halo-trial-white"}`}
+                    style={{
+                      inset: isTrialGreen ? -scalePx(8, 6) : -scalePx(6, 4),
+                      border: isTrialGreen
+                        ? `${scalePx(2.5, 2)}px solid #34d399`
+                        : `${scalePx(2, 1)}px solid #f1f5f9`,
+                      transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+                    }}
+                  />
+                );
+              })()}
 
               {/* Outer Concentric Rings */}
               {isHighlighted && (
@@ -2282,43 +2435,53 @@ export default function PlayerPositions({
               {isNightPhase && guardianProtectedTargetId === pos.playerId && (
                 <Orb hue={0} />
               )}
-              {trialGreenPlayerId === pos.playerId && (
-                <div className="player-halo halo-trial-green" style={{ inset: -scalePx(12, 8), border: `${scalePx(2.5, 2)}px solid #34d399` }} />
-              )}
 
               {/* Badges and Indicators */}
-              {showWolfVoteBadges && effectiveWolfCount >= 2 && voteCountForThis > 0 && (() => {
+              {showWolfVoteBadges && effectiveWolfCount >= 1 && voteCountForThis > 0 && (() => {
                 const status = wolfVoteStatuses?.[pos.playerId] || "tied";
-                let badgeBg = "linear-gradient(135deg, #ef5350, #c62828)"; // mặc định màu đỏ (tied)
-                let badgeShadow = "0 2px 6px rgba(198, 40, 40, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2)";
-
-                if (isNightPhase) {
-                  if (status === "winner") {
-                    badgeBg = "linear-gradient(135deg, #009688, #4CAF50)";
-                    badgeShadow = "0 2px 6px rgba(0, 150, 136, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2)";
-                  }
-                } else {
-                  // Biểu quyết ban ngày (treo cổ) luôn hiển thị màu đỏ mặc định
-                  badgeBg = "linear-gradient(135deg, #ef5350, #c62828)";
-                  badgeShadow = "0 2px 6px rgba(198, 40, 40, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.2)";
-                }
+                const isWinner = isNightPhase && status === "winner";
 
                 return (
                   <div style={{
                     position: "absolute",
-                    top: -badgeOffsetPx,
+                    top: voteBadgeTopPx,
                     right: -badgeOffsetPx,
-                    background: badgeBg,
                     color: "#fff",
                     borderRadius: badgeOffsetPx,
                     padding: badgePadding,
                     fontSize: badgeFontSizePx,
                     fontWeight: "bold",
                     zIndex: 2,
-                    boxShadow: badgeShadow,
-                    border: "1px solid rgba(255, 255, 255, 0.15)",
+                    border: "1px solid rgba(255, 255, 255, 0.18)",
+                    animation: "voteBadgePopIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
+                    overflow: "hidden",
+                    boxShadow: isWinner
+                      ? "0 2px 8px rgba(0, 150, 136, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.25)"
+                      : "0 2px 8px rgba(198, 40, 40, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.25)",
+                    transition: "box-shadow 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
                   }}>
-                    {voteCountForThis}/{effectiveWolfCount}
+                    {/* Layer màu đỏ (tied / default) */}
+                    <div style={{
+                      position: "absolute",
+                      inset: 0,
+                      background: "linear-gradient(135deg, #ef5350, #c62828)",
+                      zIndex: 0,
+                    }} />
+
+                    {/* Layer màu xanh (winner - transition opacity mượt mà) */}
+                    <div style={{
+                      position: "absolute",
+                      inset: 0,
+                      background: "linear-gradient(135deg, #009688, #4CAF50)",
+                      opacity: isWinner ? 1 : 0,
+                      transition: "opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
+                      zIndex: 1,
+                    }} />
+
+                    {/* Nội dung số phiếu */}
+                    <span style={{ position: "relative", zIndex: 2 }}>
+                      {voteCountForThis}/{effectiveWolfCount}
+                    </span>
                   </div>
                 );
               })()}
@@ -2369,29 +2532,30 @@ export default function PlayerPositions({
                     position: "absolute",
                     bottom: -badgeOffsetPx,
                     left: "50%",
-                  transform: "translateX(-50%)",
-                  padding: badgePadding,
-                  borderRadius: scalePx(6, 3),
-                  fontSize: badgeFontSizePx,
-                  fontWeight: "bold",
-                  width: "max-content",
-                  zIndex: 2,
-                  animation: "badgeFadeIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
-                  ...getRoleBadgeStyle(roleBadgeText, isHost),
-                  ...(showSpecialConvertedWolfBadge ? {
-                    background: effectiveOriginalRole === "Song Trùng"
-                      ? "linear-gradient(rgba(30 30 30 / 0.84), rgba(15 23 42 / 0.95)) padding-box padding-box, linear-gradient(135deg, rgba(85, 99, 247, 0.22), rgba(247, 85, 85, 0.22)) border-box border-box"
-                      : "linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(45 18 18 / 0.95)) padding-box, linear-gradient(135deg, rgba(239, 68, 68, 0.6), rgba(153, 27, 27, 0.3)) border-box",
-                    border: "1px solid transparent",
-                    boxShadow: effectiveOriginalRole === "Song Trùng"
-                      ? "0px 3px 8px rgba(111, 85, 247, 0.25)"
-                      : "0 3px 8px rgba(239, 68, 68, 0.25)",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: "2px",
-                  } : {}),
-                }}>
+                    transform: "translateX(-50%)",
+                    padding: badgePadding,
+                    borderRadius: scalePx(6, 3),
+                    fontSize: badgeFontSizePx,
+                    fontWeight: "bold",
+                    width: "max-content",
+                    zIndex: 2,
+                    animation: "badgeFadeIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards",
+                    ...getRoleBadgeStyle(roleBadgeText, p.id, isHost, room, loveState, revealedRoles, clientId),
+                    ...(showSpecialConvertedWolfBadge ? {
+                      background: effectiveOriginalRole === "Song Trùng"
+                        ? (isRoleWolfCorrupted("Song Trùng", p.id, room, loveState, revealedRoles) ? STYLE_DA_THA_HOA.background : STYLE_CHUA_THA_HOA.background)
+                        : "linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(45 18 18 / 0.95)) padding-box, linear-gradient(135deg, rgba(239, 68, 68, 0.6), rgba(153, 27, 27, 0.3)) border-box",
+                      border: "1px solid transparent",
+                      boxShadow: effectiveOriginalRole === "Song Trùng"
+                        ? (isRoleWolfCorrupted("Song Trùng", p.id, room, loveState, revealedRoles) ? STYLE_DA_THA_HOA.boxShadow : STYLE_CHUA_THA_HOA.boxShadow)
+                        : "0 3px 8px rgba(239, 68, 68, 0.25)",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: "2px",
+                      transition: "background 0.5s ease-in-out, box-shadow 0.5s ease-in-out, color 0.5s ease-in-out, border-color 0.5s ease-in-out",
+                    } : {}),
+                  }}>
                   {showSpecialConvertedWolfBadge && effectiveOriginalRole ? (
                     effectiveOriginalRole === "Song Trùng" ? (
                       <>
@@ -2419,26 +2583,6 @@ export default function PlayerPositions({
               )}
 
 
-              {showInGameBadge && (
-                <div style={{
-                  position: "absolute",
-                  top: -badgeOffsetPx,
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  background: "linear-gradient(135deg, #1e3a8a, #0f172a)",
-                  color: "#93c5fd",
-                  padding: badgePadding,
-                  borderRadius: scalePx(6, 3),
-                  fontSize: badgeFontSizePx,
-                  fontWeight: "bold",
-                  width: "max-content",
-                  border: "1px solid rgba(59, 130, 246, 0.4)",
-                  boxShadow: "0 2px 6px rgba(59, 130, 246, 0.2)",
-                  zIndex: 2,
-                }}>
-                  🎮 Trong trận
-                </div>
-              )}
 
               {showHpBadge && (
                 <div style={{
@@ -2478,13 +2622,13 @@ export default function PlayerPositions({
                 const hasRoleBadge = !!(roleBadgeText || showWolfBadge);
                 const isNameAtBottom = hasAvatar && !hasRoleBadge;
                 return (
-                  <div style={{ 
+                  <div style={{
                     position: "absolute",
                     left: "50%",
                     top: "50%",
                     transform: isNameAtBottom ? "translate(-50%, 2.5em)" : "translate(-50%, -50%)",
-                    textAlign: "center", 
-                    pointerEvents: "none", 
+                    textAlign: "center",
+                    pointerEvents: "none",
                     zIndex: 1,
                     width: "max-content",
                     transition: "transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)"
@@ -2571,21 +2715,21 @@ export default function PlayerPositions({
               width: circleSizePx,
               height: circleSizePx,
               borderRadius: circleRadiusPx,
-              backgroundImage: maskedAvatarUrl 
-                ? `url("${nenLungAsset}")` 
+              backgroundImage: maskedAvatarUrl
+                ? `url("${nenLungAsset}")`
                 : (avatarUrl ? `url("${avatarUrl}")` : undefined),
               backgroundPosition: (maskedAvatarUrl || avatarUrl) ? "center" : undefined,
               backgroundSize: (maskedAvatarUrl || avatarUrl) ? "cover" : undefined,
               backgroundRepeat: (maskedAvatarUrl || avatarUrl) ? "no-repeat" : undefined,
               backgroundOrigin: (maskedAvatarUrl || avatarUrl) ? "border-box" : undefined,
-              border: isReplayTarget 
-                ? "3px solid rgb(245, 158, 11)" 
-                : isReplayActor 
-                  ? "2px solid rgb(16, 185, 129)" 
-                  : isSwapSelected 
-                    ? `${selectedBorderPx}px solid #2196F3` 
-                    : isDead 
-                      ? `${circleBorderPx}px solid rgba(239, 68, 68, 0.35)` 
+              border: isReplayTarget
+                ? "3px solid rgb(245, 158, 11)"
+                : isReplayActor
+                  ? "2px solid rgb(16, 185, 129)"
+                  : isSwapSelected
+                    ? `${selectedBorderPx}px solid #2196F3`
+                    : isDead
+                      ? `${circleBorderPx}px solid rgba(239, 68, 68, 0.35)`
                       : `${circleBorderPx}px solid rgba(255, 255, 255, 0.08)`,
               boxShadow: isReplayTarget
                 ? "0 0 22px rgba(245, 158, 11, 0.75), inset 0 0 10px rgba(245, 158, 11, 0.35)"
@@ -2614,8 +2758,23 @@ export default function PlayerPositions({
           const showNamThuBoard = !!isSoiMu && !!isDay && room?.soiMuState?.namThuTargetId === pos.playerId;
           const showSuyThanBoard = !!isSoiMu && !!isDay && room?.soiMuState?.suyThanTargetId === pos.playerId;
 
+          const effectiveDayLocked = dayLocked ?? room?.dayLocked;
+          const effectiveDayVotes = dayVotes ?? room?.dayVotes;
+          const isDayVotingActive = !!isDay && !isDead && pos.playerId !== room?.hostId && (room?.trialStage === "none" || !room?.trialStage) && !!room?.dayDeadline;
+          const isDayLockedForThisPlayer = isDayVotingActive && !!effectiveDayLocked?.[pos.playerId];
+          const dayVoteTarget = effectiveDayVotes?.[pos.playerId];
+          const isDayVotedTarget = isDayLockedForThisPlayer && typeof dayVoteTarget === "string" && dayVoteTarget.trim().length > 0;
+          const isDayVotedBlank = isDayLockedForThisPlayer && !dayVoteTarget;
+
           // Xác định danh sách các bảng thực sự đang hiển thị
-          const visibleBlank = !!showVoteReview && isBlankVoter;
+          const visibleBlank = (!!showVoteReview && isBlankVoter) || isDayVotedBlank;
+          const visibleTrialVoted =
+            (!!isDay &&
+              !isDead &&
+              pos.playerId !== room?.trialTargetId &&
+              room?.trialStage === "verdict" &&
+              (room?.trialVotes?.[pos.playerId] === "live" || room?.trialVotes?.[pos.playerId] === "die")) ||
+            isDayVotedTarget;
           const visibleDisconnected = showDisconnectedBadge;
           const visibleNamThu = showNamThuBoard;
           const visibleSuyThan = showSuyThanBoard;
@@ -2625,10 +2784,35 @@ export default function PlayerPositions({
           if (hasNamThuInGame && visibleNamThu) visibleBoards.push("namthu");
           if (hasSuyThanInGame && visibleSuyThan) visibleBoards.push("suythan");
           if (visibleBlank) visibleBoards.push("blank");
+          if (visibleTrialVoted) visibleBoards.push("trialVoted");
           if (visibleDisconnected) visibleBoards.push("disconnected");
           if (visibleWarning) visibleBoards.push("warning");
 
           const hasDashCamXoay = (nightActionProgress === "pending") || (trialOrangePlayerId === pos.playerId);
+          const hasHalo =
+            hasDashCamXoay ||
+            (isSeerResult && !!currentSeerResult) ||
+            !!isVerdictLiveHighlighted ||
+            !!isVerdictDieHighlighted ||
+            !!isWitchDanger ||
+            !!isCursedHighlighted ||
+            nightActionProgress === "done" ||
+            (dietQuyOrangeHighlightPlayerIds || []).includes(pos.playerId) ||
+            (dietQuyRedHighlightPlayerIds || []).includes(pos.playerId) ||
+            !!isSecondaryHighlighted ||
+            trialGreenPlayerId === pos.playerId ||
+            (trialWhitePlayerIds || []).includes(pos.playerId) ||
+            !!isHighlighted ||
+            !!isActiveNightRoleBadge;
+
+          const isMobile =
+            typeof window !== "undefined" &&
+            (window.innerWidth <= 760 ||
+              (typeof navigator !== "undefined" &&
+                /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+                  navigator.userAgent
+                )) ||
+              (window.matchMedia && window.matchMedia("(pointer: coarse)").matches));
 
           const getBoardStyle = (key: string) => {
             const index = visibleBoards.indexOf(key);
@@ -2638,35 +2822,51 @@ export default function PlayerPositions({
 
             if (count >= 2) {
               if (index === 0) {
-                return hasDashCamXoay
+                return hasHalo
                   ? { top: "-1.75rem", right: "0.3rem", rotate: "15deg" }
-                  : { top: "-1.45rem", right: "0.3rem", rotate: "15deg" };
+                  : isMobile
+                    ? { top: "-23px", right: "-2px", rotate: "28deg" }
+                    : { top: "-1.45rem", right: "0.3rem", rotate: "15deg" };
               }
               if (index === 1) {
-                return hasDashCamXoay
+                return hasHalo
                   ? { top: "-0.9rem", right: "-0.7rem", rotate: "48deg" }
-                  : { top: "-0.9rem", right: "-0.4rem", rotate: "48deg" };
+                  : isMobile
+                    ? { top: "-12px", right: "-10px", rotate: "64deg" }
+                    : { top: "-0.9rem", right: "-0.35rem", rotate: "48deg" };
               }
               if (index === 2) {
-                return hasDashCamXoay
+                return hasHalo
                   ? { top: "-2.75rem", right: "0.05rem", rotate: "16deg", zIndex: -2 }
                   : { top: "-2.45rem", right: "0.05rem", rotate: "16deg", zIndex: -2 };
               }
               if (index === 3) {
-                return hasDashCamXoay
+                return hasHalo
                   ? { top: "-1.65rem", right: "-1.5rem", rotate: "48deg", zIndex: -2 }
                   : { top: "-1.65rem", right: "-1.2rem", rotate: "48deg", zIndex: -2 };
               }
               if (index === 4) {
-                return hasDashCamXoay
+                return hasHalo
                   ? { top: "-2.25rem", right: "-1.1rem", rotate: "32deg", zIndex: -3 }
                   : { top: "-2.25rem", right: "-0.8rem", rotate: "32deg", zIndex: -3 };
               }
             } else if (count === 1) {
-              if (hasDashCamXoay) {
+              if (hasHalo) {
+                return isMobile
+                  ? {
+                    top: "-24px",
+                    right: "-7px",
+                    rotate: "34deg",
+                  }
+                  : {
+                    top: "-1.4rem",
+                    right: "-0.3rem",
+                  };
+              } else if (isMobile) {
                 return {
-                  top: "-1.4rem",
-                  right: "-0.3rem",
+                  top: "-21px",
+                  right: "-5px",
+                  rotate: "34deg",
                 };
               }
             }
@@ -2674,6 +2874,7 @@ export default function PlayerPositions({
           };
 
           const blankStyle = getBoardStyle("blank");
+          const trialVotedStyle = getBoardStyle("trialVoted");
           const disconnectedStyle = getBoardStyle("disconnected");
           const namThuStyle = getBoardStyle("namthu");
           const suyThanStyle = getBoardStyle("suythan");
@@ -2687,6 +2888,7 @@ export default function PlayerPositions({
               <div {...tokenProps} data-player-id={pos.playerId}>
                 {innerContent}
                 <BlankVoteBoard visible={visibleBlank} style={blankStyle} />
+                <TrialVotedBoard visible={visibleTrialVoted} style={trialVotedStyle} />
                 <DisconnectedBoard visible={visibleDisconnected} style={disconnectedStyle} />
                 {hasNamThuInGame && <NamThuBoard visible={visibleNamThu} style={namThuStyle} />}
                 {hasSuyThanInGame && <SuyThanBoard visible={visibleSuyThan} style={suyThanStyle} />}

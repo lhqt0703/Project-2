@@ -1,0 +1,168 @@
+{
+  "gameId": "932",
+  "timestamp": 1784680035018,
+  "hostId": "53bc353c-f61b-4146-a53e-5ee6b7697039",
+  "playerCount": 7,
+  "winner": "wolves",
+  "players": [
+    {
+      "id": "53bc353c-f61b-4146-a53e-5ee6b7697039",
+      "name": "",
+      "role": "Dân làng"
+    },
+    {
+      "id": "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-5",
+      "name": "P5",
+      "role": "Thần tình yêu"
+    },
+    {
+      "id": "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-1",
+      "name": "P1",
+      "role": "Sói Dại"
+    },
+    {
+      "id": "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-2",
+      "name": "P2",
+      "role": "Trưởng làng"
+    },
+    {
+      "id": "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-3",
+      "name": "P3",
+      "role": "Song Trùng"
+    },
+    {
+      "id": "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-4",
+      "name": "P4",
+      "role": "Sói"
+    },
+    {
+      "id": "757a9407-202f-4c2b-acd9-50abdefd3aeb",
+      "name": "Tofu",
+      "role": "Bán sói"
+    }
+  ],
+  "positions": [
+    {
+      "playerId": "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-5",
+      "x": 0.62,
+      "y": 0.16
+    },
+    {
+      "playerId": "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-1",
+      "x": 0.75,
+      "y": 0.39
+    },
+    {
+      "playerId": "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-2",
+      "x": 0.38,
+      "y": 0.67
+    },
+    {
+      "playerId": "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-3",
+      "x": 0.62,
+      "y": 0.67
+    },
+    {
+      "playerId": "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-4",
+      "x": 0.38,
+      "y": 0.16
+    },
+    {
+      "playerId": "757a9407-202f-4c2b-acd9-50abdefd3aeb",
+      "x": 0.25,
+      "y": 0.39
+    }
+  ],
+  "gameEventLog": [
+    {
+      "id": "ev_1784679910911_3rqm4g1",
+      "timestamp": 1784679910911,
+      "night": 1,
+      "type": "WOLF_BITE",
+      "phase": "night",
+      "actorIds": [
+        "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-1",
+        "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-4"
+      ],
+      "targetIds": [
+        "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+      ],
+      "metadata": {
+        "votes": {
+          "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-1": "757a9407-202f-4c2b-acd9-50abdefd3aeb",
+          "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-4": "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+        },
+        "wolfBonusBite": false
+      }
+    },
+    {
+      "id": "ev_1784680035016_dtsyb2o",
+      "timestamp": 1784680035016,
+      "night": 1,
+      "type": "ROLE_CONVERSION",
+      "phase": "day",
+      "targetIds": [
+        "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+      ],
+      "metadata": {
+        "type": "ban_soi",
+        "toTeam": "wolves"
+      }
+    },
+    {
+      "id": "ev_1784680035017_5kr47zi",
+      "timestamp": 1784680035017,
+      "night": 1,
+      "type": "GAME_OVER",
+      "phase": "day",
+      "metadata": {
+        "winner": "wolves",
+        "reason": "after_night_kills"
+      }
+    }
+  ],
+  "gameLog": [
+    {
+      "night": 1,
+      "at": 1784679626475,
+      "entries": [
+        {
+          "type": "wolf_vote",
+          "phase": "night",
+          "voteBreakdown": [
+            {
+              "targetId": "757a9407-202f-4c2b-acd9-50abdefd3aeb",
+              "voterIds": [
+                "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-1",
+                "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-4"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "wolf_result",
+          "phase": "night",
+          "targetIds": [
+            "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+          ],
+          "selectedByByTarget": {
+            "757a9407-202f-4c2b-acd9-50abdefd3aeb": [
+              "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-1",
+              "dev-f3bb2ce4-96e7-437c-af2f-c3ff00d5eb9a-4"
+            ]
+          },
+          "villageChiefDelayedTargetIds": []
+        },
+        {
+          "type": "no_death",
+          "phase": "day"
+        },
+        {
+          "type": "ban_soi_aligned",
+          "phase": "day",
+          "targetId": "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+        }
+      ]
+    }
+  ]
+}

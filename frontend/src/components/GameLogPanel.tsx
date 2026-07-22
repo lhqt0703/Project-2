@@ -1680,12 +1680,16 @@ function LogEntryLine({
       );
     }
 
-    case "ban_soi_aligned":
+    case "ban_soi_aligned": {
+      if (!isHost && !gameEnded) {
+        return null;
+      }
       return (
         <LogItem emoji="🦠" style={lineStyle}>
           <RoleSpan playerId={entry.targetId} rolesByPlayerId={rolesByPlayerId} playerNamesById={playerNamesById} displayMode={getTargetDisplayMode(entry.targetId)} popupMode="none" onEliminationFocusChange={onEliminationFocusChange} onHighlightPlayer={onHighlightPlayer} /> đã trở thành sói
         </LogItem>
       );
+    }
 
     case "wild_wolf_conversion":
       if (!entry.targetId || entry.reason === "no_target") {

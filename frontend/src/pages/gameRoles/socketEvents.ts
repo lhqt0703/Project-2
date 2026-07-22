@@ -57,7 +57,7 @@ export type WitchPotionsPayload = { healUsed: boolean; poisonUsed: boolean };
 export type HunterTargetUpdatedPayload = { targetId: string | null };
 
 export type HunterShotPayload = { hunterId: string; targetId: string };
-export type LoveArrowShotPayload = { cupidId: string; targetId: string };
+export type LoveArrowShotPayload = { cupidId: string; targetId: string; timestamp?: number };
 export type LoveStatePayload = {
   cupidId: string | null;
   targetId: string | null;

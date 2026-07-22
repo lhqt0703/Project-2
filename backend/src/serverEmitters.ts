@@ -48,7 +48,6 @@ export function toPublicRoom(room: Room) {
         id: p.id,
         name: p.name,
         connected: p.connected !== false,
-        inGame: p.inGame === true,
         playerRealName: p.playerRealName,
         playerAvatar: p.playerAvatar,
       })),
@@ -158,13 +157,16 @@ export function toPublicRoom(room: Room) {
 
   return {
     ...rest,
+    hasPlayedMatch: room.hasPlayedMatch === true || room.gameOver === true || !!room.phase,
     daNghichState: publicDaNghichState,
+    angelReviveRecordsByAngelId: room.angelReviveRecordsByAngelId,
+    merchantWolfTradeCountsByPlayerId: room.merchantWolfTradeCountsByPlayerId,
+    merchantVillagerTradeCountsByPlayerId: room.merchantVillagerTradeCountsByPlayerId,
     serverTime: Date.now(),
     players: room.players.map((p) => ({
       id: p.id,
       name: p.name,
       connected: p.connected !== false,
-      inGame: p.inGame === true,
       playerRealName: p.playerRealName,
       playerAvatar: p.playerAvatar,
     })),
@@ -457,6 +459,9 @@ function getGameLogForPlayer(room: Room, playerId: string): GameLogNight[] {
       if (entry.phase === "day") {
         if (entry.type === "angel_revive_activated") {
           return myRole === "Thiên Sứ";
+        }
+        if (entry.type === "ban_soi_aligned") {
+          return false;
         }
         return true;
       }

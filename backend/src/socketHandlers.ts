@@ -844,6 +844,13 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         itemId: offer.itemId,
         appliesNight: offer.appliesNight,
       });
+      if (isMerchantTargetWolfTeam(room, offer.targetId)) {
+        room.merchantWolfTradeCountsByPlayerId = room.merchantWolfTradeCountsByPlayerId || {};
+        room.merchantWolfTradeCountsByPlayerId[offer.actorId] = (room.merchantWolfTradeCountsByPlayerId[offer.actorId] || 0) + 1;
+      } else {
+        room.merchantVillagerTradeCountsByPlayerId = room.merchantVillagerTradeCountsByPlayerId || {};
+        room.merchantVillagerTradeCountsByPlayerId[offer.actorId] = (room.merchantVillagerTradeCountsByPlayerId[offer.actorId] || 0) + 1;
+      }
       recordMerchantSuccessfulTrade(room, offer.actorId);
     }
   }
@@ -1893,7 +1900,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
   socket.on("createRoom", ({ name, gameRules, gameMode }) => {
     const roomId = generateRoomId(activeRooms!);
 
-    const initialPlayer: any = { id: clientId, name, connected: true, inGame: false };
+    const initialPlayer: any = { id: clientId, name, connected: true };
     if (VIP_REAL_NAMES[clientId]) {
       initialPlayer.playerRealName = VIP_REAL_NAMES[clientId];
     }
@@ -1939,7 +1946,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         ...current,
         name: typeof name === "string" && name.trim() ? name : current.name,
         connected: true,
-        inGame: false,
       };
       const realName = current.playerRealName || defaultRealName;
       if (realName) {
@@ -1947,7 +1953,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       }
       room.players[existingPlayerIndex] = updatedPlayer;
     } else {
-      const newPlayer: any = { id: clientId, name, connected: true, inGame: false };
+      const newPlayer: any = { id: clientId, name, connected: true };
       if (defaultRealName) {
         newPlayer.playerRealName = defaultRealName;
       }
@@ -2066,20 +2072,18 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
   });
 
-  socket.on("setPlayerViewState", ({ roomId, view }: { roomId: string; view: "room" | "game" }) => {
+  socket.on("update-view", ({ roomId, view }: { roomId: string; view: string }) => {
     const room = rooms[roomId];
     if (!room) return;
     const idx = room.players.findIndex((p) => p.id === clientId);
     if (idx < 0) return;
 
-    const nextInGame = view === "game";
-    const current = room.players[idx];
-    const heartsChanged = !nextInGame && room.gameOver ? clearLobbyHeartBadges(room) : false;
-    if (!current || (current.inGame === nextInGame && !heartsChanged)) return;
-
-    room.players[idx] = { ...current, inGame: nextInGame };
-    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-    if (clientId === room.hostId && nextInGame) {
+    if (view !== "game" && room.gameOver) {
+      if (clearLobbyHeartBadges(room)) {
+        ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      }
+    }
+    if (clientId === room.hostId && view === "game") {
       emitGameLogToSocket(roomId, clientId);
     }
   });
@@ -2234,11 +2238,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (clientId !== room.hostId) return;
     if (!room.phase || room.gameOver) return;
 
-    const idx = room.players.findIndex((p) => p.id === clientId);
-    if (idx >= 0) {
-      room.players[idx] = { ...room.players[idx]!, inGame: true };
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-    }
     ctx.io.to(clientId).emit("gameStarted");
     emitRolesRevealToSocket(roomId, clientId);
   });
@@ -2258,11 +2257,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     const current = room.players[idx];
     if (current) {
-      if (room.gameOver) {
-        clearLobbyHeartBadges(room);
+      if (room.gameOver && clearLobbyHeartBadges(room)) {
+        ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       }
-      room.players[idx] = { ...current, inGame: false };
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     }
 
     ctx.io.to(clientId).emit("returnToRoomResult", { ok: true, roomId });
@@ -2399,6 +2396,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (deal.updatedPlayerRoleHistory) {
       room.playerRoleHistory = deal.updatedPlayerRoleHistory;
     }
+    room.hasPlayedMatch = true;
     delete room.pendingRoleAssignments;
     delete room.pendingRoleBlocks;
     emitPendingRoleAssignmentsToHost(roomId);
@@ -2410,7 +2408,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       ctx.io.to(player.id).emit("yourRole", role);
       ctx.io.to(player.id).emit("wildWolfConvertedState", { converted: false });
     });
-    room.players = room.players.map((p) => ({ ...p, inGame: p.id !== room.hostId }));
 
     room.daNghichState!.wolves = participants
       .filter(p => isWolfRole(room.playerRoles?.[p.id]))
@@ -2633,9 +2630,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
 
           if (room.phase === "day") {
-            if (room.dayVotes) room.dayVotes[clientId] = null;
-            if (room.dayLocked) room.dayLocked[clientId] = false;
-
             ctx.io.to(roomId).emit("dayVotesUpdated", room.dayVotes || {});
             ctx.io.to(roomId).emit("dayLockedUpdated", room.dayLocked || {});
             if (room.dayDeadline) {
@@ -2676,7 +2670,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
             }
 
             if (room.trialStage === "verdict") {
-              if (room.trialVotes) room.trialVotes[clientId] = null;
               ctx.io.to(roomId).emit("trialVotesUpdated", room.trialVotes || {});
 
               const activeTrialVoters = getTrialVoters(room);
@@ -2880,7 +2873,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     room.witchHealTargetAt = {};
     room.witchPoisonTargetAt = {};
     room.daNghichState!.wolves = [];
-    room.players = room.players.map((p) => ({ ...p, inGame: p.id !== room.hostId }));
 
     if (ensureRoomGameRules(room).twoHeartsFirstTwoNights) {
       initTwoHeartsForParticipants(room);
@@ -2917,7 +2909,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       ctx.io.to(player.id).emit("yourRole", role);
       ctx.io.to(player.id).emit("wildWolfConvertedState", { converted: false });
     });
-    room.players = room.players.map((p) => ({ ...p, inGame: p.id !== room.hostId }));
 
     room.daNghichState!.wolves = participants
       .filter(p => isWolfRole(room.playerRoles?.[p.id]))
@@ -3223,6 +3214,31 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       } else {
         resolveNightDeaths(roomId, room);
       }
+
+      if (room.daNghichState!.banSoiWolfAlignedPending && !room.daNghichState!.banSoiWolfAligned) {
+        room.daNghichState!.banSoiWolfAligned = true;
+        room.daNghichState!.banSoiWolfAlignedPending = false;
+        if (room.banSoiId) {
+          appendLogEntry(room, { type: "ban_soi_aligned", phase: "day", targetId: room.banSoiId });
+          appendGameEvent(room, {
+            type: "ROLE_CONVERSION",
+            phase: "day",
+            targetIds: [room.banSoiId],
+            metadata: {
+              type: "ban_soi",
+              toTeam: "wolves",
+            },
+          });
+          ctx.io.in(room.banSoiId).socketsJoin(`wolves_${roomId}`);
+          ctx.io.to(room.banSoiId).emit("yourRole", room.playerRoles?.[room.banSoiId] || "Bán sói");
+          broadcastWolvesListSync(roomId);
+          if (room.loveTargetId === room.banSoiId) {
+            room.loveTargetWolfAligned = true;
+            emitLoveStateToPair(ctx, roomId, room);
+          }
+        }
+      }
+
       expireMerchantItemsAtNightEnd(room);
       room.merchantCheeseMarkedPlayerIds = [];
       emitMerchantCheeseMarks(roomId);
@@ -3362,31 +3378,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         if (room.gameOver) return;
       }
 
-      if (room.daNghichState!.banSoiWolfAlignedPending && !room.daNghichState!.banSoiWolfAligned) {
-        room.daNghichState!.banSoiWolfAligned = true;
-        room.daNghichState!.banSoiWolfAlignedPending = false;
-        if (room.banSoiId) {
-          appendLogEntry(room, { type: "ban_soi_aligned", phase: "night", targetId: room.banSoiId });
-          appendGameEvent(room, {
-            type: "ROLE_CONVERSION",
-            phase: "night",
-            targetIds: [room.banSoiId],
-            metadata: {
-              type: "ban_soi",
-              toTeam: "wolves",
-            },
-          });
-          ctx.io.in(room.banSoiId).socketsJoin(`wolves_${roomId}`);
-          ctx.io.to(room.banSoiId).emit("yourRole", room.playerRoles?.[room.banSoiId] || "Bán sói");
-          broadcastWolvesListSync(roomId);
-          if (room.loveTargetId === room.banSoiId) {
-            room.loveTargetWolfAligned = true;
-            emitLoveStateToPair(ctx, roomId, room);
-          }
-        }
-        checkAndEndGame(roomId, "ban_soi_aligned_next_night");
-        if (room.gameOver) return;
-      }
 
       const wildWolfId = getWildWolfId(room);
       room.daNghichState!.wildWolfConvertAvailableTonight =
@@ -3398,6 +3389,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.daNghichState!.wildWolfConvertRequestedTonight = false;
       room.wildWolfConvertActorId = null;
       room.wildWolfConvertTargetId = null;
+      emitWildWolfConversionState(roomId, room);
 
       prepareMerchantNightState(room);
       if (
@@ -5086,6 +5078,16 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
 
     ctx.io.to(roomId).emit("trialVotesUpdated", room.trialVotes);
+
+    const allVoted =
+      voters.length > 0 &&
+      voters.every((id) => {
+        const v = room.trialVotes?.[id];
+        return v === "live" || v === "die";
+      });
+    if (allVoted) {
+      finishTrialVerdict(roomId);
+    }
   });
 
   socket.on("hunterChooseTarget", ({ roomId, targetId }, callback?: SocketActionAck) => {
@@ -6078,7 +6080,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
             playerRealName: p.playerRealName || VIP_REAL_NAMES[p.id],
             playerAvatar: p.playerAvatar,
             connected: true,
-            inGame: true,
           })),
         hostId: clientId,
         hidePlayerRoleText: false,

@@ -26,7 +26,6 @@ export interface Player {
   id: string;
   name: string;
   connected?: boolean;
-  inGame?: boolean;
   playerRealName?: string;
   playerAvatar?: string;
 }
@@ -137,6 +136,7 @@ export interface SoiMuState {
 
 export interface Room {
   id: string;
+  hasPlayedMatch?: boolean;
   players: Player[];
   hostId: string;
   gameMode?: "da_nghich" | "diet_quy" | "soi_mu";
@@ -269,6 +269,8 @@ export interface Room {
   merchantItemsByPlayerId?: Record<string, MerchantItemRecord[]>;
   merchantUsedItemIds?: MerchantItemId[];
   merchantSuccessfulTradeCountsByPlayerId?: Record<string, number>;
+  merchantWolfTradeCountsByPlayerId?: Record<string, number>;
+  merchantVillagerTradeCountsByPlayerId?: Record<string, number>;
   merchantWinCompletedPlayerIds?: string[];
   merchantWolfBiteDisabledTonight?: boolean;
   merchantWolfBiteDisabledNextNight?: boolean;

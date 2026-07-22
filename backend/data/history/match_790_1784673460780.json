@@ -1,0 +1,563 @@
+{
+  "gameId": "790",
+  "timestamp": 1784673460780,
+  "hostId": "53bc353c-f61b-4146-a53e-5ee6b7697039",
+  "playerCount": 7,
+  "winner": "wolves",
+  "players": [
+    {
+      "id": "53bc353c-f61b-4146-a53e-5ee6b7697039",
+      "name": "",
+      "role": "Dân làng"
+    },
+    {
+      "id": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-5",
+      "name": "P5",
+      "role": "Song Trùng"
+    },
+    {
+      "id": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1",
+      "name": "P1",
+      "role": "Sói"
+    },
+    {
+      "id": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-2",
+      "name": "P2",
+      "role": "Thần tình yêu"
+    },
+    {
+      "id": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3",
+      "name": "P3",
+      "role": "Trưởng làng"
+    },
+    {
+      "id": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4",
+      "name": "P4",
+      "role": "Bán sói"
+    },
+    {
+      "id": "757a9407-202f-4c2b-acd9-50abdefd3aeb",
+      "name": "Tofu",
+      "role": "Sói Dại"
+    }
+  ],
+  "positions": [
+    {
+      "playerId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-5",
+      "x": 0.62,
+      "y": 0.16
+    },
+    {
+      "playerId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1",
+      "x": 0.25,
+      "y": 0.39
+    },
+    {
+      "playerId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-2",
+      "x": 0.75,
+      "y": 0.39
+    },
+    {
+      "playerId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3",
+      "x": 0.38,
+      "y": 0.67
+    },
+    {
+      "playerId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4",
+      "x": 0.62,
+      "y": 0.67
+    },
+    {
+      "playerId": "757a9407-202f-4c2b-acd9-50abdefd3aeb",
+      "x": 0.38,
+      "y": 0.16
+    }
+  ],
+  "gameEventLog": [
+    {
+      "id": "ev_1784670877477_34w9k3d",
+      "timestamp": 1784670877477,
+      "night": 1,
+      "type": "WOLF_BITE",
+      "phase": "night",
+      "actorIds": [],
+      "targetIds": [
+        "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-2"
+      ],
+      "metadata": {
+        "votes": {
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1": null,
+          "757a9407-202f-4c2b-acd9-50abdefd3aeb": null
+        },
+        "wolfBonusBite": false
+      }
+    },
+    {
+      "id": "ev_1784671374090_wo0bnhd",
+      "timestamp": 1784671374090,
+      "night": 1,
+      "type": "DAY_VOTE",
+      "phase": "day",
+      "targetIds": [
+        "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3"
+      ],
+      "metadata": {
+        "tie": false,
+        "skipped": false,
+        "votes": {
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-5": null,
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1": null,
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-2": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3",
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3": null,
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3",
+          "757a9407-202f-4c2b-acd9-50abdefd3aeb": null
+        },
+        "voteKind": "main"
+      }
+    },
+    {
+      "id": "ev_1784671943249_ch7q4y0",
+      "timestamp": 1784671943249,
+      "night": 1,
+      "type": "TRIAL_VERDICT",
+      "phase": "day",
+      "targetIds": [
+        "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3"
+      ],
+      "metadata": {
+        "executed": true,
+        "liveVotes": 1,
+        "dieVotes": 2,
+        "liveVoterIds": [
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-5"
+        ],
+        "dieVoterIds": [
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4",
+          "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+        ]
+      }
+    },
+    {
+      "id": "ev_1784673171048_4dfnnxo",
+      "timestamp": 1784673171048,
+      "night": 1,
+      "type": "DAY_VOTE",
+      "phase": "day",
+      "targetIds": [
+        "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1"
+      ],
+      "metadata": {
+        "tie": false,
+        "skipped": false,
+        "votes": {
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-5": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1",
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4",
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-2": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1",
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-2",
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1",
+          "757a9407-202f-4c2b-acd9-50abdefd3aeb": null
+        },
+        "voteKind": "main"
+      }
+    },
+    {
+      "id": "ev_1784673315770_kf7jirj",
+      "timestamp": 1784673315770,
+      "night": 1,
+      "type": "TRIAL_VERDICT",
+      "phase": "day",
+      "targetIds": [
+        "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1"
+      ],
+      "metadata": {
+        "executed": true,
+        "liveVotes": 0,
+        "dieVotes": 1,
+        "liveVoterIds": [],
+        "dieVoterIds": [
+          "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+        ]
+      }
+    },
+    {
+      "id": "ev_1784673315771_nbglp7m",
+      "timestamp": 1784673315771,
+      "night": 1,
+      "type": "PLAYER_ELIMINATED",
+      "phase": "day",
+      "targetIds": [
+        "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1"
+      ],
+      "metadata": {
+        "cause": {
+          "type": "trial_verdict",
+          "voterIds": [
+            "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ev_1784673387505_ew29ylj",
+      "timestamp": 1784673387505,
+      "night": 2,
+      "type": "WOLF_BITE",
+      "phase": "night",
+      "actorIds": [
+        "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+      ],
+      "targetIds": [
+        "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3"
+      ],
+      "metadata": {
+        "votes": {
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1": null,
+          "757a9407-202f-4c2b-acd9-50abdefd3aeb": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3"
+        },
+        "wolfBonusBite": false
+      }
+    },
+    {
+      "id": "ev_1784673417977_ob0e0bd",
+      "timestamp": 1784673417977,
+      "night": 3,
+      "type": "PLAYER_ELIMINATED",
+      "phase": "day",
+      "targetIds": [
+        "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3"
+      ],
+      "metadata": {
+        "cause": {
+          "type": "wolf",
+          "attackerIds": [
+            "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ev_1784673433379_69zi0ve",
+      "timestamp": 1784673433379,
+      "night": 4,
+      "type": "WOLF_BITE",
+      "phase": "night",
+      "actorIds": [
+        "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+      ],
+      "targetIds": [
+        "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4"
+      ],
+      "metadata": {
+        "votes": {
+          "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1": null,
+          "757a9407-202f-4c2b-acd9-50abdefd3aeb": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4"
+        },
+        "wolfBonusBite": false
+      }
+    },
+    {
+      "id": "ev_1784673460776_m0l367b",
+      "timestamp": 1784673460776,
+      "night": 5,
+      "type": "ROLE_CONVERSION",
+      "phase": "night",
+      "targetIds": [
+        "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4"
+      ],
+      "metadata": {
+        "type": "ban_soi",
+        "toTeam": "wolves"
+      }
+    },
+    {
+      "id": "ev_1784673460777_mnxy3bl",
+      "timestamp": 1784673460777,
+      "night": 5,
+      "type": "GAME_OVER",
+      "phase": "night",
+      "metadata": {
+        "winner": "wolves",
+        "reason": "ban_soi_aligned_next_night"
+      }
+    }
+  ],
+  "gameLog": [
+    {
+      "night": 1,
+      "at": 1784669502811,
+      "entries": [
+        {
+          "type": "wolf_vote",
+          "phase": "night",
+          "voteBreakdown": []
+        },
+        {
+          "type": "wolf_result",
+          "phase": "night",
+          "targetIds": [
+            "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-2"
+          ],
+          "selectedByByTarget": {
+            "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-2": []
+          },
+          "villageChiefDelayedTargetIds": []
+        },
+        {
+          "type": "no_death",
+          "phase": "day"
+        },
+        {
+          "type": "day_vote",
+          "phase": "day",
+          "voteBreakdown": [
+            {
+              "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3",
+              "voterIds": [
+                "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1",
+                "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-2",
+                "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "day_result",
+          "phase": "day",
+          "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3",
+          "tie": false
+        },
+        {
+          "type": "trial_started",
+          "phase": "day",
+          "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3"
+        },
+        {
+          "type": "trial_verdict",
+          "phase": "day",
+          "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3",
+          "liveVotes": 1,
+          "dieVotes": 2,
+          "liveVoterIds": [
+            "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-5"
+          ],
+          "dieVoterIds": [
+            "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4",
+            "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+          ],
+          "executed": true
+        },
+        {
+          "type": "village_chief_revealed",
+          "phase": "day",
+          "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3",
+          "reason": "day_vote"
+        },
+        {
+          "type": "day_vote",
+          "phase": "day",
+          "voteBreakdown": [
+            {
+              "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1",
+              "voterIds": [
+                "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-5",
+                "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-2",
+                "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4"
+              ]
+            },
+            {
+              "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-2",
+              "voterIds": [
+                "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3"
+              ]
+            },
+            {
+              "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4",
+              "voterIds": [
+                "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "day_result",
+          "phase": "day",
+          "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1",
+          "tie": false
+        },
+        {
+          "type": "trial_started",
+          "phase": "day",
+          "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1"
+        },
+        {
+          "type": "trial_verdict",
+          "phase": "day",
+          "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1",
+          "liveVotes": 0,
+          "dieVotes": 1,
+          "liveVoterIds": [],
+          "dieVoterIds": [
+            "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+          ],
+          "executed": true
+        },
+        {
+          "type": "eliminated",
+          "phase": "day",
+          "targetIds": [
+            "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1"
+          ],
+          "causesByTarget": {
+            "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-1": [
+              {
+                "type": "trial_verdict",
+                "voterIds": [
+                  "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "night": 2,
+      "at": 1784673329023,
+      "entries": [
+        {
+          "type": "wolf_vote",
+          "phase": "night",
+          "voteBreakdown": [
+            {
+              "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3",
+              "voterIds": [
+                "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "wolf_result",
+          "phase": "night",
+          "targetIds": [
+            "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3"
+          ],
+          "selectedByByTarget": {
+            "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3": [
+              "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+            ]
+          },
+          "villageChiefDelayedTargetIds": [
+            "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3"
+          ]
+        },
+        {
+          "type": "no_death",
+          "phase": "day"
+        },
+        {
+          "type": "day_vote_skipped",
+          "phase": "day"
+        }
+      ]
+    },
+    {
+      "night": 3,
+      "at": 1784673404241,
+      "entries": [
+        {
+          "type": "wolf_vote",
+          "phase": "night",
+          "voteBreakdown": []
+        },
+        {
+          "type": "wolf_result",
+          "phase": "night",
+          "targetIds": [],
+          "selectedByByTarget": {},
+          "villageChiefDelayedTargetIds": []
+        },
+        {
+          "type": "village_chief_delayed_death",
+          "phase": "day",
+          "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3"
+        },
+        {
+          "type": "eliminated",
+          "phase": "day",
+          "targetIds": [
+            "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3"
+          ],
+          "causesByTarget": {
+            "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-3": [
+              {
+                "type": "wolf",
+                "attackerIds": [
+                  "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "no_death",
+          "phase": "day"
+        },
+        {
+          "type": "day_vote_skipped",
+          "phase": "day"
+        }
+      ]
+    },
+    {
+      "night": 4,
+      "at": 1784673428221,
+      "entries": [
+        {
+          "type": "wolf_vote",
+          "phase": "night",
+          "voteBreakdown": [
+            {
+              "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4",
+              "voterIds": [
+                "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "wolf_result",
+          "phase": "night",
+          "targetIds": [
+            "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4"
+          ],
+          "selectedByByTarget": {
+            "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4": [
+              "757a9407-202f-4c2b-acd9-50abdefd3aeb"
+            ]
+          },
+          "villageChiefDelayedTargetIds": []
+        },
+        {
+          "type": "no_death",
+          "phase": "day"
+        },
+        {
+          "type": "day_vote_skipped",
+          "phase": "day"
+        }
+      ]
+    },
+    {
+      "night": 5,
+      "at": 1784673460776,
+      "entries": [
+        {
+          "type": "ban_soi_aligned",
+          "phase": "night",
+          "targetId": "dev-85476db4-5a5b-4563-8ea3-6cff255e12c5-4"
+        }
+      ]
+    }
+  ]
+}

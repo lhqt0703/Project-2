@@ -239,6 +239,8 @@ export function resetMerchantRoundState(room: Room) {
   room.merchantItemsByPlayerId = {};
   room.merchantUsedItemIds = [];
   room.merchantSuccessfulTradeCountsByPlayerId = {};
+  room.merchantWolfTradeCountsByPlayerId = {};
+  room.merchantVillagerTradeCountsByPlayerId = {};
   room.merchantWinCompletedPlayerIds = [];
   room.merchantWolfBiteDisabledTonight = false;
   room.merchantWolfBiteDisabledNextNight = false;

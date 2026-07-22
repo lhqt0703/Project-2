@@ -12,6 +12,10 @@ type Player = { id: string; name: string; connected?: boolean; playerAvatar?: st
 type RoomLike = {
   players: Player[];
   deadPlayers?: string[];
+  wolfVotes?: Record<string, string | null>;
+  wolfVotes2?: Record<string, string | null>;
+  wildWolfConvertAvailableTonight?: boolean;
+  wildWolfConvertRequestedTonight?: boolean;
   daNghichState?: {
     wolfVotes?: Record<string, string | null>;
     wolfVotes2?: Record<string, string | null>;
@@ -181,7 +185,8 @@ export function useWolfRole({
     return role === "Bán sói" && (isBanSoiAligned || isWildWolfConverted);
   }, [isBanSoiAligned, isWildWolfConverted, role]);
   const isWildWolf = role === "Sói Dại";
-  const wildWolfConversionRequested = room.daNghichState?.wildWolfConvertRequestedTonight === true;
+  const isWildWolfConvertAvailable = room.wildWolfConvertAvailableTonight === true || room.daNghichState?.wildWolfConvertAvailableTonight === true;
+  const wildWolfConversionRequested = room.wildWolfConvertRequestedTonight === true || room.daNghichState?.wildWolfConvertRequestedTonight === true;
   const wolfDurationSec =
     typeof room.gameRules?.wolfNightActionDurationSec === "number"
       ? Math.max(0, room.gameRules.wolfNightActionDurationSec)
@@ -224,25 +229,28 @@ export function useWolfRole({
     }
   }, [clientId, wolfLocked, hasSubmittedLock]);
 
+  const serverWolfVotes = room.wolfVotes || room.daNghichState?.wolfVotes;
+  const serverWolfVotes2 = room.wolfVotes2 || room.daNghichState?.wolfVotes2;
+
   useEffect(() => {
-    if (clientId && isWolfTeam && isWolfTurnActive && room.daNghichState?.wolfVotes) {
-      const serverVote = room.daNghichState?.wolfVotes[clientId] || null;
+    if (clientId && isWolfTeam && isWolfTurnActive && serverWolfVotes) {
+      const serverVote = serverWolfVotes[clientId] || null;
       if (serverVote !== localSelectedTarget) {
         setLocalSelectedTarget(serverVote);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room.daNghichState?.wolfVotes, clientId, isWolfTeam, isWolfTurnActive]);
+  }, [serverWolfVotes, clientId, isWolfTeam, isWolfTurnActive]);
 
   useEffect(() => {
-    if (clientId && isWolfTeam && isWolfTurnActive && room.daNghichState?.wolfVotes2) {
-      const serverVote2 = room.daNghichState?.wolfVotes2[clientId] || null;
+    if (clientId && isWolfTeam && isWolfTurnActive && serverWolfVotes2) {
+      const serverVote2 = serverWolfVotes2[clientId] || null;
       if (serverVote2 !== localSelectedTarget2) {
         setLocalSelectedTarget2(serverVote2);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room.daNghichState?.wolfVotes2, clientId, isWolfTeam, isWolfTurnActive]);
+  }, [serverWolfVotes2, clientId, isWolfTeam, isWolfTurnActive]);
 
   const isLocked = useMemo(() => {
     if (clientId && wolfLocked?.[clientId]) return true;
@@ -262,8 +270,8 @@ export function useWolfRole({
   }, [allNightActionsSimultaneous, currentNightTurnRole, deadPlayers, isWolfTeam, phase, wolfBiteDisabled, roomId]);
 
   const deadlineReached = !!(wolfDeadline && nightActionNow >= wolfDeadline && !nightTurnPaused);
-  const effectiveSelectedTarget = localSelectedTarget || (clientId ? room.daNghichState?.wolfVotes?.[clientId] || null : null);
-  const effectiveSelectedTarget2 = localSelectedTarget2 || (clientId ? room.daNghichState?.wolfVotes2?.[clientId] || null : null);
+  const effectiveSelectedTarget = localSelectedTarget || (clientId ? serverWolfVotes?.[clientId] || null : null);
+  const effectiveSelectedTarget2 = localSelectedTarget2 || (clientId ? serverWolfVotes2?.[clientId] || null : null);
   const wildWolfConversionCandidateIds = useMemo(
     () =>
       (wolfMaxTargets >= 2
@@ -289,7 +297,7 @@ export function useWolfRole({
   }, [nightActionNow, wolfDeadline, wolfDurationSec]);
   const shouldPulseWildWolfConversion =
     isWildWolf &&
-    room.daNghichState?.wildWolfConvertAvailableTonight === true &&
+    isWildWolfConvertAvailable &&
     !wildWolfConversionRequested &&
     !deadlineReached &&
     !nightTurnPaused &&
@@ -467,7 +475,7 @@ export function useWolfRole({
           <AvifIcon name="🐺" style={{ marginRight: 4 }} /> CẮN!
         </button>
 
-        {isWildWolf && room.daNghichState?.wildWolfConvertAvailableTonight && (
+        {isWildWolf && isWildWolfConvertAvailable && (
           <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
             <style>{`
               @keyframes wildWolfConversionPulse {

@@ -6,7 +6,6 @@ export interface Player {
   id: string;
   name: string;
   connected?: boolean;
-  inGame?: boolean;
   playerRealName?: string;
   playerAvatar?: string;
 }
@@ -179,6 +178,7 @@ export interface DaNghichState {
 
 export interface RoomData {
   id: string;
+  hasPlayedMatch?: boolean;
   players: Player[];
   hostId: string;
   warnedPlayerIds?: string[];

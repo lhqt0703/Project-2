@@ -186,12 +186,19 @@ function MockPlayerCircle({
         <div className="player-halo halo-dietquy-red" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #ef4444` }} />
       )}
 
-      {/* Mid Concentric Rings */}
+      {/* Concentric Rings */}
       {isSecondaryHighlighted && (
         <div className="player-halo" style={{ inset: -scalePx(10, 6), border: `${scalePx(4, 1)}px solid #ffffff`, boxShadow: "0 0 10px rgba(255, 255, 255, 0.8)" }} />
       )}
-      {isTrialWhite && (
-        <div className="player-halo halo-trial-white" style={{ inset: -scalePx(10, 6), border: `${scalePx(2, 1)}px solid #f1f5f9` }} />
+      {(isTrialGreen || isTrialWhite) && (
+        <div
+          className={`player-halo ${isTrialGreen ? "halo-trial-green" : "halo-trial-white"}`}
+          style={{
+            inset: isTrialGreen ? -scalePx(12, 8) : -scalePx(10, 6),
+            border: isTrialGreen ? `${scalePx(2.5, 2)}px solid #34d399` : `${scalePx(2, 1)}px solid #f1f5f9`,
+            transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+          }}
+        />
       )}
 
       {/* Outer Concentric Rings */}
@@ -206,9 +213,6 @@ function MockPlayerCircle({
       )}
       {isProtectedByGuardian && (
         <Orb hue={0} />
-      )}
-      {isTrialGreen && (
-        <div className="player-halo halo-trial-green" style={{ inset: -scalePx(12, 8), border: `${scalePx(2.5, 2)}px solid #34d399` }} />
       )}
 
       {/* Badges and Indicators */}

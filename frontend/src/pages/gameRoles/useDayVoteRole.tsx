@@ -64,10 +64,16 @@ export function useDayVoteRole({
   const [now, setNow] = useState(() => Date.now() + serverTimeOffset);
   const [isVoteReviewActive, setIsVoteReviewActive] = useState(false);
   const [showDayVoteConfirm, setShowDayVoteConfirm] = useState(false);
+  const [showBlankVoteConfirm, setShowBlankVoteConfirm] = useState(false);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+
+  const [localTrialVote, setLocalTrialVote] = useState<"live" | "die" | null>(null);
 
   useEffect(() => {
     setIsVoteReviewActive(false);
+    if (trialStage !== "verdict") {
+      setLocalTrialVote(null);
+    }
   }, [trialStage]);
 
   useEffect(() => {
@@ -103,6 +109,7 @@ export function useDayVoteRole({
   }, [dayDeadline, dayVoters, deadPlayers, phase, trialStage, isHost]);
 
   const myTrialVote = clientId ? (trialVotes?.[clientId] ?? null) : null;
+  const effectiveTrialVote = localTrialVote || myTrialVote;
 
   const isTrialTarget = !!clientId && !!trialTargetId && clientId === trialTargetId;
   const alreadyChosenByTrialTarget = !!clientId && trialSelectedInteractorIds.includes(clientId);
@@ -117,6 +124,11 @@ export function useDayVoteRole({
     !trialInteractionCut;
   const hasInteracted = !!clientId && trialInteractionActiveIds.includes(clientId);
   const remainingInteractionTurns = Math.max(0, trialInteractionSelectionLimit - trialSelectedInteractorIds.length);
+
+  const trialTargetName = useMemo(() => {
+    if (!trialTargetId || !room?.players) return "bị cáo";
+    return room.players.find((p) => p.id === trialTargetId)?.name || "bị cáo";
+  }, [trialTargetId, room?.players]);
 
   const canVoteVerdict =
     phase === "day" &&
@@ -193,8 +205,7 @@ export function useDayVoteRole({
                   </button>
                   <button
                     onClick={() => {
-                      socket.emit("dayChooseTarget", { roomId, targetId: null });
-                      socket.emit("dayLockVote", { roomId });
+                      setShowBlankVoteConfirm(true);
                     }}
                     style={{ margin: "4px 0", padding: "8px 12px", cursor: "pointer" }}
                     disabled={!!dayLocked?.[clientId]}
@@ -213,7 +224,7 @@ export function useDayVoteRole({
         {trialStage === "defense" && (
           <>
             <div style={{ marginTop: 6, opacity: 0.85 }}>
-              Lượt tương tác còn lại của bị cáo: {remainingInteractionTurns}
+              Lượt tương tác còn lại của {trialTargetName}: {remainingInteractionTurns}
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
               {!isHost && !isTrialTarget && !deadPlayers.includes(clientId) && (
@@ -275,16 +286,22 @@ export function useDayVoteRole({
         {trialStage === "verdict" && canVoteVerdict && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
-              onClick={() => socket.emit("trialVoteLifeDeath", { roomId, vote: "live" })}
+              onClick={() => {
+                setLocalTrialVote("live");
+                socket.emit("trialVoteLifeDeath", { roomId, vote: "live" });
+              }}
               style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center" }}
             >
-              <AvifIcon name="✅" style={{ marginRight: 4 }} /> Vote Sống{myTrialVote === "live" ? " (đã chọn)" : ""}
+              <AvifIcon name="✅" style={{ marginRight: 4 }} /> Vote Sống{effectiveTrialVote === "live" ? " (đã chọn)" : ""}
             </button>
             <button
-              onClick={() => socket.emit("trialVoteLifeDeath", { roomId, vote: "die" })}
+              onClick={() => {
+                setLocalTrialVote("die");
+                socket.emit("trialVoteLifeDeath", { roomId, vote: "die" });
+              }}
               style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center" }}
             >
-              <AvifIcon name="☠️" style={{ marginRight: 4 }} /> Vote Chết{myTrialVote === "die" ? " (đã chọn)" : ""}
+              <AvifIcon name="☠️" style={{ marginRight: 4 }} /> Vote Chết{effectiveTrialVote === "die" ? " (đã chọn)" : ""}
             </button>
           </div>
         )}
@@ -298,6 +315,19 @@ export function useDayVoteRole({
             setShowDayVoteConfirm(false);
           }}
           onCancel={() => setShowDayVoteConfirm(false)}
+        />
+
+        <ConfirmModal
+          open={showBlankVoteConfirm}
+          title="Xác nhận bỏ phiếu"
+          message="Bạn có chắc chắn muốn bỏ phiếu trống không?"
+          onConfirm={() => {
+            socket.emit("dayChooseTarget", { roomId, targetId: null });
+            socket.emit("dayLockVote", { roomId });
+            setLocalSelectedTarget(null);
+            setShowBlankVoteConfirm(false);
+          }}
+          onCancel={() => setShowBlankVoteConfirm(false)}
         />
 
         <ConfirmModal
@@ -328,6 +358,7 @@ export function useDayVoteRole({
       trialGreenPlayerId: trialSelectedInteractorId,
       showVoteReview: isVoteReviewActive,
       dayVotes: dayVotes,
+      dayLocked: dayLocked,
     },
   };
 }

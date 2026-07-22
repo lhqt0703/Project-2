@@ -686,15 +686,11 @@ export default function Room() {
 
   const amIHost = clientId === room.hostId;
   const gameInProgress = !!room.phase && !room.gameOver;
-  const hasInGamePlayers = room.players.some((p) => p.inGame === true);
+  const hasPlayedMatch = room.hasPlayedMatch === true || room.gameOver === true || !!room.phase || (!!room.playerRoles && Object.keys(room.playerRoles).length > 0);
   const participantCount = room.players.filter((p) => p.id !== room.hostId).length;
   const selectedRoleCount = room.roles?.length ?? 0;
   const hasElementalRole = (room.roles || []).some((role) => ELEMENTAL_ROLE_SET.has(role));
   const hasEnoughRolesToStart = selectedRoleCount >= participantCount && selectedRoleCount > 0;
-  const startGameDisabled = !gameInProgress && hasInGamePlayers;
-  const startGameTooltip = hasInGamePlayers
-    ? "Trò chơi chỉ có thể bắt đầu ván mới khi tất cả người chơi đã quay về phòng chờ này"
-    : undefined;
 
   const startButtonText = gameInProgress ? "Trở lại trò chơi" : "Bắt đầu trò chơi";
   const returnToCurrentGame = () => {
@@ -924,6 +920,14 @@ export default function Room() {
                 Trở lại trò chơi
               </button>
             )}
+            {hasPlayedMatch && (
+              <button
+                onClick={() => nav(`/game?roomId=${room.id}`)}
+                title="Xem lại kết quả và nhật ký trận đấu"
+              >
+                Xem lại kết quả
+              </button>
+            )}
           </div>
         )}
 
@@ -943,13 +947,21 @@ export default function Room() {
             <div style={{ marginTop: 8 }}>
               <button
                 onClick={startButtonAction}
-                disabled={startGameDisabled}
-                title={gameInProgress ? "Trở lại ván đang diễn ra" : startGameTooltip}
-                style={{ opacity: startGameDisabled ? 0.6 : 1, cursor: startGameDisabled ? "not-allowed" : "pointer" }}
+                title={gameInProgress ? "Trở lại ván đang diễn ra" : undefined}
               >
                 {startButtonText}
               </button>
             </div>
+            {hasPlayedMatch && (
+              <div style={{ marginTop: 8 }}>
+                <button
+                  onClick={() => nav(`/game?roomId=${room.id}`)}
+                  title="Xem lại kết quả và nhật ký trận đấu"
+                >
+                  Xem lại kết quả
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>

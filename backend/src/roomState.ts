@@ -148,7 +148,6 @@ export function getActiveDayVoters(room: Room) {
 
   return base
     .filter((id) => !dead.has(id))
-    .filter((id) => isPlayerConnected(room, id))
     .filter((id) => !!room.players.find((p) => p.id === id));
 }
 
@@ -352,7 +351,6 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.songTrungFoundByVictim = false;
   room.songTrungVictimSearchUsedTonight = {};
 
-  room.players = room.players.map((p) => ({ ...p, inGame: false }));
 }
 
 export function getSeatingOrder(room: Room, clockwise: boolean = true, startingPlayerId?: string | null): string[] {

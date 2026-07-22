@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useRoomContext } from "../context/RoomContext";
 import PlayerPositions from "../components/PlayerPositions";
 import ConfirmModal from "../components/ConfirmModal";
+import HostDisconnectButton from "../components/HostDisconnectButton";
 import Masonry from "../components/Masonry";
 import GameLogPanel from "../components/GameLogPanel";
 import { useDayVoteRole } from "./gameRoles/useDayVoteRole";
@@ -885,6 +886,7 @@ export default function GameSoiMu() {
       {(isHost || !!room.gameOver) && (
         <div className="game-top-actions" style={{ marginBottom: "1rem" }}>
           <button onClick={handleBackToRoomClick}>Quay về phòng chờ</button>
+          <HostDisconnectButton room={room} />
         </div>
       )}
 

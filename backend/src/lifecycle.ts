@@ -119,10 +119,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
     const room = ctx.rooms[roomId];
     if (!room) return;
 
-    const hostIndex = room.players.findIndex((p) => p.id === room.hostId);
-    if (hostIndex >= 0) {
-      room.players[hostIndex] = { ...room.players[hostIndex]!, inGame: true };
-    }
+
 
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     ctx.io.to(room.hostId).emit("gameStarted", hostOverlayMessage
@@ -233,7 +230,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
       ctx.io.to(player.id).emit("yourRole", role);
       ctx.io.to(player.id).emit("wildWolfConvertedState", { converted: false });
     });
-    room.players = room.players.map((p) => ({ ...p, inGame: p.id !== room.hostId }));
+
 
     room.daNghichState!.wolves = participants.filter((p) => isWolfRole(room.playerRoles?.[p.id])).map((p) => p.id);
     room.daNghichState!.wolves.forEach((wolfId) => {

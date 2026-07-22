@@ -731,7 +731,7 @@ export function useGameSocketSync({
 
     const handleLoveArrowShot = (payload: LoveArrowShotPayload) => {
       if (!payload?.cupidId || !payload?.targetId) return;
-      setLoveArrowShot(payload);
+      setLoveArrowShot({ ...payload, timestamp: Date.now() });
       setLoveArrowShotSeq((s) => s + 1);
     };
 
@@ -783,11 +783,12 @@ export function useGameSocketSync({
 
     const handleDayVotesUpdated = (votes: DayVotesUpdatedPayload) => {
       setDayVotes(votes);
-      setRoom((prev: any) => (prev ? { ...prev, wolfVotes: votes } : prev));
+      setRoom((prev: any) => (prev ? { ...prev, dayVotes: votes, wolfVotes: votes } : prev));
     };
 
     const handleDayLockedUpdated = (locked: DayLockedUpdatedPayload) => {
       setDayLocked(locked);
+      setRoom((prev: any) => (prev ? { ...prev, dayLocked: locked } : prev));
     };
 
     const handleDayDiscussionStarted = ({ deadline }: DayDiscussionStartedPayload) => {
@@ -872,6 +873,7 @@ export function useGameSocketSync({
 
     const handleTrialVotesUpdated = (payload: TrialVotesUpdatedPayload) => {
       setTrialVotes(payload || null);
+      setRoom((prev: any) => (prev ? { ...prev, trialVotes: payload || null } : prev));
     };
 
     const handleTrialVerdictFinished = (payload: TrialVerdictFinishedPayload) => {

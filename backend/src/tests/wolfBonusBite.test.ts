@@ -49,10 +49,8 @@ const createMockRoom = (rules: Partial<RoomGameRules>, votes: Record<string, str
       ...rules,
     },
     daNghichState: {
-      daNghichState: {
       wolfVotes: votes,
       wolfVotes2: votes2,
-    },
     },
     wolfBonusBiteThisNight: true,
     killedTonight: null,

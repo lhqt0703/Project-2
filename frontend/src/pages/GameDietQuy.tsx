@@ -5,6 +5,7 @@ import { useRoomContext } from "../context/RoomContext";
 import PlayerPositions, { AVA_IMAGES, getAvatarUrlByFileName } from "../components/PlayerPositions";
 import GameLogPanel from "../components/GameLogPanel";
 import ConfirmModal from "../components/ConfirmModal";
+import HostDisconnectButton from "../components/HostDisconnectButton";
 import RoleCharacterPortrait from "../components/RoleCharacterPortrait";
 import type { GamePhase } from "./gameRoles/socketEvents";
 import type { NightActionRole } from "../context/RoomContext";
@@ -425,8 +426,10 @@ export default function GameDietQuy() {
   const lastGameLogCountRef = useRef<number>(0);
   const lastTrialVotesRef = useRef<Record<string, "live" | "die" | null> | null>(null);
   const lastTrialVerdictHighlightSeqRef = useRef<number>(0);
-  
+  const hasRestoredVerdictHighlightRef = useRef(false);
+
   const clearVerdictHighlight = useCallback(() => {
+    hasRestoredVerdictHighlightRef.current = true;
     setAutoTrialHighlight(null);
     setAutoTrialHighlightSuppressed(false);
     setHighlightPlayerId(null);
@@ -478,6 +481,7 @@ export default function GameDietQuy() {
     if (!sync.trialVerdictFinished || !sync.trialVerdictFinishedSeq) return;
     if (lastTrialVerdictHighlightSeqRef.current === sync.trialVerdictFinishedSeq) return;
     lastTrialVerdictHighlightSeqRef.current = sync.trialVerdictFinishedSeq;
+    hasRestoredVerdictHighlightRef.current = true;
     const targetId = sync.trialVerdictFinished.targetId;
     if (!targetId) return;
     const votes = (lastTrialVotesRef.current || {}) as Record<string, "live" | "die" | null>;
@@ -510,6 +514,42 @@ export default function GameDietQuy() {
     setSecondaryHighlightPlayerIds(highlightPayload.secondaryIds);
     setDangerHighlightPlayerIds(highlightPayload.dangerIds);
   }, [sync.gameLogNights, sync.trialVerdictFinished, sync.trialVerdictFinishedSeq]);
+
+  useEffect(() => {
+    if (hasRestoredVerdictHighlightRef.current) return;
+    if (phase !== "day" || sync.trialStage !== "none" || sync.dayDeadline) return;
+    if (!sync.gameLogNights || sync.gameLogNights.length === 0) return;
+
+    const currentNightNum = room?.nightCount || 1;
+    const lastNight = (sync.gameLogNights || []).slice().sort((a, b) => (a.night || 0) - (b.night || 0)).pop();
+    if (!lastNight || (lastNight.night || 0) !== currentNightNum || !lastNight.entries) return;
+
+    const lastVerdictIndex = lastNight.entries.map((e) => e.type).lastIndexOf("trial_verdict");
+    if (lastVerdictIndex === -1) return;
+
+    const trailingEntries = lastNight.entries.slice(lastVerdictIndex + 1);
+    const hasNewVoteOrTrialAfter = trailingEntries.some(
+      (e) => e.type === "trial_started" || e.type === "day_vote" || e.type === "day_result"
+    );
+    if (hasNewVoteOrTrialAfter) return;
+
+    const lastVerdict = lastNight.entries[lastVerdictIndex];
+    if (lastVerdict && lastVerdict.type === "trial_verdict") {
+      const liveVoterIds = lastVerdict.liveVoterIds || [];
+      const dieVoterIds = lastVerdict.dieVoterIds || [];
+      const highlightPayload = {
+        primaryId: null,
+        secondaryIds: liveVoterIds,
+        dangerIds: dieVoterIds,
+      };
+      hasRestoredVerdictHighlightRef.current = true;
+      setAutoTrialHighlight(highlightPayload);
+      setAutoTrialHighlightSuppressed(false);
+      setHighlightPlayerId(highlightPayload.primaryId);
+      setSecondaryHighlightPlayerIds(highlightPayload.secondaryIds);
+      setDangerHighlightPlayerIds(highlightPayload.dangerIds);
+    }
+  }, [phase, sync.trialStage, sync.dayDeadline, sync.gameLogNights, room?.nightCount]);
 
   useEffect(() => {
     if (phase !== "night" && phase !== "dusk") return;
@@ -2050,6 +2090,7 @@ export default function GameDietQuy() {
             </button>
           )}
           <button onClick={handleBackToRoomClick}>Quay về phòng chờ</button>
+          <HostDisconnectButton room={room} />
         </div>
       )}
 
@@ -2170,6 +2211,7 @@ export default function GameDietQuy() {
                 verdictDiePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.dangerIds}
                 showRoleBadges={!!roleBadgesForDisplay}
                 roleBadges={roleBadgesForDisplay}
+                loveArrowShot={sync.loveArrowShot}
                 activeNightRole={isHost && isSequentialNight ? currentNightTurnRole : null}
                 suppressNightActionProgress={autoTrialHighlightSuppressed}
                 selectedOutlinePlayerId={

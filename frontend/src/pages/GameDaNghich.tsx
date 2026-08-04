@@ -6,8 +6,8 @@ import PlayerPositions, { AVA_IMAGES, getAvatarUrlByFileName } from "../componen
 import GameLogPanel from "../components/GameLogPanel";
 import ConfirmModal from "../components/ConfirmModal";
 import HostDisconnectButton from "../components/HostDisconnectButton";
-import RoleCharacterPortrait, { HYBRID_BACKGROUND_ASSET } from "../components/RoleCharacterPortrait";
-import type { CursedResultPayload, GamePhase } from "./gameRoles/socketEvents";
+import RoleCharacterPortrait from "../components/RoleCharacterPortrait";
+import type { CursedResultPayload, GamePhase, TrialVote } from "./gameRoles/socketEvents";
 import type { NightActionRole } from "../context/RoomContext";
 import { ELEMENTAL_ROLE_SET } from "../constants/elemental";
 import { useSeerRole } from "./gameRoles/useSeerRole";
@@ -27,6 +27,7 @@ import { useMerchantRole } from "./gameRoles/useMerchantRole";
 import { useAngelRole } from "./gameRoles/useAngelRole";
 import { useSongTrungRole } from "./gameRoles/useSongTrungRole";
 import { useSongTrungRobbedRole } from "./gameRoles/useSongTrungRobbedRole";
+import { useCoffeeRoles } from "./gameRoles/useCoffeeRoles";
 import { useMock8Test } from "./gameRoles/useMock8Test";
 import { PhaseTextMorph } from "../components/PhaseTextMorph";
 import { ScoreboardModal } from "../components/ScoreboardModal";
@@ -51,9 +52,19 @@ import { getVillagerAndWolfRoles } from "../utils/gameEndHelper";
 import { GameStickerBoard } from "../components/GameStickerBoard";
 import { StickerTrashZone } from "../components/StickerTrashZone";
 import { useGameSocialInteractions } from "./gameRoles/useGameSocialInteractions";
+import { MOCK_8_GAME_LOG_NIGHTS, MOCK_8_LOG_PLAYER_NAMES } from "../constants/mock8GameLogs";
+import { preloadImages } from "../utils/preloadImages";
+import { getRolePortraitSrc, HYBRID_BACKGROUND_ASSET } from "../utils/rolePortraitAssets";
 
 
 const WOLF_TEAM_REVEAL_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
+const INTRO_WHITEOUT_COMPANION_ROLES = new Set([
+  "hộ nhân",
+  "trưởng làng",
+  "sói con",
+  "sói",
+  "tiên tri",
+]);
 const NIGHT_ACTION_ROLE_SET = new Set([
   "Sói",
   "Sói con",
@@ -68,6 +79,11 @@ const NIGHT_ACTION_ROLE_SET = new Set([
   "Thần tình yêu",
   "Kẻ bị nguyền",
   "Tay Buôn",
+  "Song Trùng",
+  "Trưởng làng",
+  "Người pha cà phê",
+  "Linh Chi",
+  "Đông Trùng",
 ]);
 const HUNTER_BULLET_ANIM_MS = 4000;
 type TargetRoleDisplayOrder = "player-role" | "role-player";
@@ -96,6 +112,9 @@ const ROLE_SKILL_HINTS: Record<string, string> = {
   "Thiên Sứ": "Hãy quan sát kỹ mọi người, khi trời sáng, vào giây phút bạn bị giết, bạn sẽ có thể âm thầm hồi sinh một người đã chết mà bạn đặt niềm tin ở họ",
   "Dân làng": "Bạn không cần hành động đêm",
   "Trưởng làng": "Bạn không cần hành động đêm. Vào lần đầu tiên bạn bị biểu quyết chết bạn sẽ lộ diện thân phận và sống tiếp, nhưng cũng hãy cẩn thận vì dù bạn có lộ diện thân phận hay không thì sói vẫn có thể cắn bạn, khi đó bạn sẽ thấy một ánh sáng đỏ lóe lên và lúc này bạn sẽ còn cầm cự được sức lực thêm một đêm nữa thôi. Khi trời sáng, hãy cố thông báo cho mọi người biết nếu cần thiết",
+  "Người pha cà phê": "Chọn đúng hai người trong cùng một đêm để tìm Linh Chi và Đông Trùng",
+  "Linh Chi": "Chọn một người để tìm Người pha cà phê. Nếu tìm đúng, họ sẽ được cộng thêm một lượt tìm kiếm",
+  "Đông Trùng": "Chọn một người để tìm Người pha cà phê. Nếu tìm đúng, họ sẽ được cộng thêm một lượt tìm kiếm",
 };
 
 export default function GameDaNghich() {
@@ -107,7 +126,7 @@ export default function GameDaNghich() {
   const isMockDusk = roomId === "mock-dusk";
   const [mockDuskCardCount, setMockDuskCardCount] = useState<number>(12);
   const [mockDuskTargetRole, setMockDuskTargetRole] = useState<string>("Sói Dại");
-  const [roleOverride, setRoleOverride] = useState<string | null>("Thần tình yêu");
+  const [roleOverride, setRoleOverride] = useState<string | null>("Hộ nhân");
   const [mockSkillHintScenario, setMockSkillHintScenario] = useState<string>("default");
   const role = (roomId === "mock-8" || isMockDusk) ? (roleOverride || mockDuskTargetRole) : contextRole;
   const debugAnim = query.get("debugAnim") === "1";
@@ -321,6 +340,7 @@ export default function GameDaNghich() {
 
   const [duskTransitionActive, setDuskTransitionActive] = useState(false);
   const [dismissedNightTransitionEndsAt, setDismissedNightTransitionEndsAt] = useState<number | null>(null);
+  const [roleCompanionIntroWhiteout, setRoleCompanionIntroWhiteout] = useState(false);
   const nightTransitionEndsAt = room?.nightTransitionEndsAt ?? null;
   const nightTransitionDurationMs = nightTransitionEndsAt
     ? Math.max(0, nightTransitionEndsAt - (room?.serverTime ?? Date.now()))
@@ -353,6 +373,12 @@ export default function GameDaNghich() {
 
   const [duskRevealGameUI, setDuskRevealGameUI] = useState(false);
   const duskPlayedRef = useRef(false);
+
+  useEffect(() => {
+    if (!roleCompanionIntroWhiteout) return;
+    const timer = window.setTimeout(() => setRoleCompanionIntroWhiteout(false), 150); // Tofuedited Kiểm soát thời gian sau bao lâu ảnh nhân vật tự động whiteout
+    return () => window.clearTimeout(timer);
+  }, [roleCompanionIntroWhiteout]);
 
   const [masonryComplete, setMasonryComplete] = useState(false);
   const prevPhaseRef = useRef<string | null>(null);
@@ -431,11 +457,12 @@ export default function GameDaNghich() {
     primaryId: string | null;
     secondaryIds: string[];
     dangerIds: string[];
+    abstainIds: string[];
   } | null>(null);
   const [autoTrialHighlightSuppressed, setAutoTrialHighlightSuppressed] = useState(false);
   const lastDayDeadlineRef = useRef<number | null>(null);
   const lastGameLogCountRef = useRef<number>(0);
-  const lastTrialVotesRef = useRef<Record<string, "live" | "die" | null> | null>(null);
+  const lastTrialVotesRef = useRef<Record<string, TrialVote | null> | null>(null);
   const lastTrialVerdictHighlightSeqRef = useRef<number>(0);
   const hasRestoredVerdictHighlightRef = useRef(false);
 
@@ -460,6 +487,7 @@ export default function GameDaNghich() {
         primaryId: payload.primaryId,
         secondaryIds,
         dangerIds,
+        abstainIds: autoTrialHighlight?.abstainIds || [],
       });
     }
     if (isClear && autoTrialHighlight) {
@@ -495,15 +523,18 @@ export default function GameDaNghich() {
     hasRestoredVerdictHighlightRef.current = true;
     const targetId = sync.trialVerdictFinished.targetId;
     if (!targetId) return;
-    const votes = (lastTrialVotesRef.current || {}) as Record<string, "live" | "die" | null>;
-    let liveVoterIds = Object.entries(votes)
+    const votes = lastTrialVotesRef.current || {};
+    let liveVoterIds = sync.trialVerdictFinished.liveVoterIds ?? Object.entries(votes)
       .filter(([, vote]) => vote === "live")
       .map(([id]) => id);
-    let dieVoterIds = Object.entries(votes)
+    let dieVoterIds = sync.trialVerdictFinished.dieVoterIds ?? Object.entries(votes)
       .filter(([, vote]) => vote === "die")
       .map(([id]) => id);
+    let abstainVoterIds = sync.trialVerdictFinished.abstainVoterIds ?? Object.entries(votes)
+      .filter(([, vote]) => vote === "abstain")
+      .map(([id]) => id);
 
-    if (liveVoterIds.length === 0 && dieVoterIds.length === 0) {
+    if (liveVoterIds.length === 0 && dieVoterIds.length === 0 && abstainVoterIds.length === 0) {
       const lastNight = (sync.gameLogNights || []).slice().sort((a, b) => (a.night || 0) - (b.night || 0)).pop();
       const lastVerdict = (lastNight?.entries || []).slice().reverse().find(
         (entry) => entry.type === "trial_verdict" && entry.targetId === targetId
@@ -511,6 +542,7 @@ export default function GameDaNghich() {
       if (lastVerdict && lastVerdict.type === "trial_verdict") {
         liveVoterIds = lastVerdict.liveVoterIds || [];
         dieVoterIds = lastVerdict.dieVoterIds || [];
+        abstainVoterIds = lastVerdict.abstainVoterIds || [];
       }
     }
 
@@ -518,6 +550,7 @@ export default function GameDaNghich() {
       primaryId: null,
       secondaryIds: liveVoterIds,
       dangerIds: dieVoterIds,
+      abstainIds: abstainVoterIds,
     };
     setAutoTrialHighlight(highlightPayload);
     setAutoTrialHighlightSuppressed(false);
@@ -548,10 +581,12 @@ export default function GameDaNghich() {
     if (lastVerdict && lastVerdict.type === "trial_verdict") {
       const liveVoterIds = lastVerdict.liveVoterIds || [];
       const dieVoterIds = lastVerdict.dieVoterIds || [];
+      const abstainVoterIds = lastVerdict.abstainVoterIds || [];
       const highlightPayload = {
         primaryId: null,
         secondaryIds: liveVoterIds,
         dangerIds: dieVoterIds,
+        abstainIds: abstainVoterIds,
       };
       hasRestoredVerdictHighlightRef.current = true;
       setAutoTrialHighlight(highlightPayload);
@@ -1000,9 +1035,9 @@ export default function GameDaNghich() {
 
   const logPanel = canViewLog ? (
     <GameLogPanel
-      nights={sync.gameLogNights || []}
+      nights={roomId === "mock-8" ? MOCK_8_GAME_LOG_NIGHTS : sync.gameLogNights || []}
       rolesByPlayerId={sync.revealedRolesByPlayerId || {}}
-      playerNamesById={playerNamesById}
+      playerNamesById={roomId === "mock-8" ? { ...playerNamesById, ...MOCK_8_LOG_PLAYER_NAMES } : playerNamesById}
       playerRealNamesById={playerRealNamesById}
       viewMode={viewMode}
       onViewModeChange={handleViewModeChange}
@@ -1018,6 +1053,7 @@ export default function GameDaNghich() {
       gameRules={room?.gameRules}
       gameEnded={!!sync.gameEnded}
       isReplay={room?.isReplay}
+      showAllEntries={roomId === "mock-8"}
     />
   ) : null;
 
@@ -1223,6 +1259,17 @@ export default function GameDaNghich() {
     nightActionDeadline: mySimultaneousDeadline,
     nightActionNow: nightTurnNow,
   });
+  const coffeeRoles = useCoffeeRoles({
+    roomId,
+    phase,
+    role,
+    deadPlayers: deadPlayersForNightActions,
+    privateState: sync.coffeePrivateState,
+    allNightActionsSimultaneous,
+    currentNightTurnRole,
+    nightActionDeadline: mySimultaneousDeadline,
+    nightActionNow: nightTurnNow,
+  });
   const chief = useChiefRole({
     roomId,
     phase,
@@ -1416,6 +1463,7 @@ export default function GameDaNghich() {
     serverTimeOffset,
     dayPaused: !!(room?.dayPaused ?? sync.dayPaused),
     dayRemainingMs: room?.dayRemainingMs ?? sync.dayRemainingMs,
+    votingStunned: sync.coffeePrivateState.wolfVotingStunned,
   });
 
   const angel = useAngelRole({
@@ -1538,6 +1586,12 @@ export default function GameDaNghich() {
       }
     } else {
       let baseHintText = (currentRole ? ROLE_SKILL_HINTS[currentRole] : "") || "";
+      if (currentRole === "Người pha cà phê" && sync.coffeePrivateState.makerFoundBoth) {
+        baseHintText = "Bạn đã tìm đúng Linh Chi và Đông Trùng trong cùng một đêm";
+      }
+      if ((currentRole === "Linh Chi" || currentRole === "Đông Trùng") && sync.coffeePrivateState.herbFoundMaker) {
+        baseHintText = "Bạn đã tìm đúng Người pha cà phê và cộng thêm cho họ một lượt tìm kiếm";
+      }
       if (currentRole === "Trưởng làng") {
         const rules = (roomId === "mock-8" && mockSkillHintScenario !== "default")
           ? { villageChiefKnowsWolfBite: true, villageChiefCanFindProtector: true }
@@ -1593,9 +1647,27 @@ export default function GameDaNghich() {
         baseHintText = "Chọn một người mà bạn nghĩ họ cũng là dân làng nắm giữ nguyên tố";
       }
 
-      const isWolfTeamAction = currentRole === "Sói" || currentRole === "Sói con" || currentRole === "Sói Dại" || (currentRole === "Bán sói" && (mockIsBanSoiAligned || mockIsWildWolfConverted));
+      const isWolfTeamAction =
+        currentRole === "Sói" ||
+        currentRole === "Sói con" ||
+        currentRole === "Sói Dại" ||
+        (currentRole === "Bán sói" && (mockIsBanSoiAligned || mockIsWildWolfConverted)) ||
+        (currentRole === "Linh sói" && !!room?.daNghichState?.spiritWolfWolfAligned);
       if (isWolfTeamAction && mockWolfMaxTargets >= 2) {
         baseHintText = baseHintText.replace("chọn một người", 'Chọn <span class="breath-glow-2">2</span> người');
+      }
+      if (isWolfTeamAction && sync.coffeePrivateState.wolfToxinLevel > 0) {
+        const toxinText = sync.coffeePrivateState.wolfToxinLevel === 2
+          ? "Phe Sói hiện miễn nhiễm hoàn toàn với bình độc của Phù thủy"
+          : "Phe Sói đang giảm hấp thụ độc tố: bình độc sẽ phát tác chậm thêm một buổi sáng";
+        baseHintText += `<br><br>* ${toxinText}`;
+      }
+      if (isWolfTeamAction && sync.coffeePrivateState.wolfVotingStunned) {
+        const stunDuration = sync.coffeePrivateState.wolfStunPersistent
+          ? "Phe Sói đang bị choáng cho đến khi giết được Người pha cà phê"
+          : "Phe Sói đang bị choáng trong buổi sáng này";
+        const stunText = `${stunDuration}: ở lượt lên giàn bạn chỉ có thể chủ động bỏ phiếu trống; ở lượt sống/chết bạn chỉ có thể Vote Sống hoặc Phiếu trống và không thể Tương tác. Nếu không chọn, khi hết giờ phiếu mới được tính là phiếu trống`;
+        baseHintText += `<br><br>* ${stunText}`;
       }
 
       hintText = baseHintText;
@@ -2028,6 +2100,7 @@ export default function GameDaNghich() {
     if (merchant.onPlayerClick(playerId)) return;
     if (cursed.onPlayerClick(playerId)) return;
     if (chief.onPlayerClick(playerId)) return;
+    if (coffeeRoles.onPlayerClick(playerId)) return;
     if (songTrung.onPlayerClick(playerId)) return;
     if (songTrungRobbed.onPlayerClick(playerId)) return;
     if (seer.onPlayerClick(playerId)) return;
@@ -2121,14 +2194,17 @@ export default function GameDaNghich() {
         roleName: mockDuskTargetRole,
       }));
     }
-    const roles = room?.roles || [];
+    const roles = (room?.roles || []).filter((roleName) => (
+      room?.gameRules?.coffeeHerbCardMode !== "secondary"
+      || (roleName !== "Linh Chi" && roleName !== "Đông Trùng")
+    ));
     return roles.map((roleName, index) => ({
       id: String(index),
       img: nenLungAsset,
       height: 360,
       roleName
     }));
-  }, [isMockDusk, mockDuskCardCount, mockDuskTargetRole, room?.roles]);
+  }, [isMockDusk, mockDuskCardCount, mockDuskTargetRole, room?.gameRules?.coffeeHerbCardMode, room?.roles]);
 
   useEffect(() => {
     setCardFlippedToFront(shouldRevealMyRole);
@@ -2202,6 +2278,24 @@ export default function GameDaNghich() {
     }
     return null;
   }, [companionAssetCandidates, normalizeRoleName, rolePortraitByNameForGame]);
+  const introCompanionRoleSrc = useMemo(() => {
+    if (!normalizedRole || !INTRO_WHITEOUT_COMPANION_ROLES.has(normalizedRole)) return null;
+    for (const candidate of companionAssetCandidates) {
+      const src = rolePortraitByNameForGame[normalizeRoleName(`${candidate} W`)] ?? null;
+      if (src) return src;
+    }
+    return null;
+  }, [companionAssetCandidates, normalizeRoleName, normalizedRole, rolePortraitByNameForGame]);
+
+  useEffect(() => {
+    if (phase !== "dusk" || !role) return;
+    preloadImages([
+      getRolePortraitSrc(role, loveHybridBackgroundAsset, room?.gameMode),
+      companionRoleSrc,
+      introCompanionRoleSrc,
+    ]);
+  }, [companionRoleSrc, introCompanionRoleSrc, loveHybridBackgroundAsset, phase, role, room?.gameMode]);
+
   const showVillageChiefDyingFrame =
     phase === "night" &&
     !isHost &&
@@ -2442,6 +2536,7 @@ export default function GameDaNghich() {
                       <div className="float-up-container" style={{ opacity: 0, transform: "translateY(100vh)" }}>
                         <RoleCard3D
                           role={role}
+                          secondaryRole={sync.coffeePrivateState.secondaryRole}
                           revealed={cardFlippedToFront}
                           onToggleReveal={() => setCardFlippedToFront((p) => !p)}
                           lowPerformanceMode={lowPerformanceMode}
@@ -2584,6 +2679,7 @@ export default function GameDaNghich() {
                 cursedHighlightIsDanger={cursed.playerPositionsProps.cursedHighlightIsDanger}
                 verdictLivePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.secondaryIds}
                 verdictDiePlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.dangerIds}
+                verdictAbstainPlayerIds={autoTrialHighlightSuppressed ? undefined : autoTrialHighlight?.abstainIds}
                 showRoleBadges={!!roleBadgesForDisplay}
                 roleBadges={roleBadgesForDisplay}
                 loveState={sync.loveState}
@@ -2600,6 +2696,7 @@ export default function GameDaNghich() {
                     dayVote.playerPositionsProps.selectedOutlinePlayerId ||
                     songTrung.playerPositionsProps.selectedOutlinePlayerId ||
                     songTrungRobbed.playerPositionsProps.selectedOutlinePlayerId ||
+                    coffeeRoles.playerPositionsProps.selectedOutlinePlayerId ||
                     chief.playerPositionsProps.selectedOutlinePlayerId ||
                     guardian.playerPositionsProps.selectedOutlinePlayerId ||
                     protector.playerPositionsProps.selectedOutlinePlayerId ||
@@ -2615,7 +2712,10 @@ export default function GameDaNghich() {
                 }
                 selectedOutlinePlayerIds={
                   (phase !== "night" || isNightInfoVisible) ? (
-                    (wolf.playerPositionsProps.selectedOutlinePlayerIds || []).filter(
+                    [
+                      ...(wolf.playerPositionsProps.selectedOutlinePlayerIds || []),
+                      ...(coffeeRoles.playerPositionsProps.selectedOutlinePlayerIds || []),
+                    ].filter(
                       (id): id is string => !!id
                     )
                   ) : []
@@ -2673,10 +2773,15 @@ export default function GameDaNghich() {
             />
             <RoleCompanionOverlay
               companionRoleSrc={shouldRevealMyRole && !(sync.gameEnded && canViewLog) ? companionRoleSrc : null}
+              introCompanionRoleSrc={introCompanionRoleSrc}
               normalizedRole={normalizedRole}
               playerFrameHeightPx={playerFrameHeightPx}
               seerResults={isNightInfoVisible ? sync.seerResults : null}
               isRobbed={room?.gameRules?.songTrungVictimStaysAlive === true && !!(clientId && (sync.songTrungRobbedPlayerId === clientId || room?.daNghichState?.songTrungVictimId === clientId))}
+              introWhiteout={
+                roleCompanionIntroWhiteout ||
+                (isNightCardTransitionActive && (room?.nightCount ?? 0) === 1)
+              }
             />
             {shouldRevealMyRole && !sync.gameEnded && cursed.effect}
           </>
@@ -2686,6 +2791,7 @@ export default function GameDaNghich() {
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && seer.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && songTrung.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && songTrungRobbed.modal}
+      {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && coffeeRoles.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && chief.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && cursed.modal}
       {shouldRevealMyRole && !sync.gameEnded && canShowConfirmModals && merchant.modal}
@@ -3741,7 +3847,10 @@ export default function GameDaNghich() {
         revealed={cardFlippedToFront}
         backdropImage={ChieuBg}
         lowPerformanceMode={lowPerformanceMode}
-        onComplete={() => setDismissedNightTransitionEndsAt(nightTransitionEndsAt)}
+        onComplete={() => {
+          setDismissedNightTransitionEndsAt(nightTransitionEndsAt);
+          if ((room?.nightCount ?? 0) === 1) setRoleCompanionIntroWhiteout(true);
+        }}
       />
 
 

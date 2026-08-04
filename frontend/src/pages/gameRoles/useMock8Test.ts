@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { VILLAGER_BACKGROUND_ASSET, WOLF_BACKGROUND_ASSET } from "../../components/RoleCharacterPortrait";
+import { VILLAGER_BACKGROUND_ASSET, WOLF_BACKGROUND_ASSET } from "../../utils/rolePortraitAssets";
 
 export function useMock8Test({
   roomId,

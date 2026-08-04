@@ -6,6 +6,7 @@ import { emitGameLogToSocket, toPublicRoom } from "./serverEmitters.js";
 import { clearTrialState, getActiveDayVoters, getAlivePlayerIds, getTrialVoters } from "./roomState.js";
 import { ensureRoomGameRules, type EliminationCause, type Room } from "./serverTypes.js";
 import { markEliminatedWithLoveChain } from "./love.js";
+import { isCoffeeWolfVotingStunned } from "./coffeeRoles.js";
 import {
   getDayVoteWeight,
   getVillageChiefId,
@@ -105,11 +106,17 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
 
     room.trialVerdictTimer = setTimeout(() => {
-      finishTrialVerdict(roomId);
+      finishTrialVerdict(roomId, { defaultStunnedAbstain: true });
     }, durationSec * 1000 + 500);
+
+    const allVoted = voters.length > 0 && voters.every((id) => {
+      const vote = room.trialVotes?.[id];
+      return vote === "live" || vote === "abstain" || (vote === "die" && !isCoffeeWolfVotingStunned(room, id));
+    });
+    if (allVoted) setTimeout(() => finishTrialVerdict(roomId), 0);
   }
 
-  function finishTrialVerdict(roomId: string) {
+  function finishTrialVerdict(roomId: string, opts?: { defaultStunnedAbstain?: boolean }) {
     const room = ctx.rooms[roomId];
     if (!room) return;
     if (room.gameOver) return;
@@ -130,10 +137,19 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     const voters = getTrialVoters(room);
     const votes = room.trialVotes || {};
 
+    for (const voterId of voters) {
+      if (!isCoffeeWolfVotingStunned(room, voterId)) continue;
+      if (votes[voterId] === "live" || votes[voterId] === "abstain") continue;
+      votes[voterId] = opts?.defaultStunnedAbstain ? "abstain" : null;
+    }
+    room.trialVotes = votes;
+
     let liveVotes = 0;
     let dieVotes = 0;
+    let abstainVotes = 0;
     const liveVoterIds: string[] = [];
     const dieVoterIds: string[] = [];
+    const abstainVoterIds: string[] = [];
     for (const vid of voters) {
       const v = votes[vid];
       if (v === "live") {
@@ -142,6 +158,9 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
       } else if (v === "die") {
         dieVotes += getDayVoteWeight(room, vid);
         dieVoterIds.push(vid);
+      } else if (v === "abstain") {
+        abstainVotes += getDayVoteWeight(room, vid);
+        abstainVoterIds.push(vid);
       }
     }
 
@@ -158,20 +177,24 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
       targetId,
       liveVotes,
       dieVotes,
+      abstainVotes,
       liveVoterIds,
       dieVoterIds,
-      executed: votedToExecute,
+      abstainVoterIds,
+      executed,
     });
     appendGameEvent(room, {
       type: "TRIAL_VERDICT",
       phase: "day",
       targetIds: [targetId],
       metadata: {
-        executed: votedToExecute,
+        executed,
         liveVotes,
         dieVotes,
+        abstainVotes,
         liveVoterIds,
         dieVoterIds,
+        abstainVoterIds,
       },
     });
 
@@ -228,6 +251,10 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
       executed,
       liveVotes,
       dieVotes,
+      abstainVotes,
+      liveVoterIds,
+      dieVoterIds,
+      abstainVoterIds,
       chiefRevealed: chiefSurvivesByReveal,
     });
 
@@ -332,6 +359,7 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
     room.dayTimer = setTimeout(() => {
       finishDayVoting(roomId);
     }, durationSec * 1000 + 500);
+
   }
 
   function startDayDiscussion(roomId: string) {
@@ -390,6 +418,10 @@ export function createDayFlow(ctx: ServerContext, deps: DayFlowDeps) {
 
     const votes = room.dayVotes || {};
     const activeVoters = getActiveDayVoters(room);
+    for (const voterId of activeVoters) {
+      if (isCoffeeWolfVotingStunned(room, voterId)) votes[voterId] = null;
+    }
+    room.dayVotes = votes;
     const dayVoteBreakdown = buildDayVoteBreakdown(room, votes);
     const voteWasSkipped = dayVoteBreakdown.type === "day_vote" && dayVoteBreakdown.voteBreakdown.length === 0;
 

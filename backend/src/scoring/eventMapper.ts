@@ -683,6 +683,19 @@ export function mapEventToScores(
       break;
     }
 
+    case "COFFEE_MAKER_FOUND_BOTH": {
+      const pts = getPoints(config.actions.coffeeMakerFoundBoth);
+      actorIds.forEach((actorId) => {
+        results.push({
+          playerId: actorId,
+          category: "action",
+          points: pts,
+          reason: "Người pha cà phê tìm đúng cả Linh Chi và Đông Trùng trong cùng một đêm",
+        });
+      });
+      break;
+    }
+
     case "MANUAL_CLUTCH_BONUS": {
       actorIds.forEach((actorId) => {
         const pts = event.metadata?.points ?? 2;

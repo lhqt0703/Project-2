@@ -30,7 +30,33 @@ export interface Player {
   playerAvatar?: string;
 }
 
-export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | "Kẻ bị nguyền" | "Tay Buôn" | "Bác sĩ ung thư" | "Nam Thư" | "Đàn bà" | "Suy Thận" | ElementalRole | "Độc thủ" | "Gián điệp" | "Nhà sư" | "Thầy bói" | "Ác Quỷ" | "Thợ giặt" | "Thủ thư" | "Điều tra viên" | "Nuôi quạ" | "Diệt quỷ" | "Trưởng làng" | "Song Trùng";
+export type CoffeeHerbRole = "Linh Chi" | "Đông Trùng";
+
+export type CoffeeDelayedPoison = {
+  targetId: string;
+  sourceActorId?: string;
+  poisonedNight: number;
+  dueNight: number;
+};
+
+export interface CoffeeRoleState {
+  secondaryRolesByPlayerId: Record<string, CoffeeHerbRole>;
+  makerSearchByPlayerId: Record<string, { night: number; targetIds: [string, string] }>;
+  makerUseCountByPlayerId: Record<string, number>;
+  makerBonusUsesByPlayerId: Record<string, number>;
+  makerFoundBothPlayerIds: string[];
+  makerKilledByWolfPlayerIds: string[];
+  herbSearchByPlayerId: Record<string, { night: number; targetId: string }>;
+  herbBonusGrantedPlayerIds: string[];
+  preFoundBittenHerbs: CoffeeHerbRole[];
+  postFoundBittenHerbs: CoffeeHerbRole[];
+  wolfToxinLevel: 0 | 1 | 2;
+  delayedPoisons: CoffeeDelayedPoison[];
+  wolfStunnedNight: number | null;
+  wolfStunPersistent: boolean;
+}
+
+export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | "Kẻ bị nguyền" | "Tay Buôn" | "Bác sĩ ung thư" | "Nam Thư" | "Đàn bà" | "Suy Thận" | ElementalRole | "Độc thủ" | "Gián điệp" | "Nhà sư" | "Thầy bói" | "Ác Quỷ" | "Thợ giặt" | "Thủ thư" | "Điều tra viên" | "Nuôi quạ" | "Diệt quỷ" | "Trưởng làng" | "Song Trùng" | "Người pha cà phê" | CoffeeHerbRole;
 
 export type NightActionOrderRole = NightActionRole | typeof ELEMENTAL_GROUP_ROLE;
 
@@ -59,6 +85,8 @@ export interface RoomGameRules {
   wolfBonusBiteSmoothTied?: boolean | undefined;
   villageChiefCanFindProtector?: boolean | undefined;
   songTrungMaxUses?: number | undefined;
+  coffeeHerbCardMode?: "primary" | "secondary" | undefined;
+  coffeeMakerMaxUses?: number | undefined;
   songTrungVictimStaysAlive?: boolean | undefined;
   songTrungReturnRoleOnlyIfVotedOut?: boolean | undefined;
   songTrungReturnRoleRequiresCupidVote?: boolean | undefined;
@@ -103,7 +131,27 @@ export interface SoiMuState {
   hasMerchant?: boolean;
   namThuTargetId?: string | null;
   suyThanTargetId?: string | null;
-}export interface DaNghichState {
+}
+
+export interface CoTyPhuTransaction {
+  id: string;
+  fromPlayerId: string;
+  toPlayerId: string;
+  baseAmount: number;
+  bonusPercent: number;
+  totalAmount: number;
+  createdAt: number;
+}
+
+export interface CoTyPhuState {
+  startingMoney: number;
+  balances: Record<string, number>;
+  bankruptPlayerIds: string[];
+  transactions: CoTyPhuTransaction[];
+  winnerPlayerIds: string[];
+}
+
+export interface DaNghichState {
   banSoiWolfAligned?: boolean;
   banSoiWolfAlignedPending?: boolean;
   spiritWolfWolfAligned?: boolean;
@@ -139,10 +187,11 @@ export interface Room {
   hasPlayedMatch?: boolean;
   players: Player[];
   hostId: string;
-  gameMode?: "da_nghich" | "diet_quy" | "soi_mu";
+  gameMode?: "da_nghich" | "diet_quy" | "soi_mu" | "co_ty_phu";
   dietQuyState?: DietQuyState;
   soiMuState?: SoiMuState;
   daNghichState?: DaNghichState;
+  coTyPhuState?: CoTyPhuState;
   nightTurnPlayerId?: string | null;
   warnedPlayerIds?: string[];
   hidePlayerRoleText?: boolean;
@@ -193,7 +242,7 @@ export interface Room {
   trialSelectedInteractorIds?: string[];
   trialInteractionSelectionLimit?: number;
   trialInteractionQueuedIds?: string[];
-  trialVotes?: Record<string, "live" | "die" | null>;
+  trialVotes?: Record<string, "live" | "die" | "abstain" | null>;
   protectedTonight?: string | null;
   protectedTonightBy?: string | null;
   lastProtected?: string | null;
@@ -295,6 +344,7 @@ export interface Room {
   songTrungRobbedOriginalRole?: string | null;
   songTrungFoundByVictim?: boolean;
   songTrungVictimSearchUsedTonight?: Record<string, string | null>;
+  coffeeRoleState?: CoffeeRoleState;
 }
 
 const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
@@ -308,7 +358,7 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 20,
   wolfNightActionDurationSec: 20,
-  nightActionOrder: ["Thần tình yêu", "Song Trùng", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"],
+  nightActionOrder: ["Thần tình yêu", "Song Trùng", "Người pha cà phê", "Linh Chi", "Đông Trùng", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"],
   banSoiBecomeWolfEvenIfHealed: false,
   loveCanChoosePartnerFirstTwoNights: false,
   villageChiefKnowsWolfBite: true,
@@ -322,6 +372,8 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   wolfBonusBiteSmoothTied: true,
   villageChiefCanFindProtector: true,
   songTrungMaxUses: 0,
+  coffeeHerbCardMode: "primary",
+  coffeeMakerMaxUses: 3,
   songTrungVictimStaysAlive: false,
   songTrungReturnRoleOnlyIfVotedOut: false,
   songTrungReturnRoleRequiresCupidVote: false,
@@ -487,6 +539,10 @@ export function buildRoomGameRules(input?: Partial<RoomGameRules> | null, gameMo
     wolfBonusBiteSmoothTied: merged.wolfBonusBiteSmoothTied ?? true,
     forceWolfBiteFirstNight: merged.twoHeartsFirstTwoNights && merged.forceWolfBiteFirstNight,
     songTrungMaxUses: typeof input?.songTrungMaxUses === "number" ? Math.max(0, input.songTrungMaxUses) : DEFAULT_ROOM_GAME_RULES.songTrungMaxUses,
+    coffeeHerbCardMode: input?.coffeeHerbCardMode === "secondary" ? "secondary" : "primary",
+    coffeeMakerMaxUses: typeof input?.coffeeMakerMaxUses === "number"
+      ? Math.max(0, Math.floor(input.coffeeMakerMaxUses))
+      : DEFAULT_ROOM_GAME_RULES.coffeeMakerMaxUses,
   };
 }
 
@@ -523,7 +579,7 @@ export type GameLogEntry =
   | { type: "wolf_result"; phase: GameLogEntryPhase; targetIds: string[]; selectedByByTarget?: Record<string, string[]>; villageChiefDelayedTargetIds?: string[] }
   | { type: "day_result"; phase: GameLogEntryPhase; targetId: string | null; tie?: boolean }
   | { type: "trial_started"; phase: GameLogEntryPhase; targetId: string }
-  | { type: "trial_verdict"; phase: GameLogEntryPhase; targetId: string; liveVotes: number; dieVotes: number; liveVoterIds?: string[]; dieVoterIds?: string[]; executed: boolean }
+  | { type: "trial_verdict"; phase: GameLogEntryPhase; targetId: string; liveVotes: number; dieVotes: number; abstainVotes?: number; liveVoterIds?: string[]; dieVoterIds?: string[]; abstainVoterIds?: string[]; executed: boolean }
   | { type: "bonus_bite"; phase: GameLogEntryPhase }
   | { type: "night_action_extra_time"; phase: GameLogEntryPhase; targetId: string; roleName: string; extraSeconds: number }
   | { type: "guardian_protect"; phase: GameLogEntryPhase; actorId: string; targetId: string }
@@ -573,6 +629,8 @@ export type GameLogEntry =
   | { type: "soi_mu_wolf_bite"; phase: GameLogEntryPhase; actorId: string; targetId: string; wolfLabel: string }
   | { type: "soi_mu_wolf_suicide"; phase: GameLogEntryPhase; actorId: string; wolfLabel: string }
   | { type: "song_trung_rob"; phase: GameLogEntryPhase; actorId: string; targetId: string; victimRole: string; cupidId: string; staysAlive: boolean }
+  | { type: "coffee_maker_search"; phase: GameLogEntryPhase; actorId: string; targetIds: [string, string] }
+  | { type: "coffee_herb_search"; phase: GameLogEntryPhase; actorId: string; targetId: string; herbRole: CoffeeHerbRole }
   | { type: "soi_mu_wolf_inactive_choose"; phase: GameLogEntryPhase; actorId: string; targetId: string; wolfLabel: string; activeWolfLabel: string }
   | { type: "soi_mu_ariana_trade"; phase: GameLogEntryPhase; actorId: string; targetId: string; actorThumb: "up" | "down"; targetThumb: "up" | "down" | null };
 
@@ -583,10 +641,11 @@ export type GameLogNight = {
 };
 
 export type RolesRevealPayload = {
-   roomId: string;
-   rolesByPlayerId: Record<string, string>;
-   rolesBeforeConversion?: Record<string, string>;
- };
+  roomId: string;
+  rolesByPlayerId: Record<string, string>;
+  rolesBeforeConversion?: Record<string, string>;
+  secondaryRolesByPlayerId?: Record<string, CoffeeHerbRole>;
+};
 
 export interface GameEvent {
   id: string;

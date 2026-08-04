@@ -56,6 +56,19 @@ export type WitchPotionsPayload = { healUsed: boolean; poisonUsed: boolean };
 
 export type HunterTargetUpdatedPayload = { targetId: string | null };
 
+export type CoffeePrivateStatePayload = {
+  secondaryRole: "Linh Chi" | "Đông Trùng" | null;
+  makerTargetsTonight: [string, string] | null;
+  makerUsesUsed: number;
+  makerMaxUses: number;
+  makerFoundBoth: boolean;
+  herbTargetTonight: string | null;
+  herbFoundMaker: boolean;
+  wolfToxinLevel: 0 | 1 | 2;
+  wolfVotingStunned: boolean;
+  wolfStunPersistent: boolean;
+};
+
 export type HunterShotPayload = { hunterId: string; targetId: string };
 export type LoveArrowShotPayload = { cupidId: string; targetId: string; timestamp?: number };
 export type LoveStatePayload = {
@@ -95,12 +108,17 @@ export type TrialVerdictStartedPayload = {
   voters: string[];
   deadline: number | null;
 };
-export type TrialVotesUpdatedPayload = Record<string, "live" | "die" | null>;
+export type TrialVote = "live" | "die" | "abstain";
+export type TrialVotesUpdatedPayload = Record<string, TrialVote | null>;
 export type TrialVerdictFinishedPayload = {
   targetId: string;
   executed: boolean;
   liveVotes: number;
   dieVotes: number;
+  abstainVotes: number;
+  liveVoterIds?: string[];
+  dieVoterIds?: string[];
+  abstainVoterIds?: string[];
   chiefRevealed?: boolean;
 };
 
@@ -151,7 +169,7 @@ export type GameLogEntry =
   | { type: "wolf_result"; phase: GameLogEntryPhase; targetIds: string[]; selectedByByTarget?: Record<string, string[]>; villageChiefDelayedTargetIds?: string[] }
   | { type: "day_result"; phase: GameLogEntryPhase; targetId: string | null; tie?: boolean }
   | { type: "trial_started"; phase: GameLogEntryPhase; targetId: string }
-  | { type: "trial_verdict"; phase: GameLogEntryPhase; targetId: string; liveVotes: number; dieVotes: number; liveVoterIds?: string[]; dieVoterIds?: string[]; executed: boolean }
+  | { type: "trial_verdict"; phase: GameLogEntryPhase; targetId: string; liveVotes: number; dieVotes: number; abstainVotes?: number; liveVoterIds?: string[]; dieVoterIds?: string[]; abstainVoterIds?: string[]; executed: boolean }
   | { type: "bonus_bite"; phase: GameLogEntryPhase }
   | { type: "night_action_extra_time"; phase: GameLogEntryPhase; targetId: string; roleName: string; extraSeconds: number }
   | { type: "guardian_protect"; phase: GameLogEntryPhase; actorId: string; targetId: string }
@@ -200,7 +218,9 @@ export type GameLogEntry =
   | { type: "soi_mu_wolf_suicide"; phase: GameLogEntryPhase; actorId: string; wolfLabel: string }
   | { type: "soi_mu_wolf_inactive_choose"; phase: GameLogEntryPhase; actorId: string; targetId: string; wolfLabel: string; activeWolfLabel: string }
   | { type: "soi_mu_ariana_trade"; phase: GameLogEntryPhase; actorId: string; targetId: string; actorThumb: "up" | "down"; targetThumb: "up" | "down" | null }
-  | { type: "song_trung_rob"; phase: GameLogEntryPhase; actorId: string; targetId: string; victimRole: string; cupidId: string; staysAlive: boolean };
+  | { type: "song_trung_rob"; phase: GameLogEntryPhase; actorId: string; targetId: string; victimRole: string; cupidId: string; staysAlive: boolean }
+  | { type: "coffee_maker_search"; phase: GameLogEntryPhase; actorId: string; targetIds: [string, string] }
+  | { type: "coffee_herb_search"; phase: GameLogEntryPhase; actorId: string; targetId: string; herbRole: "Linh Chi" | "Đông Trùng" };
 
 export type GameLogNight = {
   night: number;
@@ -210,7 +230,12 @@ export type GameLogNight = {
 
 export type GameLogUpdatedPayload = { roomId: string; nights: GameLogNight[] };
 
-export type RolesRevealUpdatedPayload = { roomId: string; rolesByPlayerId: Record<string, string>; rolesBeforeConversion?: Record<string, string> };
+export type RolesRevealUpdatedPayload = {
+  roomId: string;
+  rolesByPlayerId: Record<string, string>;
+  rolesBeforeConversion?: Record<string, string>;
+  secondaryRolesByPlayerId?: Record<string, "Linh Chi" | "Đông Trùng">;
+};
 export type PublicRolesRevealUpdatedPayload = { roomId: string; rolesByPlayerId: Record<string, string> };
 
 export type SpiritWolfDecisionNeededPayload = { targetId: string; deadline?: number | null };

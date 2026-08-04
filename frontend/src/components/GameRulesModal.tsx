@@ -16,10 +16,14 @@ const NIGHT_ACTION_ROLE_LABELS: Record<NightActionOrderRole, string> = {
   "Tay Buôn": "Tay Buôn",
   "Trưởng làng": "Trưởng làng",
   "Song Trùng": "Song Trùng",
+  "Người pha cà phê": "Người pha cà phê",
+  "Linh Chi": "Linh Chi",
+  "Đông Trùng": "Đông Trùng",
 };
 
 const NIGHT_ACTION_DURATION_STEP_SEC = 10;
 const NIGHT_ACTION_DURATION_MAX_SEC = 60;
+const COFFEE_HERB_ROLES = new Set<NightActionOrderRole>(["Linh Chi", "Đông Trùng"]);
 
 function normalizeNightActionOrder(order: NightActionOrderRole[], availableRoles: NightActionOrderRole[]) {
   const availableSet = new Set(availableRoles);
@@ -218,9 +222,13 @@ export default function GameRulesModal({
   const [baseRules, setBaseRules] = useState<RoomGameRules>(initialRules);
   const [draggedRole, setDraggedRole] = useState<NightActionOrderRole | null>(null);
   const [dragOverRole, setDragOverRole] = useState<NightActionOrderRole | null>(null);
-  const selectableNightActionRoles = availableNightActionRoles?.length
-    ? availableNightActionRoles
-    : DEFAULT_ROOM_GAME_RULES.nightActionOrder;
+  const baseSelectableNightActionRoles = availableNightActionRoles ?? DEFAULT_ROOM_GAME_RULES.nightActionOrder;
+  const selectableNightActionRoles = useMemo(
+    () => baseSelectableNightActionRoles.filter((role) => (
+      draftRules.coffeeHerbCardMode !== "secondary" || !COFFEE_HERB_ROLES.has(role)
+    )),
+    [baseSelectableNightActionRoles, draftRules.coffeeHerbCardMode]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -234,7 +242,7 @@ export default function GameRulesModal({
       ...initialRules,
       nightActionOrder: normalizeNightActionOrder(
         initialRules.nightActionOrder || DEFAULT_ROOM_GAME_RULES.nightActionOrder,
-        selectableNightActionRoles
+        baseSelectableNightActionRoles
       ),
       trialInteractionSelectionLimit: clampSelectionLimit(initialRules.trialInteractionSelectionLimit),
       merchantWinRequiredSuccessfulTrades: clampMerchantWinRequiredSuccessfulTrades(
@@ -249,7 +257,7 @@ export default function GameRulesModal({
     };
     setDraftRules(merged);
     setBaseRules(merged);
-  }, [initialRules, open, selectableNightActionRoles, isDietQuy, isSoiMu]);
+  }, [initialRules, open, baseSelectableNightActionRoles, isDietQuy, isSoiMu]);
 
   const includedElementalSummary = useMemo(() => {
     const included = ELEMENTAL_ROLE_ORDER.filter((role) => includedElementalRoles.includes(role));
@@ -889,7 +897,7 @@ export default function GameRulesModal({
                   </div>
 
                   <div style={{ display: "grid", gap: 10, width: "100%" }}>
-                    {draftRules.nightActionOrder.map((role, index) => {
+                    {normalizeNightActionOrder(draftRules.nightActionOrder, selectableNightActionRoles).map((role, index) => {
                       const pinned = role === "Thần tình yêu";
                       return (
                         <div
@@ -1102,6 +1110,39 @@ export default function GameRulesModal({
                   value={draftRules.trialInteractionSelectionLimit}
                   disabled={readOnly}
                   onChange={(val) => updateRule("trialInteractionSelectionLimit", val)}
+                  style={{ width: 96 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Phát Linh Chi và Đông Trùng như thẻ phụ</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi bật, hai thẻ được phát kèm cho hai người có vai trò chính thuộc phe dân và không chiếm suất vai trò chính.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.coffeeHerbCardMode === "secondary"}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("coffeeHerbCardMode", e.target.checked ? "secondary" : "primary")}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Số lượt tìm kiếm của Người pha cà phê</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Giới hạn lượt cơ bản cho cả ván (0 để không giới hạn). Linh Chi hoặc Đông Trùng tìm đúng sẽ cộng thêm một lượt.
+                  </div>
+                </div>
+                <RuleNumericInput
+                  min={0}
+                  max={20}
+                  value={draftRules.coffeeMakerMaxUses ?? 3}
+                  disabled={readOnly}
+                  onChange={(val) => updateRule("coffeeMakerMaxUses", val)}
                   style={{ width: 96 }}
                 />
               </label>

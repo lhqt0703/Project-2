@@ -7,7 +7,7 @@ import GameLogPanel from "../components/GameLogPanel";
 import ConfirmModal from "../components/ConfirmModal";
 import HostDisconnectButton from "../components/HostDisconnectButton";
 import RoleCharacterPortrait from "../components/RoleCharacterPortrait";
-import type { GamePhase } from "./gameRoles/socketEvents";
+import type { GamePhase, TrialVote } from "./gameRoles/socketEvents";
 import type { NightActionRole } from "../context/RoomContext";
 import { ELEMENTAL_ROLE_SET } from "../constants/elemental";
 import { useGameSocketSync } from "./gameRoles/useGameSocketSync";
@@ -38,6 +38,7 @@ import { getVillagerAndWolfRoles } from "../utils/gameEndHelper";
 import { GameStickerBoard } from "../components/GameStickerBoard";
 import { StickerTrashZone } from "../components/StickerTrashZone";
 import { useGameSocialInteractions } from "./gameRoles/useGameSocialInteractions";
+import { MOCK_8_GAME_LOG_NIGHTS, MOCK_8_LOG_PLAYER_NAMES } from "../constants/mock8GameLogs";
 
 
 const DIET_QUY_DIET_QUY_ROLE_SKILL_HINTS: Record<string, string> = {
@@ -109,8 +110,8 @@ export default function GameDietQuy() {
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const roomId = query.get("roomId");
   const isMockDusk = roomId === "mock-dusk";
-  const [mockDuskCardCount, setMockDuskCardCount] = useState<number>(12);
-  const [mockDuskTargetRole, setMockDuskTargetRole] = useState<string>("Sói Dại");
+  const [mockDuskCardCount] = useState<number>(12);
+  const [mockDuskTargetRole] = useState<string>("Sói Dại");
   const [roleOverride, setRoleOverride] = useState<string | null>("Thần tình yêu");
   const role = (roomId === "mock-8" || isMockDusk) ? (roleOverride || mockDuskTargetRole) : contextRole;
   const debugAnim = query.get("debugAnim") === "1";
@@ -427,7 +428,7 @@ export default function GameDietQuy() {
   const [autoTrialHighlightSuppressed, setAutoTrialHighlightSuppressed] = useState(false);
   const lastDayDeadlineRef = useRef<number | null>(null);
   const lastGameLogCountRef = useRef<number>(0);
-  const lastTrialVotesRef = useRef<Record<string, "live" | "die" | null> | null>(null);
+  const lastTrialVotesRef = useRef<Record<string, TrialVote | null> | null>(null);
   const lastTrialVerdictHighlightSeqRef = useRef<number>(0);
   const hasRestoredVerdictHighlightRef = useRef(false);
 
@@ -487,7 +488,7 @@ export default function GameDietQuy() {
     hasRestoredVerdictHighlightRef.current = true;
     const targetId = sync.trialVerdictFinished.targetId;
     if (!targetId) return;
-    const votes = (lastTrialVotesRef.current || {}) as Record<string, "live" | "die" | null>;
+    const votes = lastTrialVotesRef.current || {};
     let liveVoterIds = Object.entries(votes)
       .filter(([, vote]) => vote === "live")
       .map(([id]) => id);
@@ -992,9 +993,9 @@ export default function GameDietQuy() {
 
   const logPanel = canViewLog ? (
     <GameLogPanel
-      nights={sync.gameLogNights || []}
+      nights={roomId === "mock-8" ? MOCK_8_GAME_LOG_NIGHTS : sync.gameLogNights || []}
       rolesByPlayerId={sync.revealedRolesByPlayerId || {}}
-      playerNamesById={playerNamesById}
+      playerNamesById={roomId === "mock-8" ? { ...playerNamesById, ...MOCK_8_LOG_PLAYER_NAMES } : playerNamesById}
       playerRealNamesById={playerRealNamesById}
       viewMode={viewMode}
       onViewModeChange={handleViewModeChange}
@@ -1010,6 +1011,7 @@ export default function GameDietQuy() {
       gameRules={room?.gameRules}
       gameEnded={!!sync.gameEnded}
       isReplay={room?.isReplay}
+      showAllEntries={roomId === "mock-8"}
     />
   ) : null;
 

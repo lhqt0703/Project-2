@@ -6,8 +6,11 @@ import { ELEMENTAL_ROLE_ORDER } from "../constants/elemental";
 import { getAvatarUrlByFileName, MASKED_AVATAR_MAP } from "../components/PlayerPositions";
 import nenLungAsset from "../assets/nền lưng.avif";
 import ArrowLeft from "../assets/arrow-left.svg";
+import coffeeMakerCardAsset from "../assets/C Người pha cà phê.avif";
+import linhChiCardAsset from "../assets/C Linh Chi.avif";
+import dongTrungCardAsset from "../assets/C Đông Trùng.avif";
 
-const NON_VILLAGER_ROLES = ["Dân làng", "Sói", "Bán sói", "Sói con", "Sói Dại", "Linh sói", "Kẻ bị nguyền", "Tay Buôn", "Thiên Sứ", "Trưởng làng", "Hộ nhân", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Thần tình yêu", "Song Trùng"] as const;
+const NON_VILLAGER_ROLES = ["Dân làng", "Sói", "Bán sói", "Sói con", "Sói Dại", "Linh sói", "Kẻ bị nguyền", "Tay Buôn", "Thiên Sứ", "Trưởng làng", "Hộ nhân", "Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Thần tình yêu", "Song Trùng", "Người pha cà phê", "Linh Chi", "Đông Trùng"] as const;
 type NonVillagerRole = (typeof NON_VILLAGER_ROLES)[number];
 
 const SOI_MU_ROLES = ["Dân làng", "Sói", "Bảo vệ", "Phù thủy", "Tiên tri", "Trưởng làng", "Tay Buôn", "Thợ săn", "Bác sĩ ung thư", "Nam Thư", "Đàn bà", "Suy Thận"] as const;
@@ -23,6 +26,12 @@ export const CARD_IMAGES = import.meta.glob<string>("../assets/F *.avif", {
   import: "default",
 });
 
+const COFFEE_ROLE_CARD_IMAGES: Record<string, string> = {
+  "người pha cà phê": coffeeMakerCardAsset,
+  "linh chi": linhChiCardAsset,
+  "đông trùng": dongTrungCardAsset,
+};
+
 export function getCardUrlByRoleName(roleName: string, gameMode?: string): string | null {
   if (!roleName) return null;
   let cleanName = roleName.trim();
@@ -37,7 +46,7 @@ export function getCardUrlByRoleName(roleName: string, gameMode?: string): strin
     const targetAvif = `/f ${cleanName.normalize("NFC").toLowerCase()}.avif`;
     return lowerPath.endsWith(targetAvif);
   });
-  return entry ? entry[1] : null;
+  return entry ? entry[1] : COFFEE_ROLE_CARD_IMAGES[cleanName.normalize("NFC").toLowerCase()] || null;
 }
 
 const getGlowColor = (role: string) => {
@@ -50,6 +59,7 @@ const getGlowColor = (role: string) => {
   if (ELEMENTAL_ROLE_ORDER.includes(role as any)) return "#ED6E7B";
   if (["Tiên tri", "Thợ săn"].includes(role)) return "#60a5fa";
   if (["Bảo vệ", "Phù thủy", "Hộ nhân", "Trưởng làng"].includes(role)) return "#34d399";
+  if (["Người pha cà phê", "Linh Chi", "Đông Trùng"].includes(role)) return "#34d399";
   if (["Kẻ bị nguyền", "Thiên Sứ", "Thần tình yêu", "Tay Buôn", "Song Trùng"].includes(role)) return "#a855f7";
   return "#ff9800"; // fallback gold glow
 };
@@ -125,8 +135,8 @@ const MiniToken = ({ playerId, players }: { playerId: string; players: PlayerInf
         width: 24,
         height: 24,
         borderRadius: "50%",
-        backgroundImage: maskedAvatarUrl 
-          ? `url(${nenLungAsset})` 
+        backgroundImage: maskedAvatarUrl
+          ? `url(${nenLungAsset})`
           : (avatarUrl ? `url(${avatarUrl})` : undefined),
         backgroundPosition: "center",
         backgroundSize: "cover",
@@ -194,6 +204,8 @@ export default function RoleSelect() {
     phase?: string;
     gameOver?: boolean;
     gameMode?: "da_nghich" | "diet_quy" | "soi_mu";
+    gameRules?: { coffeeHerbCardMode?: "primary" | "secondary" };
+    pendingGameRules?: { coffeeHerbCardMode?: "primary" | "secondary" };
     roleVotes?: Record<string, string[]>;
   } | null>(null);
   const [pendingRolesApply, setPendingRolesApply] = useState<string[] | null>(null);
@@ -202,6 +214,9 @@ export default function RoleSelect() {
 
   const amIHost = roomSnapshot?.hostId === clientId;
   const isDietQuy = roomSnapshot?.gameMode === "diet_quy";
+  const coffeeHerbCardMode = roomSnapshot?.pendingGameRules?.coffeeHerbCardMode
+    ?? roomSnapshot?.gameRules?.coffeeHerbCardMode
+    ?? "primary";
 
   const playerCount = useMemo(() => {
     if (!roomSnapshot) return 0;
@@ -212,7 +227,10 @@ export default function RoleSelect() {
     () => Object.values(selectedElementalRoles).filter(Boolean).length,
     [selectedElementalRoles]
   );
-  const totalSelected = isDietQuy ? selectedRoles.length : selectedRoles.length + elementalCount;
+  const secondaryHerbCount = coffeeHerbCardMode === "secondary"
+    ? selectedRoles.filter((role) => role === "Linh Chi" || role === "Đông Trùng").length
+    : 0;
+  const totalSelected = isDietQuy ? selectedRoles.length : selectedRoles.length + elementalCount - secondaryHerbCount;
 
   useEffect(() => {
     if (!roomId) return;
@@ -224,6 +242,8 @@ export default function RoleSelect() {
       players: PlayerInfo[];
       roles?: string[];
       gameMode?: "da_nghich" | "diet_quy" | "soi_mu";
+      gameRules?: { coffeeHerbCardMode?: "primary" | "secondary" };
+      pendingGameRules?: { coffeeHerbCardMode?: "primary" | "secondary" };
       roleVotes?: Record<string, string[]>;
     }
 
@@ -318,10 +338,15 @@ export default function RoleSelect() {
     const currentRoles = buildFinalRoles();
     const gameInProgress = !!roomSnapshot?.phase && !roomSnapshot.gameOver;
 
-    if (currentRoles.length < playerCount) {
+    const primaryRoleCount = currentRoles.filter((role) => (
+      coffeeHerbCardMode !== "secondary"
+      || (role !== "Linh Chi" && role !== "Đông Trùng")
+    )).length;
+
+    if (primaryRoleCount < playerCount) {
       setInfoModal({
         title: "Thiếu vai trò",
-        message: `Bạn đang thiếu ${playerCount - currentRoles.length} vai trò. Hãy chọn thêm vai trò trước khi xác nhận.`,
+        message: `Bạn đang thiếu ${playerCount - primaryRoleCount} vai trò chính. Hãy chọn thêm vai trò trước khi xác nhận.`,
       });
       return;
     }
@@ -418,17 +443,17 @@ export default function RoleSelect() {
         )}
 
         {amIHost && isCountable && isSelected && (
-          <div 
-            style={{ 
-              display: "flex", 
-              gap: 8, 
-              alignItems: "center", 
-              justifyContent: "center", 
-              position: "absolute", 
-              bottom: 8, 
-              left: 8, 
-              right: 8, 
-              zIndex: 4 
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              justifyContent: "center",
+              position: "absolute",
+              bottom: 8,
+              left: 8,
+              right: 8,
+              zIndex: 4
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -436,11 +461,11 @@ export default function RoleSelect() {
               onClick={() => {
                 setSelectedRoles((prev) => removeOne(prev, role));
               }}
-              style={{ 
-                padding: "2px 6px", 
-                fontSize: 12, 
-                background: "rgba(0,0,0,0.7)", 
-                color: "#fff", 
+              style={{
+                padding: "2px 6px",
+                fontSize: 12,
+                background: "rgba(0,0,0,0.7)",
+                color: "#fff",
                 border: "1px solid rgba(255,255,255,0.3)",
                 borderRadius: "4px",
                 cursor: "pointer"
@@ -453,11 +478,11 @@ export default function RoleSelect() {
               onClick={() => {
                 setSelectedRoles((prev) => [...prev, role]);
               }}
-              style={{ 
-                padding: "2px 6px", 
-                fontSize: 12, 
-                background: "rgba(0,0,0,0.7)", 
-                color: "#fff", 
+              style={{
+                padding: "2px 6px",
+                fontSize: 12,
+                background: "rgba(0,0,0,0.7)",
+                color: "#fff",
                 border: "1px solid rgba(255,255,255,0.3)",
                 borderRadius: "4px",
                 cursor: "pointer"
@@ -531,7 +556,7 @@ export default function RoleSelect() {
         </div>
       ) : (
         <div className="roleselect-grid">
-          {(["Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Trưởng làng", "Hộ nhân", "Kẻ bị nguyền", "Thần tình yêu"] as const).map((role) => renderRoleCard(role))}
+          {(["Tiên tri", "Bảo vệ", "Phù thủy", "Thợ săn", "Trưởng làng", "Hộ nhân", "Kẻ bị nguyền", "Thần tình yêu", "Người pha cà phê", "Linh Chi", "Đông Trùng"] as const).map((role) => renderRoleCard(role))}
           {(["Bán sói", "Linh sói", "Tay Buôn", "Thiên Sứ", "Song Trùng"] as const).map((role) => renderRoleCard(role))}
           {(["Sói", "Sói con", "Sói Dại"] as const).map((role) => renderRoleCard(role))}
           {ELEMENTAL_ROLE_ORDER.map((role) => renderRoleCard(role))}

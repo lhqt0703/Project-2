@@ -43,6 +43,7 @@ import type {
   AngelReviveStatePayload,
   MerchantCheeseMarksUpdatedPayload,
   MerchantPrivateStateUpdatedPayload,
+  CoffeePrivateStatePayload,
 } from "./socketEvents";
 import { ELEMENTAL_BUFF_LABELS, ELEMENTAL_BUFFS } from "../../constants/elemental";
 import { EMPTY_MERCHANT_PRIVATE_STATE } from "../../constants/merchant";
@@ -76,6 +77,19 @@ const EMPTY_ANGEL_REVIVE_STATE: AngelReviveStatePayload = {
   reviveStage: "none",
 };
 
+const EMPTY_COFFEE_PRIVATE_STATE: CoffeePrivateStatePayload = {
+  secondaryRole: null,
+  makerTargetsTonight: null,
+  makerUsesUsed: 0,
+  makerMaxUses: 3,
+  makerFoundBoth: false,
+  herbTargetTonight: null,
+  herbFoundMaker: false,
+  wolfToxinLevel: 0,
+  wolfVotingStunned: false,
+  wolfStunPersistent: false,
+};
+
 export function useGameSocketSync({
   roomId,
   setRoom,
@@ -103,6 +117,7 @@ export function useGameSocketSync({
   const [merchantPrivateState, setMerchantPrivateState] = useState(EMPTY_MERCHANT_PRIVATE_STATE);
   const [merchantCheeseMarkPlayerIds, setMerchantCheeseMarkPlayerIds] = useState<string[]>([]);
   const [angelReviveState, setAngelReviveState] = useState<AngelReviveStatePayload>(EMPTY_ANGEL_REVIVE_STATE);
+  const [coffeePrivateState, setCoffeePrivateState] = useState<CoffeePrivateStatePayload>(EMPTY_COFFEE_PRIVATE_STATE);
 
   const [chiefFoundProtectorId, setChiefFoundProtectorId] = useState<string | null>(null);
   const [isChiefBitten, setIsChiefBitten] = useState(false);
@@ -188,6 +203,7 @@ export function useGameSocketSync({
   const [gameLogNights, setGameLogNights] = useState<GameLogNight[]>([]);
   const [revealedRolesByPlayerId, setRevealedRolesByPlayerId] = useState<Record<string, string>>({});
   const [rolesBeforeConversion, setRolesBeforeConversion] = useState<Record<string, string>>({});
+  const [revealedSecondaryRolesByPlayerId, setRevealedSecondaryRolesByPlayerId] = useState<Record<string, "Linh Chi" | "Đông Trùng">>({});
 
   useEffect(() => {
     const applyPhaseTransition = (newPhase: GamePhase) => {
@@ -195,6 +211,16 @@ export function useGameSocketSync({
       setSeerResults([]);
       setCursedResult(null);
       setChiefUsedTonight(false);
+      if (newPhase === "dusk") {
+        setRolesBeforeConversion({});
+        setRevealedRolesByPlayerId({});
+        setRevealedSecondaryRolesByPlayerId({});
+        setRoom((prev: any) => (prev ? {
+          ...prev,
+          rolesBeforeConversion: {},
+          publicRevealedRolesByPlayerId: {},
+        } : prev));
+      }
       if (newPhase === "day") {
         setWitchPendingDeathTargetIds([]);
         setSpiritWolfDecisionTargetId(null);
@@ -394,6 +420,7 @@ export function useGameSocketSync({
       setMerchantPrivateState(EMPTY_MERCHANT_PRIVATE_STATE);
       setMerchantCheeseMarkPlayerIds([]);
       setAngelReviveState(EMPTY_ANGEL_REVIVE_STATE);
+      setCoffeePrivateState(EMPTY_COFFEE_PRIVATE_STATE);
       setWitchPendingDeathTargetIds([]);
       setDeadPlayers([]);
       setChiefFoundProtectorId(null);
@@ -403,6 +430,7 @@ export function useGameSocketSync({
       setGameLogNights([]);
       setRevealedRolesByPlayerId({});
       setRolesBeforeConversion({});
+      setRevealedSecondaryRolesByPlayerId({});
       setProtectorTargetId(null);
       setProtectorTargetSeq(0);
       setProtectorHasUsed(false);
@@ -440,7 +468,10 @@ export function useGameSocketSync({
         wildWolfConvertedSelf: false,
         wildWolfConvertAvailableTonight: false,
         wildWolfConvertRequestedTonight: false,
+        rolesBeforeConversion: {},
+        publicRevealedRolesByPlayerId: {},
       } : prev));
+      if (roomId) socket.emit("requestCoffeePrivateState", { roomId });
     };
 
     const handleGameEnded = (payload: GameEndedPayload) => {
@@ -478,9 +509,24 @@ export function useGameSocketSync({
       if (!payload?.roomId) return;
       if (roomId && payload.roomId !== roomId) return;
       setRevealedRolesByPlayerId(payload.rolesByPlayerId || {});
+      setRevealedSecondaryRolesByPlayerId(payload.secondaryRolesByPlayerId || {});
       if (payload.rolesBeforeConversion) {
         setRolesBeforeConversion(payload.rolesBeforeConversion);
       }
+    };
+
+    const handleCoffeePrivateStateUpdated = (payload: CoffeePrivateStatePayload) => {
+      setCoffeePrivateState({
+        ...EMPTY_COFFEE_PRIVATE_STATE,
+        ...(payload || {}),
+        secondaryRole: payload?.secondaryRole === "Linh Chi" || payload?.secondaryRole === "Đông Trùng"
+          ? payload.secondaryRole
+          : null,
+        makerTargetsTonight: Array.isArray(payload?.makerTargetsTonight) && payload.makerTargetsTonight.length === 2
+          ? [payload.makerTargetsTonight[0], payload.makerTargetsTonight[1]]
+          : null,
+        wolfToxinLevel: payload?.wolfToxinLevel === 1 || payload?.wolfToxinLevel === 2 ? payload.wolfToxinLevel : 0,
+      });
     };
 
     const handlePublicRolesRevealUpdated = (payload: PublicRolesRevealUpdatedPayload) => {
@@ -749,7 +795,7 @@ export function useGameSocketSync({
         escapeVotes: Array.isArray(payload?.escapeVotes) ? payload.escapeVotes.filter(Boolean) : [],
       });
       if (payload?.rolesBeforeConversion) {
-        setRolesBeforeConversion((prev) => ({ ...prev, ...payload.rolesBeforeConversion }));
+        setRolesBeforeConversion(payload.rolesBeforeConversion);
       }
     };
 
@@ -968,6 +1014,11 @@ export function useGameSocketSync({
     socket.on("hostNightActionProgressUpdated", handleHostNightActionProgressUpdated);
     socket.on("yourOriginalRole", handleYourOriginalRole);
     socket.on("songTrungRobbedState", handleSongTrungRobbedState);
+    socket.on("coffeePrivateStateUpdated", handleCoffeePrivateStateUpdated);
+
+    if (roomId && roomId !== "mock-8" && roomId !== "mock-dusk") {
+      socket.emit("requestCoffeePrivateState", { roomId });
+    }
 
     const stopRoomRecovery = roomId && roomId !== "mock-8" && roomId !== "mock-dusk"
       ? startRoomRecovery(roomId)
@@ -1042,6 +1093,7 @@ export function useGameSocketSync({
       socket.off("hostNightActionProgressUpdated", handleHostNightActionProgressUpdated);
       socket.off("yourOriginalRole", handleYourOriginalRole);
       socket.off("songTrungRobbedState", handleSongTrungRobbedState);
+      socket.off("coffeePrivateStateUpdated", handleCoffeePrivateStateUpdated);
       stopRoomRecovery();
     };
   }, [roomId, setRoom]);
@@ -1062,6 +1114,7 @@ export function useGameSocketSync({
       merchantPrivateState,
       merchantCheeseMarkPlayerIds,
       angelReviveState,
+      coffeePrivateState,
       witchPendingDeathTargetIds,
       witchPotions,
       witchPotionEffect,
@@ -1127,6 +1180,7 @@ export function useGameSocketSync({
       gameLogNights,
       revealedRolesByPlayerId,
       rolesBeforeConversion,
+      revealedSecondaryRolesByPlayerId,
       songTrungRobbedPlayerId,
       songTrungFoundByVictim,
       songTrungVictimSearchUsedTonight,
@@ -1146,6 +1200,7 @@ export function useGameSocketSync({
       merchantPrivateState,
       merchantCheeseMarkPlayerIds,
       angelReviveState,
+      coffeePrivateState,
       witchPendingDeathTargetIds,
       witchPotions,
       witchPotionEffect,
@@ -1206,6 +1261,7 @@ export function useGameSocketSync({
       gameLogNights,
       revealedRolesByPlayerId,
       rolesBeforeConversion,
+      revealedSecondaryRolesByPlayerId,
       songTrungRobbedPlayerId,
       songTrungFoundByVictim,
       songTrungVictimSearchUsedTonight,

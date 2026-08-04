@@ -1,0 +1,89 @@
+.ctp-game-page {
+  --money-green: #62f5aa;
+  --money-gold: #f4c45e;
+  min-height: 100dvh;
+  padding: clamp(18px, 3vw, 42px);
+  color: #f7fbf8;
+  background: radial-gradient(circle at 18% 0, #12372f 0, transparent 32%), radial-gradient(circle at 90% 90%, #2e2510 0, transparent 28%), #030a08;
+}
+.ctp-game-header, .ctp-game-layout, .ctp-winner-banner { width: min(1240px, 100%); margin-inline: auto; }
+.ctp-game-header { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 24px; }
+.ctp-game-header h1 { margin: 4px 0 0; font-size: clamp(28px, 4vw, 46px); }
+.ctp-game-kicker, .ctp-card-title small { color: var(--money-green); font-size: 10px; font-weight: 900; letter-spacing: .16em; }
+.ctp-my-wallet { min-width: 220px; display: grid; gap: 3px; padding: 15px 19px; border-radius: 18px; border: 1px solid rgba(98,245,170,.24); background: rgba(98,245,170,.07); text-align: right; }
+.ctp-my-wallet span { color: rgba(255,255,255,.55); font-size: 11px; }
+.ctp-my-wallet strong { color: var(--money-green); font-size: 26px; }
+.ctp-my-wallet small { color: #ff776d; font-weight: 900; }
+.ctp-my-wallet.is-bankrupt { border-color: rgba(255,91,91,.3); background: rgba(255,91,91,.07); }
+.ctp-my-wallet.is-bankrupt strong { color: #ff776d; }
+.ctp-winner-banner { box-sizing: border-box; padding: 24px; margin-bottom: 24px; text-align: center; border: 1px solid rgba(244,196,94,.28); border-radius: 24px; background: linear-gradient(135deg, rgba(244,196,94,.13), rgba(98,245,170,.07)); }
+.ctp-winner-banner span { color: var(--money-gold); font-size: 11px; letter-spacing: .18em; font-weight: 900; }
+.ctp-winner-banner h2 { margin: 8px 0; font-size: clamp(24px, 4vw, 38px); }
+.ctp-winner-banner p { color: rgba(255,255,255,.55); }
+.ctp-winner-banner button { padding: 12px 18px; border: 0; border-radius: 12px; background: var(--money-gold); color: #241a05; font-weight: 900; cursor: pointer; }
+.ctp-game-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, .75fr); gap: 20px; align-items: start; }
+.ctp-game-card { padding: clamp(20px, 2.5vw, 30px); border: 1px solid rgba(255,255,255,.09); border-radius: 25px; background: rgba(255,255,255,.045); backdrop-filter: blur(18px); box-shadow: 0 26px 70px rgba(0,0,0,.3); }
+.ctp-calculator { display: grid; gap: 16px; }
+.ctp-card-title { display: flex; align-items: center; gap: 13px; }
+.ctp-card-title > span { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid rgba(98,245,170,.22); border-radius: 12px; color: var(--money-green); font: 900 11px monospace; }
+.ctp-card-title h2 { margin: 3px 0 0; font-size: 20px; }
+.ctp-calculator > label { color: rgba(255,255,255,.56); font-size: 11px; font-weight: 800; margin-top: 3px; }
+.ctp-land-input { display: flex; align-items: center; border: 1px solid rgba(244,196,94,.24); border-radius: 18px; background: rgba(244,196,94,.055); padding-right: 18px; }
+.ctp-land-input input { width: 100%; min-width: 0; padding: 18px; border: 0; outline: 0; background: transparent; color: #fff; font-size: 28px; font-weight: 900; }
+.ctp-land-input span { color: var(--money-gold); font-weight: 900; }
+.ctp-quarter-button { padding: 12px 14px; border: 1px solid rgba(244,196,94,.22); border-radius: 13px; background: rgba(244,196,94,.07); color: var(--money-gold); font-weight: 900; cursor: pointer; }
+.ctp-quarter-button:disabled { opacity: .36; cursor: not-allowed; }
+.ctp-bonus-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: rgba(255,255,255,.56); font-size: 11px; font-weight: 800; }
+.ctp-bonus-heading button { border: 0; background: transparent; color: #ff9b93; font-size: 11px; font-weight: 800; cursor: pointer; }
+.ctp-bonus-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.ctp-bonus-grid button { position: relative; padding: 13px 6px; border: 1px solid rgba(255,255,255,.09); border-radius: 13px; background: rgba(255,255,255,.04); color: rgba(255,255,255,.7); font-weight: 900; cursor: pointer; }
+.ctp-bonus-grid button small { position: absolute; top: -7px; right: -5px; display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0 3px; border-radius: 999px; background: #fff; color: #1d1608; font-size: 9px; }
+.ctp-custom-bonus { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; }
+.ctp-custom-bonus > div { display: flex; align-items: center; border: 1px solid rgba(98,245,170,.18); border-radius: 13px; background: rgba(98,245,170,.045); padding-inline: 13px; }
+.ctp-custom-bonus input { width: 100%; min-width: 0; padding: 12px 8px; border: 0; outline: 0; background: transparent; color: #fff; font-weight: 900; }
+.ctp-custom-bonus span { color: var(--money-green); font-weight: 900; }
+.ctp-custom-bonus > button { padding: 0 15px; border: 1px solid rgba(98,245,170,.2); border-radius: 13px; background: rgba(98,245,170,.09); color: var(--money-green); font-weight: 900; cursor: pointer; }
+.ctp-custom-bonus > button:disabled { opacity: .36; cursor: not-allowed; }
+.ctp-bonus-grid button.is-selected { border-color: var(--money-gold); color: #1d1608; background: var(--money-gold); box-shadow: 0 10px 25px rgba(244,196,94,.16); }
+.ctp-total-panel { display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: 18px; border-radius: 17px; background: linear-gradient(135deg, rgba(98,245,170,.1), rgba(98,245,170,.025)); border: 1px solid rgba(98,245,170,.18); }
+.ctp-total-panel div { display: grid; gap: 3px; }
+.ctp-total-panel span { font-weight: 800; }
+.ctp-total-panel small { color: rgba(255,255,255,.45); }
+.ctp-total-panel strong { color: var(--money-green); font-size: clamp(24px, 4vw, 34px); }
+.ctp-bankruptcy-warning { padding: 13px; border: 1px solid rgba(255,93,84,.22); border-radius: 13px; background: rgba(255,93,84,.07); color: #ff9c94; font-size: 13px; line-height: 1.45; }
+.ctp-recipient-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.ctp-recipient-grid button { display: flex; align-items: center; gap: 10px; padding: 11px; border: 1px solid rgba(255,255,255,.08); border-radius: 15px; background: rgba(255,255,255,.03); color: #fff; text-align: left; cursor: pointer; }
+.ctp-recipient-grid button > span { display: grid; place-items: center; width: 36px; height: 36px; flex: 0 0 auto; border-radius: 11px; background: rgba(98,245,170,.1); color: var(--money-green); font-weight: 900; }
+.ctp-recipient-grid button div { display: grid; min-width: 0; }
+.ctp-recipient-grid button small { color: rgba(255,255,255,.45); }
+.ctp-recipient-grid button.is-selected { border-color: var(--money-green); background: rgba(98,245,170,.09); }
+.ctp-send-button { padding: 17px; border: 0; border-radius: 15px; color: #052117; background: linear-gradient(135deg, var(--money-green), #c2ff81); font-size: 15px; font-weight: 900; cursor: pointer; box-shadow: 0 14px 34px rgba(98,245,170,.16); }
+.ctp-send-button:disabled, .ctp-bonus-grid button:disabled, .ctp-recipient-grid button:disabled { opacity: .36; cursor: not-allowed; }
+.ctp-game-notice { margin: 0; color: var(--money-green); font-size: 13px; text-align: center; }
+.ctp-game-sidebar { display: grid; gap: 16px; }
+.ctp-ranking-list, .ctp-history-list { display: grid; gap: 8px; margin-top: 18px; }
+.ctp-ranking-list > div { display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+.ctp-ranking-list b { color: var(--money-gold); font: 900 11px monospace; }
+.ctp-ranking-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctp-ranking-list strong { color: var(--money-green); font-size: 13px; }
+.ctp-ranking-list .is-bankrupt { opacity: .43; text-decoration: line-through; }
+.ctp-ranking-list .is-bankrupt strong { color: #ff776d; }
+.ctp-history-list { max-height: 260px; overflow: auto; }
+.ctp-history-list > div { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.06); font-size: 13px; }
+.ctp-history-list strong { color: var(--money-gold); }
+.ctp-history-list small { grid-column: 1 / -1; color: rgba(255,255,255,.4); }
+.ctp-empty-history { color: rgba(255,255,255,.4); font-size: 13px; }
+.ctp-end-button { padding: 13px; border: 1px solid rgba(255,111,102,.25); border-radius: 14px; background: rgba(255,111,102,.06); color: #ff958e; font-weight: 800; cursor: pointer; }
+
+@media (max-width: 850px) {
+  .ctp-game-layout { grid-template-columns: 1fr; }
+  .ctp-game-header { align-items: stretch; flex-direction: column; }
+  .ctp-my-wallet { text-align: left; }
+}
+@media (max-width: 520px) {
+  .ctp-bonus-grid { grid-template-columns: repeat(3, 1fr); }
+  .ctp-recipient-grid { grid-template-columns: 1fr; }
+  .ctp-custom-bonus { grid-template-columns: 1fr; }
+  .ctp-custom-bonus > button { min-height: 43px; }
+  .ctp-total-panel { align-items: flex-start; flex-direction: column; }
+}

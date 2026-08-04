@@ -1,0 +1,91 @@
+.stun-action-guard {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  isolation: isolate;
+}
+
+.stun-action-guard--active {
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.stun-action-guard--active:has(> .star-border-container) {
+  border-radius: 20px;
+}
+
+.stun-action-guard--day-vote {
+  margin: 4px 0;
+}
+
+.stun-action-guard--verdict {
+  margin-top: 8px;
+}
+
+.stun-action-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at center, rgba(36, 19, 92, 0.42), rgba(12, 10, 35, 0.76)),
+    rgba(42, 20, 94, 0.42);
+  box-shadow: inset 0 0 16px rgba(219, 74, 244, 0.28);
+  pointer-events: none;
+  animation: stun-action-overlay-life 1.5s ease-in-out both;
+}
+
+.stun-action-spiral {
+  width: min(72%, 2.35rem);
+  height: min(72%, 2.35rem);
+  overflow: visible;
+  filter: drop-shadow(0 0 4px rgba(237, 95, 255, 0.9));
+  transform-origin: center;
+  animation:
+    stun-action-spiral-spin 680ms linear infinite,
+    stun-action-spiral-pulse 620ms ease-in-out infinite alternate;
+}
+
+@keyframes stun-action-overlay-life {
+  0% {
+    opacity: 0;
+  }
+
+  14%,
+  72% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes stun-action-spiral-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes stun-action-spiral-pulse {
+  from {
+    scale: 0.9;
+  }
+
+  to {
+    scale: 1.08;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stun-action-overlay {
+    animation: stun-action-overlay-life 1.5s linear both;
+  }
+
+  .stun-action-spiral {
+    animation: none;
+  }
+}

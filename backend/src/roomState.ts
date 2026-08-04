@@ -350,6 +350,7 @@ export function resetRoomFromGameToLobby(room: Room) {
   room.songTrungRobbedOriginalRole = null;
   room.songTrungFoundByVictim = false;
   room.songTrungVictimSearchUsedTonight = {};
+  delete room.coffeeRoleState;
 
 }
 

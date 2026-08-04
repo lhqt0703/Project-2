@@ -68,3 +68,29 @@ Tài liệu này là bộ quy chuẩn bắt buộc khi tạo mới hoặc sửa 
 1. **Các trang game chính:** [GameDaNghich.tsx](file:///b:/Project-2/frontend/src/pages/GameDaNghich.tsx) (3.700+ dòng) và [GameDietQuy.tsx](file:///b:/Project-2/frontend/src/pages/GameDietQuy.tsx) (3.500+ dòng) bị lặp code UI rất nhiều (Stickers, Messages, Modals...). Khi sửa UI chung, hãy ưu tiên trích xuất dần thành component/hook nhỏ dùng chung.
 2. **Backend Handlers:** File [socketHandlers.ts](file:///b:/Project-2/backend/src/socketHandlers.ts) (6.400+ dòng) đang quá tải. Không viết thêm logic nghiệp vụ lớn vào file này. Hãy tách các logic xử lý độc lập sang các module nghiệp vụ tương ứng (dayFlow, nightFlow, roleAction...).
 3. **Components lớn:** [GameLogPanel.tsx](file:///b:/Project-2/frontend/src/components/GameLogPanel.tsx) và [PlayerPositions.tsx](file:///b:/Project-2/frontend/src/components/PlayerPositions.tsx) là các component giao diện phức tạp. Giữ thay đổi ở mức tối thiểu và có kiểm soát.
+
+## 7. Các Bài Học & Kinh Nghiệm Đã Rút Ra (Lessons Learned & Anti-patterns)
+Dưới đây là các lưu ý quan trọng rút ra từ thực tế phát triển để tránh lặp lại lỗi cũ trong các phiên làm việc tiếp theo:
+
+- **Đồng bộ dữ liệu Vote Realtime (`wolfVotes`, `dayVotes`, `trialVotes`)**:
+  - Dữ liệu vote realtime từ Server phát về qua socket được `useGameSocketSync` ghi trực tiếp lên `room` (ví dụ `room.wolfVotes`, `room.wolfVotes2`).
+  - Khi đọc dữ liệu vote trong các hook vai trò (`useWolfRole`, `useDayVoteRole`) và UI (`PlayerPositions`), BẮT BUỘC sử dụng fallback song song: `(room.wolfVotes || room.daNghichState?.wolfVotes)`. Tránh chỉ đọc ở `daNghichState` làm trôi vote.
+  - Trong `PlayerPositions.tsx`, khi tính `activeVotesMap`, BẮT BUỘC phải phân biệt theo phase: Ban đêm (`isNightPhase`) dùng `(wolfVotes || wolfVotes2)`. Không dùng toán tử `dayVotes || wolfVotes` trực tiếp vì `dayVotes = {}` là truthy object trong JS làm `wolfVotes` bị bỏ qua.
+
+- **Bảo toàn dữ liệu Vote khi người chơi Disconnect (Mất kết nối)**:
+  - Trong handler `disconnect` trên backend, TUYỆT ĐỐI KHÔNG reset phiếu hoặc xóa chốt phiếu của người chơi (`room.dayVotes[id] = null`, `room.dayLocked[id] = false`, `room.trialVotes[id] = null`). Phiếu đã chốt của người chơi phải được giữ nguyên.
+
+- **Tính toán tổng số Cử tọa / Voter (`y` trong badge `x/y`)**:
+  - Tổng số phiếu cần tính (`y`) dựa trên TỔNG SỐ NGƯỜI CHƠI CÒN SỐNG.
+  - KHÔNG được dùng `isPlayerConnected` để lọc bớt người chơi rớt mạng ra khỏi `getActiveDayVoters`. Người chơi mất kết nối tạm thời vẫn là người chơi còn sống trong ván đấu.
+
+- **Đồng bộ kiểu dữ liệu TypeScript (`RoomLike`)**:
+  - Khi bổ sung thuộc tính mới vào `room` (như `wolfVotes`, `wolfVotes2`, `wildWolfConvert...`), bắt buộc phải khai báo bổ sung vào `interface RoomLike` trong [PlayerPositions.tsx](file:///b:/Project-2/frontend/src/components/PlayerPositions.tsx) và [useWolfRole.tsx](file:///b:/Project-2/frontend/src/pages/gameRoles/useWolfRole.tsx) để tránh lỗi TypeScript lặp lại.
+
+- **Reset dữ liệu biến đổi vai trò (`rolesBeforeConversion`) khi bắt đầu game mới**:
+  - Khi bắt đầu ván mới hoặc chuyển phase về `dusk` / `lobby`, BẮT BUỘC phải reset `rolesBeforeConversion = {}` và `revealedRolesByPlayerId = {}` ở cả React state và `room` object trong `useGameSocketSync.ts`.
+  - Không được dùng `(prev) => ({ ...prev, ...payload })` để merge `rolesBeforeConversion` nếu không xóa dữ liệu cũ, vì điều này làm các vai trò biến đổi từ ván trước (ví dụ: Song Trùng, Bán Sói, Sói Dại...) bị đọng lại làm hiển thị sai badge kép ở ván sau.
+
+- **Kỹ thuật Animation Gradient Chuyển Màu Mượt & Trạng Thái Dẫn Đầu Vote (Day & Night)**:
+  - Tính toán trạng thái vote (`winner` vs `tied`) áp dụng nhất quán cho cả ban đêm (Sói) lẫn ban ngày (Biểu quyết): Mục tiêu có số vote cao nhất duy nhất sẽ nhận trạng thái `winner` (Badge Xanh), các trường hợp hòa vote cao nhất hoặc số vote thấp hơn đều là `tied` (Badge Đỏ).
+  - Sử dụng 2 layer gradient tuyệt đối lồng nhau và transition thuộc tính `opacity: 0 -> 1` cùng `box-shadow` để chuyển cảnh mượt 60fps khi trạng thái dẫn đầu thay đổi.

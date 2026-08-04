@@ -38,6 +38,14 @@ import {
 } from "./merchant.js";
 import { PROTECTOR_ROLE } from "./specialRoles.js";
 import { emitAngelPrivateState } from "./angel.js";
+import {
+  COFFEE_MAKER_ROLE,
+  DONG_TRUNG_ROLE,
+  LINH_CHI_ROLE,
+  ensureCoffeeRoleState,
+  getCoffeeMakerMaxUses,
+  getCoffeePrivateState,
+} from "./coffeeRoles.js";
 
 export function toPublicRoom(room: Room) {
   ensureRoomGameRules(room);
@@ -135,6 +143,7 @@ export function toPublicRoom(room: Room) {
     songTrungRobbedOriginalRole: _songTrungRobbedOriginalRole,
     songTrungFoundByVictim: _songTrungFoundByVictim,
     songTrungVictimSearchUsedTonight: _songTrungVictimSearchUsedTonight,
+    coffeeRoleState: _coffeeRoleState,
     ...rest
   } = room;
 
@@ -359,6 +368,24 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
     if (role === "Tiên tri") {
       const usedChecks = room.seerUsedTonight?.[playerId] || 0;
       setProgress(playerId, usedChecks >= seerRequiredChecks ? "done" : "pending", role);
+      continue;
+    }
+
+    if (role === COFFEE_MAKER_ROLE) {
+      const coffeeState = ensureCoffeeRoleState(room);
+      const usedTonight = coffeeState.makerSearchByPlayerId[playerId]?.night === currentNight;
+      const usesUsed = coffeeState.makerUseCountByPlayerId[playerId] || 0;
+      const completed = coffeeState.makerFoundBothPlayerIds.includes(playerId);
+      const maxUses = getCoffeeMakerMaxUses(room, playerId);
+      setProgress(playerId, usedTonight || completed || (maxUses > 0 && usesUsed >= maxUses) ? "done" : "pending", role);
+      continue;
+    }
+
+    if (role === LINH_CHI_ROLE || role === DONG_TRUNG_ROLE) {
+      const coffeeState = ensureCoffeeRoleState(room);
+      const usedTonight = coffeeState.herbSearchByPlayerId[playerId]?.night === currentNight;
+      const completed = coffeeState.herbBonusGrantedPlayerIds.includes(playerId);
+      setProgress(playerId, usedTonight || completed ? "done" : "pending", role);
       continue;
     }
 
@@ -623,7 +650,27 @@ export function emitRolesRevealToSocket(roomId: string, socketId: string) {
     roomId,
     rolesByPlayerId: room.playerRoles || {},
     rolesBeforeConversion: room.rolesBeforeConversion || {},
+    secondaryRolesByPlayerId: room.coffeeRoleState?.secondaryRolesByPlayerId || {},
   } satisfies RolesRevealPayload);
+}
+
+export function emitCoffeePrivateState(roomId: string, playerId: string) {
+  const ctx = getServerContext();
+  if (!ctx) return;
+  const room = ctx.rooms[roomId];
+  if (!room) return;
+  ctx.io.to(playerId).emit("coffeePrivateStateUpdated", getCoffeePrivateState(room, playerId));
+}
+
+export function emitCoffeePrivateStateForAll(roomId: string) {
+  const ctx = getServerContext();
+  if (!ctx) return;
+  const room = ctx.rooms[roomId];
+  if (!room) return;
+  for (const player of room.players) {
+    if (player.id === room.hostId) continue;
+    emitCoffeePrivateState(roomId, player.id);
+  }
 }
 
 export function emitWitchPendingDeath(roomId: string) {
@@ -779,6 +826,7 @@ export function syncPrivateRoleStateForSocket(
   socket.emit("wildWolfConvertedState", {
     converted: (room.wildWolfConvertedPlayerIds || []).includes(playerId),
   });
+  socket.emit("coffeePrivateStateUpdated", getCoffeePrivateState(room, playerId));
   emitLoveStateToPlayer(ctx, roomId, room, playerId);
 
   if (isLovePairMember(room, playerId)) {

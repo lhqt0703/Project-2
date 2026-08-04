@@ -22,6 +22,10 @@ export type NightActionRole =
   | "Kẻ bị nguyền"
   | "Tay Buôn"
   | "Trưởng làng"
+  | "Song Trùng"
+  | "Người pha cà phê"
+  | "Linh Chi"
+  | "Đông Trùng"
   | ElementalRole;
 
 export type NightActionOrderRole =
@@ -37,6 +41,9 @@ export type NightActionOrderRole =
   | "Tay Buôn"
   | "Trưởng làng"
   | "Song Trùng"
+  | "Người pha cà phê"
+  | "Linh Chi"
+  | "Đông Trùng"
   | typeof ELEMENTAL_GROUP_ROLE;
 
 export interface RoomGameRules {
@@ -64,6 +71,8 @@ export interface RoomGameRules {
   wolfBonusBiteSmoothTied?: boolean;
   villageChiefCanFindProtector?: boolean;
   songTrungMaxUses?: number;
+  coffeeHerbCardMode?: "primary" | "secondary";
+  coffeeMakerMaxUses?: number;
   songTrungVictimStaysAlive?: boolean;
   songTrungReturnRoleOnlyIfVotedOut?: boolean;
   songTrungReturnRoleRequiresCupidVote?: boolean;
@@ -85,7 +94,7 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 20,
   wolfNightActionDurationSec: 20,
-  nightActionOrder: ["Thần tình yêu", "Song Trùng", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"],
+  nightActionOrder: ["Thần tình yêu", "Song Trùng", "Người pha cà phê", "Linh Chi", "Đông Trùng", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"],
   banSoiBecomeWolfEvenIfHealed: false,
   loveCanChoosePartnerFirstTwoNights: false,
   villageChiefKnowsWolfBite: true,
@@ -99,6 +108,8 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   wolfBonusBiteSmoothTied: true,
   villageChiefCanFindProtector: true,
   songTrungMaxUses: 0,
+  coffeeHerbCardMode: "primary",
+  coffeeMakerMaxUses: 3,
   songTrungVictimStaysAlive: false,
   songTrungReturnRoleOnlyIfVotedOut: false,
   songTrungReturnRoleRequiresCupidVote: false,
@@ -145,6 +156,26 @@ export interface SoiMuState {
   suyThanTargetId?: string | null;
 }
 
+export type CoTyPhuBonusPercent = 100 | 150 | 200 | 300 | 500;
+
+export interface CoTyPhuTransaction {
+  id: string;
+  fromPlayerId: string;
+  toPlayerId: string;
+  baseAmount: number;
+  bonusPercent: number;
+  totalAmount: number;
+  createdAt: number;
+}
+
+export interface CoTyPhuState {
+  startingMoney: number;
+  balances: Record<string, number>;
+  bankruptPlayerIds: string[];
+  transactions: CoTyPhuTransaction[];
+  winnerPlayerIds: string[];
+}
+
 export interface DaNghichState {
   banSoiWolfAligned?: boolean;
   banSoiWolfAlignedPending?: boolean;
@@ -182,10 +213,11 @@ export interface RoomData {
   players: Player[];
   hostId: string;
   warnedPlayerIds?: string[];
-  gameMode?: "da_nghich" | "diet_quy" | "soi_mu";
+  gameMode?: "da_nghich" | "diet_quy" | "soi_mu" | "co_ty_phu";
   dietQuyState?: DietQuyState;
   soiMuState?: SoiMuState;
   daNghichState?: DaNghichState;
+  coTyPhuState?: CoTyPhuState;
   nightTurnPlayerId?: string | null;
   serverTime?: number;
   hidePlayerRoleText?: boolean;
@@ -226,7 +258,7 @@ export interface RoomData {
   dayVoters?: string[];
   trialStage?: "none" | "defense" | "verdict";
   trialTargetId?: string | null;
-  trialVotes?: Record<string, "live" | "die" | null>;
+  trialVotes?: Record<string, "live" | "die" | "abstain" | null>;
   trialInteractionCut?: boolean;
   trialInteractionActiveIds?: string[];
   trialSelectedInteractorId?: string | null;

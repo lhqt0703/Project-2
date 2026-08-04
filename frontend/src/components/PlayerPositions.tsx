@@ -136,7 +136,7 @@ interface RoomLike {
   warnedPlayerIds?: string[];
   trialStage?: "none" | "defense" | "verdict";
   trialTargetId?: string | null;
-  trialVotes?: Record<string, "live" | "die" | null>;
+  trialVotes?: Record<string, "live" | "die" | "abstain" | null>;
   dayLocked?: Record<string, boolean>;
   dayVotes?: Record<string, string | null>;
   dayDeadline?: number | null;
@@ -872,6 +872,7 @@ export default function PlayerPositions({
   cursedHighlightIsDanger,
   verdictLivePlayerIds,
   verdictDiePlayerIds,
+  verdictAbstainPlayerIds,
   dangerPlayerId,
   dangerPlayerIds,
   showWolfVoteBadges,
@@ -928,6 +929,7 @@ export default function PlayerPositions({
   cursedHighlightIsDanger?: boolean;
   verdictLivePlayerIds?: string[];
   verdictDiePlayerIds?: string[];
+  verdictAbstainPlayerIds?: string[];
   dangerPlayerId?: string | null;
   dangerPlayerIds?: string[];
   showWolfVoteBadges?: boolean;
@@ -1621,19 +1623,21 @@ export default function PlayerPositions({
     });
   }
 
-  // Tính toán trạng thái vote của Sói (chỉ tính khi phase là night và đang hiển thị wolf vote badges)
+  // Tính toán trạng thái vote (cho cả ban đêm - Sói và ban ngày - Biểu quyết)
   const isNightPhase = room?.phase === "night";
   const wolfVoteStatuses = (() => {
-    if (!isNightPhase || !showWolfVoteBadges || !room) return null;
+    if (!showWolfVoteBadges || !room) return null;
+
+    const activeVotesMap = isNightPhase ? (wolfVotes || wolfVotes2) : (dayVotes || wolfVotes || wolfVotes2);
 
     const voterIds = wolfVoteVoterIds && wolfVoteVoterIds.length
       ? wolfVoteVoterIds
-      : Object.keys({ ...(wolfVotes || {}), ...(wolfVotes2 || {}) });
+      : Object.keys({ ...(activeVotesMap || {}), ...(isNightPhase ? (wolfVotes2 || {}) : {}) });
 
     const getPlayerVoteCount = (pId: string) => {
-      if (!wolfVotes && !wolfVotes2) return 0;
+      if (!activeVotesMap) return 0;
       return voterIds.reduce((total, wid) => {
-        const votedThis = (wolfVotes?.[wid] === pId) || (wolfVotes2?.[wid] === pId);
+        const votedThis = (activeVotesMap?.[wid] === pId) || (isNightPhase && wolfVotes2?.[wid] === pId);
         return votedThis ? total + (voteWeightsByVoterId?.[wid] || 1) : total;
       }, 0);
     };
@@ -1652,7 +1656,7 @@ export default function PlayerPositions({
 
     // Xác định những ai là winner dựa trên thuật toán kết toán
     const winners = new Set<string>();
-    const isTwoBites = wolfMaxTargets && wolfMaxTargets >= 2;
+    const isTwoBites = isNightPhase && wolfMaxTargets && wolfMaxTargets >= 2;
 
     if (eligibleList.length > 0) {
       // Sắp xếp các mục tiêu giảm dần theo số vote
@@ -1687,7 +1691,7 @@ export default function PlayerPositions({
           }
         }
       } else {
-        // Cắn thường 1 mục tiêu
+        // Cắn thường 1 mục tiêu hoặc biểu quyết ban ngày (chọn 1 mục tiêu duy nhất có số vote cao nhất)
         if (S1.length === 1) {
           winners.add(S1[0]!);
         }
@@ -2051,17 +2055,17 @@ export default function PlayerPositions({
 
           const effectiveVoterIds = wolfVoteVoterIds && wolfVoteVoterIds.length ? wolfVoteVoterIds : undefined;
           const effectiveWolfCount = effectiveVoterIds ? effectiveVoterIds.length : wolfCount;
-          const activeVotesMap = dayVotes || wolfVotes || wolfVotes2;
+          const activeVotesMap = isNightPhase ? (wolfVotes || wolfVotes2) : (dayVotes || wolfVotes || wolfVotes2);
           const voteCountForThis = activeVotesMap
             ? (effectiveVoterIds
               ? effectiveVoterIds.reduce((total, wid) => {
-                const votedThis = (activeVotesMap?.[wid] === pos.playerId) || (wolfVotes2?.[wid] === pos.playerId);
+                const votedThis = (activeVotesMap?.[wid] === pos.playerId) || (isNightPhase && wolfVotes2?.[wid] === pos.playerId);
                 if (!votedThis) return total;
                 return total + (voteWeightsByVoterId?.[wid] || 1);
               }, 0)
               : (() => {
-                const ids = Object.keys({ ...(activeVotesMap || {}), ...(wolfVotes2 || {}) });
-                return ids.filter(wid => (activeVotesMap?.[wid] === pos.playerId) || (wolfVotes2?.[wid] === pos.playerId)).length;
+                const ids = Object.keys({ ...(activeVotesMap || {}), ...(isNightPhase ? (wolfVotes2 || {}) : {}) });
+                return ids.filter(wid => (activeVotesMap?.[wid] === pos.playerId) || (isNightPhase && wolfVotes2?.[wid] === pos.playerId)).length;
               })())
             : 0;
           const isDead = (deadPlayers || []).includes(pos.playerId);
@@ -2087,6 +2091,7 @@ export default function PlayerPositions({
           const isCursedHighlighted = !!cursedHighlightPlayerIds && cursedHighlightPlayerIds.includes(pos.playerId);
           const isVerdictLiveHighlighted = !!verdictLivePlayerIds && verdictLivePlayerIds.includes(pos.playerId);
           const isVerdictDieHighlighted = !!verdictDiePlayerIds && verdictDiePlayerIds.includes(pos.playerId);
+          const isVerdictAbstain = !!verdictAbstainPlayerIds && verdictAbstainPlayerIds.includes(pos.playerId);
           const nightActionProgress = getVisibleNightActionProgress(pos.playerId);
 
           const showSelectedOutline =
@@ -2439,7 +2444,7 @@ export default function PlayerPositions({
               {/* Badges and Indicators */}
               {showWolfVoteBadges && effectiveWolfCount >= 1 && voteCountForThis > 0 && (() => {
                 const status = wolfVoteStatuses?.[pos.playerId] || "tied";
-                const isWinner = isNightPhase && status === "winner";
+                const isWinner = status === "winner";
 
                 return (
                   <div style={{
@@ -2767,13 +2772,15 @@ export default function PlayerPositions({
           const isDayVotedBlank = isDayLockedForThisPlayer && !dayVoteTarget;
 
           // Xác định danh sách các bảng thực sự đang hiển thị
-          const visibleBlank = (!!showVoteReview && isBlankVoter) || isDayVotedBlank;
+          const visibleBlank = (!!showVoteReview && isBlankVoter) || isDayVotedBlank || isVerdictAbstain;
           const visibleTrialVoted =
             (!!isDay &&
               !isDead &&
               pos.playerId !== room?.trialTargetId &&
               room?.trialStage === "verdict" &&
-              (room?.trialVotes?.[pos.playerId] === "live" || room?.trialVotes?.[pos.playerId] === "die")) ||
+              (room?.trialVotes?.[pos.playerId] === "live" ||
+                room?.trialVotes?.[pos.playerId] === "die" ||
+                room?.trialVotes?.[pos.playerId] === "abstain")) ||
             isDayVotedTarget;
           const visibleDisconnected = showDisconnectedBadge;
           const visibleNamThu = showNamThuBoard;

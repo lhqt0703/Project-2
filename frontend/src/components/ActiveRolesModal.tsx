@@ -1,6 +1,9 @@
 import React, { useMemo } from "react";
 import { ELEMENTAL_ROLE_ORDER } from "../constants/elemental";
 import nenLungAsset from "../assets/nền lưng.avif";
+import coffeeMakerCardAsset from "../assets/C Người pha cà phê.avif";
+import linhChiCardAsset from "../assets/C Linh Chi.avif";
+import dongTrungCardAsset from "../assets/C Đông Trùng.avif";
 
 const DIET_QUY_TOWNSFOLK = ["Thợ giặt", "Thủ thư", "Điều tra viên", "Đầu bếp", "Đồng cảm", "Thầy bói", "Chôn cất", "Nhà sư", "Nuôi quạ", "Trinh nữ", "Diệt quỷ", "Chiến sĩ", "Thị trưởng"];
 const DIET_QUY_TRAVELERS = ["Người ẩn dật", "Thánh nhân"];
@@ -12,6 +15,11 @@ const CARD_IMAGES = import.meta.glob<string>("../assets/F *.avif", {
   eager: true,
   import: "default",
 });
+const COFFEE_ROLE_CARD_IMAGES: Record<string, string> = {
+  "người pha cà phê": coffeeMakerCardAsset,
+  "linh chi": linhChiCardAsset,
+  "đông trùng": dongTrungCardAsset,
+};
 
 function getCardUrlByRoleName(roleName: string, gameMode?: string): string | null {
   if (!roleName) return null;
@@ -27,7 +35,7 @@ function getCardUrlByRoleName(roleName: string, gameMode?: string): string | nul
     const targetAvif = `/f ${cleanName.normalize("NFC").toLowerCase()}.avif`;
     return lowerPath.endsWith(targetAvif);
   });
-  return entry ? entry[1] : null;
+  return entry ? entry[1] : COFFEE_ROLE_CARD_IMAGES[cleanName.normalize("NFC").toLowerCase()] || null;
 }
 
 const getGlowColor = (role: string) => {
@@ -40,6 +48,7 @@ const getGlowColor = (role: string) => {
   if (ELEMENTAL_ROLE_ORDER.includes(role as any)) return "#ED6E7B";
   if (["Tiên tri", "Thợ săn"].includes(role)) return "#60a5fa";
   if (["Bảo vệ", "Phù thủy", "Hộ nhân", "Trưởng làng"].includes(role)) return "#34d399";
+  if (["Người pha cà phê", "Linh Chi", "Đông Trùng"].includes(role)) return "#34d399";
   if (["Kẻ bị nguyền", "Thiên Sứ", "Thần tình yêu", "Tay Buôn", "Song Trùng"].includes(role)) return "#a855f7";
   return "#ff9800"; // fallback gold glow
 };

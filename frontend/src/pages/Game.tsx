@@ -8,6 +8,7 @@ import ConfirmModal from "../components/ConfirmModal";
 const GameDaNghich = lazy(() => import("./GameDaNghich"));
 const GameDietQuy = lazy(() => import("./GameDietQuy"));
 const GameSoiMu = lazy(() => import("./GameSoiMu"));
+const GameCoTyPhu = lazy(() => import("./GameCoTyPhu"));
 
 export default function Game() {
   const { room, setRoom } = useRoomContext();
@@ -159,7 +160,9 @@ export default function Game() {
         </div>
       }
     >
-      {room.gameMode === "diet_quy" ? (
+      {room.gameMode === "co_ty_phu" ? (
+        <GameCoTyPhu />
+      ) : room.gameMode === "diet_quy" ? (
         <GameDietQuy />
       ) : room.gameMode === "soi_mu" ? (
         <GameSoiMu />

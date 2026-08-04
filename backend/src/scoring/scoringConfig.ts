@@ -65,6 +65,7 @@ export interface ScoringConfig {
     coupleEscapeDodgedMultipleDeaths: number;
     merchantSuccessfulTrade: number;
     merchantCompletedSideObjective: number;
+    coffeeMakerFoundBoth: number;
   };
   specialWins: {
     coupleWinByPlayerCount: PlayerBracket[];
@@ -137,6 +138,7 @@ export const DEFAULT_SCORING_CONFIG: ScoringConfig = {
     coupleEscapeDodgedMultipleDeaths: 5,
     merchantSuccessfulTrade: 1,
     merchantCompletedSideObjective: 5,
+    coffeeMakerFoundBoth: 5,
   },
   specialWins: {
     coupleWinByPlayerCount: [

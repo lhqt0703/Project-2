@@ -599,10 +599,10 @@ export default function GameSoiMu() {
   const isLocked = room.soiMuState?.locked?.[clientId] === true;
 
   return (
-    <div 
+    <div
       className="page-shell game-page soimu-theme" style={{
-      ["--soimu-wrong-choice-opacity" as any]: soiMuWrongChoiceOpacity
-    }}>
+        ["--soimu-wrong-choice-opacity" as any]: soiMuWrongChoiceOpacity
+      }}>
       {/* Background Layer */}
       <div className="game-bg-layer" style={{
         backgroundImage: `url(${isNight ? nenLaiAsset : isDusk ? ChieuBg : RoomBg})`
@@ -934,8 +934,8 @@ export default function GameSoiMu() {
               showRoleBadges={isHost || room.gameOver}
               roleBadges={activeRolesForDisplay}
               selectedOutlinePlayerId={
-                isHost 
-                  ? hostPlayerActionTargetId 
+                isHost
+                  ? hostPlayerActionTargetId
                   : (isNight ? selectedTargetId : (showInvestigationUI ? daySelectedTargetId : (dayVote.playerPositionsProps.selectedOutlinePlayerId || null)))
               }
               deadPlayersOverride={room.deadPlayers || []}
@@ -1271,7 +1271,7 @@ export default function GameSoiMu() {
         scoreResult={null}
         onClose={() => setGameFinishedModalOpen(false)}
         onBackToLobby={handleBackToRoomClick}
-        onOpenScoreboard={() => {}}
+        onOpenScoreboard={() => { }}
       />
     </div>
   );

@@ -1,0 +1,1040 @@
+{
+  "gameId": "697",
+  "timestamp": 1785077059415,
+  "hostId": "bd1d4b2c-8c07-4f38-9ca7-e2d16e85f733",
+  "playerCount": 12,
+  "winner": "villagers",
+  "players": [
+    {
+      "id": "bd1d4b2c-8c07-4f38-9ca7-e2d16e85f733",
+      "name": "Tofu",
+      "role": "Dân làng"
+    },
+    {
+      "id": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+      "name": "Mochi",
+      "playerAvatar": "Thiết kế chưa có tênciod.avif",
+      "role": "Tay Buôn"
+    },
+    {
+      "id": "601ffc3c-773a-4015-a23e-cf339b7a035b",
+      "name": "Lâm",
+      "role": "Suy Thận"
+    },
+    {
+      "id": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+      "name": "Heeus",
+      "playerRealName": "Hiếu",
+      "playerAvatar": "c3a97ba3-250d-49c7-8d00-436bc8056bf5 M-2.avif",
+      "role": "Tiên tri"
+    },
+    {
+      "id": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+      "name": "Sea you soon",
+      "playerRealName": "Duy",
+      "playerAvatar": "9bc9009c-13b3-4ba6-bbdd-a7189b477ccd M-2.avif",
+      "role": "Bảo vệ"
+    },
+    {
+      "id": "3494c45f-595c-4796-87bb-2aff4b0bd665",
+      "name": "KamadoNezuko",
+      "playerAvatar": "79b02851-1b5d-46fb-8935-5d8031dc9a7f M-1.avif",
+      "role": "Sói"
+    },
+    {
+      "id": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+      "name": "Stella",
+      "playerRealName": "Cường",
+      "playerAvatar": "8dfc1d63-988f-460d-8569-8a1964be99a0 M-1.avif",
+      "role": "Đàn bà"
+    },
+    {
+      "id": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+      "name": "Kem trinh đít mặn thầm thì keo ly",
+      "playerRealName": "Nhật",
+      "playerAvatar": "79b02851-1b5d-46fb-8935-5d8031dc9a7f M-3.avif",
+      "role": "Trưởng làng"
+    },
+    {
+      "id": "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
+      "name": "Anh chỉ làm ồn khi bất tỉnh",
+      "playerRealName": "San",
+      "playerAvatar": "d64474be-88b2-4f67-bf0d-310c3c9de7f5 M-2.avif",
+      "role": "Phù thủy"
+    },
+    {
+      "id": "046fa88a-a719-47c3-8b97-ddfc8337cf83",
+      "name": "Sicula 🍫",
+      "playerRealName": "Phúc 🍫",
+      "playerAvatar": "046fa88a-a719-47c3-8b97-ddfc8337cf83 M-4.avif",
+      "role": "Sói"
+    },
+    {
+      "id": "c3baa0ec-1bef-40a3-9812-27236222029b",
+      "name": "Bánh trôi nhỏ",
+      "playerAvatar": "c3baa0ec-1bef-40a3-9812-27236222029b M-1.avif",
+      "role": "Nam Thư"
+    },
+    {
+      "id": "34ead8aa-1712-484a-8e11-466fc191e33a",
+      "name": "Agony",
+      "playerRealName": "Thịnh",
+      "playerAvatar": "34ead8aa-1712-484a-8e11-466fc191e33a M-1.avif",
+      "role": "Thợ săn"
+    }
+  ],
+  "positions": [
+    {
+      "playerId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+      "x": 0.12,
+      "y": 0.811
+    },
+    {
+      "playerId": "601ffc3c-773a-4015-a23e-cf339b7a035b",
+      "x": 0.861,
+      "y": 0.803
+    },
+    {
+      "playerId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+      "x": 0.275,
+      "y": 0.811
+    },
+    {
+      "playerId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+      "x": 0.5,
+      "y": 0.20500000000000002
+    },
+    {
+      "playerId": "3494c45f-595c-4796-87bb-2aff4b0bd665",
+      "x": 0.891,
+      "y": 0.20500000000000002
+    },
+    {
+      "playerId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+      "x": 0.7000000000000001,
+      "y": 0.20800000000000002
+    },
+    {
+      "playerId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+      "x": 0.655,
+      "y": 0.785
+    },
+    {
+      "playerId": "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
+      "x": 0.5,
+      "y": 0.785
+    },
+    {
+      "playerId": "046fa88a-a719-47c3-8b97-ddfc8337cf83",
+      "x": 0.896,
+      "y": 0.47500000000000003
+    },
+    {
+      "playerId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+      "x": 0.302,
+      "y": 0.202
+    },
+    {
+      "playerId": "34ead8aa-1712-484a-8e11-466fc191e33a",
+      "x": 0.115,
+      "y": 0.17300000000000001
+    }
+  ],
+  "gameEventLog": [
+    {
+      "id": "ev_1785076720071_y549f7o",
+      "timestamp": 1785076720072,
+      "night": 3,
+      "type": "DAY_VOTE",
+      "phase": "day",
+      "targetIds": [
+        "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+      ],
+      "metadata": {
+        "tie": false,
+        "skipped": false,
+        "votes": {
+          "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b": null,
+          "601ffc3c-773a-4015-a23e-cf339b7a035b": null,
+          "c3a97ba3-250d-49c7-8d00-436bc8056bf5": null,
+          "b2a5788c-2a27-480f-a149-6b194d53d7c4": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "3494c45f-595c-4796-87bb-2aff4b0bd665": null,
+          "79b02851-1b5d-46fb-8935-5d8031dc9a7f": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "c3baa0ec-1bef-40a3-9812-27236222029b": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "34ead8aa-1712-484a-8e11-466fc191e33a": null
+        },
+        "voteKind": "main"
+      }
+    },
+    {
+      "id": "ev_1785076768574_ovlw2mz",
+      "timestamp": 1785076768574,
+      "night": 3,
+      "type": "TRIAL_VERDICT",
+      "phase": "day",
+      "targetIds": [
+        "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+      ],
+      "metadata": {
+        "executed": true,
+        "liveVotes": 1,
+        "dieVotes": 5,
+        "liveVoterIds": [
+          "34ead8aa-1712-484a-8e11-466fc191e33a"
+        ],
+        "dieVoterIds": [
+          "601ffc3c-773a-4015-a23e-cf339b7a035b",
+          "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "3494c45f-595c-4796-87bb-2aff4b0bd665",
+          "c3baa0ec-1bef-40a3-9812-27236222029b"
+        ]
+      }
+    },
+    {
+      "id": "ev_1785076768577_yevzqzo",
+      "timestamp": 1785076768577,
+      "night": 3,
+      "type": "PLAYER_ELIMINATED",
+      "phase": "day",
+      "targetIds": [
+        "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+      ],
+      "metadata": {
+        "cause": {
+          "type": "trial_verdict",
+          "voterIds": [
+            "601ffc3c-773a-4015-a23e-cf339b7a035b",
+            "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+            "3494c45f-595c-4796-87bb-2aff4b0bd665",
+            "c3baa0ec-1bef-40a3-9812-27236222029b"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ev_1785076885833_r6ezh7a",
+      "timestamp": 1785076885833,
+      "night": 4,
+      "type": "DAY_VOTE",
+      "phase": "day",
+      "targetIds": [
+        "c3baa0ec-1bef-40a3-9812-27236222029b"
+      ],
+      "metadata": {
+        "tie": false,
+        "skipped": false,
+        "votes": {
+          "601ffc3c-773a-4015-a23e-cf339b7a035b": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "c3a97ba3-250d-49c7-8d00-436bc8056bf5": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "b2a5788c-2a27-480f-a149-6b194d53d7c4": "34ead8aa-1712-484a-8e11-466fc191e33a",
+          "3494c45f-595c-4796-87bb-2aff4b0bd665": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "79b02851-1b5d-46fb-8935-5d8031dc9a7f": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "c3baa0ec-1bef-40a3-9812-27236222029b": null,
+          "34ead8aa-1712-484a-8e11-466fc191e33a": null
+        },
+        "voteKind": "main"
+      }
+    },
+    {
+      "id": "ev_1785076912964_xh06612",
+      "timestamp": 1785076912964,
+      "night": 4,
+      "type": "TRIAL_VERDICT",
+      "phase": "day",
+      "targetIds": [
+        "c3baa0ec-1bef-40a3-9812-27236222029b"
+      ],
+      "metadata": {
+        "executed": false,
+        "liveVotes": 2,
+        "dieVotes": 2,
+        "liveVoterIds": [
+          "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "34ead8aa-1712-484a-8e11-466fc191e33a"
+        ],
+        "dieVoterIds": [
+          "601ffc3c-773a-4015-a23e-cf339b7a035b",
+          "3494c45f-595c-4796-87bb-2aff4b0bd665"
+        ]
+      }
+    },
+    {
+      "id": "ev_1785076957088_fbpz0pr",
+      "timestamp": 1785076957088,
+      "night": 5,
+      "type": "PLAYER_ELIMINATED",
+      "phase": "day",
+      "targetIds": [
+        "79b02851-1b5d-46fb-8935-5d8031dc9a7f"
+      ],
+      "metadata": {
+        "cause": {
+          "type": "wolf",
+          "attackerIds": [
+            "3494c45f-595c-4796-87bb-2aff4b0bd665"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ev_1785077026776_ken3m1b",
+      "timestamp": 1785077026776,
+      "night": 5,
+      "type": "DAY_VOTE",
+      "phase": "day",
+      "targetIds": [
+        "3494c45f-595c-4796-87bb-2aff4b0bd665"
+      ],
+      "metadata": {
+        "tie": false,
+        "skipped": false,
+        "votes": {
+          "601ffc3c-773a-4015-a23e-cf339b7a035b": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "c3a97ba3-250d-49c7-8d00-436bc8056bf5": "3494c45f-595c-4796-87bb-2aff4b0bd665",
+          "3494c45f-595c-4796-87bb-2aff4b0bd665": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "c3baa0ec-1bef-40a3-9812-27236222029b": "3494c45f-595c-4796-87bb-2aff4b0bd665",
+          "34ead8aa-1712-484a-8e11-466fc191e33a": "3494c45f-595c-4796-87bb-2aff4b0bd665"
+        },
+        "voteKind": "main"
+      }
+    },
+    {
+      "id": "ev_1785077059397_yh2h9qi",
+      "timestamp": 1785077059397,
+      "night": 5,
+      "type": "TRIAL_VERDICT",
+      "phase": "day",
+      "targetIds": [
+        "3494c45f-595c-4796-87bb-2aff4b0bd665"
+      ],
+      "metadata": {
+        "executed": true,
+        "liveVotes": 0,
+        "dieVotes": 4,
+        "liveVoterIds": [],
+        "dieVoterIds": [
+          "601ffc3c-773a-4015-a23e-cf339b7a035b",
+          "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "34ead8aa-1712-484a-8e11-466fc191e33a"
+        ]
+      }
+    },
+    {
+      "id": "ev_1785077059398_p8630aw",
+      "timestamp": 1785077059398,
+      "night": 5,
+      "type": "PLAYER_ELIMINATED",
+      "phase": "day",
+      "targetIds": [
+        "3494c45f-595c-4796-87bb-2aff4b0bd665"
+      ],
+      "metadata": {
+        "cause": {
+          "type": "trial_verdict",
+          "voterIds": [
+            "601ffc3c-773a-4015-a23e-cf339b7a035b",
+            "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+            "c3baa0ec-1bef-40a3-9812-27236222029b",
+            "34ead8aa-1712-484a-8e11-466fc191e33a"
+          ]
+        }
+      }
+    },
+    {
+      "id": "ev_1785077059405_gfbyazl",
+      "timestamp": 1785077059405,
+      "night": 5,
+      "type": "GAME_OVER",
+      "phase": "day",
+      "metadata": {
+        "winner": "villagers",
+        "reason": "after_trial_verdict"
+      }
+    }
+  ],
+  "gameLog": [
+    {
+      "night": 1,
+      "at": 1785076296907,
+      "entries": [
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "34ead8aa-1712-484a-8e11-466fc191e33a",
+          "targetId": "34ead8aa-1712-484a-8e11-466fc191e33a"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "targetId": "d64474be-88b2-4f67-bf0d-310c3c9de7f5"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+          "targetId": "d64474be-88b2-4f67-bf0d-310c3c9de7f5"
+        },
+        {
+          "type": "soi_mu_ariana_trade",
+          "phase": "night",
+          "actorId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "targetId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+          "actorThumb": "up",
+          "targetThumb": "up"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "targetId": "046fa88a-a719-47c3-8b97-ddfc8337cf83"
+        },
+        {
+          "type": "soi_mu_wolf_bite",
+          "phase": "night",
+          "actorId": "3494c45f-595c-4796-87bb-2aff4b0bd665",
+          "targetId": "046fa88a-a719-47c3-8b97-ddfc8337cf83",
+          "wolfLabel": "Sói 1"
+        },
+        {
+          "type": "guardian_protect",
+          "phase": "night",
+          "actorId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "targetId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "targetId": "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
+          "targetId": "046fa88a-a719-47c3-8b97-ddfc8337cf83"
+        },
+        {
+          "type": "soi_mu_wolf_inactive_choose",
+          "phase": "night",
+          "actorId": "046fa88a-a719-47c3-8b97-ddfc8337cf83",
+          "targetId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+          "wolfLabel": "Sói 2",
+          "activeWolfLabel": "Sói 1"
+        },
+        {
+          "type": "custom_log",
+          "phase": "night",
+          "message": "Sicula 🍫 đã bị vô hiệu chức năng vì bị dính những niềm đau từ đàn bà mang tới"
+        },
+        {
+          "type": "custom_log",
+          "phase": "day",
+          "message": "Anh chỉ làm ồn khi bất tỉnh đã bị Nam Thư chọn và Anh chỉ làm ồn khi bất tỉnh sẽ không thể cười vì có cái gì mà buồn cười"
+        },
+        {
+          "type": "saved_by_witch",
+          "phase": "night",
+          "targetIds": [
+            "046fa88a-a719-47c3-8b97-ddfc8337cf83"
+          ]
+        },
+        {
+          "type": "no_death",
+          "phase": "day"
+        },
+        {
+          "type": "custom_log",
+          "phase": "day",
+          "message": "Người chơi bị điều tra đã chọn đúng mục tiêu cũ. Sự trong sạch được làm rõ."
+        },
+        {
+          "type": "day_vote_skipped",
+          "phase": "day"
+        }
+      ]
+    },
+    {
+      "night": 2,
+      "at": 1785076437495,
+      "entries": [
+        {
+          "type": "soi_mu_wolf_bite",
+          "phase": "night",
+          "actorId": "3494c45f-595c-4796-87bb-2aff4b0bd665",
+          "targetId": "046fa88a-a719-47c3-8b97-ddfc8337cf83",
+          "wolfLabel": "Sói 1"
+        },
+        {
+          "type": "soi_mu_wolf_inactive_choose",
+          "phase": "night",
+          "actorId": "046fa88a-a719-47c3-8b97-ddfc8337cf83",
+          "targetId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+          "wolfLabel": "Sói 2",
+          "activeWolfLabel": "Sói 1"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+          "targetId": "c3baa0ec-1bef-40a3-9812-27236222029b"
+        },
+        {
+          "type": "guardian_protect",
+          "phase": "night",
+          "actorId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "targetId": "d64474be-88b2-4f67-bf0d-310c3c9de7f5"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "targetId": "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
+          "targetId": "046fa88a-a719-47c3-8b97-ddfc8337cf83"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "targetId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f"
+        },
+        {
+          "type": "soi_mu_ariana_trade",
+          "phase": "night",
+          "actorId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "targetId": "8dfc1d63-988f-460d-8569-8a1964be99a0",
+          "actorThumb": "down",
+          "targetThumb": "up"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "targetId": "046fa88a-a719-47c3-8b97-ddfc8337cf83"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "601ffc3c-773a-4015-a23e-cf339b7a035b",
+          "targetId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "34ead8aa-1712-484a-8e11-466fc191e33a",
+          "targetId": "34ead8aa-1712-484a-8e11-466fc191e33a"
+        },
+        {
+          "type": "custom_log",
+          "phase": "night",
+          "message": "Sea you soon đã bị vô hiệu chức năng vì bị dính những niềm đau từ đàn bà mang tới"
+        },
+        {
+          "type": "custom_log",
+          "phase": "day",
+          "message": "Kem trinh đít mặn thầm thì keo ly đã bị Nam Thư chọn và Kem trinh đít mặn thầm thì keo ly sẽ không thể cười vì có cái gì mà buồn cười"
+        },
+        {
+          "type": "custom_log",
+          "phase": "day",
+          "message": "Kem trinh đít mặn thầm thì keo ly đã bị Suy Thận chọn và Kem trinh đít mặn thầm thì keo ly sẽ không thể đi đái nếu ko sẽ nổ và chết"
+        },
+        {
+          "type": "eliminated",
+          "phase": "night",
+          "targetIds": [
+            "046fa88a-a719-47c3-8b97-ddfc8337cf83",
+            "8dfc1d63-988f-460d-8569-8a1964be99a0"
+          ],
+          "causesByTarget": {
+            "046fa88a-a719-47c3-8b97-ddfc8337cf83": [
+              {
+                "type": "wolf",
+                "attackerIds": [
+                  "3494c45f-595c-4796-87bb-2aff4b0bd665"
+                ]
+              },
+              {
+                "type": "witch_poison",
+                "sourceActorId": "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
+                "killerId": "d64474be-88b2-4f67-bf0d-310c3c9de7f5"
+              }
+            ],
+            "8dfc1d63-988f-460d-8569-8a1964be99a0": [
+              {
+                "type": "merchant_gunpowder",
+                "sourceId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+              }
+            ]
+          }
+        },
+        {
+          "type": "day_vote_skipped",
+          "phase": "day"
+        }
+      ]
+    },
+    {
+      "night": 3,
+      "at": 1785076594500,
+      "entries": [
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "34ead8aa-1712-484a-8e11-466fc191e33a",
+          "targetId": "34ead8aa-1712-484a-8e11-466fc191e33a"
+        },
+        {
+          "type": "guardian_protect",
+          "phase": "night",
+          "actorId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5"
+        },
+        {
+          "type": "soi_mu_wolf_bite",
+          "phase": "night",
+          "actorId": "3494c45f-595c-4796-87bb-2aff4b0bd665",
+          "targetId": "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
+          "wolfLabel": "Sói 1"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "targetId": "3494c45f-595c-4796-87bb-2aff4b0bd665"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "601ffc3c-773a-4015-a23e-cf339b7a035b",
+          "targetId": "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+          "targetId": "34ead8aa-1712-484a-8e11-466fc191e33a"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "targetId": "d64474be-88b2-4f67-bf0d-310c3c9de7f5"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
+          "targetId": "3494c45f-595c-4796-87bb-2aff4b0bd665"
+        },
+        {
+          "type": "soi_mu_ariana_trade",
+          "phase": "night",
+          "actorId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "targetId": "d64474be-88b2-4f67-bf0d-310c3c9de7f5",
+          "actorThumb": "down",
+          "targetThumb": "up"
+        },
+        {
+          "type": "custom_log",
+          "phase": "day",
+          "message": "KamadoNezuko đã bị Nam Thư chọn và KamadoNezuko sẽ không thể cười vì có cái gì mà buồn cười"
+        },
+        {
+          "type": "custom_log",
+          "phase": "day",
+          "message": "Sea you soon đã bị Suy Thận chọn và Sea you soon sẽ không thể đi đái nếu ko sẽ nổ và chết"
+        },
+        {
+          "type": "eliminated",
+          "phase": "night",
+          "targetIds": [
+            "d64474be-88b2-4f67-bf0d-310c3c9de7f5"
+          ],
+          "causesByTarget": {
+            "d64474be-88b2-4f67-bf0d-310c3c9de7f5": [
+              {
+                "type": "wolf",
+                "attackerIds": [
+                  "3494c45f-595c-4796-87bb-2aff4b0bd665"
+                ]
+              },
+              {
+                "type": "merchant_gunpowder",
+                "sourceId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+              }
+            ]
+          }
+        },
+        {
+          "type": "day_vote",
+          "phase": "day",
+          "voteBreakdown": [
+            {
+              "targetId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+              "voterIds": [
+                "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+                "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+                "c3baa0ec-1bef-40a3-9812-27236222029b"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "day_result",
+          "phase": "day",
+          "targetId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "tie": false
+        },
+        {
+          "type": "trial_started",
+          "phase": "day",
+          "targetId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+        },
+        {
+          "type": "trial_verdict",
+          "phase": "day",
+          "targetId": "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b",
+          "liveVotes": 1,
+          "dieVotes": 5,
+          "liveVoterIds": [
+            "34ead8aa-1712-484a-8e11-466fc191e33a"
+          ],
+          "dieVoterIds": [
+            "601ffc3c-773a-4015-a23e-cf339b7a035b",
+            "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+            "3494c45f-595c-4796-87bb-2aff4b0bd665",
+            "c3baa0ec-1bef-40a3-9812-27236222029b"
+          ],
+          "executed": true
+        },
+        {
+          "type": "eliminated",
+          "phase": "day",
+          "targetIds": [
+            "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b"
+          ],
+          "causesByTarget": {
+            "d261aae9-d908-4c0a-9fc9-0a395d3f7c1b": [
+              {
+                "type": "trial_verdict",
+                "voterIds": [
+                  "601ffc3c-773a-4015-a23e-cf339b7a035b",
+                  "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+                  "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+                  "3494c45f-595c-4796-87bb-2aff4b0bd665",
+                  "c3baa0ec-1bef-40a3-9812-27236222029b"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "night": 4,
+      "at": 1785076782228,
+      "entries": [
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "34ead8aa-1712-484a-8e11-466fc191e33a",
+          "targetId": "34ead8aa-1712-484a-8e11-466fc191e33a"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "targetId": "34ead8aa-1712-484a-8e11-466fc191e33a"
+        },
+        {
+          "type": "guardian_protect",
+          "phase": "night",
+          "actorId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "targetId": "34ead8aa-1712-484a-8e11-466fc191e33a"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "targetId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f"
+        },
+        {
+          "type": "soi_mu_wolf_bite",
+          "phase": "night",
+          "actorId": "3494c45f-595c-4796-87bb-2aff4b0bd665",
+          "targetId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+          "wolfLabel": "Sói 1"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+          "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "601ffc3c-773a-4015-a23e-cf339b7a035b",
+          "targetId": "c3baa0ec-1bef-40a3-9812-27236222029b"
+        },
+        {
+          "type": "custom_log",
+          "phase": "day",
+          "message": "Agony đã bị Nam Thư chọn và Agony sẽ không thể cười vì có cái gì mà buồn cười"
+        },
+        {
+          "type": "custom_log",
+          "phase": "day",
+          "message": "Bánh trôi nhỏ đã bị Suy Thận chọn và Bánh trôi nhỏ sẽ không thể đi đái nếu ko sẽ nổ và chết"
+        },
+        {
+          "type": "custom_log",
+          "phase": "night",
+          "message": "Trưởng làng đã bị cắn nhưng chưa chết."
+        },
+        {
+          "type": "no_death",
+          "phase": "day"
+        },
+        {
+          "type": "custom_log",
+          "phase": "day",
+          "message": "Người chơi bị điều tra đã chọn đúng mục tiêu cũ. Sự trong sạch được làm rõ."
+        },
+        {
+          "type": "day_vote",
+          "phase": "day",
+          "voteBreakdown": [
+            {
+              "targetId": "34ead8aa-1712-484a-8e11-466fc191e33a",
+              "voterIds": [
+                "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+              ]
+            },
+            {
+              "targetId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+              "voterIds": [
+                "601ffc3c-773a-4015-a23e-cf339b7a035b",
+                "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+                "3494c45f-595c-4796-87bb-2aff4b0bd665",
+                "79b02851-1b5d-46fb-8935-5d8031dc9a7f"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "day_result",
+          "phase": "day",
+          "targetId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "tie": false
+        },
+        {
+          "type": "trial_started",
+          "phase": "day",
+          "targetId": "c3baa0ec-1bef-40a3-9812-27236222029b"
+        },
+        {
+          "type": "trial_verdict",
+          "phase": "day",
+          "targetId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "liveVotes": 2,
+          "dieVotes": 2,
+          "liveVoterIds": [
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+            "34ead8aa-1712-484a-8e11-466fc191e33a"
+          ],
+          "dieVoterIds": [
+            "601ffc3c-773a-4015-a23e-cf339b7a035b",
+            "3494c45f-595c-4796-87bb-2aff4b0bd665"
+          ],
+          "executed": false
+        }
+      ]
+    },
+    {
+      "night": 5,
+      "at": 1785076930720,
+      "entries": [
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+          "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5"
+        },
+        {
+          "type": "guardian_protect",
+          "phase": "night",
+          "actorId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "targetId": "3494c45f-595c-4796-87bb-2aff4b0bd665"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "34ead8aa-1712-484a-8e11-466fc191e33a",
+          "targetId": "34ead8aa-1712-484a-8e11-466fc191e33a"
+        },
+        {
+          "type": "soi_mu_wolf_bite",
+          "phase": "night",
+          "actorId": "3494c45f-595c-4796-87bb-2aff4b0bd665",
+          "targetId": "b2a5788c-2a27-480f-a149-6b194d53d7c4",
+          "wolfLabel": "Sói 1"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "601ffc3c-773a-4015-a23e-cf339b7a035b",
+          "targetId": "34ead8aa-1712-484a-8e11-466fc191e33a"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+          "targetId": "34ead8aa-1712-484a-8e11-466fc191e33a"
+        },
+        {
+          "type": "soi_mu_villager_choose",
+          "phase": "night",
+          "actorId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f",
+          "targetId": "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+        },
+        {
+          "type": "village_chief_delayed_death",
+          "phase": "day",
+          "targetId": "79b02851-1b5d-46fb-8935-5d8031dc9a7f"
+        },
+        {
+          "type": "eliminated",
+          "phase": "day",
+          "targetIds": [
+            "79b02851-1b5d-46fb-8935-5d8031dc9a7f"
+          ],
+          "causesByTarget": {
+            "79b02851-1b5d-46fb-8935-5d8031dc9a7f": [
+              {
+                "type": "wolf",
+                "attackerIds": [
+                  "3494c45f-595c-4796-87bb-2aff4b0bd665"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "custom_log",
+          "phase": "day",
+          "message": "Heeus đã bị Nam Thư chọn và Heeus sẽ không thể cười vì có cái gì mà buồn cười"
+        },
+        {
+          "type": "custom_log",
+          "phase": "day",
+          "message": "Agony đã bị Suy Thận chọn và Agony sẽ không thể đi đái nếu ko sẽ nổ và chết"
+        },
+        {
+          "type": "eliminated",
+          "phase": "night",
+          "targetIds": [
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4"
+          ],
+          "causesByTarget": {
+            "b2a5788c-2a27-480f-a149-6b194d53d7c4": [
+              {
+                "type": "wolf",
+                "attackerIds": [
+                  "3494c45f-595c-4796-87bb-2aff4b0bd665"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "custom_log",
+          "phase": "day",
+          "message": "Người chơi bị điều tra đã chọn đúng mục tiêu cũ. Sự trong sạch được làm rõ."
+        },
+        {
+          "type": "day_vote",
+          "phase": "day",
+          "voteBreakdown": [
+            {
+              "targetId": "c3baa0ec-1bef-40a3-9812-27236222029b",
+              "voterIds": [
+                "3494c45f-595c-4796-87bb-2aff4b0bd665"
+              ]
+            },
+            {
+              "targetId": "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+              "voterIds": [
+                "601ffc3c-773a-4015-a23e-cf339b7a035b"
+              ]
+            },
+            {
+              "targetId": "3494c45f-595c-4796-87bb-2aff4b0bd665",
+              "voterIds": [
+                "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+                "c3baa0ec-1bef-40a3-9812-27236222029b",
+                "34ead8aa-1712-484a-8e11-466fc191e33a"
+              ]
+            }
+          ]
+        },
+        {
+          "type": "day_result",
+          "phase": "day",
+          "targetId": "3494c45f-595c-4796-87bb-2aff4b0bd665",
+          "tie": false
+        },
+        {
+          "type": "trial_started",
+          "phase": "day",
+          "targetId": "3494c45f-595c-4796-87bb-2aff4b0bd665"
+        },
+        {
+          "type": "trial_verdict",
+          "phase": "day",
+          "targetId": "3494c45f-595c-4796-87bb-2aff4b0bd665",
+          "liveVotes": 0,
+          "dieVotes": 4,
+          "liveVoterIds": [],
+          "dieVoterIds": [
+            "601ffc3c-773a-4015-a23e-cf339b7a035b",
+            "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+            "c3baa0ec-1bef-40a3-9812-27236222029b",
+            "34ead8aa-1712-484a-8e11-466fc191e33a"
+          ],
+          "executed": true
+        },
+        {
+          "type": "eliminated",
+          "phase": "day",
+          "targetIds": [
+            "3494c45f-595c-4796-87bb-2aff4b0bd665"
+          ],
+          "causesByTarget": {
+            "3494c45f-595c-4796-87bb-2aff4b0bd665": [
+              {
+                "type": "trial_verdict",
+                "voterIds": [
+                  "601ffc3c-773a-4015-a23e-cf339b7a035b",
+                  "c3a97ba3-250d-49c7-8d00-436bc8056bf5",
+                  "c3baa0ec-1bef-40a3-9812-27236222029b",
+                  "34ead8aa-1712-484a-8e11-466fc191e33a"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

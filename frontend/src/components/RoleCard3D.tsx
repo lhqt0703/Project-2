@@ -6,6 +6,7 @@ import "./RoleCard3D.css";
 
 interface RoleCard3DProps {
   role: string | null;
+  secondaryRole?: "Linh Chi" | "Đông Trùng" | null;
   revealed: boolean;
   onToggleReveal?: () => void;
   backgroundAssetOverride?: string | null;
@@ -19,8 +20,14 @@ const roleCardImages = import.meta.glob<string>("../assets/*.{png,avif}", { eage
 const normalizeName = (name: string) => name.normalize("NFC").trim().toLowerCase();
 
 // Hàm tìm ảnh mặt trước phù hợp với vai trò
-const getRoleCardImage = (roleName: string | null) => {
-  if (!roleName) return roleCardImages["../assets/F Dân Làng.png"] || "";
+const UNPREFIXED_ROLE_CARD_FALLBACKS: Record<string, string> = {
+  "người pha cà phê": "../assets/C Người pha cà phê.avif",
+  "linh chi": "../assets/C Linh Chi.avif",
+  "đông trùng": "../assets/C Đông Trùng.avif",
+};
+
+const getRoleCardImage = (roleName: string | null, fallbackToVillager = true) => {
+  if (!roleName) return fallbackToVillager ? (roleCardImages["../assets/F Dân Làng.png"] || "") : "";
   const normalizedSearch = normalizeName(roleName);
 
   // Xử lý các trường hợp đặc biệt trước
@@ -48,12 +55,17 @@ const getRoleCardImage = (roleName: string | null) => {
     return roleCardImages[matchKey];
   }
 
+  const unprefixedFallbackPath = UNPREFIXED_ROLE_CARD_FALLBACKS[normalizedSearch];
+  if (unprefixedFallbackPath && roleCardImages[unprefixedFallbackPath]) {
+    return roleCardImages[unprefixedFallbackPath];
+  }
+
   // Fallback thông minh
   if (normalizedSearch.includes("sói")) {
     return roleCardImages["../assets/F Sói.png"] || "";
   }
 
-  return roleCardImages["../assets/F Dân Làng.png"] || "";
+  return fallbackToVillager ? (roleCardImages["../assets/F Dân Làng.png"] || "") : "";
 };
 
 // Hàm tìm ảnh biến thể phù hợp với vai trò (định dạng "N F <Tên Vai Trò>")
@@ -95,6 +107,7 @@ const adjust = (v: number, fMin: number, fMax: number, tMin: number, tMax: numbe
 
 export default function RoleCard3D({
   role,
+  secondaryRole = null,
   revealed,
   onToggleReveal,
   lowPerformanceMode = (() => {
@@ -145,6 +158,7 @@ export default function RoleCard3D({
 
   const cardFrontImage = getRoleCardImage(displayedRole);
   const cardFrontVariantImage = getRoleCardVariantImage(displayedRole);
+  const secondaryRoleCardImage = secondaryRole ? getRoleCardImage(secondaryRole, false) : "";
 
   // 1. Khởi tạo bộ máy Easing 3D Spring (Tính toán gia tốc mượt mà 60 FPS)
   const tiltEngine = useMemo(() => {
@@ -507,6 +521,14 @@ export default function RoleCard3D({
                 src={cardFrontVariantImage}
                 alt={`${role || "Vai Trò"} Biến Thể`}
                 className="pc-front-img pc-front-img-variant"
+                loading="lazy"
+              />
+            )}
+            {secondaryRole && secondaryRoleCardImage && (
+              <img
+                src={secondaryRoleCardImage}
+                alt={`Thẻ phụ ${secondaryRole}`}
+                className={`pc-secondary-role-card ${isRevealed ? "is-visible" : ""}`}
                 loading="lazy"
               />
             )}

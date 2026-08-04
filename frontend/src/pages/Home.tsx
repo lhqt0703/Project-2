@@ -27,8 +27,12 @@ export default function Home() {
         Sói Mù
       </button>
       
-      <button onClick={() => nav("/lobby?mode=diet_quy")}>
+      <button onClick={() => nav("/lobby?mode=diet_quy")} style={{ marginRight: 10 }}>
         Diệt Quỷ
+      </button>
+
+      <button onClick={() => nav("/lobby?mode=co_ty_phu")}>
+        Cờ tỷ phú
       </button>
     </div>
   );

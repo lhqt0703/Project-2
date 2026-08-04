@@ -26,6 +26,7 @@ export function saveMatchHistory(room: Room) {
         playerRealName: p.playerRealName,
         playerAvatar: p.playerAvatar,
         role: room.playerRoles?.[p.id] || "Dân làng",
+        secondaryRole: room.coffeeRoleState?.secondaryRolesByPlayerId[p.id] || null,
       })),
       positions: room.positions || [],
       gameEventLog: room.gameEventLog || [],

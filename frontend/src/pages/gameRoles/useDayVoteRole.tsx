@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { socket, clientId } from "../../socket";
-import type { DayLockedUpdatedPayload, DayVotesUpdatedPayload, GamePhase, TrialVotesUpdatedPayload } from "./socketEvents";
+import type { DayLockedUpdatedPayload, DayVotesUpdatedPayload, GamePhase, TrialVote, TrialVotesUpdatedPayload } from "./socketEvents";
 import StarBorder from "../../components/StarBorder";
 import { AvifIcon } from "../../components/AvifIcon";
 import ConfirmModal from "../../components/ConfirmModal";
+import StunActionGuard from "../../components/StunActionGuard";
 
 
 type Player = { id: string; name: string; connected?: boolean };
@@ -36,6 +37,7 @@ export function useDayVoteRole({
   serverTimeOffset = 0,
   dayPaused = false,
   dayRemainingMs = null,
+  votingStunned = false,
 }: {
   roomId: string | null;
   phase: GamePhase;
@@ -59,6 +61,7 @@ export function useDayVoteRole({
   serverTimeOffset?: number;
   dayPaused?: boolean;
   dayRemainingMs?: number | null;
+  votingStunned?: boolean;
 }) {
   const [localSelectedTarget, setLocalSelectedTarget] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now() + serverTimeOffset);
@@ -67,7 +70,7 @@ export function useDayVoteRole({
   const [showBlankVoteConfirm, setShowBlankVoteConfirm] = useState(false);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
-  const [localTrialVote, setLocalTrialVote] = useState<"live" | "die" | null>(null);
+  const [localTrialVote, setLocalTrialVote] = useState<TrialVote | null>(null);
 
   useEffect(() => {
     setIsVoteReviewActive(false);
@@ -105,15 +108,16 @@ export function useDayVoteRole({
     if (deadPlayers.includes(clientId)) return false;
     if (dayVoters.length > 0 && !dayVoters.includes(clientId)) return false;
     if (trialStage !== "none") return false;
+    if (votingStunned) return false;
     return true;
-  }, [dayDeadline, dayVoters, deadPlayers, phase, trialStage, isHost]);
+  }, [dayDeadline, dayVoters, deadPlayers, votingStunned, phase, trialStage, isHost]);
 
   const myTrialVote = clientId ? (trialVotes?.[clientId] ?? null) : null;
   const effectiveTrialVote = localTrialVote || myTrialVote;
 
   const isTrialTarget = !!clientId && !!trialTargetId && clientId === trialTargetId;
   const alreadyChosenByTrialTarget = !!clientId && trialSelectedInteractorIds.includes(clientId);
-  const canToggleInteraction =
+  const canRequestInteraction =
     phase === "day" &&
     trialStage === "defense" &&
     !!clientId &&
@@ -122,6 +126,7 @@ export function useDayVoteRole({
     !deadPlayers.includes(clientId) &&
     !alreadyChosenByTrialTarget &&
     !trialInteractionCut;
+  const canToggleInteraction = canRequestInteraction && !votingStunned;
   const hasInteracted = !!clientId && trialInteractionActiveIds.includes(clientId);
   const remainingInteractionTurns = Math.max(0, trialInteractionSelectionLimit - trialSelectedInteractorIds.length);
 
@@ -147,6 +152,7 @@ export function useDayVoteRole({
       return true;
     }
 
+    if (votingStunned && phase === "day" && trialStage === "none" && !!dayDeadline) return true;
     if (!canAct) return false;
 
     if (playerId === clientId) return true;
@@ -164,7 +170,7 @@ export function useDayVoteRole({
     setLocalSelectedTarget(playerId);
     socket.emit("dayChooseTarget", { roomId, targetId: playerId });
     return true;
-  }, [canAct, dayDeadline, dayLocked, deadPlayers, isTrialTarget, localSelectedTarget, roomId, trialInteractionActiveIds, trialStage, serverTimeOffset]);
+  }, [canAct, dayDeadline, dayLocked, dayPaused, deadPlayers, isTrialTarget, localSelectedTarget, phase, roomId, trialInteractionActiveIds, trialStage, serverTimeOffset, votingStunned]);
 
   const activeCountdownDeadline = useMemo(() => {
     if (trialStage === "verdict") return trialVerdictDeadline;
@@ -190,19 +196,25 @@ export function useDayVoteRole({
             {dayDeadline && (
               <>
                 <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between" }}>
-                  <button
-                    onClick={() => {
-                      if (!localSelectedTarget) {
-                        setInfoMessage("Bạn chưa chọn mục tiêu biểu quyết.");
-                        return;
-                      }
-                      setShowDayVoteConfirm(true);
-                    }}
-                    style={{ margin: "4px 0", padding: "8px 12px", cursor: "pointer" }}
-                    disabled={!!dayLocked?.[clientId]}
+                  <StunActionGuard
+                    blocked={votingStunned}
+                    blockedLabel="Bạn đang bị choáng và chỉ có thể bỏ phiếu trống"
+                    className="stun-action-guard--day-vote"
                   >
-                    <AvifIcon name="🗳️" style={{ marginRight: 4 }} /> Chốt biểu quyết
-                  </button>
+                    <button
+                      onClick={() => {
+                        if (!localSelectedTarget) {
+                          setInfoMessage("Bạn chưa chọn mục tiêu biểu quyết.");
+                          return;
+                        }
+                        setShowDayVoteConfirm(true);
+                      }}
+                      style={{ margin: 0, padding: "8px 12px", cursor: "pointer" }}
+                      disabled={!!dayLocked?.[clientId]}
+                    >
+                      <AvifIcon name="🗳️" style={{ marginRight: 4 }} /> Chốt biểu quyết
+                    </button>
+                  </StunActionGuard>
                   <button
                     onClick={() => {
                       setShowBlankVoteConfirm(true);
@@ -228,32 +240,37 @@ export function useDayVoteRole({
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
               {!isHost && !isTrialTarget && !deadPlayers.includes(clientId) && (
-                alreadyChosenByTrialTarget || hasInteracted ? (
-                  <button
-                    onClick={() => {
-                      if (!canToggleInteraction) return;
-                      socket.emit("trialToggleInteraction", { roomId, active: !hasInteracted });
-                    }}
-                    style={{ padding: "8px 12px", cursor: "pointer" }}
-                    disabled={!canToggleInteraction}
-                  >
-                    {alreadyChosenByTrialTarget ? "Đã tương tác" : "Hủy tương tác"}
-                  </button>
-                ) : (
-                  <StarBorder
-                    as="button"
-                    onClick={() => {
-                      if (!canToggleInteraction) return;
-                      socket.emit("trialToggleInteraction", { roomId, active: !hasInteracted });
-                    }}
-                    style={{ cursor: "pointer" }}
-                    disabled={!canToggleInteraction}
-                    color="white"
-                    speed="6s"
-                  >
-                    Tương tác
-                  </StarBorder>
-                )
+                <StunActionGuard
+                  blocked={votingStunned && canRequestInteraction}
+                  blockedLabel="Bạn đang bị choáng và không thể tương tác"
+                >
+                  {alreadyChosenByTrialTarget || hasInteracted ? (
+                    <button
+                      onClick={() => {
+                        if (!canToggleInteraction) return;
+                        socket.emit("trialToggleInteraction", { roomId, active: !hasInteracted });
+                      }}
+                      style={{ padding: "8px 12px", cursor: "pointer" }}
+                      disabled={!canRequestInteraction}
+                    >
+                      {alreadyChosenByTrialTarget ? "Đã tương tác" : "Hủy tương tác"}
+                    </button>
+                  ) : (
+                    <StarBorder
+                      as="button"
+                      onClick={() => {
+                        if (!canToggleInteraction) return;
+                        socket.emit("trialToggleInteraction", { roomId, active: !hasInteracted });
+                      }}
+                      style={{ cursor: "pointer" }}
+                      disabled={!canRequestInteraction}
+                      color="white"
+                      speed="6s"
+                    >
+                      Tương tác
+                    </StarBorder>
+                  )}
+                </StunActionGuard>
               )}
               {isTrialTarget && (
                 <button
@@ -294,18 +311,32 @@ export function useDayVoteRole({
             >
               <AvifIcon name="✅" style={{ marginRight: 4 }} /> Vote Sống{effectiveTrialVote === "live" ? " (đã chọn)" : ""}
             </button>
+            <StunActionGuard
+              blocked={votingStunned}
+              blockedLabel="Bạn đang bị choáng và không thể Vote Chết"
+              className="stun-action-guard--verdict"
+            >
+              <button
+                onClick={() => {
+                  setLocalTrialVote("die");
+                  socket.emit("trialVoteLifeDeath", { roomId, vote: "die" });
+                }}
+                style={{ margin: 0, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center" }}
+              >
+                <AvifIcon name="☠️" style={{ marginRight: 4 }} /> Vote Chết{effectiveTrialVote === "die" ? " (đã chọn)" : ""}
+              </button>
+            </StunActionGuard>
             <button
               onClick={() => {
-                setLocalTrialVote("die");
-                socket.emit("trialVoteLifeDeath", { roomId, vote: "die" });
+                setLocalTrialVote("abstain");
+                socket.emit("trialVoteLifeDeath", { roomId, vote: "abstain" });
               }}
               style={{ marginTop: 8, padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center" }}
             >
-              <AvifIcon name="☠️" style={{ marginRight: 4 }} /> Vote Chết{effectiveTrialVote === "die" ? " (đã chọn)" : ""}
+              <AvifIcon name="⭕" style={{ marginRight: 4 }} /> Phiếu trống{effectiveTrialVote === "abstain" ? " (đã chọn)" : ""}
             </button>
           </div>
         )}
-
         <ConfirmModal
           open={showDayVoteConfirm}
           title="Xác nhận biểu quyết"

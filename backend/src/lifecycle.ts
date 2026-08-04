@@ -2,7 +2,7 @@ import type { ServerContext } from "./serverContext.js";
 import { ensureRoomGameRules, buildRoomGameRules, type Room, type GameLogEntryPhase } from "./serverTypes.js";
 import { clearGameTimers, clearTrialState, ensureWitchState, getParticipantCount, getParticipantPlayers, getParticipantIds, getBanSoiId, getSpiritWolfId, getWildWolfId, getWitches, isWolfRole, resetNightTurnState, getAlivePlayerIds, isWolfAlignedPlayer } from "./roomState.js";
 import { RULES_RESTART_FADE_IN_MS, RULES_RESTART_FADE_OUT_MS, RULES_RESTART_HOLD_MS, RULES_RESTART_RESTART_AT_MS, TWO_HEARTS_NIGHT_LIMIT, initTwoHeartsForParticipants } from "./gameConfig.js";
-import { emitRolesRevealToSocket, toPublicRoom, broadcastWolvesListSync, emitPublicDayGameLogToRoom, emitGameLogToSocket, emitSongTrungRobbedStateToPlayers } from "./serverEmitters.js";
+import { emitRolesRevealToSocket, toPublicRoom, broadcastWolvesListSync, emitPublicDayGameLogToRoom, emitGameLogToSocket, emitSongTrungRobbedStateToPlayers, emitCoffeePrivateStateForAll } from "./serverEmitters.js";
 import { dealRolesWithPendingAssignments, pickRolesForParticipants } from "./roleAssignment.js";
 import { clearLoveStateForPlayers, getLovePairIds } from "./love.js";
 import { MERCHANT_ROLE, resetMerchantRoundState } from "./merchant.js";
@@ -12,6 +12,7 @@ import { ScoringEngine } from "./scoring/scoringEngine.js";
 import { buildGameSummaryFromRoom } from "./scoring/gameLogMapper.js";
 import { appendGameEvent } from "./gameEvent.js";
 import { saveMatchHistory } from "./gameHistory.js";
+import { assignCoffeeSecondaryRoles, getPrimaryRolesForDeal, resetCoffeeRoleState } from "./coffeeRoles.js";
 
 
 const SPIRIT_WOLF_ROLE = "Linh sói";
@@ -95,7 +96,12 @@ export function createLifecycleFlow(ctx: ServerContext) {
     ctx.io.to(roomId).emit("gameLogUpdated", { roomId, nights: room.gameLog || [] });
     ctx.io.to(roomId).emit(
       "rolesRevealUpdated",
-      { roomId, rolesByPlayerId: room.playerRoles || {}, rolesBeforeConversion: room.rolesBeforeConversion || {} }
+      {
+        roomId,
+        rolesByPlayerId: room.playerRoles || {},
+        rolesBeforeConversion: room.rolesBeforeConversion || {},
+        secondaryRolesByPlayerId: room.coffeeRoleState?.secondaryRolesByPlayerId || {},
+      }
     );
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
   }
@@ -124,14 +130,14 @@ export function createLifecycleFlow(ctx: ServerContext) {
     ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     ctx.io.to(room.hostId).emit("gameStarted", hostOverlayMessage
       ? {
-          hostRestartCinematic: {
-            roomId,
-            message: hostOverlayMessage,
-            fadeInMs: RULES_RESTART_FADE_IN_MS,
-            holdMs: RULES_RESTART_HOLD_MS,
-            fadeOutMs: RULES_RESTART_FADE_OUT_MS,
-          },
-        }
+        hostRestartCinematic: {
+          roomId,
+          message: hostOverlayMessage,
+          fadeInMs: RULES_RESTART_FADE_IN_MS,
+          holdMs: RULES_RESTART_HOLD_MS,
+          fadeOutMs: RULES_RESTART_FADE_OUT_MS,
+        },
+      }
       : undefined);
   }
 
@@ -154,13 +160,14 @@ export function createLifecycleFlow(ctx: ServerContext) {
       return;
     }
 
-    const removableSlots = Math.max(0, roles.length - participantCount);
+    const removableSlots = Math.max(0, getPrimaryRolesForDeal(room).length - participantCount);
     if (removableSlots > 0) {
       for (let i = roles.length - 1; i >= 0 && overflow > 0 && room.roles && removableSlots > 0; i--) {
         if (!isWolfRole(roles[i])) continue;
         roles.splice(i, 1);
         overflow -= 1;
-        if (roles.length <= participantCount) break;
+        room.roles = roles;
+        if (getPrimaryRolesForDeal(room).length <= participantCount) break;
       }
     }
 
@@ -190,9 +197,9 @@ export function createLifecycleFlow(ctx: ServerContext) {
     room.gameRules = rules;
     delete room.pendingGameRules;
 
-    const roles = room.roles;
+    const roles = getPrimaryRolesForDeal(room);
     const participantCount = getParticipantCount(room);
-    if (!roles || roles.length < participantCount) {
+    if (roles.length < participantCount) {
       return false;
     }
 
@@ -215,7 +222,18 @@ export function createLifecycleFlow(ctx: ServerContext) {
 
     if (!deal) return false;
 
+    const previousPlayerRoles = room.playerRoles;
+    const previousCoffeeRoleState = room.coffeeRoleState;
     room.playerRoles = deal.playerRoles;
+    resetCoffeeRoleState(room);
+    const secondaryDeal = assignCoffeeSecondaryRoles(room);
+    if (!secondaryDeal.ok) {
+      if (previousPlayerRoles) room.playerRoles = previousPlayerRoles;
+      else delete room.playerRoles;
+      if (previousCoffeeRoleState) room.coffeeRoleState = previousCoffeeRoleState;
+      else delete room.coffeeRoleState;
+      return false;
+    }
     if (deal.updatedPlayerRoleHistory) {
       room.playerRoleHistory = deal.updatedPlayerRoleHistory;
     }
@@ -230,6 +248,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
       ctx.io.to(player.id).emit("yourRole", role);
       ctx.io.to(player.id).emit("wildWolfConvertedState", { converted: false });
     });
+    emitCoffeePrivateStateForAll(roomId);
 
 
     room.daNghichState!.wolves = participants.filter((p) => isWolfRole(room.playerRoles?.[p.id])).map((p) => p.id);
@@ -410,7 +429,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
 
     if (room.gameMode === "diet_quy") {
       const dead = new Set(room.deadPlayers || []);
-      
+
       // Check Phò promotion first!
       const demonAliveBefore = room.players.some((p) => p.id !== room.hostId && room.playerRoles?.[p.id] === "Ác Quỷ" && !dead.has(p.id));
       if (!demonAliveBefore) {
@@ -505,7 +524,7 @@ export function createLifecycleFlow(ctx: ServerContext) {
     if (room.phase === "day" && aliveIds.length === 3 && wolfAligned.length === 1 && nonWolfAligned.length === 2) {
       const hasDefense = nonWolfAligned.some((pId) => {
         const role = room.playerRoles?.[pId];
-        
+
         // 1. Bảo vệ
         if (role === "Bảo vệ") return true;
 

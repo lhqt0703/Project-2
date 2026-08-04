@@ -86,6 +86,8 @@ import {
   broadcastElementalBuffSelection,
   broadcastWolvesListSync,
   emitSongTrungRobbedStateToPlayers,
+  emitCoffeePrivateState,
+  emitCoffeePrivateStateForAll,
 } from "./serverEmitters.js";
 import {
   ELEMENTAL_BUFFS,
@@ -169,6 +171,31 @@ import {
   recordAngelReviveChoice,
   revealAngelHiddenRevivesForDay,
 } from "./angel.js";
+import {
+  COFFEE_MAKER_ROLE,
+  DONG_TRUNG_ROLE,
+  LINH_CHI_ROLE,
+  assignCoffeeSecondaryRoles,
+  clearCoffeeWolfStunWhenMakerKilled,
+  getCoffeeWolfPoisonDisposition,
+  getPrimaryRolesForDeal,
+  getPrimaryRolesFromSelection,
+  isCoffeeWolfVotingStunned,
+  performCoffeeHerbSearch,
+  performCoffeeMakerSearch,
+  recordCoffeeHerbWolfBite,
+  resetCoffeeNightState,
+  resetCoffeeRoleState,
+  scheduleCoffeeDelayedPoison,
+  takeDueCoffeeDelayedPoisons,
+} from "./coffeeRoles.js";
+import {
+  ensureCoTyPhuState,
+  finishCoTyPhuRound,
+  setCoTyPhuStartingMoney,
+  startCoTyPhuRound,
+  transferCoTyPhuMoney,
+} from "./coTyPhu.js";
 
 const SPIRIT_WOLF_ROLE = "Linh sói";
 const NORMAL_WOLF_ROLE = "Sói";
@@ -182,6 +209,9 @@ const HOST_EXTRA_TIME_NON_WOLF_ROLES = new Set([
   "Tiên tri",
   CURSED_ROLE,
   MERCHANT_ROLE,
+  COFFEE_MAKER_ROLE,
+  LINH_CHI_ROLE,
+  DONG_TRUNG_ROLE,
 ]);
 
 function getChefPairsCount(room: Room): number {
@@ -345,10 +375,17 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
   }
 
+  function getEffectivePrimaryRoles(room: Room) {
+    const rules = room.pendingGameRules
+      ? buildRoomGameRules(room.pendingGameRules, room.gameMode)
+      : ensureRoomGameRules(room);
+    return getPrimaryRolesFromSelection(room.roles || [], rules);
+  }
+
   function pruneRoomPendingRoleAssignments(room: Room) {
     const nextAssignments = prunePendingRoleAssignments(
       room.pendingRoleAssignments,
-      room.roles || [],
+      getEffectivePrimaryRoles(room),
       getParticipantIds(room),
     );
     setRoomPendingRoleAssignments(room, nextAssignments);
@@ -357,7 +394,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
   function pruneRoomPendingRoleBlocks(room: Room) {
     const nextBlocks = prunePendingRoleBlocks(
       room.pendingRoleBlocks,
-      room.roles || [],
+      getEffectivePrimaryRoles(room),
       getParticipantIds(room),
       room.pendingRoleAssignments,
     );
@@ -421,6 +458,17 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
     if (room.playerRoleHistory) {
       delete room.playerRoleHistory[targetId];
+    }
+    if (room.coffeeRoleState) {
+      delete room.coffeeRoleState.secondaryRolesByPlayerId[targetId];
+      delete room.coffeeRoleState.makerSearchByPlayerId[targetId];
+      delete room.coffeeRoleState.makerUseCountByPlayerId[targetId];
+      delete room.coffeeRoleState.makerBonusUsesByPlayerId[targetId];
+      delete room.coffeeRoleState.herbSearchByPlayerId[targetId];
+      room.coffeeRoleState.makerFoundBothPlayerIds = room.coffeeRoleState.makerFoundBothPlayerIds.filter((id) => id !== targetId);
+      room.coffeeRoleState.makerKilledByWolfPlayerIds = room.coffeeRoleState.makerKilledByWolfPlayerIds.filter((id) => id !== targetId);
+      room.coffeeRoleState.herbBonusGrantedPlayerIds = room.coffeeRoleState.herbBonusGrantedPlayerIds.filter((id) => id !== targetId);
+      room.coffeeRoleState.delayedPoisons = room.coffeeRoleState.delayedPoisons.filter((poison) => poison.targetId !== targetId && poison.sourceActorId !== targetId);
     }
     if (room.daNghichState!.wolfVotes) {
       delete room.daNghichState!.wolfVotes[targetId];
@@ -1107,6 +1155,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     const rules = ensureRoomGameRules(room);
     const wolfTargets = getUniqueTargets([room.killedTonight, room.killedTonightExtra]);
+    const coffeeMakerKilledByWolfIds: string[] = [];
     const healEntries = Object.entries(room.witchHealTargetTonight || {});
     const wolfAttackAt = room.wolfAttackResolvedAt || Date.now();
     const spiritWolfId = getSpiritWolfId(room);
@@ -1232,6 +1281,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
       if (isVillageChief(room, currentTargetId)) {
         if (isVillageChiefDelayedBiteNight(room)) {
+          recordCoffeeHerbWolfBite(room, currentTargetId);
           if (room.daNghichState!.sharedHeartsVisible) {
             room.daNghichState!.playerHearts = room.daNghichState!.playerHearts || {};
             const currentHp = Math.max(1, Math.min(TWO_HEARTS_MAX_HP, room.daNghichState!.playerHearts[currentTargetId] ?? TWO_HEARTS_MAX_HP));
@@ -1252,6 +1302,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         continue;
       }
 
+      recordCoffeeHerbWolfBite(room, currentTargetId);
+
       const twoHeartsDamage = getTwoHeartsWolfDamage(room);
       if (twoHeartsDamage > 0) {
         room.daNghichState!.playerHearts = room.daNghichState!.playerHearts || {};
@@ -1259,12 +1311,55 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         const nextHp = Math.max(0, currentHp - twoHeartsDamage);
         room.daNghichState!.playerHearts[currentTargetId] = nextHp;
         if (nextHp <= 0) {
-          markEliminated(currentTargetId, wolfCause);
+          const newlyDead = markEliminated(currentTargetId, wolfCause);
+          if (newlyDead.includes(currentTargetId) && room.playerRoles?.[currentTargetId] === COFFEE_MAKER_ROLE) {
+            if (!coffeeMakerKilledByWolfIds.includes(currentTargetId)) coffeeMakerKilledByWolfIds.push(currentTargetId);
+          }
         }
         continue;
       }
 
-      markEliminated(currentTargetId, wolfCause);
+      const newlyDead = markEliminated(currentTargetId, wolfCause);
+      if (newlyDead.includes(currentTargetId) && room.playerRoles?.[currentTargetId] === COFFEE_MAKER_ROLE) {
+        if (!coffeeMakerKilledByWolfIds.includes(currentTargetId)) coffeeMakerKilledByWolfIds.push(currentTargetId);
+      }
+    }
+
+    for (const coffeeMakerId of coffeeMakerKilledByWolfIds) {
+      clearCoffeeWolfStunWhenMakerKilled(room, coffeeMakerId);
+    }
+
+    flushProtectorSaves();
+
+    for (const poison of takeDueCoffeeDelayedPoisons(room)) {
+      if (initialDead.has(poison.targetId) || (room.deadPlayers || []).includes(poison.targetId)) continue;
+      if (getCoffeeWolfPoisonDisposition(room, poison.targetId) === "immune") {
+        appendLogEntry(room, {
+          type: "custom_log",
+          phase: "night",
+          message: `Độc tố bị trì hoãn trên ${room.players.find((player) => player.id === poison.targetId)?.name || poison.targetId} đã bị hóa giải bởi miễn nhiễm độc tố của phe Sói.`,
+        });
+        continue;
+      }
+      const newlyDead = markEliminated(poison.targetId, {
+        type: "witch_poison",
+        sourceActorId: poison.sourceActorId,
+        killerId: poison.sourceActorId,
+      });
+      appendLogEntry(room, {
+        type: "custom_log",
+        phase: "night",
+        message: `Độc tố bị trì hoãn trên ${room.players.find((player) => player.id === poison.targetId)?.name || poison.targetId} đã phát tác.`,
+      });
+      if (newlyDead.includes(poison.targetId)) {
+        triggerMerchantGunpowderExplosion(ctx, roomId, room, poison.targetId, "night", {
+          initialDead,
+          eliminatedIds,
+          causesByTarget,
+          protectorSaves,
+          loveLinkDeaths,
+        });
+      }
     }
 
     flushProtectorSaves();
@@ -1286,6 +1381,19 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       }
       const witchEntry = poisonEntries.find(([, poisonedTargetId]) => poisonedTargetId === targetId);
       const witchId = witchEntry ? witchEntry[0] : undefined;
+      const poisonDisposition = getCoffeeWolfPoisonDisposition(room, targetId);
+      if (poisonDisposition === "immune") {
+        appendLogEntry(room, {
+          type: "custom_log",
+          phase: "night",
+          message: `${room.players.find((player) => player.id === targetId)?.name || targetId} thuộc phe Sói miễn nhiễm bình độc của Phù thủy.`,
+        });
+        continue;
+      }
+      if (poisonDisposition === "delayed") {
+        scheduleCoffeeDelayedPoison(room, targetId, witchId);
+        continue;
+      }
       const newlyDead = markEliminated(targetId, { type: "witch_poison", sourceActorId: witchId, killerId: witchId });
       if (newlyDead.includes(targetId)) {
         triggerMerchantGunpowderExplosion(ctx, roomId, room, targetId, "night", {
@@ -1923,6 +2031,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       daNghichState: {},
       warnedPlayerIds: [],
     };
+    if (gameMode === "co_ty_phu") ensureCoTyPhuState(rooms[roomId]!);
 
     leaveOtherGameRooms(roomId);
     socket.join(roomId);
@@ -1940,6 +2049,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     ensureRoomGameRules(room);
     clearDisconnectedCleanup(roomId, clientId);
     const existingPlayerIndex = room.players.findIndex((p) => p.id === clientId);
+    if (room.gameMode === "co_ty_phu" && room.phase === "playing" && existingPlayerIndex < 0) {
+      socket.emit("errorMessage", "Ván Cờ tỷ phú đã bắt đầu, bạn không thể vào giữa ván.");
+      return;
+    }
     const defaultRealName = VIP_REAL_NAMES[clientId];
     if (existingPlayerIndex >= 0) {
       const current = room.players[existingPlayerIndex]!;
@@ -2104,12 +2217,14 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!gameInProgress) {
       room.gameRules = mergedRules;
       delete room.pendingGameRules;
+      syncPendingRoleInterventionsToHost(roomId);
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       return;
     }
 
     if (applyMode === "next-round") {
       room.pendingGameRules = mergedRules;
+      syncPendingRoleInterventionsToHost(roomId);
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       return;
     }
@@ -2117,6 +2232,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (applyMode === "restart-now") {
       room.gameRules = mergedRules;
       delete room.pendingGameRules;
+      syncPendingRoleInterventionsToHost(roomId);
       ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
       returnHostToGameView(roomId, "Đang khởi tạo ván chơi mới");
       emitRestartCinematicToPlayers(roomId, "Quản trò đã thiết lập lại luật chơi và khởi động lại ván chơi mới");
@@ -2158,7 +2274,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       return;
     }
 
-    const roleCount = (room.roles || []).filter((roomRole) => roomRole === nextRole).length;
+    const roleCount = getEffectivePrimaryRoles(room).filter((roomRole) => roomRole === nextRole).length;
     if (roleCount <= 0) {
       socket.emit("errorMessage", "Vai trò này chưa có trong danh sách vai trò của phòng.");
       return;
@@ -2205,7 +2321,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const nextRole = typeof role === "string" && role.trim().length > 0 ? role : null;
     if (!nextRole) return;
 
-    const roleCount = (room.roles || []).filter((roomRole) => roomRole === nextRole).length;
+    const roleCount = getEffectivePrimaryRoles(room).filter((roomRole) => roomRole === nextRole).length;
     if (roleCount <= 0) {
       socket.emit("errorMessage", "Vai trò này chưa có trong danh sách vai trò của phòng.");
       return;
@@ -2301,8 +2417,12 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const gameInProgress = !!room.phase && !room.gameOver;
     const participantCount = getParticipantCount(room);
     const incomingRoles = Array.isArray(roles) ? roles : [];
+    const roleSelectionRules = room.pendingGameRules
+      ? buildRoomGameRules(room.pendingGameRules, room.gameMode)
+      : ensureRoomGameRules(room);
+    const incomingPrimaryRoles = getPrimaryRolesFromSelection(incomingRoles, roleSelectionRules);
 
-    if (incomingRoles.length < participantCount) {
+    if (incomingPrimaryRoles.length < participantCount) {
       socket.emit("errorMessage", "Danh sách vai trò không hợp lệ hoặc chưa được chọn.");
       return;
     }
@@ -2372,7 +2492,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.roles.push("Dân làng");
     }
 
-    const stillMissing = getParticipantCount(room) - room.roles.length;
+    const stillMissing = getParticipantCount(room) - getPrimaryRolesForDeal(room).length;
 
     if (stillMissing > 0) {
       ctx.io.to(room.hostId).emit("roleMismatch", {
@@ -2385,7 +2505,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const participants = getParticipantPlayers(room);
     const deal = dealRolesWithPendingAssignments(
       participants,
-      room.roles,
+      getPrimaryRolesForDeal(room),
       room.pendingRoleAssignments,
       room.pendingRoleBlocks,
       pickRolesForParticipants,
@@ -2397,7 +2517,19 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       return;
     }
 
+    const previousPlayerRoles = room.playerRoles;
+    const previousCoffeeRoleState = room.coffeeRoleState;
     room.playerRoles = deal.playerRoles;
+    resetCoffeeRoleState(room);
+    const secondaryDeal = assignCoffeeSecondaryRoles(room);
+    if (!secondaryDeal.ok) {
+      if (previousPlayerRoles) room.playerRoles = previousPlayerRoles;
+      else delete room.playerRoles;
+      if (previousCoffeeRoleState) room.coffeeRoleState = previousCoffeeRoleState;
+      else delete room.coffeeRoleState;
+      socket.emit("errorMessage", `Không đủ người thuộc phe dân hợp lệ để phát ${secondaryDeal.required} thẻ phụ Linh Chi/Đông Trùng.`);
+      return;
+    }
     if (deal.updatedPlayerRoleHistory) {
       room.playerRoleHistory = deal.updatedPlayerRoleHistory;
     }
@@ -2413,6 +2545,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       ctx.io.to(player.id).emit("yourRole", role);
       ctx.io.to(player.id).emit("wildWolfConvertedState", { converted: false });
     });
+    emitCoffeePrivateStateForAll(roomId);
 
     room.daNghichState!.wolves = participants
       .filter(p => isWolfRole(room.playerRoles?.[p.id]))
@@ -2682,7 +2815,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
                 activeTrialVoters.length > 0 &&
                 activeTrialVoters.every((id) => {
                   const v = room.trialVotes?.[id];
-                  return v === "live" || v === "die";
+                  return v === "live" || v === "abstain" || (v === "die" && !isCoffeeWolfVotingStunned(room, id));
                 });
               if (allVoted) {
                 finishTrialVerdict(roomId);
@@ -2718,7 +2851,21 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const room = rooms[roomId];
     if (!room) {
       return;
-    } if (room.pendingGameRules) {
+    }
+
+    if (room.gameMode === "co_ty_phu") {
+      if (clientId !== room.hostId) return;
+      const result = startCoTyPhuRound(room);
+      if (!result.ok) {
+        socket.emit("errorMessage", result.message);
+        return;
+      }
+      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+      ctx.io.to(roomId).emit("gameStarted");
+      return;
+    }
+
+    if (room.pendingGameRules) {
       room.gameRules = buildRoomGameRules(room.pendingGameRules, room.gameMode);
       delete room.pendingGameRules;
     }
@@ -2730,7 +2877,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         const newPlayers = getParticipantPlayers(room).filter(
           p => !room.lockedPlayerIds!.includes(p.id)
         );
-        const missingRoles = Math.max(0, currentCount - (room.roles?.length || 0));
+        const missingRoles = Math.max(0, currentCount - getPrimaryRolesForDeal(room).length);
         if (missingRoles > 0) {
           ctx.io.to(room.hostId).emit("roleMismatch", {
             newPlayers,
@@ -2741,9 +2888,9 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       }
     }
 
-    const roles = room.roles;
+    const roles = getPrimaryRolesForDeal(room);
     const participantCount = getParticipantCount(room);
-    if (!roles || roles.length < participantCount) {
+    if (roles.length < participantCount) {
       socket.emit("errorMessage", "Danh sách vai trò không hợp lệ hoặc chưa được chọn.");
       return;
     }
@@ -2887,7 +3034,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const participants = getParticipantPlayers(room);
     const deal = dealRolesWithPendingAssignments(
       participants,
-      room.roles || roles,
+      roles,
       room.pendingRoleAssignments,
       room.pendingRoleBlocks,
       pickRolesForParticipants,
@@ -2899,7 +3046,19 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       return;
     }
 
+    const previousPlayerRoles = room.playerRoles;
+    const previousCoffeeRoleState = room.coffeeRoleState;
     room.playerRoles = deal.playerRoles;
+    resetCoffeeRoleState(room);
+    const secondaryDeal = assignCoffeeSecondaryRoles(room);
+    if (!secondaryDeal.ok) {
+      if (previousPlayerRoles) room.playerRoles = previousPlayerRoles;
+      else delete room.playerRoles;
+      if (previousCoffeeRoleState) room.coffeeRoleState = previousCoffeeRoleState;
+      else delete room.coffeeRoleState;
+      socket.emit("errorMessage", `Không đủ người thuộc phe dân hợp lệ để phát ${secondaryDeal.required} thẻ phụ Linh Chi/Đông Trùng.`);
+      return;
+    }
     if (deal.updatedPlayerRoleHistory) {
       room.playerRoleHistory = deal.updatedPlayerRoleHistory;
     }
@@ -2914,6 +3073,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       ctx.io.to(player.id).emit("yourRole", role);
       ctx.io.to(player.id).emit("wildWolfConvertedState", { converted: false });
     });
+    emitCoffeePrivateStateForAll(roomId);
 
     room.daNghichState!.wolves = participants
       .filter(p => isWolfRole(room.playerRoles?.[p.id]))
@@ -2973,6 +3133,59 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     emitGameLogToSocket(roomId, room.hostId);
 
     checkAndEndGame(roomId, "after_game_start");
+  });
+
+  socket.on("coTyPhuSetStartingMoney", ({ roomId, startingMoney }, callback?: SocketActionAck) => {
+    const room = rooms[roomId];
+    if (!room || room.gameMode !== "co_ty_phu" || clientId !== room.hostId) {
+      callback?.({ ok: false, reason: "forbidden", message: "Bạn không có quyền đổi thiết lập này." });
+      return;
+    }
+    if (room.phase === "playing" && !room.gameOver) {
+      callback?.({ ok: false, reason: "game_in_progress", message: "Không thể đổi vốn khi ván đang diễn ra." });
+      return;
+    }
+    const result = setCoTyPhuStartingMoney(room, startingMoney);
+    if (!result.ok) {
+      callback?.({ ok: false, reason: "invalid_money", message: result.message });
+      return;
+    }
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    callback?.({ ok: true });
+  });
+
+  socket.on("coTyPhuTransfer", ({ roomId, toPlayerId, baseAmount, bonusPercent }, callback?: SocketActionAck) => {
+    const room = rooms[roomId];
+    if (!room || room.gameMode !== "co_ty_phu") {
+      callback?.({ ok: false, reason: "room_not_found", message: "Phòng Cờ tỷ phú không tồn tại." });
+      return;
+    }
+    const result = transferCoTyPhuMoney(room, clientId, toPlayerId, baseAmount, bonusPercent);
+    if (!result.ok) {
+      callback?.({ ok: false, reason: "invalid_transfer", message: result.message });
+      return;
+    }
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    callback?.({ ok: true });
+  });
+
+  socket.on("coTyPhuEndGame", ({ roomId }, callback?: SocketActionAck) => {
+    const room = rooms[roomId];
+    if (!room || room.gameMode !== "co_ty_phu" || clientId !== room.hostId) {
+      callback?.({ ok: false, reason: "forbidden", message: "Chỉ host mới có thể kết thúc trò chơi." });
+      return;
+    }
+    if (room.phase !== "playing" || room.gameOver) {
+      callback?.({ ok: false, reason: "not_playing", message: "Ván chơi hiện không diễn ra." });
+      return;
+    }
+    const result = finishCoTyPhuRound(room);
+    if (!result.ok) {
+      callback?.({ ok: false, reason: "cannot_finish", message: result.message });
+      return;
+    }
+    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
+    callback?.({ ok: true });
   });
 
   socket.on("requestRolesReveal", ({ roomId }: { roomId: string }) => {
@@ -3151,7 +3364,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     const previousPhase = room.phase;
     const nightTransitionDelayMs =
       phase === "night" && previousPhase === "dusk" && (room.gameMode || "da_nghich") === "da_nghich"
-        ? 3_900
+        ? 4_300 //Tofuedited Kiểm soát thời gian hiệu ứng chuyển cảnh dusk sang night
         : 0;
     room.nightTransitionEndsAt = nightTransitionDelayMs > 0 ? Date.now() + nightTransitionDelayMs : null;
     room.phase = phase;
@@ -3244,6 +3457,8 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         }
       }
 
+      emitCoffeePrivateStateForAll(roomId);
+
       expireMerchantItemsAtNightEnd(room);
       room.merchantCheeseMarkedPlayerIds = [];
       emitMerchantCheeseMarks(roomId);
@@ -3298,6 +3513,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       clearTrialState(room);
 
       room.nightCount = (room.nightCount || 0) + 1;
+      resetCoffeeNightState(room);
       expireUnusedAngelReviveOpportunities(room);
       const activatedAngelRevives = activateAngelRevivesForNight(room);
       for (const record of activatedAngelRevives) {
@@ -3460,6 +3676,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.loveEscapeActivatedAt = null;
       emitLoveStateToPair(ctx, roomId, room);
       emitMerchantPrivateStateForAll(roomId);
+      emitCoffeePrivateStateForAll(roomId);
 
       // Give the reusable dusk-to-night card transition time to finish before any action timer starts.
       startNightTurnFlow(roomId, { delayMs: nightTransitionDelayMs });
@@ -3476,6 +3693,10 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     const activeVoters = getActiveDayVoters(room);
     if (!activeVoters.includes(clientId)) return;
+    if (isCoffeeWolfVotingStunned(room, clientId) && targetId) {
+      socket.emit("errorMessage", "Bạn đang bị choáng và buộc phải bỏ phiếu trống trong buổi sáng này.");
+      return;
+    }
 
     if (room.dayLocked?.[clientId]) {
       socket.emit("errorMessage", "Bạn đã khóa phiếu biểu quyết, không thể thay đổi.");
@@ -3512,6 +3733,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     const activeVoters = getActiveDayVoters(room);
     if (!activeVoters.includes(clientId)) return;
+    if (!room.dayPaused && room.dayDeadline && Date.now() >= room.dayDeadline) return;
+    if (isCoffeeWolfVotingStunned(room, clientId) && room.dayVotes?.[clientId]) {
+      socket.emit("errorMessage", "Bạn đang bị choáng và buộc phải bỏ phiếu trống trong buổi sáng này.");
+      return;
+    }
 
     const DIET_QUY_TOWNSFOLK = [
       "Thợ giặt", "Thủ thư", "Điều tra viên", "Đầu bếp", "Đồng cảm",
@@ -3912,6 +4138,13 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       if (!activeDeadline) return;
 
       const remainingMs = Math.max(0, activeDeadline - Date.now());
+      if (remainingMs === 0) {
+        if (timerType === "discussion") startDayVoting(roomId);
+        else if (timerType === "voting") finishDayVoting(roomId);
+        else if (timerType === "defense") startTrialVerdictVoting(roomId);
+        else if (timerType === "verdict") finishTrialVerdict(roomId, { defaultStunnedAbstain: true });
+        return;
+      }
       room.dayRemainingMs = remainingMs;
       room.dayPaused = true;
       room.dayPausedType = timerType;
@@ -3983,7 +4216,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       room.trialVerdictTimer = setTimeout(() => {
         const r = ctx.rooms[roomId];
         if (r && r.phase === "day" && !r.dayPaused && r.trialVerdictDeadline === newDeadline) {
-          finishTrialVerdict(roomId);
+          finishTrialVerdict(roomId, { defaultStunnedAbstain: true });
         }
       }, remainingMs);
     }
@@ -4956,6 +5189,11 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (!room.trialTargetId) return;
     if ((room.deadPlayers || []).includes(clientId)) return;
     if (clientId === room.trialTargetId) return;
+    if (!room.dayPaused && room.trialDefenseDeadline && Date.now() >= room.trialDefenseDeadline) return;
+    if (isCoffeeWolfVotingStunned(room, clientId)) {
+      socket.emit("errorMessage", "Bạn đang bị choáng nên không thể tham gia tương tác trong phiên xét xử này.");
+      return;
+    }
     if (room.trialInteractionCut) return;
     if ((room.trialSelectedInteractorIds || []).includes(clientId)) return;
 
@@ -5072,11 +5310,15 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     const voters = getTrialVoters(room);
     if (!voters.includes(clientId)) return;
-
     if (!room.dayPaused && room.trialVerdictDeadline && Date.now() >= room.trialVerdictDeadline) return;
 
+    if (isCoffeeWolfVotingStunned(room, clientId) && vote !== "live" && vote !== "abstain") {
+      socket.emit("errorMessage", "Bạn đang bị choáng nên chỉ có thể bỏ phiếu sống hoặc phiếu trống.");
+      return;
+    }
+
     room.trialVotes = room.trialVotes || {};
-    if (vote !== "live" && vote !== "die") {
+    if (vote !== "live" && vote !== "die" && vote !== "abstain") {
       room.trialVotes[clientId] = null;
     } else {
       room.trialVotes[clientId] = vote;
@@ -5088,7 +5330,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       voters.length > 0 &&
       voters.every((id) => {
         const v = room.trialVotes?.[id];
-        return v === "live" || v === "die";
+        return v === "live" || v === "abstain" || (v === "die" && !isCoffeeWolfVotingStunned(room, id));
       });
     if (allVoted) {
       finishTrialVerdict(roomId);
@@ -5265,6 +5507,64 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (clientId !== room.hostId) return;
     if (!room.players.find(p => p.id === targetId)) return;
     removePlayerFromRoom(roomId, targetId, { ...(source ? { source } : {}), notifyTarget: true });
+  });
+
+  socket.on("requestCoffeePrivateState", ({ roomId }: { roomId: string }) => {
+    const room = rooms[roomId];
+    if (!room || !room.players.some((player) => player.id === clientId)) return;
+    emitCoffeePrivateState(roomId, clientId);
+  });
+
+  socket.on("coffeeMakerSearch", ({ roomId, targetIds }: { roomId: string; targetIds: string[] }) => {
+    const room = rooms[roomId];
+    if (!room || !room.playerRoles || room.gameOver) return;
+    if (room.playerRoles[clientId] !== COFFEE_MAKER_ROLE) return;
+    if (!canPerformNightRoleAction(room, clientId, COFFEE_MAKER_ROLE)) return;
+
+    const result = performCoffeeMakerSearch(room, clientId, Array.isArray(targetIds) ? targetIds : []);
+    if (!result.ok) {
+      const message = result.reason === "no_uses_left"
+        ? "Bạn đã hết số lần tìm Linh Chi và Đông Trùng."
+        : result.reason === "already_used_tonight"
+          ? "Bạn đã thực hiện tìm kiếm trong đêm nay rồi."
+          : result.reason === "already_completed"
+            ? "Bạn đã tìm đủ Linh Chi và Đông Trùng."
+            : "Bạn cần chọn đúng hai người chơi khác nhau và không được chọn bản thân.";
+      socket.emit("errorMessage", message);
+      return;
+    }
+
+    socket.emit("coffeeMakerSearchRecorded", { targetIds });
+    if (result.foundBoth) socket.emit("coffeeMakerFoundBoth");
+    emitCoffeePrivateState(roomId, clientId);
+    emitPublicDayGameLogToSocket(roomId, clientId);
+    emitHostNightActionProgress(roomId);
+  });
+
+  socket.on("coffeeHerbSearch", ({ roomId, targetId }: { roomId: string; targetId: string }) => {
+    const room = rooms[roomId];
+    if (!room || !room.playerRoles || room.gameOver) return;
+    const role = room.playerRoles[clientId];
+    if (role !== LINH_CHI_ROLE && role !== DONG_TRUNG_ROLE) return;
+    if (!canPerformNightRoleAction(room, clientId, role)) return;
+
+    const result = performCoffeeHerbSearch(room, clientId, targetId);
+    if (!result.ok) {
+      const message = result.reason === "already_used_tonight"
+        ? "Bạn đã thực hiện tìm kiếm trong đêm nay rồi."
+        : result.reason === "bonus_already_granted"
+          ? `Bạn đã tìm được ${COFFEE_MAKER_ROLE} và trao lượt thưởng.`
+          : "Mục tiêu tìm kiếm không hợp lệ.";
+      socket.emit("errorMessage", message);
+      return;
+    }
+
+    socket.emit("coffeeHerbSearchRecorded", { targetId });
+    if (result.foundMaker) socket.emit("coffeeHerbFoundMaker", { targetId });
+    emitCoffeePrivateState(roomId, clientId);
+    if (result.makerId) emitCoffeePrivateState(roomId, result.makerId);
+    emitPublicDayGameLogToSocket(roomId, clientId);
+    emitHostNightActionProgress(roomId);
   });
 
   socket.on("songTrungChoose", ({ roomId, targetId }) => {

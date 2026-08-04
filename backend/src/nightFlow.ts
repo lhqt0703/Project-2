@@ -28,6 +28,7 @@ import { toPublicRoom } from "./serverEmitters.js";
 import { LOVE_ROLE, canLoveChoosePartnerTonight, isLovePairMemberAwayAt } from "./love.js";
 import { CURSED_ROLE, MERCHANT_ROLE, canUseCursedSniff, getMerchantAvailableItemIds } from "./merchant.js";
 import { PROTECTOR_ROLE, isVillageChief } from "./specialRoles.js";
+import { COFFEE_MAKER_ROLE, DONG_TRUNG_ROLE, LINH_CHI_ROLE } from "./coffeeRoles.js";
 
 type NightFlowDeps = {
   checkAndEndGame: (roomId: string, reason?: string) => void;
@@ -134,7 +135,17 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       selected.add(LOVE_ROLE as NightActionRole);
     }
 
-    for (const role of ["Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Thợ săn", "Tiên tri"] as NightActionRole[]) {
+    for (const role of [
+      "Bảo vệ",
+      PROTECTOR_ROLE,
+      "Phù thủy",
+      "Thợ săn",
+      "Tiên tri",
+      COFFEE_MAKER_ROLE,
+      LINH_CHI_ROLE,
+      DONG_TRUNG_ROLE,
+      "Song Trùng",
+    ] as NightActionRole[]) {
       if (sourceRoles.includes(role)) selected.add(role);
     }
 

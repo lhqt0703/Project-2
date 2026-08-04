@@ -320,6 +320,14 @@ export function buildGameSummaryFromRoom(room: Room): GameSummary {
     }
   }
 
+  for (const playerId of new Set(room.coffeeRoleState?.makerFoundBothPlayerIds || [])) {
+    pushEvent({
+      type: "COFFEE_MAKER_FOUND_BOTH",
+      actorId: playerId,
+      phase: "night",
+    });
+  }
+
   // Convert room.winner to winningTeam for scoring
   let winningTeam: string | null = null;
   if (room.winner === "villagers") winningTeam = "villagers";

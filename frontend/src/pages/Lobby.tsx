@@ -1,7 +1,7 @@
 import { socket, clientId } from "../socket";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { DEFAULT_ROOM_GAME_RULES } from "../context/RoomContext";
+import { DEFAULT_ROOM_GAME_RULES, useRoomContext, type RoomData } from "../context/RoomContext";
 import Aurora from "../components/Aurora";
 import ArrowLeft from "../assets/arrow-left.svg";
 import UserIcon from "../assets/user.svg";
@@ -12,14 +12,14 @@ import { AvatarSelectModal } from "../components/AvatarSelectModal";
 const PLAYER_NAME_STORAGE_KEY = "werewolfPlayerName";
 const ALLOWED_CREATOR_IDS = [
   "16ab4278-4d7a-40e5-a856-c9bf490d5fc3",
-  "757a9407-202f-4c2b-acd9-50abdefd3aeb",
+  "bd1d4b2c-8c07-4f38-9ca7-e2d16e85f733",
   "53bc353c-f61b-4146-a53e-5ee6b7697039", //mac
-  //"046fa88a-a719-47c3-8b97-ddfc8337cf83", // Sicula 
-  //"79b02851-1b5d-46fb-8935-5d8031dc9a7f" // mẹ
+  "1dd158d3-8a1f-44da-8e56-7f60160b18fd" //iphone
 ];
 
 export default function Lobby() {
   const nav = useNavigate();
+  const { setRoom } = useRoomContext();
   const realName = VIP_REAL_NAMES[clientId];
   const greeting = realName ? `Chào ${realName}` : "Chào bạn mới";
   const [name, setName] = useState(() => localStorage.getItem(PLAYER_NAME_STORAGE_KEY) || "");
@@ -45,10 +45,12 @@ export default function Lobby() {
   const gameMode = query.get("mode") || "da_nghich";
 
   useEffect(() => {
-    const handleRoomCreated = (room: { id: string }) => {
+    const handleRoomCreated = (room: RoomData) => {
+      if (room?.id) setRoom(room);
       nav(`/room?roomId=${room.id}`);
     };
-    const handleRoomJoined = (room: { id: string }) => {
+    const handleRoomJoined = (room: RoomData) => {
+      if (room?.id) setRoom(room);
       nav(`/room?roomId=${room.id}`);
     };
 
@@ -58,7 +60,7 @@ export default function Lobby() {
       socket.off("roomCreated", handleRoomCreated);
       socket.off("roomJoined", handleRoomJoined);
     };
-  }, [nav]);
+  }, [nav, setRoom]);
 
   const isDev = ALLOWED_CREATOR_IDS.includes(clientId);
 
@@ -177,7 +179,7 @@ export default function Lobby() {
       {/* Stunning Aurora Component Background */}
       <div style={{ position: "absolute", inset: 0, zIndex: 0, opacity: 0.45, pointerEvents: "none" }}>
         <Aurora
-          colorStops={gameMode === "soi_mu" ? ["#9333ea", "#0c9170", "#118aec"] : gameMode === "diet_quy" ? ["#ff8f42", "#EF4444", "#5227FF"] : ["#7cff67", "#EF4444", "#5227FF"]}
+          colorStops={gameMode === "co_ty_phu" ? ["#59f2a5", "#f5c45e", "#073b2c"] : gameMode === "soi_mu" ? ["#9333ea", "#0c9170", "#118aec"] : gameMode === "diet_quy" ? ["#ff8f42", "#EF4444", "#5227FF"] : ["#7cff67", "#EF4444", "#5227FF"]}
           blend={0.6}
           amplitude={1.1}
           speed={1.4}
@@ -287,7 +289,7 @@ export default function Lobby() {
               <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "#a5b4fc" }}>Tạo phòng mới</h2>
               <div style={{ display: "grid", gap: 16, height: "100%", justifyContent: "space-between" }}>
                 <p style={{ fontSize: 14, color: "rgba(255,255,255,0.6)", margin: 0 }}>
-                  Trở thành chủ phòng để mời bạn bè tham gia ván chơi {gameMode === "soi_mu" ? "Sói Mù" : gameMode === "diet_quy" ? "Diệt Quỷ" : "Dạ Nghịch"}.
+                  Trở thành chủ phòng để mời bạn bè tham gia ván chơi {gameMode === "co_ty_phu" ? "Cờ tỷ phú" : gameMode === "soi_mu" ? "Sói Mù" : gameMode === "diet_quy" ? "Diệt Quỷ" : "Dạ Nghịch"}.
                 </p>
                 <button onClick={createRoom} className="lobby-btn lobby-btn-primary" style={{ alignSelf: "flex-end", width: "100%" }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

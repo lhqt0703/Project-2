@@ -5,6 +5,10 @@ import PlayerPositions, { AVA_IMAGES, getAvatarUrlByFileName } from "../componen
 import ConfirmModal from "../components/ConfirmModal";
 import { AvatarSelectModal } from "../components/AvatarSelectModal";
 import nenLungAsset from "../assets/nền lưng.avif";
+import chieuBgAsset from "../assets/nền chiều.avif";
+import moonAsset from "../assets/moon.svg";
+import leafAsset from "../assets/leaf.svg";
+import sunBehindCloudAsset from "../assets/icon/sun-behind-cloud_26c5.avif";
 import GameRulesModal from "../components/GameRulesModal";
 import ElementalEffectGuideModal from "../components/ElementalEffectGuideModal";
 import { DEFAULT_ROOM_GAME_RULES, type NightActionOrderRole, type Player, type RoomData } from "../context/RoomContext";
@@ -16,6 +20,11 @@ import {
   ELEMENTAL_GROUP_ROLE,
   ELEMENTAL_ROLE_SET,
 } from "../constants/elemental";
+import { preloadImages } from "../utils/preloadImages";
+
+const duskRoleCardAssets = Object.values(
+  import.meta.glob<string>("../assets/F *.avif", { eager: true, import: "default" })
+);
 
 const rolePortraitAvifImages = import.meta.glob<string>("../assets/C *.avif", {
   eager: true,
@@ -66,8 +75,9 @@ interface PlayerPosition {
   y: number;
 }
 
-const NIGHT_ACTION_ROLE_ORDER: NightActionRole[] = ["Thần tình yêu", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"];
+const NIGHT_ACTION_ROLE_ORDER: NightActionRole[] = ["Thần tình yêu", "Song Trùng", "Người pha cà phê", "Linh Chi", "Đông Trùng", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", "Hộ nhân", "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"];
 const WOLF_ROLES = new Set(["Sói", "Sói con", "Sói Dại", "Bán sói"]);
+const COFFEE_HERB_ROLES = new Set(["Linh Chi", "Đông Trùng"]);
 
 
 function getAvailableNightActionRoles(selectedRoles?: string[]) {
@@ -219,6 +229,17 @@ export default function Room() {
   // lấy roomId từ URL (?roomId=xxxxx)
   const query = new URLSearchParams(location.search);
   const roomId = query.get("roomId");
+
+  useEffect(() => {
+    preloadImages([
+      chieuBgAsset,
+      nenLungAsset,
+      moonAsset,
+      leafAsset,
+      sunBehindCloudAsset,
+      ...duskRoleCardAssets,
+    ]);
+  }, []);
 
   useEffect(() => {
     const syncRoomPresence = () => {
@@ -638,7 +659,11 @@ export default function Room() {
       usedByOthers.set(role, (usedByOthers.get(role) || 0) + 1);
     }
 
-    return Array.from(roleCounts.entries()).map(([role, total]) => {
+    const coffeeHerbCardMode = room.pendingGameRules?.coffeeHerbCardMode
+      ?? room.gameRules?.coffeeHerbCardMode;
+    return Array.from(roleCounts.entries()).filter(([role]) => (
+      coffeeHerbCardMode !== "secondary" || !COFFEE_HERB_ROLES.has(role)
+    )).map(([role, total]) => {
       const remaining = total - (usedByOthers.get(role) || 0);
       const selected = room.pendingRoleAssignments?.[roleAssignmentPlayer.id] === role;
       const blocked = room.pendingRoleBlocks?.[roleAssignmentPlayer.id]?.includes(role) === true;
@@ -688,7 +713,11 @@ export default function Room() {
   const gameInProgress = !!room.phase && !room.gameOver;
   const hasPlayedMatch = room.hasPlayedMatch === true || room.gameOver === true || !!room.phase || (!!room.playerRoles && Object.keys(room.playerRoles).length > 0);
   const participantCount = room.players.filter((p) => p.id !== room.hostId).length;
-  const selectedRoleCount = room.roles?.length ?? 0;
+  const coffeeHerbCardModeForNextGame = room.pendingGameRules?.coffeeHerbCardMode
+    ?? room.gameRules?.coffeeHerbCardMode;
+  const selectedRoleCount = (room.roles || []).filter((role) => (
+    coffeeHerbCardModeForNextGame !== "secondary" || !COFFEE_HERB_ROLES.has(role)
+  )).length;
   const hasElementalRole = (room.roles || []).some((role) => ELEMENTAL_ROLE_SET.has(role));
   const hasEnoughRolesToStart = selectedRoleCount >= participantCount && selectedRoleCount > 0;
 
@@ -1541,7 +1570,7 @@ export default function Room() {
       <GameRulesModal
         open={showRulesModal}
         title="Thiết lập luật chơi cho phòng"
-        gameMode={room.gameMode}
+        gameMode={room.gameMode === "co_ty_phu" ? undefined : room.gameMode}
         initialRules={room.pendingGameRules || room.gameRules || DEFAULT_ROOM_GAME_RULES}
         availableNightActionRoles={availableNightActionRoles}
         includedElementalRoles={(room.roles || []).filter((role) => ELEMENTAL_ROLE_SET.has(role))}
@@ -1564,7 +1593,7 @@ export default function Room() {
       <GameRulesModal
         open={showCurrentRulesModal}
         title="Luật hiện tại của phòng"
-        gameMode={room.gameMode}
+        gameMode={room.gameMode === "co_ty_phu" ? undefined : room.gameMode}
         initialRules={room.gameRules || DEFAULT_ROOM_GAME_RULES}
         availableNightActionRoles={availableNightActionRoles}
         includedElementalRoles={(room.roles || []).filter((role) => ELEMENTAL_ROLE_SET.has(role))}

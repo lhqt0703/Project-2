@@ -900,8 +900,6 @@ export default function PlayerPositions({
   trialGreenPlayerId,
   replayActorIds,
   replayTargetIds,
-  dietQuyOrangeHighlightPlayerIds,
-  dietQuyRedHighlightPlayerIds,
   viewMode = "nick-names",
   showVoteReview,
   dayVotes,
@@ -957,8 +955,6 @@ export default function PlayerPositions({
   trialGreenPlayerId?: string | null;
   replayActorIds?: string[];
   replayTargetIds?: string[];
-  dietQuyOrangeHighlightPlayerIds?: string[];
-  dietQuyRedHighlightPlayerIds?: string[];
   viewMode?: "real-names" | "nick-names" | "real-names-roles" | "nick-names-roles";
   showVoteReview?: boolean;
   dayVotes?: Record<string, string | null> | null;
@@ -2397,12 +2393,6 @@ export default function PlayerPositions({
               {nightActionProgress === "done" && (
                 <div className="player-halo halo-night-done" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #10b981` }} />
               )}
-              {(dietQuyOrangeHighlightPlayerIds || []).includes(pos.playerId) && (
-                <div className="player-halo halo-dietquy-orange" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #ff9800`, boxShadow: "0 0 8px #ff9800" }} />
-              )}
-              {(dietQuyRedHighlightPlayerIds || []).includes(pos.playerId) && (
-                <div className="player-halo halo-dietquy-red" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #ef4444`, boxShadow: "0 0 8px #ef4444" }} />
-              )}
 
               {/* Concentric Rings */}
               {isSecondaryHighlighted && (
@@ -2804,8 +2794,6 @@ export default function PlayerPositions({
             !!isWitchDanger ||
             !!isCursedHighlighted ||
             nightActionProgress === "done" ||
-            (dietQuyOrangeHighlightPlayerIds || []).includes(pos.playerId) ||
-            (dietQuyRedHighlightPlayerIds || []).includes(pos.playerId) ||
             !!isSecondaryHighlighted ||
             trialGreenPlayerId === pos.playerId ||
             (trialWhitePlayerIds || []).includes(pos.playerId) ||

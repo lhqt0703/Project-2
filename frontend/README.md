@@ -51,7 +51,6 @@ Một nền tảng web chơi game Ma Sói và Diệt Quỷ (phóng tác từ *Bl
 │   │   │   ├── Lobby.tsx     # Sảnh chờ tìm phòng
 │   │   │   ├── Room.tsx      # Phòng chờ chuẩn bị game
 │   │   │   ├── GameDaNghich.tsx # Giao diện chơi chế độ Dạ Nghịch
-│   │   │   ├── GameDietQuy.tsx   # Giao diện chơi chế độ Diệt Quỷ
 │   │   │   └── GameSoiMu.tsx     # Giao diện chơi chế độ Sói Mù
 │   │   ├── components/       # Các components dùng chung
 │   │   ├── theme.css         # CSS Theme hệ thống

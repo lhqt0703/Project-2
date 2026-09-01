@@ -66,7 +66,7 @@ Tài liệu này là bộ quy chuẩn bắt buộc khi tạo mới hoặc sửa 
 
 ## 6. Baseline Rà Soát Thực Tế (Hotspots Cần Lưu Ý)
 Đây là các khu vực chứa nhiều code cũ hoặc file quá lớn. Khi chỉnh sửa, cần hết sức lưu ý để tránh làm phình to thêm:
-1. **Các trang game chính:** [GameDaNghich.tsx](file:///b:/Project-2/frontend/src/pages/GameDaNghich.tsx) (3.700+ dòng) và [GameDietQuy.tsx](file:///b:/Project-2/frontend/src/pages/GameDietQuy.tsx) (3.500+ dòng) bị lặp code UI rất nhiều (Stickers, Messages, Modals...). Khi sửa UI chung, hãy ưu tiên trích xuất dần thành component/hook nhỏ dùng chung.
+1. **Các trang game chính:** [GameDaNghich.tsx](file:///b:/Project-2/frontend/src/pages/GameDaNghich.tsx) (3.700+ dòng) có cấu trúc giao diện lớn (Stickers, Messages, Modals...). Khi sửa UI chung, hãy ưu tiên trích xuất dần thành component/hook nhỏ dùng chung.
 2. **Backend Handlers:** File [socketHandlers.ts](file:///b:/Project-2/backend/src/socketHandlers.ts) (6.400+ dòng) đang quá tải. Không viết thêm logic nghiệp vụ lớn vào file này. Hãy tách các logic xử lý độc lập sang các module nghiệp vụ tương ứng (dayFlow, nightFlow, roleAction...).
 3. **Components lớn:** [GameLogPanel.tsx](file:///b:/Project-2/frontend/src/components/GameLogPanel.tsx) và [PlayerPositions.tsx](file:///b:/Project-2/frontend/src/components/PlayerPositions.tsx) là các component giao diện phức tạp. Giữ thay đổi ở mức tối thiểu và có kiểm soát.
 

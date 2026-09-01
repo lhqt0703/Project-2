@@ -95,8 +95,8 @@ export function isWolfAlignedPlayer(room: Room, playerId: string) {
   const role = room.playerRoles?.[playerId];
   if (isWildWolfConvertedPlayer(room, playerId)) return true;
   if (isWolfRole(role)) return true;
-  if (role === BAN_SOI_ROLE) return room.daNghichState!.banSoiWolfAligned === true && getBanSoiId(room) === playerId;
-  return room.daNghichState!.spiritWolfWolfAligned === true && getSpiritWolfId(room) === playerId;
+  if (role === BAN_SOI_ROLE) return room.daNghichState?.banSoiWolfAligned === true && getBanSoiId(room) === playerId;
+  return room.daNghichState?.spiritWolfWolfAligned === true && getSpiritWolfId(room) === playerId;
 }
 
 export function markWildWolfConversionReadyIfWolfDied(room: Room, playerId: string) {

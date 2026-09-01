@@ -5,16 +5,15 @@ import { socket } from "../socket";
 export default function Home() {
   const nav = useNavigate();
   useEffect(() => {
-  const query = new URLSearchParams(window.location.search);
-  const autoRoom = query.get("roomId");
-  const autoName = query.get("name");
+    const query = new URLSearchParams(window.location.search);
+    const autoRoom = query.get("roomId");
+    const autoName = query.get("name");
 
-  if (autoRoom && autoName) {
-    socket.emit("joinRoom", { roomId: autoRoom, name: autoName });
-    nav(`/room?roomId=${autoRoom}`);
-  }
-}, []);
-
+    if (autoRoom && autoName) {
+      socket.emit("joinRoom", { roomId: autoRoom, name: autoName });
+      nav(`/room?roomId=${autoRoom}`);
+    }
+  }, []);
 
   return (
     <div style={{ padding: 20 }}>
@@ -25,10 +24,6 @@ export default function Home() {
       
       <button onClick={() => nav("/lobby?mode=soi_mu")} style={{ marginRight: 10 }}>
         Sói Mù
-      </button>
-      
-      <button onClick={() => nav("/lobby?mode=diet_quy")} style={{ marginRight: 10 }}>
-        Diệt Quỷ
       </button>
 
       <button onClick={() => nav("/lobby?mode=co_ty_phu")}>

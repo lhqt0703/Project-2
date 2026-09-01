@@ -5,11 +5,6 @@ import coffeeMakerCardAsset from "../assets/C Người pha cà phê.avif";
 import linhChiCardAsset from "../assets/C Linh Chi.avif";
 import dongTrungCardAsset from "../assets/C Đông Trùng.avif";
 
-const DIET_QUY_TOWNSFOLK = ["Thợ giặt", "Thủ thư", "Điều tra viên", "Đầu bếp", "Đồng cảm", "Thầy bói", "Chôn cất", "Nhà sư", "Nuôi quạ", "Trinh nữ", "Diệt quỷ", "Chiến sĩ", "Thị trưởng"];
-const DIET_QUY_TRAVELERS = ["Người ẩn dật", "Thánh nhân"];
-const DIET_QUY_MINIONS = ["Độc thủ", "Gián điệp", "Phò"];
-const DIET_QUY_DEMON = ["Ác Quỷ"];
-
 // Glob all card images
 const CARD_IMAGES = import.meta.glob<string>("../assets/F *.avif", {
   eager: true,
@@ -39,11 +34,6 @@ function getCardUrlByRoleName(roleName: string, gameMode?: string): string | nul
 }
 
 const getGlowColor = (role: string) => {
-  if (DIET_QUY_TOWNSFOLK.includes(role)) return "#34d399";
-  if (DIET_QUY_TRAVELERS.includes(role)) return "#60a5fa";
-  if (DIET_QUY_MINIONS.includes(role)) return "#fb923c";
-  if (DIET_QUY_DEMON.includes(role)) return "#f87171";
-
   if (["Sói", "Sói con", "Sói Dại", "Linh sói", "Bán sói"].includes(role)) return "#ef4444";
   if (ELEMENTAL_ROLE_ORDER.includes(role as any)) return "#ED6E7B";
   if (["Tiên tri", "Thợ săn"].includes(role)) return "#60a5fa";

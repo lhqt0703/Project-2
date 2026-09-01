@@ -66,7 +66,7 @@ export default function RoleCharacterPortrait({
 
   return (
     <div
-      className={`role-character-portrait ${visible ? "is-visible" : "is-hiding"} ${hasDarkOverlay && gameMode !== "diet_quy" ? "has-dark-overlay" : ""}`}
+      className={`role-character-portrait ${visible ? "is-visible" : "is-hiding"} ${hasDarkOverlay ? "has-dark-overlay" : ""}`}
       aria-hidden="true"
     >
       <img className="role-character-portrait__image" src={portraitSrc} alt="" />

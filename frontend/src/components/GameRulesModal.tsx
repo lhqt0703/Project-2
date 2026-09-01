@@ -74,9 +74,9 @@ function normalizeDurationSec(value: number, fallback: number, minSec = 0) {
   return Math.max(minSec, Math.min(NIGHT_ACTION_DURATION_MAX_SEC, rounded));
 }
 
-function clampNonWolfNightActionDurationSec(value: number, allNightActionsSimultaneous: boolean, isDietQuy = false, isSoiMu = false) {
-  // Chế độ Diệt Quỷ hoặc Sói Mù cho phép 0s (không giới hạn thời gian)
-  const minSec = (allNightActionsSimultaneous || isDietQuy || isSoiMu) ? 0 : NIGHT_ACTION_DURATION_STEP_SEC;
+function clampNonWolfNightActionDurationSec(value: number, allNightActionsSimultaneous: boolean, isSoiMu = false) {
+  // Chế độ Sói Mù cho phép 0s (không giới hạn thời gian)
+  const minSec = (allNightActionsSimultaneous || isSoiMu) ? 0 : NIGHT_ACTION_DURATION_STEP_SEC;
   const fallback = isSoiMu ? 30 : DEFAULT_ROOM_GAME_RULES.nonWolfNightActionDurationSec;
   return normalizeDurationSec(value, fallback, minSec);
 }
@@ -90,11 +90,10 @@ function normalizeNightActionDurations(input: {
   allNightActionsSimultaneous: boolean;
   nonWolfNightActionDurationSec: number;
   wolfNightActionDurationSec: number;
-}, isDietQuy = false, isSoiMu = false) {
+}, isSoiMu = false) {
   const nonWolf = clampNonWolfNightActionDurationSec(
     input.nonWolfNightActionDurationSec,
     input.allNightActionsSimultaneous,
-    isDietQuy,
     isSoiMu
   );
   let wolf = clampWolfNightActionDurationSec(input.wolfNightActionDurationSec, isSoiMu);
@@ -214,9 +213,8 @@ export default function GameRulesModal({
   onClose: () => void;
   saveText?: string;
   readOnly?: boolean;
-  gameMode?: "da_nghich" | "diet_quy" | "soi_mu";
+  gameMode?: "da_nghich" | "soi_mu";
 }) {
-  const isDietQuy = gameMode === "diet_quy";
   const isSoiMu = gameMode === "soi_mu";
   const [draftRules, setDraftRules] = useState<RoomGameRules>(initialRules);
   const [baseRules, setBaseRules] = useState<RoomGameRules>(initialRules);
@@ -236,7 +234,7 @@ export default function GameRulesModal({
       allNightActionsSimultaneous: initialRules.allNightActionsSimultaneous,
       nonWolfNightActionDurationSec: initialRules.nonWolfNightActionDurationSec,
       wolfNightActionDurationSec: initialRules.wolfNightActionDurationSec,
-    }, isDietQuy, isSoiMu);
+    }, isSoiMu);
     const merged = {
       ...DEFAULT_ROOM_GAME_RULES,
       ...initialRules,
@@ -257,7 +255,7 @@ export default function GameRulesModal({
     };
     setDraftRules(merged);
     setBaseRules(merged);
-  }, [initialRules, open, baseSelectableNightActionRoles, isDietQuy, isSoiMu]);
+  }, [initialRules, open, baseSelectableNightActionRoles, isSoiMu]);
 
   const includedElementalSummary = useMemo(() => {
     const included = ELEMENTAL_ROLE_ORDER.filter((role) => includedElementalRoles.includes(role));
@@ -310,7 +308,7 @@ export default function GameRulesModal({
         allNightActionsSimultaneous: prev.allNightActionsSimultaneous,
         nonWolfNightActionDurationSec: prev.nonWolfNightActionDurationSec,
         wolfNightActionDurationSec: prev.wolfNightActionDurationSec,
-      }, isDietQuy, isSoiMu);
+      }, isSoiMu);
       return { ...prev, ...normalizedDurations } as RoomGameRules;
     });
   };
@@ -333,28 +331,6 @@ export default function GameRulesModal({
 
   const handleSave = () => {
     if (!onSave) return;
-    if (isDietQuy) {
-      onSave({
-        ...draftRules,
-        allNightActionsSimultaneous: false,
-        witchSeeBiteOnlyIfHasHealPotion: false,
-        witchBonusTimeRequiresUsablePotion: false,
-        witchHideProtectedBiteInSimultaneous: false,
-        witchHideProtectedBiteWhenSequential: false,
-        trialInteractionSelectionLimit: 0,
-        banSoiBecomeWolfEvenIfHealed: false,
-        loveCanChoosePartnerFirstTwoNights: false,
-        villageChiefKnowsWolfBite: false,
-        witchSeeProtectorImmortalBite: false,
-        hunterShotPublicInDay: false,
-        merchantSingleUseItems: false,
-        merchantHideReceivedItemName: false,
-        wolfNightActionDurationSec: draftRules.nonWolfNightActionDurationSec,
-        forceWolfBiteFirstNight: draftRules.twoHeartsFirstTwoNights && draftRules.forceWolfBiteFirstNight,
-        wolfCanBiteWolf: false,
-      });
-      return;
-    }
     if (isSoiMu) {
       onSave({
         ...draftRules,
@@ -407,9 +383,7 @@ export default function GameRulesModal({
     : draftRules.witchHideProtectedBiteWhenSequential;
 
   const renderTwoHeartsFirstTwoNights = () => {
-    const desc = isDietQuy
-      ? "Đêm 1 bị quỷ đâm sẽ mất 1 máu. Đêm 2 bị quỷ đâm sẽ mất 2 máu và chết ngay cả khi đã mất 1 máu ở đêm 1."
-      : "Đêm 1 bị sói cắn sẽ mất 1 máu. Đêm 2 bị sói cắn sẽ mất 2 máu và chết ngay cả khi đã mất 1 máu ở đêm 1.";
+    const desc = "Đêm 1 bị sói cắn sẽ mất 1 máu. Đêm 2 bị sói cắn sẽ mất 2 máu và chết ngay cả khi đã mất 1 máu ở đêm 1.";
 
     return (
       <label style={rowStyle()}>
@@ -441,10 +415,8 @@ export default function GameRulesModal({
   const renderForceWolfBiteFirstNight = () => {
     if (!draftRules.twoHeartsFirstTwoNights) return null;
 
-    const label = isDietQuy ? "Bắt buộc quỷ phải đâm trong đêm đầu" : "Bắt buộc phe sói cắn trong đêm đầu";
-    const desc = isDietQuy
-      ? "Nếu Quỷ không chọn ai, hệ thống sẽ chọn ngẫu nhiên một mục tiêu hợp lệ."
-      : "Nếu Sói không chọn ai, hệ thống sẽ chọn ngẫu nhiên một mục tiêu hợp lệ. Nếu hòa phiếu, hệ thống chọn ngẫu nhiên trong các mục tiêu đang hòa.";
+    const label = "Bắt buộc phe sói cắn trong đêm đầu";
+    const desc = "Nếu Sói không chọn ai, hệ thống sẽ chọn ngẫu nhiên một mục tiêu hợp lệ. Nếu hòa phiếu, hệ thống chọn ngẫu nhiên trong các mục tiêu đang hòa.";
 
     return (
       <label style={rowStyle()}>
@@ -617,37 +589,7 @@ export default function GameRulesModal({
         </div>
 
         <div id="PhầnCuộn" style={{ padding: 24, display: "grid", gap: 14, flex: 1, overflowY: "auto" }}>
-          {isDietQuy ? (
-            <>
-              {renderTwoHeartsFirstTwoNights()}
-              {renderForceWolfBiteFirstNight()}
-              {renderDayPhaseDurations()}
-
-              <label style={rowStyle()}>
-                <div>
-                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Thời gian hành động trong đêm</div>
-                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
-                    Thời gian giới hạn cho mỗi lượt hành động ban đêm (giây).
-                  </div>
-                </div>
-                <RuleNumericInput
-                  min={0}
-                  max={60}
-                  step={10}
-                  value={draftRules.nonWolfNightActionDurationSec}
-                  disabled={readOnly}
-                  onChange={(val) => {
-                    setDraftRules(prev => ({
-                      ...prev,
-                      nonWolfNightActionDurationSec: val,
-                      wolfNightActionDurationSec: val
-                    }));
-                  }}
-                  style={{ width: 96 }}
-                />
-              </label>
-            </>
-          ) : isSoiMu ? (
+          {isSoiMu ? (
             <>
               {renderTwoHeartsFirstTwoNights()}
               {renderForceWolfBiteFirstNight()}

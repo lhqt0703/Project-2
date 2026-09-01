@@ -124,27 +124,7 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   dayVotingDurationSec: 45,
 };
 
-export interface DietQuyState {
-  nightDirection?: "clockwise" | "counter_clockwise";
-  nightStartPlayerId?: string | null;
-  nightTurnOrder?: string[];
-  poisonedPlayerId?: string | null;
-  poisonedPrevPlayerId?: string | null;
-  redCharmPlayerId?: string | null;
-  monkProtectedPlayerId?: string | null;
-  impKillPlayerId?: string | null;
-  mayorReplacementId?: string | null;
-  ravenkeeperTargetId?: string | null;
-  washerwomanSelectedIds?: string[];
-  librarianSelectedIds?: string[];
-  investigatorSelectedIds?: string[];
-  slayerUsed?: boolean;
-  virginTriggered?: boolean;
-  fortuneTellerCheckedIds?: string[];
-  saintExecutedToday?: boolean;
-  executedToday?: boolean;
-  executedPlayerId?: string | null;
-}
+
 
 export interface SoiMuState {
   targets?: Record<string, string>;
@@ -217,8 +197,7 @@ export interface RoomData {
   players: Player[];
   hostId: string;
   warnedPlayerIds?: string[];
-  gameMode?: "da_nghich" | "diet_quy" | "soi_mu" | "co_ty_phu";
-  dietQuyState?: DietQuyState;
+  gameMode?: "da_nghich" | "soi_mu" | "co_ty_phu";
   soiMuState?: SoiMuState;
   daNghichState?: DaNghichState;
   coTyPhuState?: CoTyPhuState;

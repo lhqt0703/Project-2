@@ -101,27 +101,7 @@ export interface RoomGameRules {
   dayVotingDurationSec?: number | undefined;
 }
 
-export interface DietQuyState {
-  nightDirection?: "clockwise" | "counter_clockwise";
-  nightStartPlayerId?: string | null;
-  nightTurnOrder?: string[];
-  poisonedPlayerId?: string | null;
-  poisonedPrevPlayerId?: string | null;
-  redCharmPlayerId?: string | null;
-  monkProtectedPlayerId?: string | null;
-  impKillPlayerId?: string | null;
-  mayorReplacementId?: string | null;
-  ravenkeeperTargetId?: string | null;
-  washerwomanSelectedIds?: string[];
-  librarianSelectedIds?: string[];
-  investigatorSelectedIds?: string[];
-  slayerUsed?: boolean;
-  virginTriggered?: boolean;
-  fortuneTellerCheckedIds?: string[];
-  saintExecutedToday?: boolean;
-  executedToday?: boolean;
-  executedPlayerId?: string | null;
-}
+
 
 export interface SoiMuState {
   targets?: Record<string, string>;
@@ -191,8 +171,7 @@ export interface Room {
   hasPlayedMatch?: boolean;
   players: Player[];
   hostId: string;
-  gameMode?: "da_nghich" | "diet_quy" | "soi_mu" | "co_ty_phu";
-  dietQuyState?: DietQuyState;
+  gameMode?: "da_nghich" | "soi_mu" | "co_ty_phu";
   soiMuState?: SoiMuState;
   daNghichState?: DaNghichState;
   coTyPhuState?: CoTyPhuState;
@@ -491,7 +470,7 @@ function normalizeNightActionDurations(input?: Partial<RoomGameRules> | null, ga
     input?.allNightActionsSimultaneous ?? DEFAULT_ROOM_GAME_RULES.allNightActionsSimultaneous;
   const fallback = gameMode === "soi_mu" ? 30 : DEFAULT_ROOM_GAME_RULES.nonWolfNightActionDurationSec;
   let nonWolf = clampNightActionDurationSec(input?.nonWolfNightActionDurationSec, fallback);
-  if (gameMode !== "diet_quy" && gameMode !== "soi_mu" && !allNightActionsSimultaneous && nonWolf < NIGHT_ACTION_DURATION_STEP_SEC) {
+  if (gameMode !== "soi_mu" && !allNightActionsSimultaneous && nonWolf < NIGHT_ACTION_DURATION_STEP_SEC) {
     nonWolf = NIGHT_ACTION_DURATION_STEP_SEC;
   }
   const wolfFallback = gameMode === "soi_mu" ? 30 : DEFAULT_ROOM_GAME_RULES.wolfNightActionDurationSec;

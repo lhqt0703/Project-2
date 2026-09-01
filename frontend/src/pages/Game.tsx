@@ -6,7 +6,6 @@ import ConfirmModal from "../components/ConfirmModal";
 
 // Lazy-load the mode-specific game pages
 const GameDaNghich = lazy(() => import("./GameDaNghich"));
-const GameDietQuy = lazy(() => import("./GameDietQuy"));
 const GameSoiMu = lazy(() => import("./GameSoiMu"));
 const GameCoTyPhu = lazy(() => import("./GameCoTyPhu"));
 
@@ -153,8 +152,6 @@ export default function Game() {
     >
       {room.gameMode === "co_ty_phu" ? (
         <GameCoTyPhu />
-      ) : room.gameMode === "diet_quy" ? (
-        <GameDietQuy />
       ) : room.gameMode === "soi_mu" ? (
         <GameSoiMu />
       ) : (

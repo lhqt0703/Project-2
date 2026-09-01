@@ -257,7 +257,7 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
   const now = Date.now();
   const isElementalBuffVoteNight = shouldElementalsVoteBuffTonight(room);
   const seerRequiredChecks =
-    room.daNghichState!.elementalSelectedBuffId === "seer-check-two" && room.elementalSelectedBuffAppliesNight === currentNight
+    room.daNghichState?.elementalSelectedBuffId === "seer-check-two" && room.elementalSelectedBuffAppliesNight === currentNight
       ? 2
       : 1;
   const nonWolfDurationSec = clampNonWolfNightActionDurationSec(rules.nonWolfNightActionDurationSec);
@@ -862,20 +862,7 @@ export function syncPrivateRoleStateForSocket(
       wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
       rolesBeforeConversion: room.rolesBeforeConversion || {},
     });
-    if (room.gameMode === "diet_quy") {
-      socket.emit("wolfPhaseStarted", {
-        wolves: wolves.map((w) => w.id),
-        activeWolves: [],
-        deadline: null,
-        maxTargets: 0,
-        resetVotes: false,
-        biteDisabled: true,
-        wolfBadgeRolesByPlayerId: Object.fromEntries(wolves.map((w) => [w.id, room.playerRoles?.[w.id] || "Sói"])),
-        rolesBeforeConversion: room.rolesBeforeConversion || {},
-        wildWolfConvertAvailable: false,
-        wildWolfConvertRequested: false,
-      });
-    } else if (room.phase === "night" && room.merchantWolfBiteDisabledTonight) {
+    if (room.phase === "night" && room.merchantWolfBiteDisabledTonight) {
       socket.emit("wolfPhaseStarted", {
         wolves: wolves.map((w) => w.id),
         activeWolves: [],

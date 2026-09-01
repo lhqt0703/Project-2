@@ -26,8 +26,6 @@ interface MockPlayerCircleProps {
   isCursedHighlighted?: boolean;
   cursedHighlightIsDanger?: boolean;
   nightActionProgress?: "none" | "pending" | "done";
-  isDietQuyOrange?: boolean;
-  isDietQuyRed?: boolean;
   isSecondaryHighlighted?: boolean;
   isTrialWhite?: boolean;
   isHighlighted?: boolean;
@@ -56,8 +54,6 @@ function MockPlayerCircle({
   isCursedHighlighted = false,
   cursedHighlightIsDanger = false,
   nightActionProgress = "none",
-  isDietQuyOrange = false,
-  isDietQuyRed = false,
   isSecondaryHighlighted = false,
   isTrialWhite = false,
   isHighlighted = false,
@@ -179,12 +175,6 @@ function MockPlayerCircle({
       {nightActionProgress === "done" && (
         <div className="player-halo halo-night-done" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #10b981` }} />
       )}
-      {isDietQuyOrange && (
-        <div className="player-halo halo-dietquy-orange" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #ff9800` }} />
-      )}
-      {isDietQuyRed && (
-        <div className="player-halo halo-dietquy-red" style={{ inset: -scalePx(6, 4), border: `${scalePx(2, 1)}px solid #ef4444` }} />
-      )}
 
       {/* Concentric Rings */}
       {isSecondaryHighlighted && (
@@ -298,12 +288,10 @@ export default function DevSpawn() {
   const [prefix, setPrefix] = useState("P");
   const [debugAnim, setDebugAnim] = useState(true);
 
-
   const [villagerVictoryAnimOpen, setVillagerVictoryAnimOpen] = useState(false);
   const [gameFinishedModalOpen, setGameFinishedModalOpen] = useState(false);
   const [testWinner, setTestWinner] = useState<string | null>(null);
   const [testScoreResult, setTestScoreResult] = useState<any>(null);
-
 
   // --- PLAYER HALO SHOWCASE STATES ---
   const [haloCircleSize, setHaloCircleSize] = useState(80);
@@ -322,8 +310,6 @@ export default function DevSpawn() {
     isCursedHighlighted: false,
     cursedHighlightIsDanger: false,
     nightActionProgress: "none" as "none" | "pending" | "done",
-    isDietQuyOrange: false,
-    isDietQuyRed: false,
     isSecondaryHighlighted: false,
     isTrialWhite: false,
     isHighlighted: false,
@@ -368,16 +354,12 @@ export default function DevSpawn() {
 
   const groupedScannedIcons = Array.from(emojiGroupMap.values()).sort((a, b) => b.usages.length - a.usages.length);
 
-  // Danh sách các file avif thực tế trong thư mục assets/icon
   const avifFiles = Object.keys(allIconFiles).map(key => key.split("/").pop() || "").sort();
 
-  // Danh sách các file avif đã được map trong AvifIcon.tsx
   const mappedFiles = new Set(
     Object.values(iconMap).map(src => {
-      // Lấy phần tên tệp tin cuối cùng, ví dụ "ok.avif"
-      const parts = src.split(/[/\\]/);
+      const parts = src.split(/[\/\\]/);
       const filename = parts[parts.length - 1];
-      // Nếu có query param từ vite (?import) thì bỏ đi
       return filename.split("?")[0];
     })
   );
@@ -1501,12 +1483,6 @@ export default function DevSpawn() {
             animation: breatheSoft 2s ease-in-out infinite;
             box-shadow: 0 0 16px rgb(255 0 0 / 40%);
           }
-          .halo-dietquy-orange {
-            box-shadow: 0 0 8px #ff9800;
-          }
-          .halo-dietquy-red {
-            box-shadow: 0 0 8px #ef4444;
-          }
 
           /* PREMIUM TOKEN COMPONENT */
           .player-circle-token {
@@ -1739,23 +1715,6 @@ export default function DevSpawn() {
               <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer", borderTop: "1px dashed rgba(255,255,255,0.05)", paddingTop: "8px" }}>
                 <input
                   type="checkbox"
-                  checked={playgroundHalos.isDietQuyOrange}
-                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isDietQuyOrange: e.target.checked })}
-                />
-                🟠 Diệt Quỷ Cam (dietquy-orange)
-              </label>
-              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer", borderTop: "1px dashed rgba(255,255,255,0.05)", paddingTop: "8px" }}>
-                <input
-                  type="checkbox"
-                  checked={playgroundHalos.isDietQuyRed}
-                  onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isDietQuyRed: e.target.checked })}
-                />
-                🔴 Diệt Quỷ Đỏ (dietquy-red)
-              </label>
-
-              <label style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.8rem", color: "#e2e8f0", cursor: "pointer" }}>
-                <input
-                  type="checkbox"
                   checked={playgroundHalos.isSecondaryHighlighted}
                   onChange={(e) => setPlaygroundHalos({ ...playgroundHalos, isSecondaryHighlighted: e.target.checked })}
                 />
@@ -1947,21 +1906,9 @@ export default function DevSpawn() {
               <MockPlayerCircle name="Xong" size={70} scaleFactor={1.0} nightActionProgress="done" />
             </div>
 
-            {/* Halo 10: Diet Quy Orange */}
+            {/* Halo 10: Secondary Highlight */}
             <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
-              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>10. Diệt Quỷ Cam</span>
-              <MockPlayerCircle name="Diệt Quỷ" size={70} scaleFactor={1.0} isDietQuyOrange={true} />
-            </div>
-
-            {/* Halo 11: Diet Quy Red */}
-            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
-              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>11. Diệt Quỷ Đỏ</span>
-              <MockPlayerCircle name="Diệt Quỷ" size={70} scaleFactor={1.0} isDietQuyRed={true} />
-            </div>
-
-            {/* Halo 12: Secondary Highlight */}
-            <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px 12px", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.03)", display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>
-              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>12. Vòng Thứ Cấp</span>
+              <span style={{ fontSize: "0.775rem", fontWeight: "bold", color: "#94a3b8", textAlign: "center" }}>10. Vòng Thứ Cấp</span>
               <MockPlayerCircle name="Thứ Cấp" size={70} scaleFactor={1.0} isSecondaryHighlighted={true} />
             </div>
 

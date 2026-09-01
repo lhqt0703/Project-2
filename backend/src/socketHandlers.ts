@@ -320,7 +320,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     startWolfPhase,
     startNightTurnByIndex,
     startNightTurnFlow,
-    advanceDietQuyNightTurn,
     finishWolfVoting,
     getEffectiveNightActionOrder,
   } = nightFlow;
@@ -933,134 +932,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
   }
 
   function resolveNightDeaths(roomId: string, room: Room) {
-    if (room.gameMode === "diet_quy") {
-      const initialDead = new Set(room.deadPlayers || []);
-      const impKillId = room.dietQuyState!.impKillPlayerId;
-
-      if (impKillId && !initialDead.has(impKillId)) {
-        let finalTargetId: string | null = impKillId;
-
-        // Check Monk protection
-        const monkId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Nhà sư");
-        const isMonkActive = monkId && !initialDead.has(monkId) && room.dietQuyState!.poisonedPlayerId !== monkId;
-        const isMonkProtected = isMonkActive && room.dietQuyState!.monkProtectedPlayerId === impKillId;
-
-        // Check Soldier protection
-        const soldierId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Chiến sĩ");
-        const isSoldierProtected = soldierId === impKillId && room.dietQuyState!.poisonedPlayerId !== soldierId;
-
-        // Check Mayor protection
-        const mayorId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Thị trưởng");
-        const isMayorProtected = mayorId === impKillId && room.dietQuyState!.poisonedPlayerId !== mayorId;
-
-        if (isMonkProtected || isSoldierProtected) {
-          finalTargetId = null; // Protected!
-        } else if (isMayorProtected) {
-          const replacementId = room.dietQuyState!.mayorReplacementId;
-          if (replacementId && !initialDead.has(replacementId)) {
-            // Check if replacement is protected
-            const isReplacementMonkProtected = isMonkActive && room.dietQuyState!.monkProtectedPlayerId === replacementId;
-            const isReplacementSoldierProtected = soldierId === replacementId && room.dietQuyState!.poisonedPlayerId !== soldierId;
-            if (isReplacementMonkProtected || isReplacementSoldierProtected) {
-              finalTargetId = null;
-            } else {
-              finalTargetId = replacementId;
-            }
-          } else {
-            finalTargetId = impKillId;
-          }
-        }
-
-        if (finalTargetId) {
-          const impId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Ác Quỷ");
-          if (finalTargetId === impId) {
-            // Imp suicide!
-            room.deadPlayers = room.deadPlayers || [];
-            if (!room.deadPlayers.includes(finalTargetId)) {
-              room.deadPlayers.push(finalTargetId);
-            }
-            appendLogEntry(room, {
-              type: "eliminated",
-              phase: "night",
-              targetIds: [finalTargetId],
-              causesByTarget: { [finalTargetId]: [{ type: "wolf", attackerIds: [finalTargetId] }] }
-            });
-
-            // Find alive minions to promote
-            const aliveMinions = Object.entries(room.playerRoles || {})
-              .filter(([id, role]) => ["Độc thủ", "Gián điệp", "Phò"].includes(role) && !room.deadPlayers?.includes(id))
-              .map(([id]) => id);
-
-            if (aliveMinions.length > 0) {
-              const phòId = aliveMinions.find(id => room.playerRoles?.[id] === "Phò");
-              const promotedId = phòId || aliveMinions[Math.floor(Math.random() * aliveMinions.length)];
-              if (promotedId) {
-                room.playerRoles = room.playerRoles || {};
-                room.playerRoles[promotedId] = "Ác Quỷ";
-                appendLogEntry(room, {
-                  type: "role_conversion",
-                  phase: "night",
-                  targetId: promotedId,
-                  metadata: { newRole: "Ác Quỷ", reason: "imp_suicide" }
-                });
-                ctx.io.to(promotedId).emit("yourRole", "Ác Quỷ");
-              }
-            }
-          } else {
-            // Normal kill
-            room.deadPlayers = room.deadPlayers || [];
-            if (!room.deadPlayers.includes(finalTargetId)) {
-              room.deadPlayers.push(finalTargetId);
-            }
-            appendLogEntry(room, {
-              type: "eliminated",
-              phase: "night",
-              targetIds: [finalTargetId],
-              causesByTarget: { [finalTargetId]: [{ type: "wolf", attackerIds: [] }] }
-            });
-          }
-        } else {
-          appendLogEntry(room, { type: "no_death", phase: "day" });
-        }
-      } else {
-        appendLogEntry(room, { type: "no_death", phase: "day" });
-      }
-
-      // Calculate and emit Chef info if Night 1
-      const chefId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Đầu bếp");
-      if (chefId && !room.deadPlayers?.includes(chefId) && room.nightCount === 1) {
-        const count = getChefPairsCount(room);
-        const isPoisoned = room.dietQuyState!.poisonedPlayerId === chefId;
-        const finalCount = isPoisoned ? (Math.random() < 0.5 ? 0 : 1) : count;
-        ctx.io.to(chefId).emit("dietQuyChefInfo", { count: finalCount });
-      }
-
-      // Calculate and emit Empath info
-      const empathId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Đồng cảm");
-      if (empathId && !room.deadPlayers?.includes(empathId)) {
-        const count = getEmpathNeighborsCount(room, empathId);
-        const isPoisoned = room.dietQuyState!.poisonedPlayerId === empathId;
-        const finalCount = isPoisoned ? (Math.random() < 0.5 ? 0 : 1) : count;
-        ctx.io.to(empathId).emit("dietQuyEmpathInfo", { count: finalCount });
-      }
-
-      // Calculate and emit Undertaker info
-      const undertakerId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Chôn cất");
-      if (undertakerId && !room.deadPlayers?.includes(undertakerId)) {
-        const executedId = room.dietQuyState!.executedPlayerId;
-        if (executedId) {
-          const role = room.playerRoles?.[executedId] || "Dân làng";
-          const isPoisoned = room.dietQuyState!.poisonedPlayerId === undertakerId;
-          const finalRole = isPoisoned ? "Ác Quỷ" : role;
-          ctx.io.to(undertakerId).emit("dietQuyUndertakerInfo", { role: finalRole });
-        }
-      }
-
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-      emitHostNightActionProgress(roomId);
-      return;
-    }
-
     const initialDead = new Set(room.deadPlayers || []);
     const playerIds = new Set(room.players.map((player) => player.id));
     const eliminatedIds: string[] = [];
@@ -2012,7 +1883,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       gameRules: buildRoomGameRules(gameRules, gameMode),
       gameEventLog: [],
       gameMode: gameMode || "da_nghich",
-      dietQuyState: {},
       soiMuState: {},
       daNghichState: {},
       warnedPlayerIds: [],
@@ -3345,7 +3215,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     }
   });
 
-  socket.on("changePhase", ({ roomId, phase, dietQuyNightDirection, dietQuyNightStartPlayerId }) => {
+  socket.on("changePhase", ({ roomId, phase }) => {
     const room = rooms[roomId];
     if (!room) return;
 
@@ -3460,10 +3330,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         startDayDiscussion(roomId);
       }
     } else if (phase === "night") {
-      if (room.gameMode === "diet_quy") {
-        room.dietQuyState!.nightDirection = dietQuyNightDirection || "clockwise";
-        room.dietQuyState!.nightStartPlayerId = dietQuyNightStartPlayerId || null;
-      }
       if (previousPhase === "day") {
         const currentNightLog = ensureNightLog(room);
         const hasDayVoteLog = currentNightLog?.entries.some((entry) =>
@@ -3729,76 +3595,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       return;
     }
 
-    const DIET_QUY_TOWNSFOLK = [
-      "Thợ giặt", "Thủ thư", "Điều tra viên", "Đầu bếp", "Đồng cảm",
-      "Thầy bói", "Chôn cất", "Nhà sư", "Nuôi quạ", "Trinh nữ",
-      "Diệt quỷ", "Chiến sĩ", "Thị trưởng"
-    ];
-    const voterRole = room.playerRoles?.[clientId];
-    const targetId = room.dayVotes?.[clientId];
-    const targetRole = targetId ? room.playerRoles?.[targetId] : null;
 
-    if (
-      room.gameMode === "diet_quy" &&
-      targetRole === "Trinh nữ" &&
-      room.dietQuyState!.virginTriggered !== true &&
-      voterRole &&
-      DIET_QUY_TOWNSFOLK.includes(voterRole)
-    ) {
-      room.dietQuyState!.virginTriggered = true;
-      room.deadPlayers = room.deadPlayers || [];
-      if (!room.deadPlayers.includes(clientId)) {
-        room.deadPlayers.push(clientId);
-      }
-      appendLogEntry(room, {
-        type: "eliminated",
-        phase: "day",
-        targetIds: [clientId],
-        causesByTarget: { [clientId]: [{ type: "trial_verdict", voterIds: [] }] }
-      });
-
-      if (room.dayTimer) {
-        clearTimeout(room.dayTimer);
-        room.dayTimer = null;
-      }
-      if (room.dayDiscussionTimer) {
-        clearTimeout(room.dayDiscussionTimer);
-        room.dayDiscussionTimer = null;
-      }
-      room.dayDiscussionDeadline = null;
-      room.dayDeadline = null;
-
-      room.phase = "night";
-      room.hidePlayerRoleText = true;
-      room.nightCount = (room.nightCount || 0) + 1;
-
-      room.dietQuyState!.poisonedPrevPlayerId = room.dietQuyState!.poisonedPlayerId || null;
-      room.dietQuyState!.poisonedPlayerId = null;
-      room.dietQuyState!.redCharmPlayerId = null;
-      room.dietQuyState!.monkProtectedPlayerId = null;
-      room.dietQuyState!.impKillPlayerId = null;
-      room.dietQuyState!.ravenkeeperTargetId = null;
-      room.dietQuyState!.washerwomanSelectedIds = [];
-      room.dietQuyState!.librarianSelectedIds = [];
-      room.dietQuyState!.investigatorSelectedIds = [];
-      room.dietQuyState!.fortuneTellerCheckedIds = [];
-      room.dietQuyState!.executedToday = false;
-      room.dietQuyState!.saintExecutedToday = false;
-      room.dietQuyState!.mayorReplacementId = null;
-      room.nightTurnPlayerId = null;
-
-      room.dietQuyState!.nightTurnOrder = getSeatingOrder(room, room.dietQuyState!.nightDirection === "clockwise", room.dietQuyState!.nightStartPlayerId);
-      room.nightTurnIndex = 0;
-
-      ctx.io.to(roomId).emit("phaseChanged", "night");
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-
-      checkAndEndGame(roomId, "virgin_trigger");
-      if (!room.gameOver) {
-        advanceDietQuyNightTurn(roomId);
-      }
-      return;
-    }
 
     room.dayLocked = room.dayLocked || {};
     room.dayLocked[clientId] = true;
@@ -3809,203 +3606,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
       activeVoters.every((id) => room.dayLocked?.[id] === true);
     if (allLocked) {
       finishDayVoting(roomId);
-    }
-  });
-
-  socket.on("dietQuyPlayerAction", ({ roomId, targetId, targetIds }) => {
-    const room = rooms[roomId];
-    if (!room) return;
-    if (room.gameOver) return;
-    if (room.phase !== "night") return;
-    if (room.nightTurnPlayerId !== clientId) return;
-
-    const role = room.playerRoles?.[clientId];
-    if (!role) return;
-
-    if (role === "Độc thủ") {
-      room.dietQuyState!.poisonedPlayerId = targetId;
-      appendLogEntry(room, {
-        type: "poisoner_poison",
-        phase: "night",
-        actorId: clientId,
-        targetId,
-      });
-    } else if (role === "Nhà sư") {
-      room.dietQuyState!.monkProtectedPlayerId = targetId;
-      appendLogEntry(room, {
-        type: "monk_protect",
-        phase: "night",
-        actorId: clientId,
-        targetId,
-      });
-    } else if (role === "Ác Quỷ") {
-      room.dietQuyState!.impKillPlayerId = targetId;
-      appendLogEntry(room, {
-        type: "imp_attack",
-        phase: "night",
-        actorId: clientId,
-        targetId,
-      });
-    } else if (role === "Thầy bói") {
-      if (Array.isArray(targetIds) && targetIds.length === 2) {
-        room.dietQuyState!.fortuneTellerCheckedIds = targetIds;
-        const hasDemonOrCharm = targetIds.some(
-          (id) => room.playerRoles?.[id] === "Ác Quỷ" || room.dietQuyState!.redCharmPlayerId === id
-        );
-        const isPoisoned = room.dietQuyState!.poisonedPlayerId === clientId;
-        const result = isPoisoned
-          ? (Math.random() < 0.5 ? "Yes" : "No")
-          : (hasDemonOrCharm ? "Yes" : "No");
-
-        socket.emit("dietQuyFortuneTellerResult", { result });
-        appendLogEntry(room, {
-          type: "custom_log",
-          phase: "night",
-          message: `Thầy bói kiểm tra hai người chơi, kết quả: ${result}`,
-        });
-      }
-    } else if (role === "Nuôi quạ") {
-      room.dietQuyState!.ravenkeeperTargetId = targetId;
-      const isPoisoned = room.dietQuyState!.poisonedPlayerId === clientId;
-      const targetRole = room.playerRoles?.[targetId] || "Không rõ";
-      const revealedRole = isPoisoned ? "Dân làng" : targetRole;
-      socket.emit("dietQuyRavenkeeperResult", { role: revealedRole });
-      appendLogEntry(room, {
-        type: "custom_log",
-        phase: "night",
-        message: `Nuôi quạ kiểm tra một người chơi, vai trò nhận được: ${revealedRole}`,
-      });
-    } else if (role === "Gián điệp") {
-      appendLogEntry(room, {
-        type: "spy_view",
-        phase: "night",
-        actorId: clientId,
-      });
-    }
-
-    room.nightTurnIndex = (room.nightTurnIndex || 0) + 1;
-    advanceDietQuyNightTurn(roomId);
-  });
-
-  socket.on("dietQuyHostSelectTargets", ({ roomId, targetIds }) => {
-    const room = rooms[roomId];
-    if (!room) return;
-    if (clientId !== room.hostId) return;
-
-    const currentRole = room.nightTurnRole;
-
-    const DIET_QUY_TOWNSFOLK = [
-      "Thợ giặt", "Thủ thư", "Điều tra viên", "Đầu bếp", "Đồng cảm",
-      "Thầy bói", "Chôn cất", "Nhà sư", "Nuôi quạ", "Trinh nữ",
-      "Diệt quỷ", "Chiến sĩ", "Thị trưởng"
-    ];
-    const DIET_QUY_OUTSIDERS = ["Người ẩn dật", "Thánh nhân"];
-    const DIET_QUY_MINIONS = ["Độc thủ", "Gián điệp", "Phò"];
-
-    if ((currentRole as string) === "Thợ giặt") {
-      room.dietQuyState!.washerwomanSelectedIds = targetIds;
-      let townsfolkRole = "";
-      for (const id of targetIds) {
-        const r = room.playerRoles?.[id];
-        if (r && DIET_QUY_TOWNSFOLK.includes(r)) {
-          townsfolkRole = r;
-          break;
-        }
-      }
-      if (!townsfolkRole) townsfolkRole = "Đầu bếp";
-
-      const wwId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Thợ giặt");
-      if (wwId) {
-        ctx.io.to(wwId).emit("dietQuyWasherwomanInfo", { targetIds, townsfolkRole });
-      }
-    } else if ((currentRole as string) === "Thủ thư") {
-      room.dietQuyState!.librarianSelectedIds = targetIds;
-      let outsiderRole = "";
-      for (const id of targetIds) {
-        const r = room.playerRoles?.[id];
-        if (r && DIET_QUY_OUTSIDERS.includes(r)) {
-          outsiderRole = r;
-          break;
-        }
-      }
-      if (!outsiderRole) outsiderRole = "Người ẩn dật";
-
-      const libId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Thủ thư");
-      if (libId) {
-        ctx.io.to(libId).emit("dietQuyLibrarianInfo", { targetIds, role: outsiderRole });
-      }
-    } else if ((currentRole as string) === "Điều tra viên") {
-      room.dietQuyState!.investigatorSelectedIds = targetIds;
-      let minionRole = "";
-      for (const id of targetIds) {
-        const r = room.playerRoles?.[id];
-        if (r && DIET_QUY_MINIONS.includes(r)) {
-          minionRole = r;
-          break;
-        }
-      }
-      if (!minionRole) minionRole = "Độc thủ";
-
-      const invId = Object.keys(room.playerRoles || {}).find(id => room.playerRoles?.[id] === "Điều tra viên");
-      if (invId) {
-        ctx.io.to(invId).emit("dietQuyInvestigatorInfo", { targetIds, minionRole });
-      }
-    }
-
-    room.nightTurnIndex = (room.nightTurnIndex || 0) + 1;
-    advanceDietQuyNightTurn(roomId);
-  });
-
-  socket.on("dietQuyHostSelectMayorReplacement", ({ roomId, replacementId }) => {
-    const room = rooms[roomId];
-    if (!room) return;
-    if (clientId !== room.hostId) return;
-
-    room.dietQuyState!.mayorReplacementId = replacementId;
-    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-  });
-
-  socket.on("dietQuyHostConfirmRedCharm", ({ roomId, targetId }) => {
-    const room = rooms[roomId];
-    if (!room) return;
-    if (clientId !== room.hostId) return;
-
-    room.dietQuyState!.redCharmPlayerId = targetId;
-    ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-  });
-
-  socket.on("dietQuySlayerAbility", ({ roomId, targetId }) => {
-    const room = rooms[roomId];
-    if (!room) return;
-    if (room.gameOver) return;
-    if (room.phase !== "day") return;
-    if (room.playerRoles?.[clientId] !== "Diệt quỷ") return;
-    if (room.dietQuyState!.slayerUsed) return;
-
-    room.dietQuyState!.slayerUsed = true;
-    const targetRole = room.playerRoles?.[targetId];
-    const isPoisoned = room.dietQuyState!.poisonedPlayerId === clientId;
-
-    if (targetRole === "Ác Quỷ" && !isPoisoned) {
-      room.deadPlayers = room.deadPlayers || [];
-      if (!room.deadPlayers.includes(targetId)) {
-        room.deadPlayers.push(targetId);
-      }
-      appendLogEntry(room, {
-        type: "eliminated",
-        phase: "day",
-        targetIds: [targetId],
-        causesByTarget: { [targetId]: [{ type: "trial_verdict", voterIds: [] }] }
-      });
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-      checkAndEndGame(roomId, "slayer_kill");
-    } else {
-      appendLogEntry(room, {
-        type: "custom_log",
-        phase: "day",
-        message: `Diệt quỷ bắn trượt người chơi.`,
-      });
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
     }
   });
 
@@ -4074,12 +3674,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
     if (rules.allNightActionsSimultaneous) return;
     if (!room.nightTurnRole) return;
 
-    if (room.gameMode === "diet_quy") {
-      clearNightTurnTimer(room);
-      room.nightTurnIndex = (room.nightTurnIndex ?? 0) + 1;
-      advanceDietQuyNightTurn(roomId);
-      return;
-    }
+
 
     if (room.nightTurnRole === "Sói") {
       if (room.wolfTimer) {
@@ -4310,69 +3905,6 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
 
     if (!room.nightTurnRole) return;
 
-    if (room.gameMode === "diet_quy") {
-      if (!room.nightTurnPaused) {
-        const deadline = room.nightTurnDeadline;
-        const remainingMs = deadline ? Math.max(0, deadline - Date.now()) : null;
-        room.nightTurnRemainingMs = remainingMs;
-        room.nightTurnPaused = true;
-        clearNightTurnTimer(room);
-        ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-        return;
-      }
-
-      room.nightTurnPaused = false;
-      const durationMs = getNonWolfTurnDurationMs(room);
-      if (durationMs > 0) {
-        const actualRemainingMs = Math.max(0, room.nightTurnRemainingMs ?? 0);
-        if (actualRemainingMs <= 0) {
-          const ravenkeeperId = Object.keys(room.playerRoles || {}).find(
-            (id) => room.playerRoles?.[id] === "Nuôi quạ"
-          );
-          if (room.nightTurnPlayerId === ravenkeeperId && ravenkeeperId) {
-            room.nightTurnPlayerId = null;
-            room.nightTurnRole = null;
-            ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-            emitHostNightActionProgress(roomId);
-          } else {
-            room.nightTurnIndex = (room.nightTurnIndex ?? 0) + 1;
-            advanceDietQuyNightTurn(roomId);
-          }
-          return;
-        }
-
-        room.nightTurnDeadline = Date.now() + actualRemainingMs;
-        clearNightTurnTimer(room);
-
-        const activePlayerId = room.nightTurnPlayerId;
-        const activeRole = room.nightTurnRole;
-
-        room.nightTurnTimer = setTimeout(() => {
-          const r = ctx.rooms[roomId];
-          if (r && r.phase === "night" && r.nightTurnPlayerId === activePlayerId && r.nightTurnRole === activeRole) {
-            const ravenkeeperId = Object.keys(r.playerRoles || {}).find(
-              (id) => r.playerRoles?.[id] === "Nuôi quạ"
-            );
-            if (activePlayerId === ravenkeeperId && ravenkeeperId) {
-              r.nightTurnPlayerId = null;
-              r.nightTurnRole = null;
-              ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(r));
-              emitHostNightActionProgress(roomId);
-            } else {
-              r.nightTurnIndex = (r.nightTurnIndex ?? 0) + 1;
-              advanceDietQuyNightTurn(roomId);
-            }
-          }
-        }, actualRemainingMs);
-      } else {
-        room.nightTurnDeadline = null;
-        room.nightTurnRemainingMs = null;
-      }
-
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-      return;
-    }
-
     if (!room.nightTurnPaused) {
       const deadline = room.nightTurnDeadline ?? Date.now();
       const remainingMs = Math.max(0, deadline - Date.now());
@@ -4596,16 +4128,7 @@ export function registerSocketHandlers(params: RegisterSocketHandlersParams) {
         clearNightTurnTimer(room);
         const remainingMs = newDeadline - now;
 
-        if (room.gameMode === "diet_quy") {
-          const playerId = room.nightTurnPlayerId;
-          room.nightTurnTimer = setTimeout(() => {
-            const r = rooms[roomId];
-            if (r && r.phase === "night" && r.nightTurnPlayerId === playerId) {
-              r.nightTurnIndex = (r.nightTurnIndex ?? 0) + 1;
-              advanceDietQuyNightTurn(roomId);
-            }
-          }, remainingMs);
-        } else {
+        {
           const role = room.nightTurnRole;
           const index = room.nightTurnIndex ?? 0;
           if (role === "Linh sói") {

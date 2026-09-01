@@ -21,6 +21,7 @@ import {
   ELEMENTAL_ROLE_SET,
 } from "../constants/elemental";
 import { preloadImages } from "../utils/preloadImages";
+import { normalizeRoleName, getAssetName } from "../utils/rolePortraitAssets";
 
 const duskRoleCardAssets = Object.values(
   import.meta.glob<string>("../assets/F *.avif", { eager: true, import: "default" })
@@ -30,30 +31,9 @@ const rolePortraitAvifImages = import.meta.glob<string>("../assets/C *.avif", {
   eager: true,
   import: "default",
 });
-const dietQuyRolePortraitAvifImages = import.meta.glob<string>("../assets/Diệt Quỷ/C *.avif", {
-  eager: true,
-  import: "default",
-});
-
-function normalizeRoleName(value: string) {
-  return value.normalize("NFC").trim().toLowerCase();
-}
-
-function getAssetName(path: string) {
-  return path.split("/").pop()?.replace(/\.avif$/i, "") ?? "";
-}
-
-function getRoomRolePortrait(role: string, gameMode?: string) {
+function getRoomRolePortrait(role: string, _gameMode?: string) {
   if (!role) return null;
   const targetCName = normalizeRoleName(`C ${role}`);
-
-  if (gameMode === "diet_quy") {
-    for (const [path, src] of Object.entries(dietQuyRolePortraitAvifImages)) {
-      if (normalizeRoleName(getAssetName(path)) === targetCName) {
-        return src;
-      }
-    }
-  }
 
   for (const [path, src] of Object.entries(rolePortraitAvifImages)) {
     if (normalizeRoleName(getAssetName(path)) === targetCName) {
@@ -259,11 +239,7 @@ export default function Room() {
   // Tải trước (prefetch) component Game tương ứng với chế độ chơi để tránh bị khựng khi chuyển trang
   useEffect(() => {
     if (!room?.gameMode) return;
-    if (room.gameMode === "diet_quy") {
-      import("./GameDietQuy").catch((err) => {
-        console.error("Lỗi tải trước GameDietQuy:", err);
-      });
-    } else if (room.gameMode === "soi_mu") {
+    if (room.gameMode === "soi_mu") {
       import("./GameSoiMu").catch((err) => {
         console.error("Lỗi tải trước GameSoiMu:", err);
       });
@@ -889,7 +865,7 @@ export default function Room() {
           )}
         </div>
       </div>
-      {room.gameMode !== "diet_quy" && room.gameMode !== "soi_mu" && hasElementalRole && (
+      {room.gameMode !== "soi_mu" && hasElementalRole && (
 
         <div id="Luat-phong" style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
           {(() => {

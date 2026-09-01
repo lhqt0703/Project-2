@@ -179,7 +179,7 @@ export default function Lobby() {
       {/* Stunning Aurora Component Background */}
       <div style={{ position: "absolute", inset: 0, zIndex: 0, opacity: 0.45, pointerEvents: "none" }}>
         <Aurora
-          colorStops={gameMode === "co_ty_phu" ? ["#59f2a5", "#f5c45e", "#073b2c"] : gameMode === "soi_mu" ? ["#9333ea", "#0c9170", "#118aec"] : gameMode === "diet_quy" ? ["#ff8f42", "#EF4444", "#5227FF"] : ["#7cff67", "#EF4444", "#5227FF"]}
+          colorStops={gameMode === "co_ty_phu" ? ["#59f2a5", "#f5c45e", "#073b2c"] : gameMode === "soi_mu" ? ["#9333ea", "#0c9170", "#118aec"] : ["#7cff67", "#EF4444", "#5227FF"]}
           blend={0.6}
           amplitude={1.1}
           speed={1.4}
@@ -289,7 +289,7 @@ export default function Lobby() {
               <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, color: "#a5b4fc" }}>Tạo phòng mới</h2>
               <div style={{ display: "grid", gap: 16, height: "100%", justifyContent: "space-between" }}>
                 <p style={{ fontSize: 14, color: "rgba(255,255,255,0.6)", margin: 0 }}>
-                  Trở thành chủ phòng để mời bạn bè tham gia ván chơi {gameMode === "co_ty_phu" ? "Cờ tỷ phú" : gameMode === "soi_mu" ? "Sói Mù" : gameMode === "diet_quy" ? "Diệt Quỷ" : "Dạ Nghịch"}.
+                  Trở thành chủ phòng để mời bạn bè tham gia ván chơi {gameMode === "co_ty_phu" ? "Cờ tỷ phú" : gameMode === "soi_mu" ? "Sói Mù" : "Dạ Nghịch"}.
                 </p>
                 <button onClick={createRoom} className="lobby-btn lobby-btn-primary" style={{ alignSelf: "flex-end", width: "100%" }}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

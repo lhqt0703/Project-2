@@ -15,11 +15,6 @@ type NonVillagerRole = (typeof NON_VILLAGER_ROLES)[number];
 
 const SOI_MU_ROLES = ["Dân làng", "Sói", "Bảo vệ", "Phù thủy", "Tiên tri", "Trưởng làng", "Tay Buôn", "Thợ săn", "Bác sĩ ung thư", "Nam Thư", "Đàn bà", "Suy Thận"] as const;
 
-const DIET_QUY_TOWNSFOLK = ["Thợ giặt", "Thủ thư", "Điều tra viên", "Đầu bếp", "Đồng cảm", "Thầy bói", "Chôn cất", "Nhà sư", "Nuôi quạ", "Trinh nữ", "Diệt quỷ", "Chiến sĩ", "Thị trưởng"] as const;
-const DIET_QUY_TRAVELERS = ["Người ẩn dật", "Thánh nhân"] as const;
-const DIET_QUY_MINIONS = ["Độc thủ", "Gián điệp", "Phò"] as const;
-const DIET_QUY_DEMON = ["Ác Quỷ"] as const;
-
 // Glob only .avif character card images
 export const CARD_IMAGES = import.meta.glob<string>("../assets/F *.avif", {
   eager: true,
@@ -50,11 +45,6 @@ export function getCardUrlByRoleName(roleName: string, gameMode?: string): strin
 }
 
 const getGlowColor = (role: string) => {
-  if (DIET_QUY_TOWNSFOLK.includes(role as any)) return "#34d399";
-  if (DIET_QUY_TRAVELERS.includes(role as any)) return "#60a5fa";
-  if (DIET_QUY_MINIONS.includes(role as any)) return "#fb923c";
-  if (DIET_QUY_DEMON.includes(role as any)) return "#f87171";
-
   if (["Sói", "Sói con", "Sói Dại", "Linh sói", "Bán sói"].includes(role)) return "#ef4444";
   if (ELEMENTAL_ROLE_ORDER.includes(role as any)) return "#ED6E7B";
   if (["Tiên tri", "Thợ săn"].includes(role)) return "#60a5fa";
@@ -203,7 +193,7 @@ export default function RoleSelect() {
     roles?: string[];
     phase?: string;
     gameOver?: boolean;
-    gameMode?: "da_nghich" | "diet_quy" | "soi_mu";
+    gameMode?: "da_nghich" | "soi_mu";
     gameRules?: { coffeeHerbCardMode?: "primary" | "secondary" };
     pendingGameRules?: { coffeeHerbCardMode?: "primary" | "secondary" };
     roleVotes?: Record<string, string[]>;
@@ -213,7 +203,6 @@ export default function RoleSelect() {
   const didInitFromServer = useRef(false);
 
   const amIHost = roomSnapshot?.hostId === clientId;
-  const isDietQuy = roomSnapshot?.gameMode === "diet_quy";
   const coffeeHerbCardMode = roomSnapshot?.pendingGameRules?.coffeeHerbCardMode
     ?? roomSnapshot?.gameRules?.coffeeHerbCardMode
     ?? "primary";
@@ -230,7 +219,7 @@ export default function RoleSelect() {
   const secondaryHerbCount = coffeeHerbCardMode === "secondary"
     ? selectedRoles.filter((role) => role === "Linh Chi" || role === "Đông Trùng").length
     : 0;
-  const totalSelected = isDietQuy ? selectedRoles.length : selectedRoles.length + elementalCount - secondaryHerbCount;
+  const totalSelected = selectedRoles.length + elementalCount - secondaryHerbCount;
 
   useEffect(() => {
     if (!roomId) return;
@@ -241,7 +230,7 @@ export default function RoleSelect() {
       hostId: string;
       players: PlayerInfo[];
       roles?: string[];
-      gameMode?: "da_nghich" | "diet_quy" | "soi_mu";
+      gameMode?: "da_nghich" | "soi_mu";
       gameRules?: { coffeeHerbCardMode?: "primary" | "secondary" };
       pendingGameRules?: { coffeeHerbCardMode?: "primary" | "secondary" };
       roleVotes?: Record<string, string[]>;
@@ -253,18 +242,14 @@ export default function RoleSelect() {
 
       if (!didInitFromServer.current) {
         const roles = room.roles ?? [];
-        if (room.gameMode === "diet_quy") {
-          setSelectedRoles(roles);
-        } else {
-          const elementalRoleSet = new Set(ELEMENTAL_ROLE_ORDER);
-          const nextElemental = Object.fromEntries(
-            ELEMENTAL_ROLE_ORDER.map((role) => [role, roles.includes(role)])
-          );
-          const nonElemental = roles.filter((role) => !elementalRoleSet.has(role as any));
+        const elementalRoleSet = new Set(ELEMENTAL_ROLE_ORDER);
+        const nextElemental = Object.fromEntries(
+          ELEMENTAL_ROLE_ORDER.map((role) => [role, roles.includes(role)])
+        );
+        const nonElemental = roles.filter((role) => !elementalRoleSet.has(role as any));
 
-          setSelectedRoles(nonElemental);
-          setSelectedElementalRoles(nextElemental);
-        }
+        setSelectedRoles(nonElemental);
+        setSelectedElementalRoles(nextElemental);
         didInitFromServer.current = true;
       }
     };
@@ -304,7 +289,7 @@ export default function RoleSelect() {
       socket.off("gameStarted", handleGameStarted);
       socket.off("rolesReady", handleRolesReady);
     };
-  }, [nav, roomId, selectedRoles, selectedElementalRoles, isDietQuy]);
+  }, [nav, roomId, selectedRoles, selectedElementalRoles]);
 
   const removeOne = (arr: string[], role: string) => {
     const idx = arr.indexOf(role);
@@ -327,7 +312,6 @@ export default function RoleSelect() {
   };
 
   const buildFinalRoles = () => {
-    if (isDietQuy) return selectedRoles;
     const elementalRoles = ELEMENTAL_ROLE_ORDER.filter((role) => selectedElementalRoles[role]);
     return [...selectedRoles, ...elementalRoles];
   };
@@ -523,34 +507,7 @@ export default function RoleSelect() {
       <p>Số người chơi: <b>{playerCount}</b></p>
       {amIHost && <p>Đã chọn: <b>{totalSelected}</b></p>}
 
-      {isDietQuy ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-          <div>
-            <h2 style={{ color: "#34d399", margin: "10px 0" }}>Phe Dân Làng (Townsfolk)</h2>
-            <div className="roleselect-grid">
-              {DIET_QUY_TOWNSFOLK.map((role) => renderRoleCard(role))}
-            </div>
-          </div>
-          <div>
-            <h2 style={{ color: "#60a5fa", margin: "10px 0" }}>Phe Lữ Khách (Travelers)</h2>
-            <div className="roleselect-grid">
-              {DIET_QUY_TRAVELERS.map((role) => renderRoleCard(role))}
-            </div>
-          </div>
-          <div>
-            <h2 style={{ color: "#fb923c", margin: "10px 0" }}>Phe Tay Sai (Minions)</h2>
-            <div className="roleselect-grid">
-              {DIET_QUY_MINIONS.map((role) => renderRoleCard(role))}
-            </div>
-          </div>
-          <div>
-            <h2 style={{ color: "#f87171", margin: "10px 0" }}>Phe Quỷ (Demons)</h2>
-            <div className="roleselect-grid">
-              {DIET_QUY_DEMON.map((role) => renderRoleCard(role))}
-            </div>
-          </div>
-        </div>
-      ) : roomSnapshot?.gameMode === "soi_mu" ? (
+      {roomSnapshot?.gameMode === "soi_mu" ? (
         <div className="roleselect-grid">
           {SOI_MU_ROLES.map((role) => renderRoleCard(role))}
         </div>

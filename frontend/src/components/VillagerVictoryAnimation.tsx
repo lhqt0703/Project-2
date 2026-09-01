@@ -8,12 +8,6 @@ const cAvifPortraits = import.meta.glob<string>("../assets/C *.avif", {
   import: "default",
 });
 
-// Load Diet Quy portraits
-const dietQuyPortraits = import.meta.glob<string>("../assets/Diệt Quỷ/C *.avif", {
-  eager: true,
-  import: "default",
-});
-
 interface VillagerVictoryAnimationProps {
   open: boolean;
   villagerRole: string | null;
@@ -26,7 +20,7 @@ function normalizeRole(name: string) {
   return name.normalize("NFC").trim().toLowerCase();
 }
 
-function getPortraitSrc(role: string | null | undefined, gameMode?: string) {
+function getPortraitSrc(role: string | null | undefined, _gameMode?: string) {
   if (!role) return null;
   const normalized = normalizeRole(role);
 
@@ -46,16 +40,6 @@ function getPortraitSrc(role: string | null | undefined, gameMode?: string) {
   if (targetName === "thiên sứ" || targetName === "angel") targetName = "thiên sứ";
   if (targetName === "sói con") targetName = "sói con";
   if (targetName === "sói dại") targetName = "sói dại";
-
-  // Diet Quy mode
-  if (gameMode === "diet_quy") {
-    const key = Object.keys(dietQuyPortraits).find((path) => {
-      const filename = path.split("/").pop()?.toLowerCase() || "";
-      const cleaned = filename.replace(/^c\s+/, "").replace(/\.avif$/i, "").trim();
-      return cleaned === targetName || cleaned.includes(targetName) || targetName.includes(cleaned);
-    });
-    if (key) return dietQuyPortraits[key];
-  }
 
   // Normal / Fallback mode: find in cAvifPortraits
   const key = Object.keys(cAvifPortraits).find((path) => {

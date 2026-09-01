@@ -5,11 +5,6 @@ const rolePortraitImages = import.meta.glob<string>("../assets/*.{png,avif}", {
   import: "default",
 });
 
-const dietQuyRolePortraitImages = import.meta.glob<string>("../assets/Diệt Quỷ/C *.avif", {
-  eager: true,
-  import: "default",
-});
-
 const ROLE_IMAGE_ALIASES: Record<string, string> = {
   "tự nhiên": "Tự nhiên",
   "sấm sét": "Sét",
@@ -24,22 +19,18 @@ export const VILLAGER_BACKGROUND_ASSET = "Nền dân";
 export const WOLF_BACKGROUND_ASSET = "Nền sói";
 export const HYBRID_BACKGROUND_ASSET = "Nền lai";
 
-function normalizeRoleName(value: string) {
+export function normalizeRoleName(value: string) {
   return value.normalize("NFC").trim().toLowerCase();
 }
 
 const ELEMENTAL_ROLE_NAMES = new Set(Array.from(ELEMENTAL_ROLE_SET, (role) => normalizeRoleName(role)));
 
-function getAssetName(path: string) {
+export function getAssetName(path: string) {
   return path.split("/").pop()?.replace(/\.(png|avif)$/i, "") ?? "";
 }
 
 const rolePortraitByName = Object.fromEntries(
   Object.entries(rolePortraitImages).map(([path, src]) => [normalizeRoleName(getAssetName(path)), src])
-);
-
-const dietQuyPortraitByName = Object.fromEntries(
-  Object.entries(dietQuyRolePortraitImages).map(([path, src]) => [normalizeRoleName(getAssetName(path)), src])
 );
 
 export function hasDarkRolePortraitOverlay(role: string) {
@@ -49,16 +40,11 @@ export function hasDarkRolePortraitOverlay(role: string) {
 export function getRolePortraitSrc(
   role: string | null | undefined,
   backgroundAssetOverride?: string | null,
-  gameMode?: string
+  _gameMode?: string
 ) {
   if (!role) return null;
 
   const normalizedRole = normalizeRoleName(role);
-
-  if (gameMode === "diet_quy") {
-    const assetName = `C ${role}`;
-    return dietQuyPortraitByName[normalizeRoleName(assetName)] ?? null;
-  }
 
   if (BLANK_ROLE_NAMES.has(normalizedRole)) return null;
 

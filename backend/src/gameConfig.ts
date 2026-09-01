@@ -55,9 +55,12 @@ export function ensureLinhMieuHeartState(room: Room) {
 
 export function hideSharedHeartsPreservingLinhMieu(room: Room) {
   const previousHp = room.daNghichState!.playerHearts || {};
-  const linhMieuHp = Object.fromEntries(
-    getLinhMieuPlayerIds(room).map((playerId) => [playerId, previousHp[playerId]]),
-  );
+  const linhMieuHp: Record<string, number> = {};
+  for (const playerId of getLinhMieuPlayerIds(room)) {
+    if (typeof previousHp[playerId] === "number") {
+      linhMieuHp[playerId] = previousHp[playerId]!;
+    }
+  }
   room.daNghichState!.sharedHeartsVisible = false;
   room.daNghichState!.playerHearts = linhMieuHp;
   ensureLinhMieuHeartState(room);

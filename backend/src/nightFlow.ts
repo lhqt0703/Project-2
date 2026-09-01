@@ -510,116 +510,6 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     emitElementalNightStateForRole(roomId, role);
   }
 
-  function advanceDietQuyNightTurn(roomId: string) {
-    const room = ctx.rooms[roomId];
-    if (!room) return;
-    if (room.phase !== "night") return;
-
-    clearNightTurnTimer(room);
-
-    const order = room.dietQuyState!.nightTurnOrder || [];
-    const index = room.nightTurnIndex ?? 0;
-
-    if (index >= order.length) {
-      // Check if Nuôi quạ (Ravenkeeper) was killed tonight and hasn't acted yet
-      const ravenkeeperId = Object.keys(room.playerRoles || {}).find(
-        (id) => room.playerRoles?.[id] === "Nuôi quạ"
-      );
-      const isRavenkeeperKilledTonight =
-        ravenkeeperId &&
-        room.dietQuyState!.impKillPlayerId === ravenkeeperId &&
-        room.dietQuyState!.monkProtectedPlayerId !== ravenkeeperId;
-
-      if (isRavenkeeperKilledTonight && !room.dietQuyState!.ravenkeeperTargetId && room.nightTurnPlayerId !== ravenkeeperId) {
-        room.nightTurnPlayerId = ravenkeeperId;
-        room.nightTurnRole = "Nuôi quạ";
-        room.nightTurnPaused = false;
-        const durationMs = getNonWolfTurnDurationMs(room);
-        if (durationMs > 0) {
-          room.nightTurnRemainingMs = durationMs;
-          room.nightTurnDeadline = Date.now() + durationMs + 500;
-          room.nightTurnTimer = setTimeout(() => {
-            const r = ctx.rooms[roomId];
-            if (r && r.phase === "night" && r.nightTurnPlayerId === ravenkeeperId) {
-              r.nightTurnPlayerId = null;
-              r.nightTurnRole = null;
-              ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(r));
-              emitHostNightActionProgress(roomId);
-            }
-          }, durationMs + 500);
-        } else {
-          room.nightTurnRemainingMs = null;
-          room.nightTurnDeadline = null;
-        }
-
-        ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-        emitHostNightActionProgress(roomId);
-        return;
-      }
-
-      // No Ravenkeeper action needed or finished
-      room.nightTurnPlayerId = null;
-      room.nightTurnRole = null;
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-      emitHostNightActionProgress(roomId);
-      return;
-    }
-
-    const playerId = order[index];
-    if (!playerId) {
-      room.nightTurnIndex = index + 1;
-      advanceDietQuyNightTurn(roomId);
-      return;
-    }
-
-    const deadPlayers = room.deadPlayers || [];
-    if (deadPlayers.includes(playerId)) {
-      room.nightTurnIndex = index + 1;
-      advanceDietQuyNightTurn(roomId);
-      return;
-    }
-
-    const role = room.playerRoles?.[playerId];
-    let hasAction = false;
-    if (role === "Độc thủ" || role === "Gián điệp" || role === "Nhà sư" || role === "Thầy bói") {
-      hasAction = true;
-    } else if (role === "Ác Quỷ" && (room.nightCount || 0) > 1) {
-      hasAction = true;
-    } else if (
-      (room.nightCount || 0) === 1 &&
-      (role === "Thợ giặt" || role === "Thủ thư" || role === "Điều tra viên")
-    ) {
-      hasAction = true;
-    }
-
-    if (hasAction && role) {
-      room.nightTurnPlayerId = playerId;
-      room.nightTurnRole = role as NightActionRole;
-      room.nightTurnPaused = false;
-      const durationMs = getNonWolfTurnDurationMs(room);
-      if (durationMs > 0) {
-        room.nightTurnRemainingMs = durationMs;
-        room.nightTurnDeadline = Date.now() + durationMs + 500;
-        room.nightTurnTimer = setTimeout(() => {
-          const r = ctx.rooms[roomId];
-          if (r && r.phase === "night" && r.nightTurnPlayerId === playerId) {
-            r.nightTurnIndex = (r.nightTurnIndex ?? 0) + 1;
-            advanceDietQuyNightTurn(roomId);
-          }
-        }, durationMs + 500);
-      } else {
-        room.nightTurnRemainingMs = null;
-        room.nightTurnDeadline = null;
-      }
-
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-      emitHostNightActionProgress(roomId);
-    } else {
-      room.nightTurnIndex = index + 1;
-      advanceDietQuyNightTurn(roomId);
-    }
-  }
-
   function startNightTurnFlow(roomId: string, options?: { delayMs?: number }) {
     const room = ctx.rooms[roomId];
     if (!room) return;
@@ -642,33 +532,6 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     }
 
     room.nightTransitionEndsAt = null;
-
-    if (room.gameMode === "diet_quy") {
-      room.dietQuyState!.poisonedPrevPlayerId = room.dietQuyState!.poisonedPlayerId || null;
-      room.dietQuyState!.poisonedPlayerId = null;
-      room.dietQuyState!.redCharmPlayerId = null;
-      room.dietQuyState!.monkProtectedPlayerId = null;
-      room.dietQuyState!.impKillPlayerId = null;
-      room.dietQuyState!.ravenkeeperTargetId = null;
-      room.dietQuyState!.washerwomanSelectedIds = [];
-      room.dietQuyState!.librarianSelectedIds = [];
-      room.dietQuyState!.investigatorSelectedIds = [];
-      room.dietQuyState!.fortuneTellerCheckedIds = [];
-      room.dietQuyState!.executedToday = false;
-      room.dietQuyState!.saintExecutedToday = false;
-      room.dietQuyState!.mayorReplacementId = null;
-      room.nightTurnPlayerId = null;
-
-      room.dietQuyState!.nightTurnOrder = getSeatingOrder(room, room.dietQuyState!.nightDirection === "clockwise", room.dietQuyState!.nightStartPlayerId);
-      room.nightTurnIndex = 0;
-      room.hidePlayerRoleText = true;
-      room.nightTurnPaused = false;
-      room.nightTurnRemainingMs = null;
-      room.nightTurnDeadline = null;
-      ctx.io.to(roomId).emit("roomUpdated", toPublicRoom(room));
-      advanceDietQuyNightTurn(roomId);
-      return;
-    }
 
     const rules = ensureRoomGameRules(room);
     resetNightTurnState(room);
@@ -885,7 +748,6 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     getRoleTurnDurationMs,
     startNightTurnByIndex,
     startNightTurnFlow,
-    advanceDietQuyNightTurn,
     finishWolfVoting,
   };
 }

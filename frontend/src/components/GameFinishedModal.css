@@ -1,233 +1,23 @@
+@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@100..900&display=swap');
+
 .game-finished-overlay {
   position: fixed;
   inset: 0;
-  z-index: 110;
-  background: rgba(8, 10, 15, 0.82);
-  backdrop-filter: blur(16px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  animation: fadeIn 0.4s ease forwards;
-}
-
-.game-finished-container {
-  width: min(600px, 100%);
-  border-radius: 20px;
-  padding: 36px;
-  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.85);
-  text-align: center;
-  color: #f8fbff;
-  position: relative;
+  z-index: 1000;
   overflow: hidden;
-  animation: scaleUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(241, 181, 91, 0.22), transparent 27%),
+    radial-gradient(circle at 20% 80%, rgba(157, 104, 255, 0.19), transparent 30%),
+    rgba(5, 4, 12, 0.96);
+  animation: MKT-overlay-reveal 0.65s cubic-bezier(0.16, 1, 0.3, 1) both;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-/* Themes */
-.theme-villagers {
-  background: linear-gradient(145deg, rgba(16, 28, 22, 0.9) 0%, rgba(10, 12, 18, 0.95) 100%);
-  border: 1px solid rgba(34, 197, 94, 0.3);
-  box-shadow: 0 0 40px rgba(34, 197, 94, 0.15), 0 32px 80px rgba(0, 0, 0, 0.8);
-}
-
-.theme-villagers .game-finished-title {
-  background: linear-gradient(135deg, #facc15 0%, #22c55e 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.theme-wolves {
-  background: linear-gradient(145deg, rgba(30, 10, 10, 0.9) 0%, rgba(10, 12, 18, 0.95) 100%);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  box-shadow: 0 0 40px rgba(239, 68, 68, 0.15), 0 32px 80px rgba(0, 0, 0, 0.8);
-}
-
-.theme-wolves .game-finished-title {
-  background: linear-gradient(135deg, #ff4d4d 0%, #ff8080 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.theme-lovers {
-  background: linear-gradient(145deg, rgba(32, 14, 25, 0.9) 0%, rgba(10, 12, 18, 0.95) 100%);
-  border: 1px solid rgba(253, 121, 168, 0.3);
-  box-shadow: 0 0 40px rgba(253, 121, 168, 0.15), 0 32px 80px rgba(0, 0, 0, 0.8);
-}
-
-.theme-lovers .game-finished-title {
-  background: linear-gradient(135deg, #ff758c 0%, #fd79a8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.theme-nobody {
-  background: linear-gradient(145deg, rgba(23, 26, 33, 0.9) 0%, rgba(10, 12, 18, 0.95) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-/* Header */
-.game-finished-header {
-  margin-bottom: 28px;
-}
-
-.game-finished-subtitle {
-  font-size: 0.8125rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 2px;
-  color: rgba(255, 255, 255, 0.5);
-  margin-bottom: 8px;
-}
-
-.game-finished-title {
-  font-size: 2.125rem;
-  font-weight: 900;
-  margin: 0;
-}
-
-/* MVP Section */
-.game-finished-mvp-section {
-  background: rgba(0, 0, 0, 0.28);
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.mvp-title {
-  font-size: 0.875rem;
-  font-weight: 900;
-  color: #f1c40f;
-  margin-bottom: 12px;
-  letter-spacing: 1px;
-}
-
-.mvp-list {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.mvp-card {
-  min-width: 140px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 10px 16px;
-  transition: all 0.25s;
-}
-
-.mvp-card:hover {
-  transform: translateY(-2px);
-  background: rgba(255, 255, 255, 0.07);
-}
-
-.mvp-name {
-  font-weight: 800;
-  font-size: 1.0625rem;
-  margin-bottom: 4px;
-}
-
-.mvp-role {
-  font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.68);
-  margin-bottom: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.mvp-score {
-  font-size: 0.875rem;
-  font-weight: 800;
-  color: #f1c40f;
-}
-
-/* Description */
-.game-finished-desc {
-  font-size: 0.9375rem;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.75);
-  margin: 0 auto 32px;
-  max-width: 440px;
-}
-
-/* Buttons */
-.game-finished-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 100%;
-}
-
-.btn-action {
-  width: 100%;
-  padding: 14px 20px;
-  border-radius: 10px;
-  font-weight: 800;
-  font-size: 0.9375rem;
-  cursor: pointer;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  transition: all 0.2s ease;
-}
-
-.btn-score {
-  background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
-  color: white;
-  box-shadow: 0 4px 16px rgba(168, 85, 247, 0.35);
-}
-
-.btn-score:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(168, 85, 247, 0.5);
-  filter: brightness(1.05);
-}
-
-
-.btn-lobby {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: white;
-}
-
-.btn-lobby:hover {
-  background: rgba(255, 255, 255, 0.14);
-}
-
-.btn-close {
-  background: transparent;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.btn-close:hover {
-  color: white;
-}
-
-.btn-icon {
-  width: 18px;
-  height: 18px;
-}
-
-/* Animations */
-@keyframes fadeIn {
+@keyframes MKT-overlay-reveal {
   from {
     opacity: 0;
-  }
-
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes scaleUp {
-  from {
-    opacity: 0;
-    transform: scale(0.92);
+    transform: scale(1.02);
   }
 
   to {
@@ -236,14 +26,466 @@
   }
 }
 
-@media (min-width: 480px) {
-  .game-finished-actions {
-    flex-direction: row;
-    justify-content: center;
+.awards-announcement-glow {
+  position: fixed;
+  top: 10%;
+  left: 50%;
+  width: 380px;
+  height: 380px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: rgba(244, 178, 78, 0.13);
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.awards-announcement-content {
+  position: fixed;
+  inset: 0 auto 0 50%;
+  width: min(760px, calc(100% - 36px));
+  overflow-y: auto;
+  padding: clamp(40px, 7vh, 70px) 0 20px;
+  transform: translateX(-50%);
+  scrollbar-gutter: stable;
+  text-align: center;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Kicker: MKTChữ1 */
+.MKTChữ1 {
+  margin: 0 0 10px;
+  color: #f3be68;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.9;
+  animation: MKT-fade-down 0.5s ease-out both;
+}
+
+/* Icon thắng: MKTicon */
+.MKTicon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  opacity: 0;
+  transform: translateY(12px) scale(0.92);
+  filter: drop-shadow(0 8px 24px rgba(247, 185, 85, 0.45));
+  animation: MKT-icon-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.5s forwards;
+}
+
+.MKTicon img {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+}
+
+@keyframes MKT-icon-in {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes MKT-fade-down {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
   }
 
-  .btn-action {
-    width: auto;
-    flex: 1;
+  to {
+    opacity: 0.9;
+    transform: translateY(0);
+  }
+}
+
+
+/* Tiêu đề phe thắng: MKTchữ2 */
+.MKTchữ2 {
+  /* TofuEdited */
+  max-width: 720px;
+  margin: 0 auto 10px;
+  font-size: clamp(34px, 5.5vw, 56px);
+  color: #ffffff;
+  font-family: "Lexend", sans-serif;
+  text-transform: uppercase;
+}
+
+/* Nhãn MVP: MKTchữ3 */
+.MKTchữ3 {
+  margin: 18px 0 6px;
+  color: #f3be68;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+/* Tên người chơi MVP: MKTtên */
+.MKTtên {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 100%;
+  overflow: visible;
+  font-family: "Lexend", sans-serif;
+  margin-bottom: 24px;
+}
+
+.MKTtên-stroke {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+}
+
+/* Hiệu ứng chùm sao */
+.awards-winner-stars {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.awards-winner-star {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--winner-star-size);
+  opacity: 0;
+  filter: drop-shadow(0 0 0 #fffdef);
+  animation: awards-winner-star-burst var(--winner-star-burst-duration) cubic-bezier(0.05, 0.83, 0.43, 0.96) forwards;
+}
+
+.awards-winner-star svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  animation: awards-winner-star-gentle-bob var(--winner-star-bob-duration) ease-in-out var(--winner-star-bob-delay) infinite;
+}
+
+.awards-winner-star path {
+  fill: #fffdef;
+}
+
+.awards-winner-star--1 {
+  --winner-star-left: 7%;
+  --winner-star-top: -30%;
+  --winner-star-size: 26px;
+  --winner-star-rotation: -22deg;
+  --winner-star-burst-duration: 0.95s;
+  --winner-star-bob-duration: 2.2s;
+  --winner-star-bob-delay: 0.95s;
+  --winner-star-bob-distance: -3px;
+}
+
+.awards-winner-star--2 {
+  --winner-star-left: 25%;
+  --winner-star-top: 2%;
+  --winner-star-size: 16px;
+  --winner-star-rotation: 15deg;
+  --winner-star-burst-duration: 1.08s;
+  --winner-star-bob-duration: 1.6s;
+  --winner-star-bob-delay: 1.18s;
+  --winner-star-bob-distance: 2.5px;
+}
+
+.awards-winner-star--3 {
+  --winner-star-left: 14%;
+  --winner-star-top: 82%;
+  --winner-star-size: 8px;
+  --winner-star-rotation: 32deg;
+  --winner-star-burst-duration: 0.82s;
+  --winner-star-bob-duration: 2.4s;
+  --winner-star-bob-delay: 0.88s;
+  --winner-star-bob-distance: -2px;
+}
+
+.awards-winner-star--4 {
+  --winner-star-left: 84%;
+  --winner-star-top: 75%;
+  --winner-star-size: 10px;
+  --winner-star-rotation: -15deg;
+  --winner-star-burst-duration: 1.02s;
+  --winner-star-bob-duration: 1.8s;
+  --winner-star-bob-delay: 1.12s;
+  --winner-star-bob-distance: 3.5px;
+}
+
+.awards-winner-star--5 {
+  --winner-star-left: 95%;
+  --winner-star-top: 8%;
+  --winner-star-size: 18px;
+  --winner-star-rotation: 20deg;
+  --winner-star-burst-duration: 0.9s;
+  --winner-star-bob-duration: 2.1s;
+  --winner-star-bob-delay: 0.98s;
+  --winner-star-bob-distance: -4px;
+}
+
+.awards-winner-star--6 {
+  --winner-star-left: 73%;
+  --winner-star-top: -22%;
+  --winner-star-size: 8px;
+  --winner-star-rotation: -30deg;
+  --winner-star-burst-duration: 1.12s;
+  --winner-star-bob-duration: 1.5s;
+  --winner-star-bob-delay: 1.22s;
+  --winner-star-bob-distance: 2.2px;
+}
+
+@keyframes awards-winner-star-burst {
+  0% {
+    top: 50%;
+    left: 50%;
+    opacity: 0;
+    filter: drop-shadow(0 0 0 #fffdef);
+    transform: translate(-50%, -50%) scale(0.15) rotate(0deg);
+  }
+
+  35% {
+    opacity: 1;
+  }
+
+  100% {
+    top: var(--winner-star-top);
+    left: var(--winner-star-left);
+    opacity: 1;
+    filter: drop-shadow(0 0 10px #fffdef);
+    transform: translate(-50%, -50%) scale(1) rotate(var(--winner-star-rotation));
+  }
+}
+
+@keyframes awards-winner-star-gentle-bob {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(var(--winner-star-bob-distance));
+  }
+}
+
+/* Action Buttons Container */
+.MKT-actions-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+  animation: MKT-detail-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  z-index: 30;
+}
+
+@keyframes MKT-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* TofuEdited */
+/* Nút 1: Xem chi tiết điểm */
+.MKTnút1 {
+  padding: 12px 28px;
+  border-radius: 12px;
+  border: none;
+  background: linear-gradient(135deg, #f7c765, #f069b3 55%, #9e73ff);
+  color: #130d1a;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(243, 190, 104, 0.2), inset 0 0 12px rgba(255, 255, 255, 0.1);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.MKTnút1:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Nút 2: Đóng */
+.MKTnút2 {
+  padding: 12px 24px;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  transition: all 0.25s ease;
+}
+
+
+
+.MKTnút2:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* End of TofuEdited */
+
+/* Showcase phía dưới góc phải: Avatar & Role Companion */
+.MKT-bottom-showcase {
+  position: fixed;
+  bottom: -1px;
+  right: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  pointer-events: none;
+  z-index: 15;
+  max-width: 100vw;
+  max-height: 100vh;
+  overflow: visible;
+}
+
+/* Avatar người chơi MVP: MKTảnhava (Z-Index thấp hơn 1 bậc so với MKTảnhrole, dịch sang trái) */
+.MKTảnhava {
+  position: relative;
+  z-index: 16;
+  margin-right: -300px;
+  margin-bottom: 0;
+  height: 47vh;
+  width: auto;
+  display: flex;
+  align-items: flex-end;
+  flex-shrink: 0;
+  transform-origin: bottom center;
+  animation: MKT-ava-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  pointer-events: none;
+}
+
+.MKTảnhava img {
+  height: 100%;
+  width: auto;
+  max-width: none;
+  object-fit: contain;
+  object-position: bottom right;
+  display: block;
+  filter: drop-shadow(0 15px 35px rgba(0, 0, 0, 0.85));
+}
+
+@keyframes MKT-ava-in {
+  from {
+    opacity: 0;
+    transform: translateY(35px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Ảnh role companion MVP: MKTảnhrole (Z-Index cao hơn MKTảnhava 1 bậc, nằm sát góc phải) */
+.MKTảnhrole {
+  position: relative;
+  z-index: 17;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: hidden;
+  height: clamp(380px, 64vh, 680px);
+  width: auto;
+  margin-right: -100px;
+  flex-shrink: 0;
+  transform-origin: bottom right;
+  animation: MKT-role-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  pointer-events: none;
+}
+
+@keyframes MKT-role-in {
+  from {
+    opacity: 0;
+    transform: translateY(35px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.MKTảnhrole img {
+  width: auto;
+  max-width: none;
+  display: block;
+  filter: brightness(1) saturate(1) drop-shadow(0 15px 45px rgba(0, 0, 0, 0.95));
+}
+
+.MKTảnhrole-image--base {
+  opacity: 1;
+  transition: filter var(--MKT-intro-filter-ms, 520ms) ease;
+}
+
+.MKTảnhrole-image--intro {
+  position: absolute;
+  top: 0;
+  right: 0;
+  opacity: 0;
+  filter: brightness(1) saturate(1) drop-shadow(2px 4px 6px white);
+  transition:
+    opacity 320ms ease var(--MKT-intro-filter-ms, 520ms),
+    filter var(--MKT-intro-filter-ms, 520ms) ease;
+}
+
+.MKTảnhrole.is-intro-whiteout .MKTảnhrole-image--intro {
+  opacity: 1;
+  filter: brightness(100) saturate(1) drop-shadow(2px 4px 6px white);
+  transition: opacity 0ms, filter var(--MKT-intro-filter-ms, 520ms) ease;
+}
+
+.MKTảnhrole:not(.has-intro-variant).is-intro-whiteout .MKTảnhrole-image--base {
+  filter: brightness(100) saturate(1) drop-shadow(2px 4px 6px white);
+  transition: filter var(--MKT-intro-filter-ms, 520ms) ease;
+}
+
+/* Cắt ảnh role: Phe Dân hoặc Phe Thứ Ba lấy 7/11 chiều cao từ trên xuống */
+.MKTảnhrole.crop-villager-third img {
+  height: calc(100% * 11 / 7);
+  object-fit: cover;
+  object-position: top center;
+}
+
+/* Cắt ảnh role: Phe Sói lấy 9.5/11 chiều cao từ trên xuống */
+.MKTảnhrole.crop-wolf img {
+  height: calc(100% * 11 / 9.5);
+  object-fit: cover;
+  object-position: top center;
+}
+
+@media (max-width: 768px) {
+  .MKTchữ2 {
+    font-size: 32px;
+  }
+
+  .MKTicon img {
+    width: 65px;
+    height: 65px;
+  }
+
+  .MKTảnhava {
+    height: 273px;
+    margin-right: -230px;
+  }
+
+  .MKTảnhrole {
+    height: clamp(260px, 47vh, 440px);
   }
 }

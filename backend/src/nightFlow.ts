@@ -9,7 +9,7 @@ import {
   getWolfTurnDurationMs,
   isElementalRoleTurn,
 } from "./serverEmitters.js";
-import { clampNonWolfNightActionDurationSec, clampWolfNightActionDurationSec, isVillageChiefDelayedBiteNight } from "./gameConfig.js";
+import { clampNonWolfNightActionDurationSec, clampWolfNightActionDurationSec, isVillageChiefDelayedBiteNight, LINH_MIEU_ROLE } from "./gameConfig.js";
 import { ELEMENTAL_GROUP_ROLE } from "./elemental.js";
 import {
   clearNightTurnTimer,
@@ -138,6 +138,7 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
     for (const role of [
       "Bảo vệ",
       PROTECTOR_ROLE,
+      LINH_MIEU_ROLE,
       "Phù thủy",
       "Thợ săn",
       "Tiên tri",
@@ -255,9 +256,9 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
       currentIndex >= 0
         ? currentIndex + 1
         : (() => {
-            const witchIndex = order.indexOf("Phù thủy");
-            return witchIndex >= 0 ? witchIndex + 1 : order.length;
-          })();
+          const witchIndex = order.indexOf("Phù thủy");
+          return witchIndex >= 0 ? witchIndex + 1 : order.length;
+        })();
 
     order.splice(Math.min(insertAt, order.length), 0, spiritRole);
   }
@@ -822,8 +823,8 @@ export function createNightFlow(ctx: ServerContext, deps: NightFlowDeps) {
 
     const wildConversionTargetId =
       room.daNghichState!.wildWolfConvertRequestedTonight &&
-      room.daNghichState!.wildWolfConvertAvailableTonight &&
-      !room.wildWolfConvertUsed
+        room.daNghichState!.wildWolfConvertAvailableTonight &&
+        !room.wildWolfConvertUsed
         ? room.wildWolfConvertTargetId || null
         : null;
     const wildConversionTargetWasBitten = !!wildConversionTargetId && wolfTargets.includes(wildConversionTargetId);

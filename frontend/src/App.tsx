@@ -8,7 +8,7 @@ import DevSpawn from "./pages/dev";
 import InAppBrowserBlocker from "./components/InAppBrowserBlocker";
 
 const isInsideMessengerOrSocialApp = () => {
-  const ua = navigator.userAgent || navigator.vendor || (window as any).opera;
+  const ua = navigator.userAgent || navigator.vendor;
   return /FBAN|FBAV|Instagram|Messenger|FB_IAB|FB4A|FBIOS/i.test(ua);
 };
 

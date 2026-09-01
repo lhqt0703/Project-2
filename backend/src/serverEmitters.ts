@@ -8,7 +8,7 @@ import {
   type ElementalBuffId,
   type ElementalRole,
 } from "./elemental.js";
-import { clampNonWolfNightActionDurationSec, clampWolfNightActionDurationSec } from "./gameConfig.js";
+import { clampNonWolfNightActionDurationSec, clampWolfNightActionDurationSec, LINH_MIEU_ROLE } from "./gameConfig.js";
 import {
   ensureRoomGameRules,
   type GameLogNight,
@@ -68,6 +68,7 @@ export function toPublicRoom(room: Room) {
     witchHealTargetTonight: _witchHealTargetTonight,
     witchPoisonTargetTonight: _witchPoisonTargetTonight,
     hunterTargetTonight: _hunterTargetTonight,
+    linhMieuTargetTonight: _linhMieuTargetTonight,
     protectorActorId: _protectorActorId,
     protectorTargetId: _protectorTargetId,
     protectorTargetSetNight: _protectorTargetSetNight,
@@ -338,6 +339,11 @@ export function getHostNightActionProgressByPlayerId(room: Room): Record<string,
       continue;
     }
 
+    if (role === LINH_MIEU_ROLE) {
+      setProgress(playerId, room.linhMieuTargetTonight?.[playerId] ? "done" : "pending", role);
+      continue;
+    }
+
     if (role === PROTECTOR_ROLE) {
       const hasUsed = room.protectorActorId === playerId;
       setProgress(playerId, hasUsed || !!room.protectorTargetId ? "done" : "pending", role);
@@ -473,7 +479,7 @@ function getGameLogForPlayer(room: Room, playerId: string): GameLogNight[] {
   if (room.isReplay || room.gameOver) {
     return room.gameLog || [];
   }
-  
+
   const myRole = room.playerRoles?.[playerId];
   const isWolf = isWolfAlignedPlayer(room, playerId);
   const isElemental = ELEMENTAL_ROLE_SET.has(myRole || "");
@@ -916,6 +922,12 @@ export function syncPrivateRoleStateForSocket(
   if (role === "Bảo vệ") {
     const targetId = room.protectedTonightBy === playerId ? (room.protectedTonight ?? null) : null;
     socket.emit("guardianProtected", targetId);
+  }
+
+  if (role === LINH_MIEU_ROLE) {
+    socket.emit("linhMieuTargetUpdated", {
+      targetId: room.linhMieuTargetTonight?.[playerId] ?? null,
+    });
   }
 
   if (role === PROTECTOR_ROLE) {

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { useRoomContext, DEFAULT_ROOM_GAME_RULES } from "../context/RoomContext";
-import { socket } from "../socket";
+import { useRoomContext, DEFAULT_ROOM_GAME_RULES, type RoomData } from "../context/RoomContext";
+import { socket, startRoomRecovery } from "../socket";
 import { useLocation, useNavigate } from "react-router-dom";
 import ConfirmModal from "../components/ConfirmModal";
 
@@ -77,10 +77,7 @@ export default function Game() {
       return;
     }
 
-    // Gửi yêu cầu lấy thông tin phòng từ server
-    socket.emit("getRoom", roomId);
-
-    const handleRoomUpdated = (updatedRoom: any) => {
+    const handleRoomUpdated = (updatedRoom: RoomData) => {
       if (updatedRoom && updatedRoom.id === roomId) {
         setRoom(updatedRoom);
       }
@@ -92,18 +89,12 @@ export default function Game() {
 
     socket.on("roomUpdated", handleRoomUpdated);
     socket.on("errorMessage", handleErrorMessage);
-
-    const handleConnect = () => {
-      if (roomId !== "mock-8" && roomId !== "mock-dusk") {
-        socket.emit("getRoom", roomId);
-      }
-    };
-    socket.on("connect", handleConnect);
+    const stopRoomRecovery = startRoomRecovery(roomId);
 
     return () => {
       socket.off("roomUpdated", handleRoomUpdated);
       socket.off("errorMessage", handleErrorMessage);
-      socket.off("connect", handleConnect);
+      stopRoomRecovery();
     };
   }, [room, roomId, setRoom]);
 

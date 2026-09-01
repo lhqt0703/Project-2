@@ -1,0 +1,13 @@
+.split-text {
+  visibility: hidden;
+  overflow: hidden;
+}
+
+.split-text.is-ready {
+  visibility: visible;
+}
+
+.split-text__line {
+  display: block;
+  will-change: transform, opacity;
+}

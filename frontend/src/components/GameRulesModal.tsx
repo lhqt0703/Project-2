@@ -578,10 +578,10 @@ export default function GameRulesModal({
               <h2 style={{ margin: "8px 0 0", fontSize: 28 }}>{title}</h2>
             </div>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <button 
-                onClick={onClose} 
-                style={{ 
-                  padding: "10px 16px", 
+              <button
+                onClick={onClose}
+                style={{
+                  padding: "10px 16px",
                   cursor: "pointer",
                   borderRadius: 10,
                   border: "1px solid rgba(255,255,255,0.15)",
@@ -1144,6 +1144,38 @@ export default function GameRulesModal({
                   disabled={readOnly}
                   onChange={(val) => updateRule("coffeeMakerMaxUses", val)}
                   style={{ width: 96 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Chế độ khó của Người pha cà phê</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi tắt, Linh Chi và Đông Trùng được ghi nhận cộng dồn qua nhiều đêm. Khi bật, phải tìm đúng cả hai trong cùng một đêm.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.coffeeMakerHardMode === true}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("coffeeMakerHardMode", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
+                />
+              </label>
+
+              <label style={rowStyle()}>
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Cho Người pha cà phê biết kết quả tìm kiếm</div>
+                  <div style={{ fontSize: 13, color: "rgba(246,247,251,0.68)", lineHeight: 1.5 }}>
+                    Khi bật, log cá nhân sẽ cho biết mục tiêu nào là Linh Chi hoặc Đông Trùng. Log đầy đủ của quản trò luôn giữ kết quả.
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={draftRules.coffeeMakerRevealSearchResults === true}
+                  disabled={readOnly}
+                  onChange={(e) => updateRule("coffeeMakerRevealSearchResults", e.target.checked)}
+                  style={{ width: 20, height: 20, marginTop: 2 }}
                 />
               </label>
 

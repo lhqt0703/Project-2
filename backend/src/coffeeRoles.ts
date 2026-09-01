@@ -57,6 +57,7 @@ export function createCoffeeRoleState(): CoffeeRoleState {
     makerSearchByPlayerId: {},
     makerUseCountByPlayerId: {},
     makerBonusUsesByPlayerId: {},
+    makerFoundHerbsByPlayerId: {},
     makerFoundBothPlayerIds: [],
     makerKilledByWolfPlayerIds: [],
     herbSearchByPlayerId: {},
@@ -72,6 +73,7 @@ export function createCoffeeRoleState(): CoffeeRoleState {
 
 export function ensureCoffeeRoleState(room: Room): CoffeeRoleState {
   room.coffeeRoleState = room.coffeeRoleState || createCoffeeRoleState();
+  room.coffeeRoleState.makerFoundHerbsByPlayerId ||= {};
   return room.coffeeRoleState;
 }
 
@@ -201,18 +203,34 @@ export function performCoffeeMakerSearch(
   if (maxUses > 0 && used >= maxUses) return { ok: false, reason: "no_uses_left" };
 
   const targets = [uniqueTargetIds[0]!, uniqueTargetIds[1]!] as [string, string];
-  const selectedHerbs = new Set(targets.map((targetId) => getCoffeeHerbRoleForPlayer(room, targetId)).filter(isCoffeeHerbRole));
-  const foundBoth = selectedHerbs.has(LINH_CHI_ROLE) && selectedHerbs.has(DONG_TRUNG_ROLE);
+  const matches = targets.flatMap((targetId) => {
+    const herbRole = getCoffeeHerbRoleForPlayer(room, targetId);
+    return herbRole ? [{ targetId, herbRole }] : [];
+  });
+  const selectedHerbs = new Set(matches.map(({ herbRole }) => herbRole));
+  const rules = ensureRoomGameRules(room);
+  const previouslyFoundHerbs = state.makerFoundHerbsByPlayerId[actorId] || [];
+  const foundHerbs = rules.coffeeMakerHardMode === true
+    ? [...selectedHerbs]
+    : [...new Set([...previouslyFoundHerbs, ...selectedHerbs])];
+  const foundBoth = foundHerbs.includes(LINH_CHI_ROLE) && foundHerbs.includes(DONG_TRUNG_ROLE);
 
   state.makerSearchByPlayerId[actorId] = { night, targetIds: targets };
   state.makerUseCountByPlayerId[actorId] = used + 1;
+  state.makerFoundHerbsByPlayerId[actorId] = foundHerbs;
   if (foundBoth) state.makerFoundBothPlayerIds.push(actorId);
 
-  appendLogEntry(room, { type: "coffee_maker_search", phase: "night", actorId, targetIds: targets });
+  appendLogEntry(room, {
+    type: "coffee_maker_search",
+    phase: "night",
+    actorId,
+    targetIds: targets,
+    ...(rules.coffeeMakerRevealSearchResults === true ? { matches, foundHerbs } : {}),
+  });
   appendLogEntry(room, {
     type: "custom_log",
     phase: "night",
-    message: `${getPlayerName(room, actorId)} (${COFFEE_MAKER_ROLE}) đã chọn ${targets.map((id) => getPlayerName(room, id)).join(" và ")}. Kết quả: ${foundBoth ? "tìm đúng Linh Chi và Đông Trùng" : "không tìm đủ cặp"}.`,
+    message: `${getPlayerName(room, actorId)} (${COFFEE_MAKER_ROLE}) đã chọn ${targets.map((id) => getPlayerName(room, id)).join(" và ")}. Kết quả: ${matches.length > 0 ? matches.map(({ targetId, herbRole }) => `${getPlayerName(room, targetId)} là ${herbRole}`).join(", ") : "không trúng thảo dược nào"}; ${foundBoth ? "đã tìm đủ Linh Chi và Đông Trùng" : rules.coffeeMakerHardMode === true ? "không tìm đủ cặp trong cùng đêm" : `tiến độ cộng dồn ${foundHerbs.length}/2`}.`,
   });
 
   return { ok: true, foundBoth };

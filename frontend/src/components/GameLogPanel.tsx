@@ -1312,6 +1312,30 @@ function LogEntryLine({
             onEliminationFocusChange={onEliminationFocusChange}
             onHighlightPlayer={onHighlightPlayer}
           />
+          {isPlayerActor && entry.matches && (
+            <>
+              {" — Kết quả: "}
+              {entry.matches.length > 0
+                ? entry.matches.map(({ targetId, herbRole }, index) => (
+                  <span key={`${targetId}-${herbRole}`}>
+                    {index > 0 ? ", " : ""}
+                    <RoleSpan
+                      playerId={targetId}
+                      rolesByPlayerId={rolesByPlayerId}
+                      playerNamesById={playerNamesById}
+                      displayMode="player"
+                      popupMode="none"
+                      onEliminationFocusChange={onEliminationFocusChange}
+                      onHighlightPlayer={onHighlightPlayer}
+                    /> là {herbRole}
+                  </span>
+                ))
+                : "không trúng Linh Chi hoặc Đông Trùng"}
+              {entry.foundHerbs && entry.foundHerbs.length < 2
+                ? ` (đã ghi nhận ${entry.foundHerbs.length}/2)`
+                : ""}
+            </>
+          )}
         </LogItem>
       );
     }

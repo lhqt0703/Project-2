@@ -4,6 +4,7 @@ import { ensureRoomGameRules, type Room } from "./serverTypes.js";
 export const WOLF_TURN_DURATION_MS = 20_000;
 export const TWO_HEARTS_MAX_HP = 2;
 export const TWO_HEARTS_NIGHT_LIMIT = 2;
+export const LINH_MIEU_ROLE = "Linh Miêu";
 export const RULES_RESTART_FADE_IN_MS = 1000;
 export const RULES_RESTART_HOLD_MS = 2000;
 export const RULES_RESTART_FADE_OUT_MS = 500;
@@ -15,12 +16,51 @@ const NIGHT_ACTION_DURATION_MIN_SEC = 0;
 const NIGHT_ACTION_DURATION_MAX_SEC = 60;
 
 export function initTwoHeartsForParticipants(room: Room) {
+  const previousHp = room.daNghichState!.playerHearts || {};
   const hp: Record<string, number> = {};
+  const rules = ensureRoomGameRules(room);
   for (const p of getParticipantPlayers(room)) {
-    hp[p.id] = TWO_HEARTS_MAX_HP;
+    hp[p.id] = room.playerRoles?.[p.id] === LINH_MIEU_ROLE
+      ? previousHp[p.id] ?? rules.linhMieuHealth ?? 3
+      : TWO_HEARTS_MAX_HP;
   }
   room.daNghichState!.playerHearts = hp;
   room.daNghichState!.sharedHeartsVisible = true;
+  ensureLinhMieuHeartState(room);
+}
+
+export function getLinhMieuPlayerIds(room: Room) {
+  return getParticipantPlayers(room)
+    .filter((player) => room.playerRoles?.[player.id] === LINH_MIEU_ROLE)
+    .map((player) => player.id);
+}
+
+export function ensureLinhMieuHeartState(room: Room) {
+  const ids = getLinhMieuPlayerIds(room);
+  if (!ids.length) return;
+
+  const maxHp = ensureRoomGameRules(room).linhMieuHealth ?? 3;
+  room.daNghichState!.playerHearts = room.daNghichState!.playerHearts || {};
+  for (const playerId of ids) {
+    const currentHp = room.daNghichState!.playerHearts[playerId];
+    room.daNghichState!.playerHearts[playerId] = typeof currentHp === "number"
+      ? Math.max(0, Math.min(maxHp, currentHp))
+      : maxHp;
+  }
+  room.daNghichState!.privateHeartVisiblePlayerIds = Array.from(new Set([
+    ...(room.daNghichState!.privateHeartVisiblePlayerIds || []),
+    ...ids,
+  ]));
+}
+
+export function hideSharedHeartsPreservingLinhMieu(room: Room) {
+  const previousHp = room.daNghichState!.playerHearts || {};
+  const linhMieuHp = Object.fromEntries(
+    getLinhMieuPlayerIds(room).map((playerId) => [playerId, previousHp[playerId]]),
+  );
+  room.daNghichState!.sharedHeartsVisible = false;
+  room.daNghichState!.playerHearts = linhMieuHp;
+  ensureLinhMieuHeartState(room);
 }
 
 export function isTwoHeartsDamageMode(room: Room) {

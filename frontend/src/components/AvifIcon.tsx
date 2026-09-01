@@ -33,10 +33,13 @@ import palmUpIcon from "../assets/icon/palm-up.avif";
 import rocketIcon from "../assets/icon/rocket_1f680.avif";
 import scissorsIcon from "../assets/icon/scissors_2702-fe0f.avif";
 import trophyIcon from "../assets/icon/trophy_1f3c6.avif";
-import sparklesIcon from "../assets/icon/Lấp lánh.avif";
+import sparklesIcon from "../assets/VIP ava/Lấp lánh.avif";
+import yellowHeartIcon from "../assets/VIP ava/Tim vàng.avif";
+import giftBoxIcon from "../assets/VIP ava/Hộp quà.avif";
 import skullCrossbonesIcon from "../assets/icon/skull-and-crossbones_2620-fe0f.avif";
 import disconnectedIcon from "../assets/disconnected.svg";
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const iconMap: Record<string, string> = {
   "⛓️💥": disconnectedIcon,
   "🩸": dropOfBloodIcon,
@@ -83,6 +86,8 @@ export const iconMap: Record<string, string> = {
   "✂": scissorsIcon,
   "🏆": trophyIcon,
   "✨": sparklesIcon,
+  "💛": yellowHeartIcon,
+  "🎁": giftBoxIcon,
   "☠️": skullCrossbonesIcon,
   "☠": skullCrossbonesIcon,
 };

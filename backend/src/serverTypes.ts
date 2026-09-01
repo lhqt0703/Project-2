@@ -44,6 +44,7 @@ export interface CoffeeRoleState {
   makerSearchByPlayerId: Record<string, { night: number; targetIds: [string, string] }>;
   makerUseCountByPlayerId: Record<string, number>;
   makerBonusUsesByPlayerId: Record<string, number>;
+  makerFoundHerbsByPlayerId: Record<string, CoffeeHerbRole[]>;
   makerFoundBothPlayerIds: string[];
   makerKilledByWolfPlayerIds: string[];
   herbSearchByPlayerId: Record<string, { night: number; targetId: string }>;
@@ -56,7 +57,7 @@ export interface CoffeeRoleState {
   wolfStunPersistent: boolean;
 }
 
-export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | "Kẻ bị nguyền" | "Tay Buôn" | "Bác sĩ ung thư" | "Nam Thư" | "Đàn bà" | "Suy Thận" | ElementalRole | "Độc thủ" | "Gián điệp" | "Nhà sư" | "Thầy bói" | "Ác Quỷ" | "Thợ giặt" | "Thủ thư" | "Điều tra viên" | "Nuôi quạ" | "Diệt quỷ" | "Trưởng làng" | "Song Trùng" | "Người pha cà phê" | CoffeeHerbRole;
+export type NightActionRole = "Sói" | "Bảo vệ" | typeof PROTECTOR_ROLE | "Linh Miêu" | "Phù thủy" | "Linh sói" | "Thợ săn" | "Tiên tri" | "Thần tình yêu" | "Kẻ bị nguyền" | "Tay Buôn" | "Bác sĩ ung thư" | "Nam Thư" | "Đàn bà" | "Suy Thận" | ElementalRole | "Độc thủ" | "Gián điệp" | "Nhà sư" | "Thầy bói" | "Ác Quỷ" | "Thợ giặt" | "Thủ thư" | "Điều tra viên" | "Nuôi quạ" | "Diệt quỷ" | "Trưởng làng" | "Song Trùng" | "Người pha cà phê" | CoffeeHerbRole;
 
 export type NightActionOrderRole = NightActionRole | typeof ELEMENTAL_GROUP_ROLE;
 
@@ -81,12 +82,15 @@ export interface RoomGameRules {
   merchantWinRequiredSuccessfulTrades: number;
   merchantHideReceivedItemName: boolean;
   loveEscapeImmuneSimultaneous: boolean;
+  linhMieuHealth?: number | undefined;
   wolfCanBiteWolf?: boolean | undefined;
   wolfBonusBiteSmoothTied?: boolean | undefined;
   villageChiefCanFindProtector?: boolean | undefined;
   songTrungMaxUses?: number | undefined;
   coffeeHerbCardMode?: "primary" | "secondary" | undefined;
   coffeeMakerMaxUses?: number | undefined;
+  coffeeMakerHardMode?: boolean | undefined;
+  coffeeMakerRevealSearchResults?: boolean | undefined;
   songTrungVictimStaysAlive?: boolean | undefined;
   songTrungReturnRoleOnlyIfVotedOut?: boolean | undefined;
   songTrungReturnRoleRequiresCupidVote?: boolean | undefined;
@@ -252,6 +256,10 @@ export interface Room {
   witchHealTargetTonight?: Record<string, string | null>;
   witchPoisonTargetTonight?: Record<string, string | null>;
   hunterTargetTonight?: Record<string, string | null>;
+  linhMieuTargetTonight?: Record<string, string | null>;
+  linhMieuCursePending?: boolean;
+  linhMieuCurseResolving?: boolean;
+  linhMieuCurseActorId?: string | null;
   hunterShotPlayerIds?: string[];
   loveCupidId?: string | null;
   loveTargetId?: string | null;
@@ -282,7 +290,7 @@ export interface Room {
   compactCircles?: boolean;
   layoutHeightPx?: number;
   gameOver?: boolean;
-  winner?: "wolves" | "villagers" | "lovers" | "nobody" | undefined;
+  winner?: "wolves" | "villagers" | "lovers" | "linh_mieu" | "nobody" | undefined;
   gameRules?: RoomGameRules;
   pendingGameRules?: RoomGameRules;
   spiritWolfId?: string | null;
@@ -358,7 +366,7 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   trialInteractionSelectionLimit: 2,
   nonWolfNightActionDurationSec: 20,
   wolfNightActionDurationSec: 20,
-  nightActionOrder: ["Thần tình yêu", "Song Trùng", "Người pha cà phê", "Linh Chi", "Đông Trùng", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Sói", "Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"],
+  nightActionOrder: ["Thần tình yêu", "Song Trùng", "Người pha cà phê", "Linh Chi", "Đông Trùng", "Tay Buôn", ELEMENTAL_GROUP_ROLE, "Linh Miêu", "Sói", "Bảo vệ", PROTECTOR_ROLE, "Phù thủy", "Linh sói", "Thợ săn", "Tiên tri", "Kẻ bị nguyền", "Trưởng làng"],
   banSoiBecomeWolfEvenIfHealed: false,
   loveCanChoosePartnerFirstTwoNights: false,
   villageChiefKnowsWolfBite: true,
@@ -368,12 +376,15 @@ const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   merchantWinRequiredSuccessfulTrades: 3,
   merchantHideReceivedItemName: false,
   loveEscapeImmuneSimultaneous: true,
+  linhMieuHealth: 3,
   wolfCanBiteWolf: false,
   wolfBonusBiteSmoothTied: true,
   villageChiefCanFindProtector: true,
   songTrungMaxUses: 0,
   coffeeHerbCardMode: "primary",
   coffeeMakerMaxUses: 3,
+  coffeeMakerHardMode: false,
+  coffeeMakerRevealSearchResults: false,
   songTrungVictimStaysAlive: false,
   songTrungReturnRoleOnlyIfVotedOut: false,
   songTrungReturnRoleRequiresCupidVote: false,
@@ -428,6 +439,12 @@ function clampMerchantWinRequiredSuccessfulTrades(value: unknown) {
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return DEFAULT_ROOM_GAME_RULES.merchantWinRequiredSuccessfulTrades;
   return Math.max(1, Math.min(10, Math.floor(n)));
+}
+
+function clampLinhMieuHealth(value: unknown) {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return DEFAULT_ROOM_GAME_RULES.linhMieuHealth ?? 3;
+  return Math.max(2, Math.min(5, Math.floor(n)));
 }
 
 function clampNightActionDurationSec(value: unknown, fallback: number) {
@@ -493,6 +510,7 @@ export function buildRoomGameRules(input?: Partial<RoomGameRules> | null, gameMo
     ...(input || {}),
     trialInteractionSelectionLimit: clampTrialInteractionSelectionLimit(input?.trialInteractionSelectionLimit),
     merchantWinRequiredSuccessfulTrades: clampMerchantWinRequiredSuccessfulTrades(input?.merchantWinRequiredSuccessfulTrades),
+    linhMieuHealth: clampLinhMieuHealth(input?.linhMieuHealth),
     nonWolfNightActionDurationSec: normalizedDurations.nonWolfNightActionDurationSec,
     wolfNightActionDurationSec: normalizedDurations.wolfNightActionDurationSec,
     nightActionOrder: normalizeNightActionOrder(input?.nightActionOrder),
@@ -543,6 +561,8 @@ export function buildRoomGameRules(input?: Partial<RoomGameRules> | null, gameMo
     coffeeMakerMaxUses: typeof input?.coffeeMakerMaxUses === "number"
       ? Math.max(0, Math.floor(input.coffeeMakerMaxUses))
       : DEFAULT_ROOM_GAME_RULES.coffeeMakerMaxUses,
+    coffeeMakerHardMode: input?.coffeeMakerHardMode === true,
+    coffeeMakerRevealSearchResults: input?.coffeeMakerRevealSearchResults === true,
   };
 }
 
@@ -569,7 +589,8 @@ export type EliminationCause =
   | { type: "cancer_doctor" }
   | { type: "nam_thu_smile" }
   | { type: "suy_than_pee" }
-  | { type: "song_trung_rob" };
+  | { type: "song_trung_rob" }
+  | { type: "linh_mieu_curse"; actorId: string };
 
 export type GameLogEntry =
   | { type: "custom_log"; phase: GameLogEntryPhase; message: string; timestamp?: number }
@@ -583,6 +604,9 @@ export type GameLogEntry =
   | { type: "bonus_bite"; phase: GameLogEntryPhase }
   | { type: "night_action_extra_time"; phase: GameLogEntryPhase; targetId: string; roleName: string; extraSeconds: number }
   | { type: "guardian_protect"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "linh_mieu_choose"; phase: GameLogEntryPhase; actorId: string; targetId: string }
+  | { type: "linh_mieu_shield"; phase: GameLogEntryPhase; actorId: string; targetId: string; remainingHealth: number }
+  | { type: "linh_mieu_wolf_redirect"; phase: GameLogEntryPhase; actorId: string; targetId: string }
   | { type: "protector_bless"; phase: GameLogEntryPhase; actorId: string; targetId: string; permanent: boolean }
   | { type: "protector_save"; phase: GameLogEntryPhase; actorId: string | null; targetId: string; cause: EliminationCause; permanent: boolean }
   | { type: "village_chief_revealed"; phase: GameLogEntryPhase; targetId: string; reason: "day_vote" }
@@ -601,7 +625,7 @@ export type GameLogEntry =
   | { type: "merchant_item_used"; phase: GameLogEntryPhase; itemId: MerchantItemId; actorId?: string | null; targetId?: string | null; sourceId?: string | null; targetIds?: string[] }
   | { type: "merchant_win_condition_completed"; phase: GameLogEntryPhase; actorId: string; successfulTrades: number; requiredTrades: number }
   | { type: "angel_revive_activated"; phase: GameLogEntryPhase; actorId: string; targetId: string; guess: AngelAlignmentGuess }
-  | { type: "angel_outcome"; phase: GameLogEntryPhase; actorId: string; targetId: string; guess: AngelAlignmentGuess; targetTeam: AngelTargetTeam; won: boolean; noContest?: boolean; reason: "matched_wolves" | "matched_villagers" | "wrong_guess" | "aligned_team_lost" | "third_party_target_won" | "third_party_target_lost"; winner?: "wolves" | "villagers" | "lovers" | "nobody" }
+  | { type: "angel_outcome"; phase: GameLogEntryPhase; actorId: string; targetId: string; guess: AngelAlignmentGuess; targetTeam: AngelTargetTeam; won: boolean; noContest?: boolean; reason: "matched_wolves" | "matched_villagers" | "wrong_guess" | "aligned_team_lost" | "third_party_target_won" | "third_party_target_lost"; winner?: "wolves" | "villagers" | "lovers" | "linh_mieu" | "nobody" }
   | { type: "love_pair"; phase: GameLogEntryPhase; actorId: string; targetId: string; targetWolfAligned: boolean }
   | { type: "love_escape_vote"; phase: GameLogEntryPhase; actorId: string; partnerId: string }
   | { type: "love_escape_missed"; phase: GameLogEntryPhase; actorId: string; partnerId: string }
@@ -629,7 +653,14 @@ export type GameLogEntry =
   | { type: "soi_mu_wolf_bite"; phase: GameLogEntryPhase; actorId: string; targetId: string; wolfLabel: string }
   | { type: "soi_mu_wolf_suicide"; phase: GameLogEntryPhase; actorId: string; wolfLabel: string }
   | { type: "song_trung_rob"; phase: GameLogEntryPhase; actorId: string; targetId: string; victimRole: string; cupidId: string; staysAlive: boolean }
-  | { type: "coffee_maker_search"; phase: GameLogEntryPhase; actorId: string; targetIds: [string, string] }
+  | {
+    type: "coffee_maker_search";
+    phase: GameLogEntryPhase;
+    actorId: string;
+    targetIds: [string, string];
+    matches?: { targetId: string; herbRole: CoffeeHerbRole }[];
+    foundHerbs?: CoffeeHerbRole[];
+  }
   | { type: "coffee_herb_search"; phase: GameLogEntryPhase; actorId: string; targetId: string; herbRole: CoffeeHerbRole }
   | { type: "soi_mu_wolf_inactive_choose"; phase: GameLogEntryPhase; actorId: string; targetId: string; wolfLabel: string; activeWolfLabel: string }
   | { type: "soi_mu_ariana_trade"; phase: GameLogEntryPhase; actorId: string; targetId: string; actorThumb: "up" | "down"; targetThumb: "up" | "down" | null };
@@ -670,5 +701,3 @@ export interface Sticker {
   isPasted?: boolean;
   pastedAt?: number;
 }
-
-

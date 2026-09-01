@@ -17,6 +17,10 @@
 
   --danger: #ff6b6b;
   --player-position-frame-translucent-bg: rgba(31, 36, 48, 0.68);
+  --glass-bg: rgba(255, 255, 255, 0.045);
+  --glass-bg-strong: rgba(13, 17, 30, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.11);
+  --glass-blur: blur(18px);
 }
 
 html, body {

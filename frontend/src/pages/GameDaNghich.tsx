@@ -204,6 +204,7 @@ export default function GameDaNghich() {
   const [scoreboardOpen, setScoreboardOpen] = useState(false);
   const [villagerVictoryAnimOpen, setVillagerVictoryAnimOpen] = useState(false);
   const [gameFinishedModalOpen, setGameFinishedModalOpen] = useState(false);
+  const [mock8GameFinishedOpen, setMock8GameFinishedOpen] = useState(false);
   const [hostPlayerActionTargetId, setHostPlayerActionTargetId] = useState<string | null>(null);
   const isWarned = !!(hostPlayerActionTargetId && room?.warnedPlayerIds?.includes(hostPlayerActionTargetId));
 
@@ -3278,6 +3279,17 @@ export default function GameDaNghich() {
                   >
                     💀
                   </div>
+                  <div
+                    title="Test Màn Kết Thúc (🏆)"
+                    onClick={() => {
+                      setMock8GameFinishedOpen(true);
+                    }}
+                    style={{ ...btnStyle, borderColor: "rgba(234, 179, 8, 0.55)", background: "rgba(234, 179, 8, 0.2)", cursor: "pointer" }}
+                    onMouseOver={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                    onMouseOut={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                  >
+                    🏆
+                  </div>
                 </>
               )}
             </div>
@@ -3868,10 +3880,17 @@ export default function GameDaNghich() {
       />
 
       <GameFinishedModal
-        open={gameFinishedModalOpen}
-        winner={sync.gameEnded?.winner}
+        open={gameFinishedModalOpen || mock8GameFinishedOpen}
+        winner={room?.id === "mock-8" ? undefined : sync.gameEnded?.winner}
         scoreResult={room?.scoreResult}
-        onClose={() => setGameFinishedModalOpen(false)}
+        room={room}
+        testMode={room?.id === "mock-8"}
+        testRole={roleOverride || role || "Thần tình yêu"}
+        testMvpName="Paris Hilton Tipton London Hoàng Hy Cây Keo"
+        onClose={() => {
+          setGameFinishedModalOpen(false);
+          setMock8GameFinishedOpen(false);
+        }}
         onBackToLobby={handleBackToRoomClick}
         onOpenScoreboard={() => setScoreboardOpen(true)}
       />

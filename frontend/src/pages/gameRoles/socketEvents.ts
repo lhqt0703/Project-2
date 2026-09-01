@@ -219,7 +219,14 @@ export type GameLogEntry =
   | { type: "soi_mu_wolf_inactive_choose"; phase: GameLogEntryPhase; actorId: string; targetId: string; wolfLabel: string; activeWolfLabel: string }
   | { type: "soi_mu_ariana_trade"; phase: GameLogEntryPhase; actorId: string; targetId: string; actorThumb: "up" | "down"; targetThumb: "up" | "down" | null }
   | { type: "song_trung_rob"; phase: GameLogEntryPhase; actorId: string; targetId: string; victimRole: string; cupidId: string; staysAlive: boolean }
-  | { type: "coffee_maker_search"; phase: GameLogEntryPhase; actorId: string; targetIds: [string, string] }
+  | {
+      type: "coffee_maker_search";
+      phase: GameLogEntryPhase;
+      actorId: string;
+      targetIds: [string, string];
+      matches?: { targetId: string; herbRole: "Linh Chi" | "Đông Trùng" }[];
+      foundHerbs?: ("Linh Chi" | "Đông Trùng")[];
+    }
   | { type: "coffee_herb_search"; phase: GameLogEntryPhase; actorId: string; targetId: string; herbRole: "Linh Chi" | "Đông Trùng" };
 
 export type GameLogNight = {

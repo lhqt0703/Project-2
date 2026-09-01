@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useRoomContext, type RoomData } from "../context/RoomContext";
+import { useRoomContext } from "../context/RoomContext";
 import { clientId, socket } from "../socket";
 import "./CoTyPhuRoom.css";
 
@@ -18,31 +18,16 @@ export default function CoTyPhuRoom() {
 
   useEffect(() => {
     if (!roomId) return;
-    const syncRoom = () => socket.emit("getRoom", roomId);
-    const handleRoomUpdated = (nextRoom: RoomData) => {
-      if (nextRoom.id === roomId) setRoom(nextRoom);
-    };
     const handleGameStarted = () => nav(`/game?roomId=${roomId}`);
     const handleError = (message: string) => setNotice(message);
 
-    syncRoom();
-    socket.on("connect", syncRoom);
-    socket.on("roomUpdated", handleRoomUpdated);
     socket.on("gameStarted", handleGameStarted);
     socket.on("errorMessage", handleError);
     return () => {
-      socket.off("connect", syncRoom);
-      socket.off("roomUpdated", handleRoomUpdated);
       socket.off("gameStarted", handleGameStarted);
       socket.off("errorMessage", handleError);
     };
   }, [nav, roomId, setRoom]);
-
-  useEffect(() => {
-    if (room?.coTyPhuState?.startingMoney !== undefined) {
-      setStartingMoney(room.coTyPhuState.startingMoney.toLocaleString("vi-VN"));
-    }
-  }, [room?.coTyPhuState?.startingMoney]);
 
   if (!room || room.gameMode !== "co_ty_phu") return null;
 

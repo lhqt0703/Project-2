@@ -29,6 +29,7 @@ dist-ssr
 # Backend build output
 backend/dist
 backend/build
+backend/data/history
 
 # Frontend cache (optional)
 .vite-cache/

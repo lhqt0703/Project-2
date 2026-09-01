@@ -4,7 +4,46 @@ const PheDân = ["#f97316", "#facc15", "#22c55e", "#38bdf8", "#a855f7", "#ec4899
 const CặpĐôi = ["#f91616", "#fa1515", "#c52222", "#f83838", "#f75555", "#ec4899"];
 const PheSói = ["#220e0e", "#3f0b0b", "#422b2b", "#300d0d", "#5a1717", "#000000"];
 
-export function shootWinnerConfettiFromSides(winner?: string, loveState?: any) {
+type LoveWinnerState = {
+  pairIds?: string[];
+  rolesByPlayerId?: Record<string, string>;
+};
+
+export function shootCupidWolfCoupleConfetti() {
+  const cupidOptions = {
+    particleCount: 1696,
+    startVelocity: 152,
+    ticks: 1000,
+    colors: CặpĐôi,
+    disableForReducedMotion: true,
+    zIndex: 10000,
+    spread: 90,
+  };
+
+  confetti({
+    ...cupidOptions,
+    angle: 90,
+    origin: { x: 0.5, y: 3 },
+  });
+
+  setTimeout(() => {
+    confetti({
+      ...cupidOptions,
+      angle: 90,
+      origin: { x: 0.5, y: 2 },
+    });
+  }, 1000);
+
+  setTimeout(() => {
+    confetti({
+      ...cupidOptions,
+      angle: 90,
+      origin: { x: 0.5, y: 1 },
+    });
+  }, 2500);
+}
+
+export function shootWinnerConfettiFromSides(winner?: string, loveState?: LoveWinnerState) {
   // Check if Thần tình yêu (Cupid) and a Wolf are the couple and won
   let isCupidWolfCouple = false;
   if (winner === "lovers" && loveState && Array.isArray(loveState.pairIds) && loveState.pairIds.length >= 2) {
@@ -20,41 +59,7 @@ export function shootWinnerConfettiFromSides(winner?: string, loveState?: any) {
   }
 
   if (isCupidWolfCouple) {
-    const cupidOptions = {
-      particleCount: 1696,
-      startVelocity: 152,
-      ticks: 1000,
-      colors: CặpĐôi,
-      disableForReducedMotion: true,
-      zIndex: 10000,
-      spread: 90,
-    };
-
-    // Bắn 1 phát ở khắp màn hình từ dưới lên 1 tý
-    confetti({
-      ...cupidOptions,
-      angle: 90,
-      origin: { x: 0.5, y: 3 },
-    });
-
-    // Bắn 1 phát ở khắp màn hình từ dưới lên nhiều hơn 1 tý
-    setTimeout(() => {
-      confetti({
-        ...cupidOptions,
-        angle: 90,
-        origin: { x: 0.5, y: 2 },
-      });
-    }, 1000);
-
-    // Bắn 1 phát cuối từ dưới màn lên cái đùng
-    setTimeout(() => {
-      confetti({
-        ...cupidOptions,
-        angle: 90,
-        origin: { x: 0.5, y: 1 },
-      });
-    }, 2500);
-
+    shootCupidWolfCoupleConfetti();
     return;
   }
 

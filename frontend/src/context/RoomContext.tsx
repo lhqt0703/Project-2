@@ -73,6 +73,8 @@ export interface RoomGameRules {
   songTrungMaxUses?: number;
   coffeeHerbCardMode?: "primary" | "secondary";
   coffeeMakerMaxUses?: number;
+  coffeeMakerHardMode?: boolean;
+  coffeeMakerRevealSearchResults?: boolean;
   songTrungVictimStaysAlive?: boolean;
   songTrungReturnRoleOnlyIfVotedOut?: boolean;
   songTrungReturnRoleRequiresCupidVote?: boolean;
@@ -110,6 +112,8 @@ export const DEFAULT_ROOM_GAME_RULES: RoomGameRules = {
   songTrungMaxUses: 0,
   coffeeHerbCardMode: "primary",
   coffeeMakerMaxUses: 3,
+  coffeeMakerHardMode: false,
+  coffeeMakerRevealSearchResults: false,
   songTrungVictimStaysAlive: false,
   songTrungReturnRoleOnlyIfVotedOut: false,
   songTrungReturnRoleRequiresCupidVote: false,

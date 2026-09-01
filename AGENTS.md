@@ -2,6 +2,7 @@
 
 <!-- - **Build Instructions**: Only run the command `npm run build` when the user requests it. -->
 - Phản hồi bằng tiếng Việt (nhất là Implementation Plan)
+- Đừng tự ý chỉnh sửa các phần css TofuEdited nếu chưa có sự cho phép, nếu cần đụng đến thì hãy hỏi trước
 
 # Ponytail
 
@@ -90,7 +91,3 @@ Dưới đây là các lưu ý quan trọng rút ra từ thực tế phát tri�
 - **Reset dữ liệu biến đổi vai trò (`rolesBeforeConversion`) khi bắt đầu game mới**:
   - Khi bắt đầu ván mới hoặc chuyển phase về `dusk` / `lobby`, BẮT BUỘC phải reset `rolesBeforeConversion = {}` và `revealedRolesByPlayerId = {}` ở cả React state và `room` object trong `useGameSocketSync.ts`.
   - Không được dùng `(prev) => ({ ...prev, ...payload })` để merge `rolesBeforeConversion` nếu không xóa dữ liệu cũ, vì điều này làm các vai trò biến đổi từ ván trước (ví dụ: Song Trùng, Bán Sói, Sói Dại...) bị đọng lại làm hiển thị sai badge kép ở ván sau.
-
-- **Kỹ thuật Animation Gradient Chuyển Màu Mượt & Trạng Thái Dẫn Đầu Vote (Day & Night)**:
-  - Tính toán trạng thái vote (`winner` vs `tied`) áp dụng nhất quán cho cả ban đêm (Sói) lẫn ban ngày (Biểu quyết): Mục tiêu có số vote cao nhất duy nhất sẽ nhận trạng thái `winner` (Badge Xanh), các trường hợp hòa vote cao nhất hoặc số vote thấp hơn đều là `tied` (Badge Đỏ).
-  - Sử dụng 2 layer gradient tuyệt đối lồng nhau và transition thuộc tính `opacity: 0 -> 1` cùng `box-shadow` để chuyển cảnh mượt 60fps khi trạng thái dẫn đầu thay đổi.

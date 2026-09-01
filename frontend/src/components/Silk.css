@@ -1,0 +1,13 @@
+.silk,
+.silk canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.silk {
+  overflow: hidden;
+}
+
+.silk canvas {
+  display: block;
+}
